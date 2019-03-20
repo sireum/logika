@@ -45,9 +45,27 @@ class LogikaTest extends TestSuite {
 
       * - passingWorksheet(
         """import org.sireum._
-          |var x = 3
-          |x = x + 1
-          |assert(x <= 4)""".stripMargin)
+          |val x = Z.random
+          |val y = Z.random
+          |var max = x
+          |if (x < y) {
+          |  max = y
+          |}
+          |assert(max >= x & max >= y & (max == x | max == y))""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
+          |var x = Z.random
+          |if (x < 0) {
+          |  x = -x
+          |}
+          |assert(x >= 0)""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
+          |var x = Z.random
+          |x = x * x
+          |assert(x >= 0)""".stripMargin)
 
       * - passingWorksheet(
         """import org.sireum._
@@ -56,11 +74,6 @@ class LogikaTest extends TestSuite {
       * - passingWorksheet(
         """import org.sireum._
           |assume(T)""".stripMargin)
-
-    }
-
-    "Failing" - {
-
     }
 
   }

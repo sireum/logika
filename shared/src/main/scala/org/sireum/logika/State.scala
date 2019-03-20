@@ -31,23 +31,12 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.message.Position
 
 @datatype class State(status: B,
-                      scope: State.Scope,
-                      stack: Stack[State.Scope],
                       claims: ISZ[State.Claim],
                       nextFresh: org.sireum.Z) {
 
   @pure def toST: ST = {
-    @pure def locals2ST(ls: State.Scope): ST = {
-      return st"{ ${(for (l <- ls) yield st"$l", ", ")} }"
-    }
-
-    val stackElements = ops.ISZOps(stack.elements).reverse
     val r =  st"""State {
                  |  status = $status,
-                 |  scope = ${locals2ST(scope)},
-                 |  stack = [
-                 |    ${(for (s <- stackElements) yield locals2ST(s), ",\n")}
-                 |  ],
                  |  claims = {
                  |    ${(for (c <- claims) yield c.toST, ",\n")}
                  |  },
@@ -73,15 +62,6 @@ import org.sireum.message.Position
     return (newState, State.Value.Sym(n, tipe, pos))
   }
 
-  @pure def enterScope: State = {
-    return this(scope = ISZ(), stack = stack.push(scope))
-  }
-
-  @pure def exitScope: State = {
-    val (scope, newStack) = stack.pop.get
-    return this(scope = scope, stack = newStack)
-  }
-
 }
 
 object State {
@@ -92,12 +72,12 @@ object State {
   val errorValue: Value.Sym = Value.Sym(0, AST.Typed.nothing, Position.none)
 
   @memoize def create: State = {
-    return State(T, ISZ(), Stack.empty, ISZ(), 1)
+    return State(T, ISZ(), 1)
   }
 
   @datatype trait Value {
 
-    @pure def typed: AST.Typed
+    @pure def tipe: AST.Typed
 
     @pure def toST: ST
 
@@ -117,7 +97,7 @@ object State {
   object Value {
 
     @datatype class B(value: org.sireum.B, @hidden val pos: Position) extends Value {
-      @pure override def typed: AST.Typed.Name = {
+      @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.b
       }
 
@@ -131,7 +111,7 @@ object State {
     }
 
     @datatype class Z(value: org.sireum.Z, @hidden val pos: Position) extends Value {
-      @pure override def typed: AST.Typed.Name = {
+      @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.z
       }
 
@@ -145,7 +125,7 @@ object State {
     }
 
     @datatype class C(value: org.sireum.C, @hidden val pos: Position) extends Value {
-      @pure override def typed: AST.Typed.Name = {
+      @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.c
       }
 
@@ -159,7 +139,7 @@ object State {
     }
 
     @datatype class F32(value: org.sireum.F32, @hidden val pos: Position) extends Value {
-      @pure override def typed: AST.Typed.Name = {
+      @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.f32
       }
 
@@ -173,7 +153,7 @@ object State {
     }
 
     @datatype class F64(value: org.sireum.F64, @hidden val pos: Position) extends Value {
-      @pure override def typed: AST.Typed.Name = {
+      @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.f64
       }
 
@@ -187,7 +167,7 @@ object State {
     }
 
     @datatype class R(value: org.sireum.R, @hidden val pos: Position) extends Value {
-      @pure override def typed: AST.Typed.Name = {
+      @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.r
       }
 
@@ -201,7 +181,7 @@ object State {
     }
 
     @datatype class String(value: org.sireum.String, @hidden val pos: Position) extends Value {
-      @pure override def typed: AST.Typed.Name = {
+      @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.string
       }
 
@@ -215,11 +195,7 @@ object State {
     }
 
     @datatype trait SubZ extends Value {
-      def tipe: AST.Typed.Name
-
-      @pure override def typed: AST.Typed.Name = {
-        return tipe
-      }
+      @pure override def tipe: AST.Typed.Name
 
       @pure override def toST: ST = {
         val id = tipe.ids(tipe.ids.size - 1)
@@ -319,10 +295,7 @@ object State {
       }
     }
 
-    @datatype class Sym(num: org.sireum.Z, @hidden tipe: AST.Typed, @hidden val pos: Position) extends Value {
-      @pure def typed: AST.Typed = {
-        return tipe
-      }
+    @datatype class Sym(num: org.sireum.Z, @hidden val tipe: AST.Typed, @hidden val pos: Position) extends Value {
 
       @pure override def toST: ST = {
         return st"$symPrefix$num@[${pos.beginLine}:${pos.beginColumn}]"
@@ -333,11 +306,7 @@ object State {
       }
     }
 
-    @datatype class Address(address: Address, @hidden tipe: AST.Typed, @hidden val pos: Position) extends Value {
-      @pure def typed: AST.Typed = {
-        return tipe
-      }
-
+    @datatype class Address(address: Address, @hidden val tipe: AST.Typed, @hidden val pos: Position) extends Value {
       @pure override def toST: ST = {
         return st"$tipe@$address"
       }
@@ -349,12 +318,8 @@ object State {
 
     @datatype class AdtLit(address: Address,
                            @hidden fields: Map[String, Value],
-                           @hidden tipe: AST.Typed,
+                           @hidden val tipe: AST.Typed,
                            @hidden val pos: Position) extends Value {
-      @pure def typed: AST.Typed = {
-        return tipe
-      }
-
       @pure override def toST: ST = {
         return st"$tipe@$address(${(for (f <- fields.entries) yield st"${f._1} = ${f._2.toST}", ", ")})"
       }
@@ -366,12 +331,8 @@ object State {
 
     @datatype class SeqLit(address: Address,
                            elements: ISZ[Value],
-                           @hidden tipe: AST.Typed,
+                           @hidden val tipe: AST.Typed,
                            @hidden val pos: Position) extends Value {
-      @pure def typed: AST.Typed = {
-        return tipe
-      }
-
       @pure override def toST: ST = {
         return st"$tipe@$address[${(for (e <- elements) yield e.toST, ", ")}]"
       }
@@ -384,12 +345,8 @@ object State {
     @datatype class SeqAgg(address: Address,
                            sizeOpt: Option[Value],
                            default: Value,
-                           @hidden tipe: AST.Typed,
+                           @hidden val tipe: AST.Typed,
                            @hidden val pos: Position) extends Value {
-      @pure def typed: AST.Typed = {
-        return tipe
-      }
-
       @pure override def toST: ST = {
         sizeOpt match {
           case Some(size) => return st"$tipe@$address(${size.toST})[_ ~> ${default.toST}]"
@@ -447,6 +404,9 @@ object State {
 
     @datatype class And(claims: ISZ[Claim]) extends Claim {
       @pure override def toST: ST = {
+        if (claims.isEmpty) {
+          return st"T"
+        }
         val r = st"""∧(
                     |  ${(for (c <- claims) yield c.toST, ",\n")}
                     |)"""
@@ -454,6 +414,9 @@ object State {
       }
 
       @pure override def toSmt2: ST = {
+        if (claims.isEmpty) {
+          return st"true"
+        }
         val r = st"""(and
                     |  ${(for (c <- claims) yield c.toSmt2, "\n")}
                     |)"""
@@ -474,6 +437,9 @@ object State {
 
     @datatype class Or(claims: ISZ[Claim]) extends Claim {
       @pure override def toST: ST = {
+        if (claims.isEmpty) {
+          return st"F"
+        }
         val r =  st"""∨(
                      |  ${(for (c <- claims) yield c.toST, ",\n")}
                      |)"""
@@ -481,6 +447,9 @@ object State {
       }
 
       @pure override def toSmt2: ST = {
+        if (claims.isEmpty) {
+          return st"false"
+        }
         val r = st"""(or
                     |  ${(for (c <- claims) yield c.toSmt2, "\n")}
                     |)"""
@@ -526,7 +495,7 @@ object State {
       }
     }
 
-    @datatype class Quant(isAll: B, ids: ISZ[Def.Id], tipe: AST.Typed, claim: Claim) extends Claim {
+    @datatype class Quant(isAll: B, ids: ISZ[Def.CurrentId], tipe: AST.Typed, claim: Claim) extends Claim {
       @pure override def toST: ST = {
         val r = st"""${if (isAll) "∀" else "∃"} ${(for (id <- ids) yield id.toST, ", ")} : ${tipe.string} ${claim.toST}"""
         return r
@@ -537,7 +506,9 @@ object State {
       }
 
       @pure override def toSmt2Decl: Map[String, ST] = {
-        return claim.toSmt2Decl
+        return claim.toSmt2Decl --
+          (for (id <- ids) yield id.smt2name.render) --
+          (for (id <- ids) yield id.sym.toSmt2.render)
       }
     }
 
@@ -565,7 +536,26 @@ object State {
       }
 
       @pure override def toSmt2Decl: Map[String, ST] = {
-        return Map.empty[String, ST] + value.toSmt2.render ~> st"(declare-const ${value.toSmt2} ${tipe(value.typed)})"
+        return Map.empty[String, ST] + value.toSmt2.render ~> st"(declare-const ${value.toSmt2} ${tipe(value.tipe)})"
+      }
+    }
+
+    @datatype class If(sym: Value.Sym, tClaim: Claim, fClaim: Claim) extends Claim {
+      @pure override def toST: ST = {
+        return st"""${sym.toST} ?
+                   |  ${tClaim.toST}
+                   |: ${fClaim.toST}"""
+      }
+
+      @pure override def toSmt2: ST = {
+        return st"""(ite ${sym.toSmt2}
+                   |  ${tClaim.toSmt2}
+                   |  ${fClaim.toSmt2})"""
+      }
+
+      @pure override def toSmt2Decl: Map[String, ST] = {
+        return (Map.empty[String, ST] + sym.toSmt2.render ~> st"(declare-const ${sym.toSmt2} ${tipe(sym.tipe)})") ++
+          tClaim.toSmt2Decl.entries ++ fClaim.toSmt2Decl.entries
       }
     }
 
@@ -573,7 +563,7 @@ object State {
       def sym: Value.Sym
 
       @pure override def toSmt2Decl: Map[String, ST] = {
-        return Map.empty[String, ST] + sym.toSmt2.render ~> st"(declare-const ${sym.toSmt2} ${tipe(sym.typed)})"
+        return Map.empty[String, ST] + sym.toSmt2.render ~> st"(declare-const ${sym.toSmt2} ${tipe(sym.tipe)})"
       }
     }
 
@@ -613,55 +603,62 @@ object State {
             ))
           )
 
-      @datatype class CurrentName(val sym: Value.Sym, ids: ISZ[String]) extends Def {
+      @datatype class CurrentName(val sym: Value.Sym, ids: ISZ[String],
+                                  @hidden defPosOpt: Option[Position]) extends Def {
         @pure override def toST: ST = {
           return st"${(ids, ".")} == ${sym.toST}"
         }
 
         @pure override def toSmt2: ST = {
-          return st"(= $name ${sym.toSmt2})"
+          return st"(= $smt2name ${sym.toSmt2})"
         }
 
         @pure override def toSmt2Decl: Map[String, ST] = {
           var r = super.toSmt2Decl
-          val n = name
+          val n = smt2name
           val ns = n.render
           if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${tipe(sym.typed)})"
+            r = r + ns ~> st"(declare-const $n ${tipe(sym.tipe)})"
           }
           return r
         }
 
-        @pure def name: ST = {
-          return st"|f:${(ids, ".")}|"
+        @memoize def smt2name: ST = {
+          return st"|g:${(ids, ".")}|"
         }
       }
 
-      @datatype class Name(val sym: Value.Sym, ids: ISZ[String], pos: Position) extends Def {
+      @datatype class Name(val sym: Value.Sym, ids: ISZ[String], num: Z, poss: ISZ[Position]) extends Def {
         @pure override def toST: ST = {
-          return st"${(ids, ".")} == ${sym.toST}"
+          return st"${(ids, ".")}@$possLines:$num == ${sym.toST}"
         }
 
         @pure override def toSmt2: ST = {
-          return st"(= $name ${sym.toSmt2})"
+          return st"(= $smt2name ${sym.toSmt2})"
         }
 
         @pure override def toSmt2Decl: Map[String, ST] = {
           var r = super.toSmt2Decl
-          val n = name
+          val n = smt2name
           val ns = n.render
           if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${tipe(sym.typed)})"
+            r = r + ns ~> st"(declare-const $n ${tipe(sym.tipe)})"
           }
           return r
         }
 
-        @pure def name: ST = {
-          return st"|f:${(ids, ".")}@[${pos.beginLine}, ${pos.beginColumn}]|"
+        @memoize def smt2name: ST = {
+          return st"|g:${(ids, ".")}@$possLines:$num|"
+        }
+
+        @pure def possLines: ST = {
+          return if (poss.size > 1) st"{${(for (pos <- poss) yield pos.beginLine, ", ")}}"
+          else st"${poss(0).beginLine}"
         }
       }
 
-      @datatype class CurrentId(val sym: Value.Sym, context: ISZ[String], id: String) extends Def {
+      @datatype class CurrentId(val sym: Value.Sym, context: ISZ[String], id: String,
+                                @hidden defPosOpt: Option[Position]) extends Def {
         @pure override def toST: ST = {
           return st"$id == ${sym.toST}"
         }
@@ -672,41 +669,47 @@ object State {
 
         @pure override def toSmt2Decl: Map[String, ST] = {
           var r = super.toSmt2Decl
-          val n = name
+          val n = smt2name
           val ns = n.render
           if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${tipe(sym.typed)})"
+            r = r + ns ~> st"(declare-const $n ${tipe(sym.tipe)})"
           }
           return r
         }
 
-        @pure def name: ST = {
+        @memoize def smt2name: ST = {
           return st"|l:$id|"
         }
       }
 
-      @datatype class Id(val sym: Value.Sym, context: ISZ[String], id: String, scope: org.sireum.Z, pos: Position) extends Def {
+      @datatype class Id(val sym: Value.Sym, context: ISZ[String], id: String, num: Z, poss: ISZ[Position]) extends Def {
 
         @pure override def toST: ST = {
-          return st"$id@${pos.beginLine} == ${sym.toST}"
+          return if (context.isEmpty) st"$id@$possLines:$num == ${sym.toST}"
+          else st"$id:${(context, ".")}@$possLines:$num == ${sym.toST}"
         }
 
         @pure override def toSmt2: ST = {
-          return st"(= $name ${sym.toSmt2})"
+          return st"(= $smt2name ${sym.toSmt2})"
         }
 
         @pure override def toSmt2Decl: Map[String, ST] = {
           var r = super.toSmt2Decl
-          val n = name
+          val n = smt2name
           val ns = n.render
           if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${tipe(sym.typed)})"
+            r = r + ns ~> st"(declare-const $n ${tipe(sym.tipe)})"
           }
           return r
         }
 
-        @pure def name: ST = {
-          return st"|l:$id:$scope:[${pos.beginLine}, ${pos.beginColumn}]|"
+        @memoize def smt2name: ST = {
+          return if (context.isEmpty) st"|l:$id@$possLines:$num|" else st"|l:$id:${(context, ".")}@$possLines:$num|"
+        }
+
+        @pure def possLines: ST = {
+          return if (poss.size > 1) st"{${(for (pos <- poss) yield pos.beginLine, ", ")}}"
+          else st"${poss(0).beginLine}"
         }
       }
 
@@ -749,7 +752,7 @@ object State {
 
         @pure override def toSmt2: ST = {
           unop2Smt2Map.get(sym.tipe) match {
-            case Some(m) => return st"(${m.get(op).get} ${sym.toSmt2})"
+            case Some(m) => return st"(= ${sym.toSmt2} (${m.get(op).get} ${sym.toSmt2}))"
             case _ =>
               halt("TODO") // TODO
           }

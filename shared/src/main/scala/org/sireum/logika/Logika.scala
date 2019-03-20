@@ -31,17 +31,48 @@ import org.sireum.lang.symbol.TypeInfo
 import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Position, Reporter}
+import StateTransformer.{PrePost, PreResult}
 
 object Logika {
   val kind: String = "Logika"
+
+  @datatype class CurrentIdPossCollector(context: ISZ[String], id: String) extends PrePost[ISZ[Position]] {
+    override def preStateClaimDefCurrentId(ctx: ISZ[Position], o: State.Claim.Def.CurrentId): PreResult[ISZ[Position], State.Claim.Def] = {
+      return if (o.defPosOpt.nonEmpty && o.context == context && o.id == id) PreResult(ctx :+ o.defPosOpt.get, T, None())
+      else PreResult(ctx, T, None())
+    }
+  }
+
+  @datatype class CurrentIdRewriter(map: HashMap[(ISZ[String], String), (ISZ[Position], Z)]) extends PrePost[B] {
+    override def preStateClaimDefCurrentId(ctx: B, o: State.Claim.Def.CurrentId): PreResult[B, State.Claim.Def] = {
+      map.get((o.context, o.id)) match {
+        case Some((poss, num)) => return PreResult(ctx, T, Some(State.Claim.Def.Id(o.sym, o.context, o.id, num, poss)))
+        case _ => return PreResult(ctx, T, None())
+      }
+    }
+  }
 }
 
 @record class Logika(smt2: Smt2, typeHierarchy: TypeHierarchy, timeoutInSeconds: Z) {
 
-  @memoize def basicTypes: HashSet[AST.Typed] = {
-    return HashSet.empty[AST.Typed] ++ ISZ[AST.Typed](
+  val basicTypes: HashSet[AST.Typed] =
+    HashSet.empty[AST.Typed] ++ ISZ[AST.Typed](
       AST.Typed.b, AST.Typed.c, AST.Typed.f32, AST.Typed.f64, AST.Typed.r, AST.Typed.string, AST.Typed.z
     )
+
+  @pure def isBasic(t: AST.Typed): B = {
+    if (basicTypes.contains(t)) {
+      return T
+    }
+    t match {
+      case t: AST.Typed.Name =>
+        typeHierarchy.typeMap.get(t.ids) match {
+          case Some(_: TypeInfo.SubZ) => return T
+          case _ => return F
+        }
+      case _ => return F
+    }
+    return T
   }
 
   @memoize def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
@@ -63,10 +94,31 @@ object Logika {
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.LocalVar =>
           val (s1, sym) = s0.freshSym(exp.attr.typedOpt.get, pos)
-          return (s1.addClaim(State.Claim.Def.CurrentId(sym, res.context, res.id)), sym)
+          return (s1.addClaim(State.Claim.Def.CurrentId(sym, res.context, res.id, None())), sym)
         case AST.ResolvedInfo.Var(T, F, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
           return (state, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
         case _ => halt(s"TODO: $e") // TODO
+      }
+    }
+
+    def evalUnaryExp(exp: AST.Exp.Unary): (State, State.Value) = {
+
+      val s0 = state
+
+      exp.attr.resOpt.get match {
+        case AST.ResolvedInfo.BuiltIn(kind) if isBasic(exp.typedOpt.get) =>
+          val (s1, v) = evalExp(s0, exp.exp, reporter)
+          if (!s1.status) {
+            return (s1, State.errorValue)
+          }
+          kind match {
+            case AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus => return (s1, v)
+            case _ =>
+              val (s2, sym) = s1.freshSym(v.tipe, exp.posOpt.get)
+              return (s2(claims = s2.claims :+ State.Claim.Def.Unary(sym, exp.op, v)), sym)
+          }
+        case _ =>
+          halt(s"TODO: $exp") // TODO
       }
     }
 
@@ -101,24 +153,9 @@ object Logika {
         return T
       }
 
-      @pure def isBasic(t: AST.Typed): B = {
-        if (basicTypes.contains(t)) {
-          return T
-        }
-        t match {
-          case t: AST.Typed.Name =>
-            typeHierarchy.typeMap.get(t.ids) match {
-              case Some(_: TypeInfo.SubZ) => return T
-              case _ => return F
-            }
-          case _ => return F
-        }
-        return T
-      }
-
       def checkNonZero(s0: State, value: State.Value, pos: Position): State = {
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
-        val tipe = value.typed.asInstanceOf[AST.Typed.Name]
+        val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
         val claim = State.Claim.Def.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
         val query = smt2.valid(s0.claims :+ claim, State.Claim.Prop(sym)).render
         val unsat = smt2.checkUnsat(query, timeoutInSeconds)
@@ -135,7 +172,7 @@ object Logika {
       exp.attr.resOpt.get match {
         case AST.ResolvedInfo.BuiltIn(kind) =>
           val (s1, v1) = evalExp(s0, exp.left, reporter)
-          val tipe = v1.typed.asInstanceOf[AST.Typed.Name]
+          val tipe = v1.tipe.asInstanceOf[AST.Typed.Name]
           if (isCond(kind)) {
             halt(s"TODO: $e") // TODO
           } else if (isSeq(kind)) {
@@ -161,6 +198,17 @@ object Logika {
       }
     }
 
+    def evalSelect(exp: AST.Exp.Select): (State, State.Value) = {
+      exp.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext && res.owner.size == 3
+          && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id == "random" =>
+          val s0 = state
+          val (s1, num) = s0.fresh
+          return (s1, State.Value.Sym(num, res.tpeOpt.get.ret, exp.posOpt.get))
+        case _ => halt(s"TODO: $e") // TODO
+      }
+    }
+
     val s0 = state
 
     e match {
@@ -171,8 +219,10 @@ object Logika {
       case e: AST.Exp.LitR => return (s0, State.Value.R(e.value, e.posOpt.get))
       case e: AST.Exp.LitString => return (s0, State.Value.String(e.value, e.posOpt.get))
       case e: AST.Exp.LitZ => return (s0, State.Value.Z(e.value, e.posOpt.get))
-      case e: AST.Exp.Binary => return evalBinaryExp(e)
       case e: AST.Exp.Ident => return evalIdent(e)
+      case e: AST.Exp.Select => return evalSelect(e)
+      case e: AST.Exp.Unary => return evalUnaryExp(e)
+      case e: AST.Exp.Binary => return evalBinaryExp(e)
       case _ => halt(s"TODO: $e") // TODO
     }
   }
@@ -181,7 +231,7 @@ object Logika {
     v match {
       case v: State.Value.Sym => return (s0, v)
       case _ =>
-        val (s2, symV) = s0.freshSym(v.typed, pos)
+        val (s2, symV) = s0.freshSym(v.tipe, pos)
         return (s2.addClaim(State.Claim.Def.Eq(symV, v)), symV)
     }
   }
@@ -225,34 +275,60 @@ object Logika {
       }
     }
 
-    def evalAssignLocal(decl: B, s0: State, context: ISZ[String], id: String, rhs: AST.AssignExp): State = {
-      @pure def firstPos: Position = {
-        for (claim <- s0.claims) {
-          claim match {
-            case claim: State.Claim.Def.CurrentId if claim.context == context && id == claim.id =>
-              return claim.sym.pos
-            case _ =>
-          }
-        }
-        halt("Infeasible")
-      }
-      @pure def rewriteClaim(claim: State.Claim, pos: Position): State.Claim = {
-        claim match {
-          case claim: State.Claim.Def.CurrentId if claim.context == context && id == claim.id =>
-            return State.Claim.Def.Id(claim.sym, context, id, s0.stack.size + 1, pos)
-          case _ => return claim
-        }
-      }
+    def evalAssignLocal(decl: B, s0: State, context: ISZ[String], id: String, rhs: AST.AssignExp, idPos: Position): State = {
       val (s1, init) = evalAssignExp(s0, rhs)
+      if (!s1.status) {
+        return s1
+      }
       val (s2, sym) = value2Sym(s1, init, rhs.asStmt.posOpt.get)
-      val newClaims: ISZ[State.Claim] =
+      val s4: State =
         if (decl) {
-          s2.claims
+          s2
         } else {
-          val pos = firstPos
-          for (c <- s2.claims) yield rewriteClaim(c, pos)
+          val poss = StateTransformer(Logika.CurrentIdPossCollector(context, id)).transformState(ISZ(), s2).ctx
+          if (poss.isEmpty) {
+            println("Here")
+          }
+          assert(poss.nonEmpty)
+          val (s3, num) = s2.fresh
+          val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (context, id) ~> ((poss, num))
+          StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, s3).resultOpt.get
         }
-      return s2(claims = newClaims :+ State.Claim.Def.CurrentId(sym, context, id))
+      return s4(claims = s4.claims :+ State.Claim.Def.CurrentId(sym, context, id, Some(idPos)))
+    }
+
+    def evalIf(s0: State, ifStmt: AST.Stmt.If): State = {
+      val (s1, v) = evalExp(s0, ifStmt.cond, reporter)
+      val (s2, cond) = value2Sym(s1, v, ifStmt.cond.posOpt.get)
+      if (!s2.status) {
+        return s2
+      }
+      val prop = State.Claim.Prop(cond)
+      val thenClaims = s2.claims :+ prop
+      var thenSat = smt2.checkSat(smt2.sat(thenClaims).render, timeoutInSeconds)
+      val s4: State = if (thenSat) {
+        val s3 = evalBody(s2(claims = thenClaims), ifStmt.thenBody, reporter)
+        thenSat = s3.status
+        s3
+      } else {
+        s2
+      }
+      val negProp = State.Claim.Neg(prop)
+      val elseClaims = s2.claims :+ negProp
+      var elseSat = smt2.checkSat(smt2.sat(elseClaims).render, timeoutInSeconds)
+      val s6: State = if (elseSat) {
+        val s5 = evalBody(s2(claims = elseClaims, nextFresh = s4.nextFresh), ifStmt.elseBody, reporter)
+        elseSat = s5.status
+        s5
+      } else {
+        s2(nextFresh = s4.nextFresh)
+      }
+      (thenSat, elseSat) match {
+        case (T, T) => return mergeStates(s2, cond, s4, s6, s6.nextFresh)
+        case (T, F) => return s4(status = s4.status && !reporter.hasError, nextFresh = s6.nextFresh)
+        case (F, T) => return s6(status = s6.status && !reporter.hasError)
+        case _ => return s6(status = F)
+      }
     }
 
     stmt match {
@@ -272,19 +348,34 @@ object Logika {
         }
       case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
         stmt.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.LocalVar => return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get)
+          case res: AST.ResolvedInfo.LocalVar =>
+            return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.id.attr.posOpt.get)
           case _ => halt(s"TODO: $stmt") // TODO
         }
       case AST.Stmt.Assign(lhs: AST.Exp.Ident, rhs) =>
         lhs.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.LocalVar => return evalAssignLocal(F, state, res.context, res.id, rhs)
+          case res: AST.ResolvedInfo.LocalVar =>
+            return evalAssignLocal(F, state, res.context, res.id, rhs, lhs.posOpt.get)
           case _ => halt(s"TODO: $stmt") // TODO
         }
+      case stmt: AST.Stmt.If => return evalIf(state, stmt)
       case _: AST.Stmt.Import => return state
       case _ =>
         halt(s"TODO: $stmt") // TODO
     }
 
+  }
+
+  def mergeStates(s0: State, cond: State.Value.Sym, sT: State, sF: State, nextFresh: Z): State = {
+    @pure def mergeClaimPrefix(tClaim: State.Claim, fClaim: State.Claim): State.Claim = {
+      return if (tClaim == fClaim) tClaim else State.Claim.If(cond, tClaim, fClaim)
+    }
+    val size = s0.claims.size
+    val prefixClaims: ISZ[State.Claim] =
+      for (i <- 0 until size) yield mergeClaimPrefix(sT.claims(i), sF.claims(i))
+    return State(s0.status, prefixClaims :+
+      State.Claim.If(cond, State.Claim.And(ops.ISZOps(sT.claims).drop(size + 1)),
+        State.Claim.And(ops.ISZOps(sF.claims).drop(size + 1))), nextFresh)
   }
 
   def evalStmts(state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): State = {
@@ -298,6 +389,29 @@ object Logika {
     }
 
     return current
+  }
+
+  def evalBody(state: State, body: AST.Body, reporter: Reporter): State = {
+    val s0 = state
+    var current = evalStmts(s0, body.stmts, reporter)
+    if (!current.status) {
+      return current
+    }
+    var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)]
+    for (undecl <- body.undecls) {
+      val poss = StateTransformer(Logika.CurrentIdPossCollector(undecl.context, undecl.id)).
+        transformState(ISZ(), current).ctx
+      assert(poss.nonEmpty)
+      val (s1, num) = current.fresh
+      current = s1
+      locals = locals + (undecl.context, undecl.id) ~> ((poss, num))
+    }
+    return if (locals.isEmpty) current
+    else StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, current).resultOpt.get
+  }
+
+  def evalBlock(state: State, block: AST.Stmt.Block, reporter: Reporter): State = {
+    return evalBody(state, block.body, reporter)
   }
 
 }

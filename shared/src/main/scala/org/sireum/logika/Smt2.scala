@@ -51,7 +51,7 @@ import org.sireum._
   }
 
   @pure def query(headers: ISZ[ST], decls: ISZ[ST], claims: ISZ[ST]): ST = {
-    return st"""${(for (header <- headers) yield st"; $header", "\n")}
+    return st"""${(for (header <- headers; line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
                |;
                |(define-sort   B            ()           Bool)
                |(define-sort   C            ()           String)
