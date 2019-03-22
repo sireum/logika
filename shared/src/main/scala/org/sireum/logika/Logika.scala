@@ -53,7 +53,7 @@ object Logika {
   }
 }
 
-@record class Logika(smt2: Smt2, typeHierarchy: TypeHierarchy, timeoutInSeconds: Z) {
+@record class Logika(smt2: Smt2, typeHierarchy: TypeHierarchy) {
 
   val basicTypes: HashSet[AST.Typed] =
     HashSet.empty[AST.Typed] ++ ISZ[AST.Typed](
@@ -95,7 +95,7 @@ object Logika {
         case res: AST.ResolvedInfo.LocalVar =>
           val (s1, sym) = s0.freshSym(exp.attr.typedOpt.get, pos)
           return (s1.addClaim(State.Claim.Def.CurrentId(sym, res.context, res.id, None())), sym)
-        case AST.ResolvedInfo.Var(T, F, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
+        case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
           return (state, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
         case _ => halt(s"TODO: $e") // TODO
       }
@@ -153,13 +153,13 @@ object Logika {
         return T
       }
 
-      def checkNonZero(s0: State, value: State.Value, pos: Position): State = {
+      def checkNonZero(s0: State, op: String, value: State.Value, pos: Position): State = {
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
         val claim = State.Claim.Def.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
-        val query = smt2.valid(s0.claims :+ claim, State.Claim.Prop(sym)).render
-        val unsat = smt2.checkUnsat(query, timeoutInSeconds)
-        if (unsat) {
+        val valid = smt2.valid(s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
+          s0.claims :+ claim, State.Claim.Prop(sym))
+        if (valid) {
           return s1.addClaim(claim)
         } else {
           reporter.error(Some(pos), Logika.kind, s"Could not deduce non-zero second operand for ${exp.op}")
@@ -180,7 +180,7 @@ object Logika {
           } else if (isBasic(tipe)) {
             val (s2, v2) = evalExp(s1, exp.right, reporter)
             val s3: State = if (reqNonZeroCheck(kind)) {
-              checkNonZero(s2, v2, exp.right.posOpt.get)
+              checkNonZero(s2, exp.op, v2, exp.right.posOpt.get)
             } else {
               s2
             }
@@ -248,8 +248,9 @@ object Logika {
       }
       val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
       val s3 = s2(claims = s2.claims :+ State.Claim.Prop(sym))
-      val sat = smt2.checkSat(smt2.sat(s3.claims).render, timeoutInSeconds)
-      return if (sat) s3 else s3(status = F)
+      val pos = cond.posOpt.get
+      val sat = smt2.sat(s"Assumption at [${pos.beginLine}, ${pos.beginColumn}]", s3.claims)
+      return s3(status = sat)
     }
 
     def evalAssert(s0: State, cond: AST.Exp): State = {
@@ -259,13 +260,12 @@ object Logika {
       }
       val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
       val conclusion = State.Claim.Prop(sym)
-      val unsat = smt2.checkUnsat(smt2.valid(s2.claims, conclusion).render, timeoutInSeconds)
-      if (unsat) {
-        return s2(claims = s2.claims :+ conclusion)
-      } else {
-        reporter.error(cond.posOpt, Logika.kind, s"Assertion violated")
-        return s2(status = F)
+      val pos = cond.posOpt.get
+      val valid = smt2.valid(s"Assertion at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion)
+      if (!valid) {
+        reporter.error(cond.posOpt, Logika.kind, s"Cannot deduce that the assertion condition holds")
       }
+      return s2(status = valid, claims = s2.claims :+ conclusion)
     }
 
     def evalAssignExp(s0: State, ae: AST.AssignExp): (State, State.Value) = {
@@ -286,9 +286,6 @@ object Logika {
           s2
         } else {
           val poss = StateTransformer(Logika.CurrentIdPossCollector(context, id)).transformState(ISZ(), s2).ctx
-          if (poss.isEmpty) {
-            println("Here")
-          }
           assert(poss.nonEmpty)
           val (s3, num) = s2.fresh
           val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (context, id) ~> ((poss, num))
@@ -299,29 +296,30 @@ object Logika {
 
     def evalIf(s0: State, ifStmt: AST.Stmt.If): State = {
       val (s1, v) = evalExp(s0, ifStmt.cond, reporter)
-      val (s2, cond) = value2Sym(s1, v, ifStmt.cond.posOpt.get)
+      val pos = ifStmt.cond.posOpt.get
+      val (s2, cond) = value2Sym(s1, v, pos)
       if (!s2.status) {
         return s2
       }
       val prop = State.Claim.Prop(cond)
       val thenClaims = s2.claims :+ prop
-      var thenSat = smt2.checkSat(smt2.sat(thenClaims).render, timeoutInSeconds)
+      var thenSat = smt2.sat(s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims)
       val s4: State = if (thenSat) {
         val s3 = evalBody(s2(claims = thenClaims), ifStmt.thenBody, reporter)
         thenSat = s3.status
         s3
       } else {
-        s2
+        s2(claims = thenClaims)
       }
       val negProp = State.Claim.Neg(prop)
       val elseClaims = s2.claims :+ negProp
-      var elseSat = smt2.checkSat(smt2.sat(elseClaims).render, timeoutInSeconds)
+      var elseSat = smt2.sat(s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims)
       val s6: State = if (elseSat) {
         val s5 = evalBody(s2(claims = elseClaims, nextFresh = s4.nextFresh), ifStmt.elseBody, reporter)
         elseSat = s5.status
         s5
       } else {
-        s2(nextFresh = s4.nextFresh)
+        s2(claims = elseClaims, nextFresh = s4.nextFresh)
       }
       (thenSat, elseSat) match {
         case (T, T) => return mergeStates(s2, cond, s4, s6, s6.nextFresh)
@@ -329,6 +327,51 @@ object Logika {
         case (F, T) => return s6(status = s6.status && !reporter.hasError)
         case _ => return s6(status = F)
       }
+    }
+
+    def evalWhile(s0: State, whileStmt: AST.Stmt.While): State = {
+      val s1 = checkOptNamedExps("Loop invariant", " at the beginning of while-loop", s0, whileStmt.invariants, reporter)
+      if (!s1.status) {
+        return s1
+      }
+      val modLocalVars = whileStmt.modifiedLocalVars
+      val s0R: State = {  // TODO: rewrite Vars as well
+        var srw = rewriteLocalVars(s0(nextFresh = s1.nextFresh), modLocalVars.keys)
+        for (p <- modLocalVars.entries) {
+          val (res, (tipe, pos)) = p
+          val (srw1, sym) = srw.freshSym(tipe, pos)
+          srw = srw1(claims = srw1.claims :+ State.Claim.Def.CurrentId(sym, res.context, res.id, Some(pos)))
+        }
+        srw
+      }
+      val s2 = State(T, s0R.claims ++ (for (i <- s0.claims.size until s1.claims.size) yield s1.claims(i)), s0R.nextFresh)
+      val (s3, v) = evalExp(s2, whileStmt.cond, reporter)
+      val pos = whileStmt.cond.posOpt.get
+      val (s4, cond) = value2Sym(s3, v, pos)
+      val prop = State.Claim.Prop(cond)
+      val thenClaims = s4.claims :+ prop
+      var thenSat = smt2.sat(s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims)
+      val nextFresh: Z = if (thenSat) {
+        val s5 = evalStmts(s4(claims = thenClaims), whileStmt.body.stmts, reporter)
+        thenSat = s5.status
+        if (thenSat) {
+          val s6 = checkOptNamedExps("Loop invariant", " at the end of while-loop",
+            s5, whileStmt.invariants, reporter)
+          s6.nextFresh
+        } else {
+          s5.nextFresh
+        }
+      } else {
+        s4.nextFresh
+      }
+      val negProp = State.Claim.Neg(prop)
+      val elseClaims = s4.claims :+ negProp
+      val elseSat = smt2.sat(s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims)
+      return State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
+    }
+
+    def evalWhileUnroll(s0: State, whileStmt: AST.Stmt.While): State = {
+      halt("TODO") // TODO
     }
 
     stmt match {
@@ -359,11 +402,49 @@ object Logika {
           case _ => halt(s"TODO: $stmt") // TODO
         }
       case stmt: AST.Stmt.If => return evalIf(state, stmt)
+      case stmt: AST.Stmt.While =>
+        return if (stmt.modifies.nonEmpty && stmt.invariants.nonEmpty) evalWhile(state, stmt)
+        else evalWhileUnroll(state, stmt)
       case _: AST.Stmt.Import => return state
       case _ =>
         halt(s"TODO: $stmt") // TODO
     }
 
+  }
+
+  def checkOptNamedExp(title: String, titleSuffix: String, s0: State, ne: AST.OptNamedExp, reporter: Reporter): State = {
+    val (s1, v) = evalExp(s0, ne.exp, reporter)
+    val pos = ne.exp.posOpt.get
+    val (s2, sym) = value2Sym(s1, v, pos)
+    val prop = State.Claim.Prop(sym)
+    val valid: B = ne.idOpt match {
+      case Some(id) =>
+        val valid = smt2.valid(s"$title '${id.value}' at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop)
+        if (!valid) {
+          reporter.error(id.attr.posOpt, Logika.kind,
+            s"Cannot deduce ${ops.StringOps(title).firstToLower} '${id.value}' holds$titleSuffix")
+        }
+        valid
+      case _ =>
+        val valid = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop)
+        if (!valid) {
+          reporter.error(ne.exp.posOpt, Logika.kind,
+            s"Cannot deduce the ${ops.StringOps(title).firstToLower} holds$titleSuffix")
+        }
+        valid
+    }
+    return s2(status = valid, claims = s2.claims :+ prop)
+  }
+
+  def checkOptNamedExps(title: String, titleSuffix: String, s0: State, nes: ISZ[AST.OptNamedExp], reporter: Reporter): State = {
+    var current = s0
+    for (ne <- nes) {
+      if (!current.status) {
+        return current
+      }
+      current = checkOptNamedExp(title, titleSuffix, current, ne, reporter)
+    }
+    return current
   }
 
   def mergeStates(s0: State, cond: State.Value.Sym, sT: State, sF: State, nextFresh: Z): State = {
@@ -393,18 +474,23 @@ object Logika {
 
   def evalBody(state: State, body: AST.Body, reporter: Reporter): State = {
     val s0 = state
-    var current = evalStmts(s0, body.stmts, reporter)
-    if (!current.status) {
-      return current
+    val s1 = evalStmts(s0, body.stmts, reporter)
+    if (!s1.status) {
+      return s1
     }
+    return rewriteLocalVars(s1, body.undecls)
+  }
+
+  def rewriteLocalVars(state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar]): State = {
+    var current = state
     var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)]
-    for (undecl <- body.undecls) {
-      val poss = StateTransformer(Logika.CurrentIdPossCollector(undecl.context, undecl.id)).
+    for (l <- localVars) {
+      val poss = StateTransformer(Logika.CurrentIdPossCollector(l.context, l.id)).
         transformState(ISZ(), current).ctx
       assert(poss.nonEmpty)
       val (s1, num) = current.fresh
       current = s1
-      locals = locals + (undecl.context, undecl.id) ~> ((poss, num))
+      locals = locals + (l.context, l.id) ~> ((poss, num))
     }
     return if (locals.isEmpty) current
     else StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, current).resultOpt.get

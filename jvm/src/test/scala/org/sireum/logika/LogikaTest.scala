@@ -39,9 +39,28 @@ class LogikaTest extends TestSuite {
 
   val timeoutInSeconds: Z = 2
 
+  val tqs: String = "\"\"\""
+
   val tests = Tests {
 
     "Passing" - {
+
+      * - passingWorksheet(
+        s"""import org.sireum._
+           |val m = Z.random
+           |val n = Z.random
+           |assume(n >= 0)
+           |var i = 0
+           |var r = 0
+           |while (i < n) {
+           |  l$tqs invariant 0 <= i
+           |                  i <= n
+           |                  r == m * i
+           |        modifies  i, r       $tqs
+           |  r = r + m
+           |  i = i + 1
+           |}
+           |assert(r == m * n)""".stripMargin)
 
       * - passingWorksheet(
         """import org.sireum._
@@ -74,6 +93,7 @@ class LogikaTest extends TestSuite {
       * - passingWorksheet(
         """import org.sireum._
           |assume(T)""".stripMargin)
+
     }
 
   }
@@ -99,7 +119,7 @@ class LogikaTest extends TestSuite {
         }
         if (!reporter.hasIssue) {
           try {
-            val logika = Logika(Z3(), p._1, timeoutInSeconds)
+            val logika = Logika(Z3(timeoutInSeconds), p._1)
             logika.evalStmts(State.create, p._2.body.stmts, reporter)
           } catch {
             case t: Throwable =>
