@@ -43,17 +43,17 @@ object Z3 {
 
 }
 
-@record class Z3 extends Smt2 {
+@record class Z3(val timeoutInSeconds: Z) extends Smt2 {
 
-  def checkSat(query: String, timeoutInSeconds: Z): B = {
-    return checkQuery(query, timeoutInSeconds).kind == Z3.Result.Kind.Sat
+  def checkSat(query: String): B = {
+    return checkQuery(query).kind == Z3.Result.Kind.Sat
   }
 
-  def checkUnsat(query: String, timeoutInSeconds: Z): B = {
-    return checkQuery(query, timeoutInSeconds).kind == Z3.Result.Kind.Unsat
+  def checkUnsat(query: String): B = {
+    return checkQuery(query).kind == Z3.Result.Kind.Unsat
   }
 
-  def checkQuery(query: String, timeoutInSeconds: Z): Z3.Result = {
+  def checkQuery(query: String): Z3.Result = {
     //println(s"Z3 Query:")
     //println(query)
     val pr = Os.proc(ISZ("z3", "-smt2", s"-T:$timeoutInSeconds", "-in")).input(query).redirectErr.run()

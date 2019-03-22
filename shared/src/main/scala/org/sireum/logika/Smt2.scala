@@ -30,24 +30,25 @@ import org.sireum._
 
 @msig trait Smt2 {
 
-  def checkSat(query: String, timeoutInSeconds: Z): B
+  def timeoutInSeconds: Z
 
-  def checkUnsat(query: String, timeoutInSeconds: Z): B
+  def checkSat(query: String): B
 
-  @pure def sat(claims: ISZ[State.Claim]): ST = {
-    val headers = st"Satisfiability Check:" +: (for (c <- claims) yield c.toST)
-    return satQuery(headers, claims)
+  def checkUnsat(query: String): B
+
+  def sat(title: String, claims: ISZ[State.Claim]): B = {
+    val headers = st"Satisfiability Check for $title:" +: (for (c <- claims) yield c.toST)
+    checkSat(satQuery(headers, claims).render)
   }
 
   @pure def satQuery(headers: ISZ[ST], claims: ISZ[State.Claim]): ST = {
-
     val decls: ISZ[ST] = (HashSMap.empty[String, ST] ++ (for (c <- claims; p <- c.toSmt2DeclMem.entries) yield p)).values
     return query(headers, decls, for (c <- claims) yield c.toSmt2Mem)
   }
 
-  @pure def valid(premises: ISZ[State.Claim], conclusion: State.Claim): ST = {
-    val headers = st"Validity Check:" +: (for (c <- premises) yield c.toST) :+ st"  ⊢" :+ conclusion.toST
-    return satQuery(headers, premises :+ State.Claim.Neg(conclusion))
+  def valid(title: String, premises: ISZ[State.Claim], conclusion: State.Claim): B = {
+    val headers = st"Validity Check for $title:" +: (for (c <- premises) yield c.toST) :+ st"  ⊢" :+ conclusion.toST
+    checkUnsat(satQuery(headers, premises :+ State.Claim.Neg(conclusion)).render)
   }
 
   @pure def query(headers: ISZ[ST], decls: ISZ[ST], claims: ISZ[ST]): ST = {
