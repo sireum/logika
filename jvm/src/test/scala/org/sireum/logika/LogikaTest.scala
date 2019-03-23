@@ -37,13 +37,32 @@ class LogikaTest extends TestSuite {
 
   lazy val typeChecker: TypeChecker = LibraryTypeCheckingTest.tc
 
-  val timeoutInSeconds: Z = 2
-
   val tqs: String = "\"\"\""
+
+  val config: Logika.Config =
+    Logika.Config(
+      defaultLoopBound = 10,
+      loopBounds = HashMap.empty,
+      smt2TimeoutInSeconds = 2)
 
   val tests = Tests {
 
     "Passing" - {
+
+      * - passingWorksheet(
+        s"""import org.sireum._
+           |val m = Z.random
+           |val n = 3
+           |var i = 0
+           |var r = 0
+           |while (i < n) { // loop unrolling (no modify clause)
+           |  l$tqs invariant 0 <= i
+           |                  i <= n
+           |                  r == m * i $tqs
+           |  r = r + m
+           |  i = i + 1
+           |}
+           |assert(r == m * n)""".stripMargin)
 
       * - passingWorksheet(
         s"""import org.sireum._
@@ -96,6 +115,24 @@ class LogikaTest extends TestSuite {
 
     }
 
+    "Failing" - {
+
+      * - failingWorksheet(
+        s"""import org.sireum._
+           |val m = Z.random
+           |val n = 11
+           |var i = 0
+           |var r = 0
+           |while (i < n) { // loop unrolling (no modify clause)
+           |  l$tqs invariant 0 <= i
+           |                  i <= n
+           |                  r == m * i $tqs
+           |  r = r + m
+           |  i = i + 1
+           |}
+           |assert(r == m * n)""".stripMargin, "loop unrolling capped")
+
+    }
   }
 
   def passingWorksheet(worksheet: String): Unit = {
@@ -119,7 +156,7 @@ class LogikaTest extends TestSuite {
         }
         if (!reporter.hasIssue) {
           try {
-            val logika = Logika(Z3(timeoutInSeconds), p._1)
+            val logika = Logika(config, Z3(config.smt2TimeoutInSeconds), p._1)
             logika.evalStmts(State.create, p._2.body.stmts, reporter)
           } catch {
             case t: Throwable =>

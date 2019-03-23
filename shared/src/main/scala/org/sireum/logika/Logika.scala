@@ -51,9 +51,15 @@ object Logika {
       }
     }
   }
+
+  @datatype class Config(defaultLoopBound: Z,
+                         loopBounds: HashMap[ISZ[String], Z],
+                         smt2TimeoutInSeconds: Z)
 }
 
-@record class Logika(smt2: Smt2, typeHierarchy: TypeHierarchy) {
+@record class Logika(config: Logika.Config,
+                     smt2: Smt2,
+                     typeHierarchy: TypeHierarchy) {
 
   val basicTypes: HashSet[AST.Typed] =
     HashSet.empty[AST.Typed] ++ ISZ[AST.Typed](
@@ -325,7 +331,9 @@ object Logika {
         case (T, T) => return mergeStates(s2, cond, s4, s6, s6.nextFresh)
         case (T, F) => return s4(status = s4.status && !reporter.hasError, nextFresh = s6.nextFresh)
         case (F, T) => return s6(status = s6.status && !reporter.hasError)
-        case _ => return s6(status = F)
+        case _ =>
+          val s7 = mergeStates(s2, cond, s4, s6, s6.nextFresh)
+          return s7(status = F)
       }
     }
 
@@ -370,8 +378,69 @@ object Logika {
       return State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
     }
 
+    @pure def loopBound(ids: ISZ[String]): Z = {
+      return config.loopBounds.get(ids).getOrElse(config.defaultLoopBound)
+    }
+
     def evalWhileUnroll(s0: State, whileStmt: AST.Stmt.While): State = {
-      halt("TODO") // TODO
+      val loopId: ISZ[String] = whileStmt.loopIdOpt match {
+        case Some(id) => whileStmt.context :+ id.value
+        case _ => whileStmt.context
+      }
+      def rec(current: State, numLoops: Z): State = {
+        val s1 = checkOptNamedExps("Loop invariant", " at the beginning of while-loop", current,
+          whileStmt.invariants, reporter)
+        if (!s1.status) {
+          return s1
+        }
+        val (s2, v) = evalExp(s1, whileStmt.cond, reporter)
+        val pos = whileStmt.cond.posOpt.get
+        val (s3, cond) = value2Sym(s2, v, pos)
+        val prop = State.Claim.Prop(cond)
+        val thenClaims = s3.claims :+ prop
+        var thenSat = smt2.sat(s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims)
+        val s6: State = if (thenSat) {
+          val s4 = evalStmts(s3(claims = thenClaims), whileStmt.body.stmts, reporter)
+          thenSat = s4.status
+          if (thenSat) {
+            val bound = loopBound(loopId)
+            if (bound <= 0 || numLoops + 1 < loopBound(loopId)) {
+              val s5 = rec(s4, numLoops + 1)
+              s5
+            } else {
+              if (bound > 0) {
+                whileStmt.loopIdOpt match {
+                  case Some(_) =>
+                    reporter.warn(whileStmt.cond.posOpt, Logika.kind,
+                      s"Under-approximation due to loop unrolling at '${(loopId, ".")}' capped with bound $bound")
+                  case _ =>
+                    reporter.warn(whileStmt.cond.posOpt, Logika.kind,
+                      s"Under-approximation due to loop unrolling capped with bound $bound")
+                }
+                s4(status = F)
+              } else {
+                s4
+              }
+            }
+          } else {
+            s4
+          }
+        } else {
+          s3
+        }
+        val negProp = State.Claim.Neg(prop)
+        val elseClaims = s3.claims :+ negProp
+        val elseSat = smt2.sat(s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims)
+        (thenSat, elseSat) match {
+          case (T, T) => return mergeStates(s3, cond, s6, s3, s6.nextFresh)
+          case (T, F) => return s6(status = s6.status && !reporter.hasError)
+          case (F, T) => return s3(status = s3.status && !reporter.hasError, nextFresh = s6.nextFresh)
+          case _ =>
+            val s7 = mergeStates(s3, cond, s6, s3, s6.nextFresh)
+            return s7(status = F)
+        }
+      }
+      return rec(s0, 0)
     }
 
     stmt match {
@@ -402,9 +471,8 @@ object Logika {
           case _ => halt(s"TODO: $stmt") // TODO
         }
       case stmt: AST.Stmt.If => return evalIf(state, stmt)
-      case stmt: AST.Stmt.While =>
-        return if (stmt.modifies.nonEmpty && stmt.invariants.nonEmpty) evalWhile(state, stmt)
-        else evalWhileUnroll(state, stmt)
+      case stmt: AST.Stmt.While => 
+        return if (stmt.modifies.nonEmpty) evalWhile(state, stmt) else evalWhileUnroll(state, stmt)
       case _: AST.Stmt.Import => return state
       case _ =>
         halt(s"TODO: $stmt") // TODO
