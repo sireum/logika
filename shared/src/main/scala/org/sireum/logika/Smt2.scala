@@ -42,8 +42,8 @@ import org.sireum._
   }
 
   @pure def satQuery(headers: ISZ[ST], claims: ISZ[State.Claim]): ST = {
-    val decls: ISZ[ST] = (HashSMap.empty[String, ST] ++ (for (c <- claims; p <- c.toSmt2DeclMem.entries) yield p)).values
-    return query(headers, decls, for (c <- claims) yield c.toSmt2Mem)
+    val decls: ISZ[String] = (HashSMap.empty[String, String] ++ (for (c <- claims; p <- c.toSmt2DeclString) yield p)).values
+    return query(headers, decls, for (c <- claims) yield c.toSmt2String)
   }
 
   def valid(title: String, premises: ISZ[State.Claim], conclusion: State.Claim): B = {
@@ -51,7 +51,7 @@ import org.sireum._
     checkUnsat(satQuery(headers, premises :+ State.Claim.Neg(conclusion)).render)
   }
 
-  @pure def query(headers: ISZ[ST], decls: ISZ[ST], claims: ISZ[ST]): ST = {
+  @pure def query(headers: ISZ[ST], decls: ISZ[String], claims: ISZ[String]): ST = {
     return st"""${(for (header <- headers; line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
                |;
                |(define-sort   B            ()           Bool)

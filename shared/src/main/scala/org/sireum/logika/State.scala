@@ -372,12 +372,12 @@ object State {
       return ISZ()
     }
 
-    @memoize def toSmt2Mem: ST = {
-      return toSmt2
+    @memoize def toSmt2String: String = {
+      return toSmt2.render
     }
 
-    @memoize def toSmt2DeclMem: Map[String, ST] = {
-      return toSmt2Decl
+    @memoize def toSmt2DeclString: ISZ[(String, String)] = {
+      return (HashSMap.empty[String, String] ++ (for(p <- toSmt2Decl.entries) yield (p._1, p._2.render))).entries
     }
 
     @memoize def funsMem: ISZ[State.Fun] = {
