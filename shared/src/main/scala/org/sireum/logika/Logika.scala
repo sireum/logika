@@ -28,7 +28,6 @@ package org.sireum.logika
 
 import org.sireum._
 import org.sireum.lang.symbol.TypeInfo
-import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Position, Reporter}
 import StateTransformer.{PrePost, PreResult}
@@ -58,21 +57,15 @@ object Logika {
 }
 
 @record class Logika(config: Logika.Config,
-                     smt2: Smt2,
-                     typeHierarchy: TypeHierarchy) {
-
-  val basicTypes: HashSet[AST.Typed] =
-    HashSet.empty[AST.Typed] ++ ISZ[AST.Typed](
-      AST.Typed.b, AST.Typed.c, AST.Typed.f32, AST.Typed.f64, AST.Typed.r, AST.Typed.string, AST.Typed.z
-    )
+                     smt2: Smt2) {
 
   @pure def isBasic(t: AST.Typed): B = {
-    if (basicTypes.contains(t)) {
+    if (smt2.basicTypes.contains(t)) {
       return T
     }
     t match {
       case t: AST.Typed.Name =>
-        typeHierarchy.typeMap.get(t.ids) match {
+        smt2.typeHierarchy.typeMap.get(t.ids) match {
           case Some(_: TypeInfo.SubZ) => return T
           case _ => return F
         }
@@ -86,6 +79,11 @@ object Logika {
       return State.Value.Z(0, pos)
     }
     halt("TODO") // TODO
+  }
+
+  @memoize def adtSmtParamNames(t: AST.Typed.Name): ISZ[ST] = {
+    val adt = smt2.typeHierarchy.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
+    return for (p <- adt.ast.params) yield smt2.fieldId(t, p.id.value)
   }
 
   def evalExp(state: State, e: AST.Exp, reporter: Reporter): (State, State.Value) = {
@@ -211,8 +209,40 @@ object Logika {
           val s0 = state
           val (s1, num) = s0.fresh
           return (s1, State.Value.Sym(num, res.tpeOpt.get.ret, exp.posOpt.get))
+        case res: AST.ResolvedInfo.Var =>
+          if (res.isInObject) {
+            halt(s"TODO: $e") // TODO
+          } else {
+            exp.receiverOpt match {
+              case Some(receiver) =>
+                val (s0, o) = evalExp(state, receiver, reporter)
+                if (!s0.status) {
+                  return (s0, State.errorValue)
+                }
+                val (s1, sym) = s0.freshSym(exp.typedOpt.get, exp.posOpt.get)
+                return (s1.addClaim(
+                  State.Claim.Def.FieldLookup(sym, o, smt2.fieldId(receiver.typedOpt.get, exp.id.value))), sym)
+              case _ => halt(s"TODO: $e") // TODO
+            }
+          }
         case _ => halt(s"TODO: $e") // TODO
       }
+    }
+
+    def evalConstructor(exp: AST.Exp.Invoke, res: AST.ResolvedInfo.Method): (State, State.Value) = {
+      val t = exp.typedOpt.get.asInstanceOf[AST.Typed.Name]
+      var current = state
+      var args = ISZ[State.Value]()
+      for (arg <- exp.args) {
+        val (s0, v) = evalExp(current, arg, reporter)
+        if (!s0.status) {
+          return (s0, State.errorValue)
+        }
+        current = s0
+        args = args :+ v
+      }
+      val (s1, sym) = current.freshSym(t, exp.posOpt.get)
+      return (s1.addClaim(State.Claim.Def.AdtLit(sym, t, adtSmtParamNames(t), args)), sym)
     }
 
     val s0 = state
@@ -229,6 +259,11 @@ object Logika {
       case e: AST.Exp.Select => return evalSelect(e)
       case e: AST.Exp.Unary => return evalUnaryExp(e)
       case e: AST.Exp.Binary => return evalBinaryExp(e)
+      case e: AST.Exp.Invoke =>
+        e.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor => evalConstructor(e, res)
+          case _ => halt(s"TODO: $e") // TODO
+        }
       case _ => halt(s"TODO: $e") // TODO
     }
   }

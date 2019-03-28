@@ -75,6 +75,65 @@ object State {
     return State(T, ISZ(), 1)
   }
 
+  @pure def smtTypeId(t: AST.Typed): ST = {
+    return smtId(t, "")
+  }
+
+  @pure def smtTypeHierarchyId(t: AST.Typed): ST = {
+    return smtId(t, "T")
+  }
+
+  @pure def smtTypeConstructorId(t: AST.Typed): ST = {
+    return smtId(t, "C")
+  }
+
+  @pure def smtId(t: AST.Typed, prefix: String): ST = {
+    t match {
+      case t: AST.Typed.Name =>
+        shorten(t) match {
+          case Some(r) => return r
+          case _ =>
+            if (t.args.nonEmpty) {
+              return if (prefix == "") st"|${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]|"
+              else st"|$prefix:${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]|"
+            } else {
+              return if (prefix == "") st"|${(t.ids, ".")}|" else st"|$prefix:${(t.ids, ".")}|"
+            }
+        }
+      case _ => return if (prefix == "") st"|${smtIdRaw(t)}|" else st"|$prefix:${smtIdRaw(t)}|"
+    }
+  }
+
+  @pure def smtIdRaw(t: AST.Typed): ST = {
+    t match {
+      case t: AST.Typed.Name =>
+        shorten(t) match {
+          case Some(r) => return r
+          case _ =>
+            if (t.args.nonEmpty) {
+              return st"${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]"
+            } else {
+              return st"${(t.ids, ".")}"
+            }
+        }
+      case t: AST.Typed.TypeVar => return st"'${t.id}"
+      case _ => halt("TODO") // TODO
+    }
+  }
+
+  @pure def shorten(t: AST.Typed.Name): Option[ST] = {
+    if (t.ids.size == 3 && t.ids(0) == "org" && t.ids(1) == "sireum") {
+      val tid = t.ids(2)
+      if (tid == "IS" || tid == "MS") {
+        val it = t.args(0).asInstanceOf[AST.Typed.Name]
+        return Some(st"$tid[${smtIdRaw(it)}, ${smtIdRaw(t.args(1))}]")
+      } else if (t.args.isEmpty) {
+        return Some(st"${t.ids(2)}")
+      }
+    }
+    return None()
+  }
+
   @datatype trait Value {
 
     @pure def tipe: AST.Typed
@@ -83,7 +142,7 @@ object State {
 
     @pure def pos: Position
 
-    @pure def toSmt2: ST
+    @pure def toSmt: ST
   }
 
 
@@ -105,7 +164,7 @@ object State {
         return if (value) st"T" else st"F"
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         return if (value) st"true" else st"false"
       }
     }
@@ -119,7 +178,7 @@ object State {
         return st"$value"
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         return toST
       }
     }
@@ -133,7 +192,7 @@ object State {
         return st"""char${Json.Printer.printC(value)}"""
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -147,7 +206,7 @@ object State {
         return st"${value}f"
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -161,7 +220,7 @@ object State {
         return st"${value}d"
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -175,7 +234,7 @@ object State {
         return st"$value"
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         return toST
       }
     }
@@ -189,7 +248,7 @@ object State {
         return Json.Printer.printString(value)
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -210,7 +269,7 @@ object State {
         return value.string
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         return st"$value"
       }
     }
@@ -220,7 +279,7 @@ object State {
         return value.string
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -230,7 +289,7 @@ object State {
         return value.string
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -240,7 +299,7 @@ object State {
         return value.string
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -250,7 +309,7 @@ object State {
         return value.string
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -260,7 +319,7 @@ object State {
         return value.string
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -270,7 +329,7 @@ object State {
         return value.string
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -280,7 +339,7 @@ object State {
         return value.string
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -290,7 +349,7 @@ object State {
         return value.string
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
     }
@@ -301,106 +360,53 @@ object State {
         return st"$symPrefix$num@[${pos.beginLine}:${pos.beginColumn}]"
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         return st"cx!$num"
-      }
-    }
-
-    @datatype class Address(address: Address, @hidden val tipe: AST.Typed, @hidden val pos: Position) extends Value {
-      @pure override def toST: ST = {
-        return st"$tipe@$address"
-      }
-
-      @pure override def toSmt2: ST = {
-        return st"|$tipe@$address|"
-      }
-    }
-
-    @datatype class AdtLit(address: Address,
-                           @hidden fields: Map[String, Value],
-                           @hidden val tipe: AST.Typed,
-                           @hidden val pos: Position) extends Value {
-      @pure override def toST: ST = {
-        return st"$tipe@$address(${(for (f <- fields.entries) yield st"${f._1} = ${f._2.toST}", ", ")})"
-      }
-
-      @pure override def toSmt2: ST = {
-        halt("TODO") // TODO
-      }
-    }
-
-    @datatype class SeqLit(address: Address,
-                           elements: ISZ[Value],
-                           @hidden val tipe: AST.Typed,
-                           @hidden val pos: Position) extends Value {
-      @pure override def toST: ST = {
-        return st"$tipe@$address[${(for (e <- elements) yield e.toST, ", ")}]"
-      }
-
-      @pure override def toSmt2: ST = {
-        halt("TODO") // TODO
-      }
-    }
-
-    @datatype class SeqAgg(address: Address,
-                           sizeOpt: Option[Value],
-                           default: Value,
-                           @hidden val tipe: AST.Typed,
-                           @hidden val pos: Position) extends Value {
-      @pure override def toST: ST = {
-        sizeOpt match {
-          case Some(size) => return st"$tipe@$address(${size.toST})[_ ~> ${default.toST}]"
-          case _ => return st"$tipe@$address[_ ~> ${default.toST}]"
-        }
-      }
-
-      @pure override def toSmt2: ST = {
-        halt("TODO") // TODO
       }
     }
 
   }
 
   @datatype trait Claim {
+
     @pure def toST: ST
 
-    @pure def toSmt2: ST
+    @pure def toSmt: ST
 
-    @pure def toSmt2Decl: Map[String, ST]
+    @pure def toSmtDecl: HashSMap[String, ST]
 
     @pure def funs: ISZ[Fun] = {
       return ISZ()
     }
 
-    @memoize def toSmt2String: String = {
-      return toSmt2.render
+    @pure def types: ISZ[AST.Typed]
+
+    @memoize def toSmtString: String = {
+      return toSmt.render
     }
 
-    @memoize def toSmt2DeclString: ISZ[(String, String)] = {
-      return (HashSMap.empty[String, String] ++ (for(p <- toSmt2Decl.entries) yield (p._1, p._2.render))).entries
+    @memoize def toSmtDeclString: ISZ[(String, String)] = {
+      return (HashSMap.empty[String, String] ++ (for(p <- toSmtDecl.entries) yield (p._1, p._2.render))).entries
     }
 
     @memoize def funsMem: ISZ[State.Fun] = {
       return (HashSSet.empty[State.Fun] ++ funs).elements
     }
+
+    @memoize def typeNames: ISZ[AST.Typed.Name] = {
+      var r = HashSSet.empty[AST.Typed.Name]
+      for (t <- types) {
+        t match {
+          case t: AST.Typed.Name => r = r + t
+          case _ =>
+        }
+      }
+      return r.elements
+    }
+
   }
 
   object Claim {
-
-    @pure def tipe(t: AST.Typed): ST = {
-      t match {
-        case t: AST.Typed.Name => return shorten(t)
-        case _ => halt("TODO") // TODO
-      }
-    }
-
-    @pure def shorten(t: AST.Typed.Name): ST = {
-      if (t.ids.size == 3 && t.ids(0) == "org" && t.ids(1) == "sireum") {
-        return st"${t.ids(2)}"
-      } else {
-        return st"${(t.ids, ".")}"
-      }
-    }
 
     @datatype class And(claims: ISZ[Claim]) extends Claim {
       @pure override def toST: ST = {
@@ -413,25 +419,29 @@ object State {
         return r
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         if (claims.isEmpty) {
           return st"true"
         }
         val r = st"""(and
-                    |  ${(for (c <- claims) yield c.toSmt2, "\n")}
+                    |  ${(for (c <- claims) yield c.toSmt, "\n")}
                     |)"""
         return r
       }
 
-      @pure override def toSmt2Decl: Map[String, ST] = {
-        var r = Map.empty[String, ST]
-        for (c <- claims; p <- c.toSmt2Decl.entries) {
+      @pure override def toSmtDecl: HashSMap[String, ST] = {
+        var r = HashSMap.empty[String, ST]
+        for (c <- claims; p <- c.toSmtDecl.entries) {
           val (k, v) = p
           if (!r.contains(k)) {
             r = r + k ~> v
           }
         }
         return r
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return for (c <- claims; t <- c.types) yield t
       }
     }
 
@@ -446,25 +456,29 @@ object State {
         return r
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         if (claims.isEmpty) {
           return st"false"
         }
         val r = st"""(or
-                    |  ${(for (c <- claims) yield c.toSmt2, "\n")}
+                    |  ${(for (c <- claims) yield c.toSmt, "\n")}
                     |)"""
         return r
       }
 
-      @pure override def toSmt2Decl: Map[String, ST] = {
-        var r = Map.empty[String, ST]
-        for (c <- claims; p <- c.toSmt2Decl.entries) {
+      @pure override def toSmtDecl: HashSMap[String, ST] = {
+        var r = HashSMap.empty[String, ST]
+        for (c <- claims; p <- c.toSmtDecl.entries) {
           val (k, v) = p
           if (!r.contains(k)) {
             r = r + k ~> v
           }
         }
         return r
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return for (c <- claims; t <- c.types) yield t
       }
     }
 
@@ -476,22 +490,26 @@ object State {
         return r
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         val r = st"""(implies
-                    |  ${(for (c <- claims) yield c.toSmt2, "\n")}
+                    |  ${(for (c <- claims) yield c.toSmt, "\n")}
                     |)"""
         return r
       }
 
-      @pure override def toSmt2Decl: Map[String, ST] = {
-        var r = Map.empty[String, ST]
-        for (c <- claims; p <- c.toSmt2Decl.entries) {
+      @pure override def toSmtDecl: HashSMap[String, ST] = {
+        var r = HashSMap.empty[String, ST]
+        for (c <- claims; p <- c.toSmtDecl.entries) {
           val (k, v) = p
           if (!r.contains(k)) {
             r = r + k ~> v
           }
         }
         return r
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return for (c <- claims; t <- c.types) yield t
       }
     }
 
@@ -501,14 +519,18 @@ object State {
         return r
       }
 
-      @pure override def toSmt2: ST = {
+      @pure override def toSmt: ST = {
         halt("TODO") // TODO
       }
 
-      @pure override def toSmt2Decl: Map[String, ST] = {
-        return claim.toSmt2Decl --
+      @pure override def toSmtDecl: HashSMap[String, ST] = {
+        return claim.toSmtDecl --
           (for (id <- ids) yield id.smt2name.render) --
-          (for (id <- ids) yield id.sym.toSmt2.render)
+          (for (id <- ids) yield id.sym.toSmt.render)
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return tipe +: claim.types
       }
     }
 
@@ -517,12 +539,16 @@ object State {
         return st"¬(${claim.toST})"
       }
 
-      @pure override def toSmt2: ST = {
-        return st"(not ${claim.toSmt2})"
+      @pure override def toSmt: ST = {
+        return st"(not ${claim.toSmt})"
       }
 
-      @pure override def toSmt2Decl: Map[String, ST] = {
-        return claim.toSmt2Decl
+      @pure override def toSmtDecl: HashSMap[String, ST] = {
+        return claim.toSmtDecl
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return claim.types
       }
     }
 
@@ -531,12 +557,17 @@ object State {
         return value.toST
       }
 
-      @pure override def toSmt2: ST = {
-        return value.toSmt2
+      @pure override def toSmt: ST = {
+        return value.toSmt
       }
 
-      @pure override def toSmt2Decl: Map[String, ST] = {
-        return Map.empty[String, ST] + value.toSmt2.render ~> st"(declare-const ${value.toSmt2} ${tipe(value.tipe)})"
+      @pure override def toSmtDecl: HashSMap[String, ST] = {
+        return HashSMap.empty[String, ST] + value.toSmt.render ~>
+          st"(declare-const ${value.toSmt} ${State.smtTypeId(value.tipe)})"
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return ISZ(value.tipe)
       }
     }
 
@@ -547,23 +578,33 @@ object State {
                    |: ${fClaim.toST}"""
       }
 
-      @pure override def toSmt2: ST = {
-        return st"""(ite ${sym.toSmt2}
-                   |  ${tClaim.toSmt2}
-                   |  ${fClaim.toSmt2})"""
+      @pure override def toSmt: ST = {
+        return st"""(ite ${sym.toSmt}
+                   |  ${tClaim.toSmt}
+                   |  ${fClaim.toSmt})"""
       }
 
-      @pure override def toSmt2Decl: Map[String, ST] = {
-        return (Map.empty[String, ST] + sym.toSmt2.render ~> st"(declare-const ${sym.toSmt2} ${tipe(sym.tipe)})") ++
-          tClaim.toSmt2Decl.entries ++ fClaim.toSmt2Decl.entries
+      @pure override def toSmtDecl: HashSMap[String, ST] = {
+        return (HashSMap.empty[String, ST] + sym.toSmt.render ~>
+          st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})") ++
+          tClaim.toSmtDecl.entries ++ fClaim.toSmtDecl.entries
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return tClaim.types ++ fClaim.types
       }
     }
 
     @datatype trait Def extends Claim {
       def sym: Value.Sym
 
-      @pure override def toSmt2Decl: Map[String, ST] = {
-        return Map.empty[String, ST] + sym.toSmt2.render ~> st"(declare-const ${sym.toSmt2} ${tipe(sym.tipe)})"
+      @pure override def toSmtDecl: HashSMap[String, ST] = {
+        return HashSMap.empty[String, ST] + sym.toSmt.render ~>
+          st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})"
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return ISZ(sym.tipe)
       }
     }
 
@@ -609,16 +650,16 @@ object State {
           return st"${(ids, ".")} == ${sym.toST}"
         }
 
-        @pure override def toSmt2: ST = {
-          return st"(= $smt2name ${sym.toSmt2})"
+        @pure override def toSmt: ST = {
+          return st"(= $smt2name ${sym.toSmt})"
         }
 
-        @pure override def toSmt2Decl: Map[String, ST] = {
-          var r = super.toSmt2Decl
+        @pure override def toSmtDecl: HashSMap[String, ST] = {
+          var r = super.toSmtDecl
           val n = smt2name
           val ns = n.render
           if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${tipe(sym.tipe)})"
+            r = r + ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
           }
           return r
         }
@@ -633,16 +674,16 @@ object State {
           return st"${(ids, ".")}@$possLines:$num == ${sym.toST}"
         }
 
-        @pure override def toSmt2: ST = {
-          return st"(= $smt2name ${sym.toSmt2})"
+        @pure override def toSmt: ST = {
+          return st"(= $smt2name ${sym.toSmt})"
         }
 
-        @pure override def toSmt2Decl: Map[String, ST] = {
-          var r = super.toSmt2Decl
+        @pure override def toSmtDecl: HashSMap[String, ST] = {
+          var r = super.toSmtDecl
           val n = smt2name
           val ns = n.render
           if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${tipe(sym.tipe)})"
+            r = r + ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
           }
           return r
         }
@@ -663,16 +704,16 @@ object State {
           return st"$id == ${sym.toST}"
         }
 
-        @pure override def toSmt2: ST = {
-          return st"(= |l:$id| ${sym.toSmt2})"
+        @pure override def toSmt: ST = {
+          return st"(= |l:$id| ${sym.toSmt})"
         }
 
-        @pure override def toSmt2Decl: Map[String, ST] = {
-          var r = super.toSmt2Decl
+        @pure override def toSmtDecl: HashSMap[String, ST] = {
+          var r = super.toSmtDecl
           val n = smt2name
           val ns = n.render
           if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${tipe(sym.tipe)})"
+            r = r + ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
           }
           return r
         }
@@ -689,16 +730,16 @@ object State {
           else st"$id:${(context, ".")}@$possLines:$num == ${sym.toST}"
         }
 
-        @pure override def toSmt2: ST = {
-          return st"(= $smt2name ${sym.toSmt2})"
+        @pure override def toSmt: ST = {
+          return st"(= $smt2name ${sym.toSmt})"
         }
 
-        @pure override def toSmt2Decl: Map[String, ST] = {
-          var r = super.toSmt2Decl
+        @pure override def toSmtDecl: HashSMap[String, ST] = {
+          var r = super.toSmtDecl
           val n = smt2name
           val ns = n.render
           if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${tipe(sym.tipe)})"
+            r = r + ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
           }
           return r
         }
@@ -718,8 +759,8 @@ object State {
           return st"${sym.toST} ≜ ${value.toST}"
         }
 
-        @pure override def toSmt2: ST = {
-          return st"(= ${sym.toSmt2} ${value.toSmt2})"
+        @pure override def toSmt: ST = {
+          return st"(= ${sym.toSmt} ${value.toSmt})"
         }
       }
 
@@ -728,7 +769,7 @@ object State {
           return st"${sym.toST} ≜ ${left.toST} $op ${right.toST}"
         }
 
-        @pure override def toSmt2: ST = {
+        @pure override def toSmt: ST = {
           var neg: B = F
           val binop: String = if (op == "!=") {
             neg = T
@@ -737,7 +778,7 @@ object State {
             op
           }
           val r: ST = binop2Smt2Map.get(tipe) match {
-            case Some(m) => st"(= ${sym.toSmt2} (${m.get(binop).get} ${left.toSmt2} ${right.toSmt2}))"
+            case Some(m) => st"(= ${sym.toSmt} (${m.get(binop).get} ${left.toSmt} ${right.toSmt}))"
             case _ =>
               halt("TODO") // TODO
           }
@@ -750,9 +791,9 @@ object State {
           return st"${sym.toST} ≜ $op ${value.toST}"
         }
 
-        @pure override def toSmt2: ST = {
+        @pure override def toSmt: ST = {
           unop2Smt2Map.get(sym.tipe) match {
-            case Some(m) => return st"(= ${sym.toSmt2} (${m.get(op).get} ${sym.toSmt2}))"
+            case Some(m) => return st"(= ${sym.toSmt} (${m.get(op).get} ${sym.toSmt}))"
             case _ =>
               halt("TODO") // TODO
           }
@@ -764,7 +805,7 @@ object State {
           return st"${sym.toST} ≜ @$seq(${index.toST} ~> ${element.toST})"
         }
 
-        @pure override def toSmt2: ST = {
+        @pure override def toSmt: ST = {
           halt("TODO") // TODO
         }
       }
@@ -774,28 +815,28 @@ object State {
           return st"${sym.toST} ≜ @$seq(${index.toST})"
         }
 
-        @pure override def toSmt2: ST = {
+        @pure override def toSmt: ST = {
           halt("TODO") // TODO
         }
       }
 
-      @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: String, value: Value) extends Def {
+      @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: ST, value: Value) extends Def {
         @pure override def toST: ST = {
           return st"${sym.toST} ≜ @$adt($id = ${value.toST})"
         }
 
-        @pure override def toSmt2: ST = {
+        @pure override def toSmt: ST = {
           halt("TODO") // TODO
         }
       }
 
-      @datatype class FieldLookup(val sym: Value.Sym, adt: Value, id: String) extends Def {
+      @datatype class FieldLookup(val sym: Value.Sym, adt: Value, id: ST) extends Def {
         @pure override def toST: ST = {
           return st"${sym.toST} ≜ @$adt.$id"
         }
 
-        @pure override def toSmt2: ST = {
-          halt("TODO") // TODO
+        @pure override def toSmt: ST = {
+          return st"(= ${sym.toSmt} ($id ${adt.toSmt}))"
         }
       }
 
@@ -804,7 +845,7 @@ object State {
           return st"${sym.toST} ≜ ${(name, ".")}(${(for (arg <- args) yield arg.toST, ", ")})"
         }
 
-        @pure override def toSmt2: ST = {
+        @pure override def toSmt: ST = {
           halt("TODO") // TODO
         }
 
@@ -818,12 +859,26 @@ object State {
           return st"${sym.toST} ≜ ${o.toST}.$id(${(for (arg <- args) yield arg.toST, ", ")})"
         }
 
-        @pure override def toSmt2: ST = {
+        @pure override def toSmt: ST = {
           halt("TODO") // TODO
         }
 
         @pure override def funs: ISZ[Fun] = {
           return ISZ(IFun(oTipe, id))
+        }
+      }
+
+      @datatype class AdtLit(val sym: Value.Sym, tipe: AST.Typed.Name, params: ISZ[ST], args: ISZ[Value]) extends Def {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${tipe.string}(${(for (arg <- args) yield arg.toST, ", ")})"
+        }
+
+        @pure override def toSmt: ST = {
+          val symST = sym.toSmt
+          val r =  st"""(and
+                       |  (= (type-of $symST) ${State.smtTypeHierarchyId(tipe)})
+                       |  ${(for (p <- ops.ISZOps(params).zip(args)) yield st"(= (${p._1} $symST) ${p._2.toSmt})", "\n")})"""
+          return r
         }
       }
 

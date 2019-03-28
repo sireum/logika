@@ -27,6 +27,8 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.lang.{ast => AST}
+import org.sireum.lang.tipe.TypeHierarchy
 
 object Z3 {
   object Result {
@@ -43,7 +45,45 @@ object Z3 {
 
 }
 
-@record class Z3(val timeoutInSeconds: Z) extends Smt2 {
+@record class Z3(val typeHierarchy: TypeHierarchy,
+                 val timeoutInSeconds: Z)
+  extends Smt2 {
+
+  var types: HashSet[AST.Typed] = basicTypes
+
+  var poset: Poset[AST.Typed.Name] = Poset.empty
+
+  var sorts: ISZ[ST] = ISZ()
+
+  var typeDecls: ISZ[ST] = ISZ()
+
+  var typeHierarchyIds: ISZ[ST] = ISZ()
+
+  var typeConstructors: ISZ[ST] = ISZ()
+
+  def sortsUp(newSorts: ISZ[ST]): Unit = {
+    sorts = newSorts
+  }
+
+  def typeDeclsUp(newTypeDecls: ISZ[ST]): Unit = {
+    typeDecls = newTypeDecls
+  }
+
+  def typeHierarchyIdsUp(newTypeHierarchyIds: ISZ[ST]): Unit = {
+    typeHierarchyIds = newTypeHierarchyIds
+  }
+
+  def typeConstructorsUp(newConstructors: ISZ[ST]): Unit = {
+    typeConstructors = newConstructors
+  }
+
+  def typesUp(newTypes: HashSet[AST.Typed]): Unit = {
+    types = newTypes
+  }
+
+  def posetUp(newPoset: Poset[AST.Typed.Name]): Unit = {
+    poset = newPoset
+  }
 
   def checkSat(query: String): B = {
     return checkQuery(query).kind == Z3.Result.Kind.Sat

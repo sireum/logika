@@ -51,6 +51,12 @@ class LogikaTest extends TestSuite {
 
       * - passingWorksheet(
         s"""import org.sireum._
+           |val x = Z.random
+           |val xOpt = Some(Some(x))
+           |assert(xOpt.value.value == x)""".stripMargin)
+
+      * - passingWorksheet(
+        s"""import org.sireum._
            |val m = Z.random
            |val n = 3
            |var i = 0
@@ -133,6 +139,7 @@ class LogikaTest extends TestSuite {
            |assert(r == m * n)""".stripMargin, "loop unrolling capped")
 
     }
+
   }
 
   def passingWorksheet(worksheet: String): Unit = {
@@ -156,7 +163,8 @@ class LogikaTest extends TestSuite {
         }
         if (!reporter.hasIssue) {
           try {
-            val logika = Logika(config, Z3(config.smt2TimeoutInSeconds), p._1)
+            val th = p._1
+            val logika = Logika(config, Z3(th, config.smt2TimeoutInSeconds))
             logika.evalStmts(State.create, p._2.body.stmts, reporter)
           } catch {
             case t: Throwable =>

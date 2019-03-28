@@ -120,10 +120,6 @@ object StateTransformer {
           }
           return r
         case o: State.Value.Sym => return preStateValueSym(ctx, o)
-        case o: State.Value.Address => return preStateValueAddress(ctx, o)
-        case o: State.Value.AdtLit => return preStateValueAdtLit(ctx, o)
-        case o: State.Value.SeqLit => return preStateValueSeqLit(ctx, o)
-        case o: State.Value.SeqAgg => return preStateValueSeqAgg(ctx, o)
       }
     }
 
@@ -221,22 +217,6 @@ object StateTransformer {
     }
 
     @pure def preStateValueSym(ctx: Context, o: State.Value.Sym): PreResult[Context, State.Value] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateValueAddress(ctx: Context, o: State.Value.Address): PreResult[Context, State.Value] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateValueAdtLit(ctx: Context, o: State.Value.AdtLit): PreResult[Context, State.Value] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateValueSeqLit(ctx: Context, o: State.Value.SeqLit): PreResult[Context, State.Value] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateValueSeqAgg(ctx: Context, o: State.Value.SeqAgg): PreResult[Context, State.Value] = {
       return PreResult(ctx, T, None())
     }
 
@@ -340,6 +320,13 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Def.AdtLit =>
+          val r: PreResult[Context, State.Claim] = preStateClaimDefAdtLit(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
+          }
+          return r
       }
     }
 
@@ -386,6 +373,7 @@ object StateTransformer {
         case o: State.Claim.Def.FieldLookup => return preStateClaimDefFieldLookup(ctx, o)
         case o: State.Claim.Def.Apply => return preStateClaimDefApply(ctx, o)
         case o: State.Claim.Def.IApply => return preStateClaimDefIApply(ctx, o)
+        case o: State.Claim.Def.AdtLit => return preStateClaimDefAdtLit(ctx, o)
       }
     }
 
@@ -438,6 +426,10 @@ object StateTransformer {
     }
 
     @pure def preStateClaimDefIApply(ctx: Context, o: State.Claim.Def.IApply): PreResult[Context, State.Claim.Def] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimDefAdtLit(ctx: Context, o: State.Claim.Def.AdtLit): PreResult[Context, State.Claim.Def] = {
       return PreResult(ctx, T, None())
     }
 
@@ -518,10 +510,6 @@ object StateTransformer {
           }
           return r
         case o: State.Value.Sym => return postStateValueSym(ctx, o)
-        case o: State.Value.Address => return postStateValueAddress(ctx, o)
-        case o: State.Value.AdtLit => return postStateValueAdtLit(ctx, o)
-        case o: State.Value.SeqLit => return postStateValueSeqLit(ctx, o)
-        case o: State.Value.SeqAgg => return postStateValueSeqAgg(ctx, o)
       }
     }
 
@@ -619,22 +607,6 @@ object StateTransformer {
     }
 
     @pure def postStateValueSym(ctx: Context, o: State.Value.Sym): Result[Context, State.Value] = {
-      return Result(ctx, None())
-    }
-
-    @pure def postStateValueAddress(ctx: Context, o: State.Value.Address): Result[Context, State.Value] = {
-      return Result(ctx, None())
-    }
-
-    @pure def postStateValueAdtLit(ctx: Context, o: State.Value.AdtLit): Result[Context, State.Value] = {
-      return Result(ctx, None())
-    }
-
-    @pure def postStateValueSeqLit(ctx: Context, o: State.Value.SeqLit): Result[Context, State.Value] = {
-      return Result(ctx, None())
-    }
-
-    @pure def postStateValueSeqAgg(ctx: Context, o: State.Value.SeqAgg): Result[Context, State.Value] = {
       return Result(ctx, None())
     }
 
@@ -738,6 +710,13 @@ object StateTransformer {
            case Result(postCtx, _) => Result(postCtx, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Def.AdtLit =>
+          val r: Result[Context, State.Claim] = postStateClaimDefAdtLit(ctx, o) match {
+           case Result(postCtx, Some(result: State.Claim)) => Result(postCtx, Some[State.Claim](result))
+           case Result(_, Some(_)) => halt("Can only produce object of type State.Claim")
+           case Result(postCtx, _) => Result(postCtx, None[State.Claim]())
+          }
+          return r
       }
     }
 
@@ -784,6 +763,7 @@ object StateTransformer {
         case o: State.Claim.Def.FieldLookup => return postStateClaimDefFieldLookup(ctx, o)
         case o: State.Claim.Def.Apply => return postStateClaimDefApply(ctx, o)
         case o: State.Claim.Def.IApply => return postStateClaimDefIApply(ctx, o)
+        case o: State.Claim.Def.AdtLit => return postStateClaimDefAdtLit(ctx, o)
       }
     }
 
@@ -839,6 +819,10 @@ object StateTransformer {
       return Result(ctx, None())
     }
 
+    @pure def postStateClaimDefAdtLit(ctx: Context, o: State.Claim.Def.AdtLit): Result[Context, State.Claim.Def] = {
+      return Result(ctx, None())
+    }
+
   }
 
   @pure def transformISZ[Context, T](ctx: Context, s: IS[Z, T], f: (Context, T) => Result[Context, T] @pure): Result[Context, IS[Z, T]] = {
@@ -856,18 +840,6 @@ object StateTransformer {
       return Result(ctxi, Some(s2.toIS))
     } else {
       return Result[Context, IS[Z, T]](ctxi, None[IS[Z, T]]())
-    }
-  }
-
-  @pure def transformOption[Context, T](ctx: Context, option: Option[T], f: (Context, T) => Result[Context, T] @pure): Result[Context, Option[T]] = {
-    option match {
-      case Some(v) =>
-        val r = f(ctx, v)
-        r.resultOpt match {
-          case Some(_) => return Result(r.ctx, Some(r.resultOpt))
-          case _ => return Result[Context, Option[T]](r.ctx, None[Option[T]]())
-        }
-      case _ => return Result[Context, Option[T]](ctx, None[Option[T]]())
     }
   }
 
@@ -995,33 +967,6 @@ import StateTransformer._
             Result(preR.ctx, Some(o2))
           else
             Result(preR.ctx, None())
-        case o2: State.Value.Address =>
-          val r0: Result[Context, State.Value.Address] = transformStateValueAddress(preR.ctx, o2.address)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            Result(r0.ctx, Some(o2(address = r0.resultOpt.getOrElse(o2.address))))
-          else
-            Result(r0.ctx, None())
-        case o2: State.Value.AdtLit =>
-          val r0: Result[Context, State.Value.Address] = transformStateValueAddress(preR.ctx, o2.address)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            Result(r0.ctx, Some(o2(address = r0.resultOpt.getOrElse(o2.address))))
-          else
-            Result(r0.ctx, None())
-        case o2: State.Value.SeqLit =>
-          val r0: Result[Context, State.Value.Address] = transformStateValueAddress(preR.ctx, o2.address)
-          val r1: Result[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.elements, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            Result(r1.ctx, Some(o2(address = r0.resultOpt.getOrElse(o2.address), elements = r1.resultOpt.getOrElse(o2.elements))))
-          else
-            Result(r1.ctx, None())
-        case o2: State.Value.SeqAgg =>
-          val r0: Result[Context, State.Value.Address] = transformStateValueAddress(preR.ctx, o2.address)
-          val r1: Result[Context, Option[State.Value]] = transformOption(r0.ctx, o2.sizeOpt, transformStateValue _)
-          val r2: Result[Context, State.Value] = transformStateValue(r1.ctx, o2.default)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            Result(r2.ctx, Some(o2(address = r0.resultOpt.getOrElse(o2.address), sizeOpt = r1.resultOpt.getOrElse(o2.sizeOpt), default = r2.resultOpt.getOrElse(o2.default))))
-          else
-            Result(r2.ctx, None())
       }
       rOpt
     } else if (preR.resultOpt.nonEmpty) {
@@ -1290,6 +1235,13 @@ import StateTransformer._
             Result(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), o = r1.resultOpt.getOrElse(o2.o), args = r2.resultOpt.getOrElse(o2.args))))
           else
             Result(r2.ctx, None())
+        case o2: State.Claim.Def.AdtLit =>
+          val r0: Result[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          val r1: Result[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            Result(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
+          else
+            Result(r1.ctx, None())
       }
       rOpt
     } else if (preR.resultOpt.nonEmpty) {
@@ -1408,6 +1360,13 @@ import StateTransformer._
             Result(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), o = r1.resultOpt.getOrElse(o2.o), args = r2.resultOpt.getOrElse(o2.args))))
           else
             Result(r2.ctx, None())
+        case o2: State.Claim.Def.AdtLit =>
+          val r0: Result[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          val r1: Result[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            Result(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
+          else
+            Result(r1.ctx, None())
       }
       rOpt
     } else if (preR.resultOpt.nonEmpty) {
@@ -1418,41 +1377,6 @@ import StateTransformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: State.Claim.Def = r.resultOpt.getOrElse(o)
     val postR: Result[Context, State.Claim.Def] = pp.postStateClaimDef(r.ctx, o2)
-    if (postR.resultOpt.nonEmpty) {
-      return postR
-    } else if (hasChanged) {
-      return Result(postR.ctx, Some(o2))
-    } else {
-      return Result(postR.ctx, None())
-    }
-  }
-
-  @pure def transformStateValueAddress(ctx: Context, o: State.Value.Address): Result[Context, State.Value.Address] = {
-    val preR: PreResult[Context, State.Value.Address] = pp.preStateValueAddress(ctx, o) match {
-     case PreResult(preCtx, continu, Some(r: State.Value.Address)) => PreResult(preCtx, continu, Some[State.Value.Address](r))
-     case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Value.Address")
-     case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Value.Address]())
-    }
-    val r: Result[Context, State.Value.Address] = if (preR.continu) {
-      val o2: State.Value.Address = preR.resultOpt.getOrElse(o)
-      val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: Result[Context, State.Value.Address] = transformStateValueAddress(preR.ctx, o2.address)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        Result(r0.ctx, Some(o2(address = r0.resultOpt.getOrElse(o2.address))))
-      else
-        Result(r0.ctx, None())
-    } else if (preR.resultOpt.nonEmpty) {
-      Result(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
-    } else {
-      Result(preR.ctx, None())
-    }
-    val hasChanged: B = r.resultOpt.nonEmpty
-    val o2: State.Value.Address = r.resultOpt.getOrElse(o)
-    val postR: Result[Context, State.Value.Address] = pp.postStateValueAddress(r.ctx, o2) match {
-     case Result(postCtx, Some(result: State.Value.Address)) => Result(postCtx, Some[State.Value.Address](result))
-     case Result(_, Some(_)) => halt("Can only produce object of type State.Value.Address")
-     case Result(postCtx, _) => Result(postCtx, None[State.Value.Address]())
-    }
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {
