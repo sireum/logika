@@ -327,6 +327,13 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Def.SeqLit =>
+          val r: PreResult[Context, State.Claim] = preStateClaimDefSeqLit(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
+          }
+          return r
       }
     }
 
@@ -374,6 +381,7 @@ object StateTransformer {
         case o: State.Claim.Def.Apply => return preStateClaimDefApply(ctx, o)
         case o: State.Claim.Def.IApply => return preStateClaimDefIApply(ctx, o)
         case o: State.Claim.Def.AdtLit => return preStateClaimDefAdtLit(ctx, o)
+        case o: State.Claim.Def.SeqLit => return preStateClaimDefSeqLit(ctx, o)
       }
     }
 
@@ -430,6 +438,10 @@ object StateTransformer {
     }
 
     @pure def preStateClaimDefAdtLit(ctx: Context, o: State.Claim.Def.AdtLit): PreResult[Context, State.Claim.Def] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimDefSeqLit(ctx: Context, o: State.Claim.Def.SeqLit): PreResult[Context, State.Claim.Def] = {
       return PreResult(ctx, T, None())
     }
 
@@ -717,6 +729,13 @@ object StateTransformer {
            case Result(postCtx, _) => Result(postCtx, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Def.SeqLit =>
+          val r: Result[Context, State.Claim] = postStateClaimDefSeqLit(ctx, o) match {
+           case Result(postCtx, Some(result: State.Claim)) => Result(postCtx, Some[State.Claim](result))
+           case Result(_, Some(_)) => halt("Can only produce object of type State.Claim")
+           case Result(postCtx, _) => Result(postCtx, None[State.Claim]())
+          }
+          return r
       }
     }
 
@@ -764,6 +783,7 @@ object StateTransformer {
         case o: State.Claim.Def.Apply => return postStateClaimDefApply(ctx, o)
         case o: State.Claim.Def.IApply => return postStateClaimDefIApply(ctx, o)
         case o: State.Claim.Def.AdtLit => return postStateClaimDefAdtLit(ctx, o)
+        case o: State.Claim.Def.SeqLit => return postStateClaimDefSeqLit(ctx, o)
       }
     }
 
@@ -820,6 +840,10 @@ object StateTransformer {
     }
 
     @pure def postStateClaimDefAdtLit(ctx: Context, o: State.Claim.Def.AdtLit): Result[Context, State.Claim.Def] = {
+      return Result(ctx, None())
+    }
+
+    @pure def postStateClaimDefSeqLit(ctx: Context, o: State.Claim.Def.SeqLit): Result[Context, State.Claim.Def] = {
       return Result(ctx, None())
     }
 
@@ -1242,6 +1266,12 @@ import StateTransformer._
             Result(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
           else
             Result(r1.ctx, None())
+        case o2: State.Claim.Def.SeqLit =>
+          val r0: Result[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            Result(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
+          else
+            Result(r0.ctx, None())
       }
       rOpt
     } else if (preR.resultOpt.nonEmpty) {
@@ -1367,6 +1397,12 @@ import StateTransformer._
             Result(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
           else
             Result(r1.ctx, None())
+        case o2: State.Claim.Def.SeqLit =>
+          val r0: Result[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            Result(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
+          else
+            Result(r0.ctx, None())
       }
       rOpt
     } else if (preR.resultOpt.nonEmpty) {

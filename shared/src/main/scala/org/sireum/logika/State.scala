@@ -91,7 +91,7 @@ object State {
     t match {
       case t: AST.Typed.Name =>
         shorten(t) match {
-          case Some(r) => return r
+          case Some((r, raw)) => return if (raw) r else st"|$r|"
           case _ =>
             if (t.args.nonEmpty) {
               return if (prefix == "") st"|${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]|"
@@ -108,7 +108,7 @@ object State {
     t match {
       case t: AST.Typed.Name =>
         shorten(t) match {
-          case Some(r) => return r
+          case Some((r, _)) => return r
           case _ =>
             if (t.args.nonEmpty) {
               return st"${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]"
@@ -121,14 +121,14 @@ object State {
     }
   }
 
-  @pure def shorten(t: AST.Typed.Name): Option[ST] = {
+  @pure def shorten(t: AST.Typed.Name): Option[(ST, B)] = {
     if (t.ids.size == 3 && t.ids(0) == "org" && t.ids(1) == "sireum") {
       val tid = t.ids(2)
       if (tid == "IS" || tid == "MS") {
         val it = t.args(0).asInstanceOf[AST.Typed.Name]
-        return Some(st"$tid[${smtIdRaw(it)}, ${smtIdRaw(t.args(1))}]")
+        return Some((st"$tid[${smtIdRaw(it)}, ${smtIdRaw(t.args(1))}]", F))
       } else if (t.args.isEmpty) {
-        return Some(st"${t.ids(2)}")
+        return Some((st"${t.ids(2)}", T))
       }
     }
     return None()
@@ -800,7 +800,7 @@ object State {
         }
       }
 
-      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value) extends Def {
+      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value, @hidden atId: ST) extends Def {
         @pure override def toST: ST = {
           return st"${sym.toST} ≜ @$seq(${index.toST} ~> ${element.toST})"
         }
@@ -810,13 +810,13 @@ object State {
         }
       }
 
-      @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value) extends Def {
+      @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value, @hidden atId: ST) extends Def {
         @pure override def toST: ST = {
           return st"${sym.toST} ≜ @$seq(${index.toST})"
         }
 
         @pure override def toSmt: ST = {
-          halt("TODO") // TODO
+          return st"(= ${sym.toSmt} ($atId ${seq.toSmt} ${index.toSmt}))"
         }
       }
 
@@ -868,16 +868,38 @@ object State {
         }
       }
 
-      @datatype class AdtLit(val sym: Value.Sym, tipe: AST.Typed.Name, params: ISZ[ST], args: ISZ[Value]) extends Def {
+      @datatype class AdtLit(val sym: Value.Sym, @hidden params: ISZ[ST], args: ISZ[Value]) extends Def {
+        @pure def tipe: AST.Typed.Name = {
+          return sym.tipe.asInstanceOf[AST.Typed.Name]
+        }
+
         @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${tipe.string}(${(for (arg <- args) yield arg.toST, ", ")})"
+          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg.toST, ", ")})"
         }
 
         @pure override def toSmt: ST = {
           val symST = sym.toSmt
           val r =  st"""(and
-                       |  (= (type-of $symST) ${State.smtTypeHierarchyId(tipe)})
+                       |  (= (type-of $symST) ${State.smtTypeHierarchyId(sym.tipe)})
                        |  ${(for (p <- ops.ISZOps(params).zip(args)) yield st"(= (${p._1} $symST) ${p._2.toSmt})", "\n")})"""
+          return r
+        }
+      }
+
+      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[(Value, Value)], @hidden sizeId: ST, @hidden atId: ST) extends Def {
+        @pure def tipe: AST.Typed.Name = {
+          return sym.tipe.asInstanceOf[AST.Typed.Name]
+        }
+
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg._2.toST, ", ")})"
+        }
+
+        @pure override def toSmt: ST = {
+          val symST = sym.toSmt
+          val r =  st"""(and
+                       |  (= ($sizeId $symST) ${args.size})
+                       |  ${(for (arg <- args) yield st"(= ($atId $symST ${arg._1.toST}) ${arg._2.toST})", "\n")})"""
           return r
         }
       }

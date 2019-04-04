@@ -146,11 +146,14 @@ import org.sireum.message.Reporter
         val tid = t.ids(2)
         if (tid == "IS" || tid == "MS") {
           val it = t.args(0).asInstanceOf[AST.Typed.Name]
-          val bv: B = typeHierarchy.typeMap.get(it.ids).get match {
-            case ti: TypeInfo.SubZ => ti.ast.isBitVector
-            case _ => F
+          var zIndex: B = it == AST.Typed.z
+          if (!zIndex) {
+            typeHierarchy.typeMap.get(it.ids).get match {
+              case ti: TypeInfo.SubZ if ti.ast.isBitVector =>
+              case _ => zIndex = T
+            }
           }
-          return if (bv) Some(st"(${tid}Z ${smtIdRaw(t.args(1))})")
+          return if (zIndex) Some(st"(${tid}Z ${smtIdRaw(t.args(1))})")
           else Some(st"($tid ${smtIdRaw(it)} ${smtIdRaw(t.args(1))})")
         } else if (t.args.isEmpty) {
           return if (!basicTypes.contains(t) && isAdt) Some(st"ADT") else Some(st"${t.ids(2)}")
@@ -160,6 +163,10 @@ import org.sireum.message.Reporter
     }
 
     return smtId(tipe)
+  }
+
+  @memoize def typeOpId(tipe: AST.Typed.Name, op: String): ST = {
+    return st"|${typeIdRaw(tipe)}.$op|"
   }
 
   @memoize def typeIdRaw(t: AST.Typed): ST = {
@@ -189,7 +196,60 @@ import org.sireum.message.Reporter
       addType(it)
       val et = t.args(1)
       addType(et)
-      halt("TODO") // TODO
+      val tId = typeId(t)
+      val aId = adtId(t)
+      val itId = typeId(it)
+      val etId = typeId(et)
+      val atId = typeOpId(t, "at")
+      val sizeId = typeOpId(t, "size")
+      val appendId = typeOpId(t, ":+")
+      val appendsId = typeOpId(t, "++")
+      val prependId = typeOpId(t, "+:")
+      addTypeDecl(st"(define-sort $tId () $aId)")
+      val aIdOps = ops.StringOps(aId.render)
+      if (aIdOps.startsWith("(ISZ") || aIdOps.startsWith("(MSZ")) {
+        addTypeDecl(st"(define-fun $sizeId ((x $tId)) Z (seq.len x))")
+        addTypeDecl(st"(declare-fun $atId ($tId $itId) $etId)")
+        addTypeDecl(
+          st"""(assert (forall ((x $tId) (y $itId) (z $etId))
+                       |  (= (= ($atId x y) z)
+                       |     (= (seq.at x y) (seq.unit z)))))""")
+        addTypeDecl(st"(define-fun $appendId ((x $tId) (y $etId)) $tId (seq.++ x (seq.unit y)))")
+        addTypeDecl(st"(define-fun $appendsId ((x $tId) (y $tId)) $tId (seq.++ x y))")
+        addTypeDecl(st"(define-fun $prependId ((x $etId) (y $tId)) $tId (seq.++ (seq.unit x) y))")
+      } else {
+        addTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
+        addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
+        addTypeDecl(st"(assert (forall ((x $tId)) (>= ($sizeId x) 0)))")
+        addTypeDecl(st"(declare-fun $appendId ($tId $etId) $tId)")
+        addTypeDecl(
+          st"""(assert (forall ((x $tId) (y $etId) (z $tId))
+                       |  (= (= ($appendId x y) z)
+                       |     (and
+                       |        (= ($sizeId z) (+ ($sizeId x) 1))
+                       |        (forall ((i Z)) (implies (and (<= 0 i) (< i ($sizeId x)))
+                       |                                 (= ($atId z i) ($atId x i)))
+                       |        (= ($atId z ($sizeId x)) y)))))""")
+        addTypeDecl(st"(declare-fun $appendsId ($tId $tId) $tId)")
+        addTypeDecl(
+          st"""(assert (forall ((x $tId) (y $tId) (z $tId))
+                       |  (= (= ($appendsId x y) z)
+                       |     (and
+                       |        (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
+                       |        (forall ((i Z)) (implies (and (<= 0 i) (< i ($sizeId x)))
+                       |                                 (= ($atId z i) ($atId x i)))
+                       |        (forall ((i Z)) (implies (and (<= 0 i) (< i ($sizeId y)))
+                       |                                 (= ($atId z (+ ($sizeId x) i)) ($atId y i)))))))""")
+        addTypeDecl(st"(declare-fun $prependId ($etId $tId) $tId)")
+        addTypeDecl(
+          st"""(assert (forall ((x $etId) (y $tId) (z $tId))
+                       |  (= (= ($prependId x y) z)
+                       |     (and
+                       |        (= ($sizeId z) (+ ($sizeId y) 1))
+                       |        (forall ((i Z)) (implies (and (<= 0 i) (< i ($sizeId y)))
+                       |                                 (= ($atId z (+ i 1)) ($atId y i)))
+                       |        (= ($atId z 0) x)))))""")
+      }
     }
     def addSub(isRoot: B,
                t: AST.Typed.Name,
@@ -209,24 +269,17 @@ import org.sireum.message.Reporter
       if (isRoot) {
         var children = ISZ[AST.Typed.Name]()
         for (sub <- sortName(typeHierarchy.poset.childrenOf(t.ids).elements)) {
-          typeHierarchy.typeMap.get(sub).get match {
-            case childTi: TypeInfo.Adt =>
-              for (parent <- childTi.parents if parent.ids == t.ids) {
-                val sm = TypeChecker.unify(typeHierarchy, None(), TypeChecker.TypeRelation.Equal, t, parent, reporter).get
-                assert(sm.size == childTi.ast.typeParams.size)
-                val childT = childTi.tpe.subst(sm)
-                children = children :+ childT
-                addType(childT)
-              }
-            case childTi: TypeInfo.Sig =>
-              for (parent <- childTi.parents if parent.ids == t.ids) {
-                val sm = TypeChecker.unify(typeHierarchy, None(), TypeChecker.TypeRelation.Equal, t, parent, reporter).get
-                assert(sm.size == childTi.ast.typeParams.size)
-                val childT = childTi.tpe.subst(sm)
-                children = children :+ childT
-                addType(childT)
-              }
+          val (parents, tpSize, tipe): (ISZ[AST.Typed.Name], Z, AST.Typed.Name) = typeHierarchy.typeMap.get(sub).get match {
+            case childTi: TypeInfo.Adt => (childTi.parents, childTi.ast.typeParams.size, childTi.tpe)
+            case childTi: TypeInfo.Sig => (childTi.parents, childTi.ast.typeParams.size, childTi.tpe)
             case _ => halt(s"Infeasible: $sub")
+          }
+          for (parent <- parents if parent.ids == t.ids) {
+            val sm = TypeChecker.unify(typeHierarchy, None(), TypeChecker.TypeRelation.Equal, t, parent, reporter).get
+            assert(sm.size == tpSize)
+            val childT = tipe.subst(sm)
+            children = children :+ childT
+            addType(childT)
           }
         }
         posetUp(poset.addChildren(t, children))
@@ -278,11 +331,11 @@ import org.sireum.message.Reporter
     def addSubZ(t: AST.Typed.Name, ti: TypeInfo.SubZ): Unit = {
       halt("TODO") // TODO
     }
-    def addEnum(name: ISZ[String], ti: TypeInfo.Enum): Unit = {
+    def addEnum(name: ISZ[String], ti: Info.Enum): Unit = {
       halt("TODO") // TODO
     }
-    def addTypeVar(ti: TypeInfo.TypeVar): Unit = {
-      halt("TODO") // TODO
+    def addTypeVar(t: AST.Typed.TypeVar): Unit = {
+      addTypeDecl(st"(declare-sort ${typeId(t)})")
     }
     if (types.contains(tipe)) {
       return
@@ -297,12 +350,11 @@ import org.sireum.message.Reporter
             case ti: TypeInfo.Adt => addAdt(t, ti)
             case ti: TypeInfo.Sig => addSig(t, ti)
             case ti: TypeInfo.SubZ => addSubZ(t, ti)
-            case ti: TypeInfo.Enum => addEnum(t.ids, ti)
-            case ti: TypeInfo.TypeVar => addTypeVar(ti)
             case _ => halt(s"Infeasible: $t")
           }
         }
-      case t: AST.Typed.Enum => addEnum(t.name, typeHierarchy.typeMap.get(t.name).get.asInstanceOf[TypeInfo.Enum])
+      case t: AST.Typed.TypeVar => addTypeVar(t)
+      case t: AST.Typed.Enum => addEnum(t.name, typeHierarchy.nameMap.get(t.name).get.asInstanceOf[Info.Enum])
       case _ => halt(s"TODO: $tipe") // TODO
     }
   }

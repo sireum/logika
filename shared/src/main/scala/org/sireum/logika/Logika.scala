@@ -91,18 +91,19 @@ object Logika {
       return (state, State.errorValue)
     }
 
-    def evalIdent(exp: AST.Exp.Ident): (State, State.Value) = {
-      val s0 = state
-      val pos = exp.posOpt.get
-
-      exp.attr.resOpt.get match {
+    def evalIdentH(res: AST.ResolvedInfo, t: AST.Typed, pos: Position): (State, State.Value) = {
+      res match {
         case res: AST.ResolvedInfo.LocalVar =>
-          val (s1, sym) = s0.freshSym(exp.attr.typedOpt.get, pos)
-          return (s1.addClaim(State.Claim.Def.CurrentId(sym, res.context, res.id, None())), sym)
+          val (s0, sym) = state.freshSym(t, pos)
+          return (s0.addClaim(State.Claim.Def.CurrentId(sym, res.context, res.id, None())), sym)
         case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
           return (state, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
         case _ => halt(s"TODO: $e") // TODO
       }
+    }
+
+    def evalIdent(exp: AST.Exp.Ident): (State, State.Value) = {
+      return evalIdentH(exp.attr.resOpt.get, exp.attr.typedOpt.get, exp.posOpt.get)
     }
 
     def evalUnaryExp(exp: AST.Exp.Unary): (State, State.Value) = {
@@ -202,6 +203,28 @@ object Logika {
       }
     }
 
+    def evalSelectH(res: AST.ResolvedInfo, receiverOpt: Option[AST.Exp], id: String, t: AST.Typed, pos: Position): (State, State.Value) = {
+      res match {
+        case res: AST.ResolvedInfo.Var =>
+          if (res.isInObject) {
+            halt(s"TODO: $e") // TODO
+          } else {
+            receiverOpt match {
+              case Some(receiver) =>
+                val (s0, o) = evalExp(state, receiver, reporter)
+                if (!s0.status) {
+                  return (s0, State.errorValue)
+                }
+                val (s1, sym) = s0.freshSym(t, pos)
+                return (s1.addClaim(State.Claim.Def.FieldLookup(sym, o, smt2.fieldId(receiver.typedOpt.get, id))), sym)
+              case _ => halt(s"TODO: $e") // TODO
+            }
+          }
+        case res: AST.ResolvedInfo.LocalVar => return evalIdentH(res, t, pos)
+        case _ => halt(s"TODO: $e") // TODO
+      }
+    }
+
     def evalSelect(exp: AST.Exp.Select): (State, State.Value) = {
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext && res.owner.size == 3
@@ -209,23 +232,7 @@ object Logika {
           val s0 = state
           val (s1, num) = s0.fresh
           return (s1, State.Value.Sym(num, res.tpeOpt.get.ret, exp.posOpt.get))
-        case res: AST.ResolvedInfo.Var =>
-          if (res.isInObject) {
-            halt(s"TODO: $e") // TODO
-          } else {
-            exp.receiverOpt match {
-              case Some(receiver) =>
-                val (s0, o) = evalExp(state, receiver, reporter)
-                if (!s0.status) {
-                  return (s0, State.errorValue)
-                }
-                val (s1, sym) = s0.freshSym(exp.typedOpt.get, exp.posOpt.get)
-                return (s1.addClaim(
-                  State.Claim.Def.FieldLookup(sym, o, smt2.fieldId(receiver.typedOpt.get, exp.id.value))), sym)
-              case _ => halt(s"TODO: $e") // TODO
-            }
-          }
-        case _ => halt(s"TODO: $e") // TODO
+        case res => return evalSelectH(res, exp.receiverOpt, exp.id.value, exp.typedOpt.get, exp.posOpt.get)
       }
     }
 
@@ -242,7 +249,55 @@ object Logika {
         args = args :+ v
       }
       val (s1, sym) = current.freshSym(t, exp.posOpt.get)
-      return (s1.addClaim(State.Claim.Def.AdtLit(sym, t, adtSmtParamNames(t), args)), sym)
+      if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
+        val it = t.args(0).asInstanceOf[AST.Typed.Name]
+        var indices = ISZ[State.Value]()
+        if (it == AST.Typed.z) {
+          indices = for (i <- 0 until args.size) yield State.Value.Z(i, args(i).pos)
+        } else {
+          val subz = smt2.typeHierarchy.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast
+          @pure def z2subz(n: Z, pos: Position): State.Value = {
+            if (subz.isBitVector) {
+              if (subz.bitWidth == 8) {
+                return if (subz.isSigned) State.Value.S8(conversions.Z.toS8(n), it, pos)
+                else State.Value.U8(conversions.Z.toU8(n), it, pos)
+              } else if (subz.bitWidth == 16) {
+                return if (subz.isSigned) State.Value.S16(conversions.Z.toS16(n), it, pos)
+                else State.Value.U16(conversions.Z.toU16(n), it, pos)
+              } else if (subz.bitWidth == 32) {
+                return if (subz.isSigned) State.Value.S32(conversions.Z.toS32(n), it, pos)
+                else State.Value.U32(conversions.Z.toU32(n), it, pos)
+              } else if (subz.bitWidth == 64) {
+                return if (subz.isSigned) State.Value.S64(conversions.Z.toS64(n), it, pos)
+                else State.Value.U64(conversions.Z.toU64(n), it, pos)
+              } else {
+                halt(s"Infeasible bit-width: ${subz.bitWidth}")
+              }
+            } else {
+              return State.Value.Range(n, it, pos)
+            }
+          }
+          var i = 0
+          var index = subz.index
+          while (i < args.size) {
+            indices = indices :+ z2subz(index, args(i).pos)
+            index = index + 1
+            i = i + 1
+          }
+        }
+        return (s1.addClaim(State.Claim.Def.SeqLit(sym, ops.ISZOps(indices).zip(args),
+          smt2.typeOpId(t, "size"), smt2.typeOpId(t, "at"))), sym)
+      } else {
+        return (s1.addClaim(State.Claim.Def.AdtLit(sym, adtSmtParamNames(t), args)), sym)
+      }
+    }
+
+    def evalSeqSelect(exp: AST.Exp.Invoke, res: AST.ResolvedInfo.Method): (State, State.Value) = {
+      val t = exp.ident.typedOpt.get.asInstanceOf[AST.Typed.Name]
+      val (s0, seq) = evalSelectH(exp.ident.attr.resOpt.get, exp.receiverOpt, exp.ident.id.value, t, exp.ident.posOpt.get)
+      val (s1, i) = evalExp(s0, exp.args(0), reporter)
+      val (s2, v) = s1.freshSym(exp.typedOpt.get, exp.posOpt.get)
+      return (s2.addClaim(State.Claim.Def.SeqLookup(v, seq, i, smt2.typeOpId(t, "at"))), v)
     }
 
     val s0 = state
@@ -261,9 +316,15 @@ object Logika {
       case e: AST.Exp.Binary => return evalBinaryExp(e)
       case e: AST.Exp.Invoke =>
         e.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor => evalConstructor(e, res)
-          case _ => halt(s"TODO: $e") // TODO
+          case res: AST.ResolvedInfo.Method =>
+            res.mode match {
+              case AST.MethodMode.Constructor => return evalConstructor(e, res)
+              case AST.MethodMode.Select => return evalSeqSelect(e, res)
+              case _ =>
+            }
+          case _ =>
         }
+        halt(s"TODO: $e") // TODO
       case _ => halt(s"TODO: $e") // TODO
     }
   }
