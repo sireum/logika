@@ -201,7 +201,7 @@ import org.sireum.message.Reporter
       val itId = typeId(it)
       val etId = typeId(et)
       val atId = typeOpId(t, "at")
-      val sizeId = typeOpId(t, "size")
+      val sizeId = fieldId(t, "size")
       val appendId = typeOpId(t, ":+")
       val appendsId = typeOpId(t, "++")
       val prependId = typeOpId(t, "+:")

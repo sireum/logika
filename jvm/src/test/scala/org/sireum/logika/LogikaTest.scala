@@ -56,7 +56,7 @@ class LogikaTest extends TestSuite {
            |assert(s1(0) == 1)
            |assert(s1(1) == 2)
            |assert(s1(2) == 3)
-           |//assert(s1.size == 3)""".stripMargin)
+           |assert(s1.size == 3)""".stripMargin)
 
       * - passingWorksheet(
         s"""import org.sireum._

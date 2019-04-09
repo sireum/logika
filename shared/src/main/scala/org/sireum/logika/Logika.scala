@@ -203,24 +203,29 @@ object Logika {
       }
     }
 
-    def evalSelectH(res: AST.ResolvedInfo, receiverOpt: Option[AST.Exp], id: String, t: AST.Typed, pos: Position): (State, State.Value) = {
+    def evalSelectH(res: AST.ResolvedInfo, receiverOpt: Option[AST.Exp], id: String, tipe: AST.Typed, pos: Position): (State, State.Value) = {
+      def evalField(t: AST.Typed): (State, State.Value) = {
+        receiverOpt match {
+          case Some(receiver) =>
+            val (s0, o) = evalExp(state, receiver, reporter)
+            if (!s0.status) {
+              return (s0, State.errorValue)
+            }
+            val (s1, sym) = s0.freshSym(t, pos)
+            return (s1.addClaim(State.Claim.Def.FieldLookup(sym, o, smt2.fieldId(receiver.typedOpt.get, id))), sym)
+          case _ => halt(s"TODO: $e") // TODO
+        }
+      }
       res match {
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
             halt(s"TODO: $e") // TODO
           } else {
-            receiverOpt match {
-              case Some(receiver) =>
-                val (s0, o) = evalExp(state, receiver, reporter)
-                if (!s0.status) {
-                  return (s0, State.errorValue)
-                }
-                val (s1, sym) = s0.freshSym(t, pos)
-                return (s1.addClaim(State.Claim.Def.FieldLookup(sym, o, smt2.fieldId(receiver.typedOpt.get, id))), sym)
-              case _ => halt(s"TODO: $e") // TODO
-            }
+            return evalField(tipe)
           }
-        case res: AST.ResolvedInfo.LocalVar => return evalIdentH(res, t, pos)
+        case res:AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName =>
+          return evalField(res.tpeOpt.get.ret)
+        case res: AST.ResolvedInfo.LocalVar => return evalIdentH(res, tipe, pos)
         case _ => halt(s"TODO: $e") // TODO
       }
     }
@@ -286,7 +291,7 @@ object Logika {
           }
         }
         return (s1.addClaim(State.Claim.Def.SeqLit(sym, ops.ISZOps(indices).zip(args),
-          smt2.typeOpId(t, "size"), smt2.typeOpId(t, "at"))), sym)
+          smt2.fieldId(t, "size"), smt2.typeOpId(t, "at"))), sym)
       } else {
         return (s1.addClaim(State.Claim.Def.AdtLit(sym, adtSmtParamNames(t), args)), sym)
       }
