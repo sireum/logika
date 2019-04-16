@@ -199,7 +199,7 @@ import org.sireum.message.Reporter
       val tId = typeId(t)
       val aId = adtId(t)
       val itId = typeId(it)
-      val etId = typeId(et)
+      val etId = adtId(et)
       val atId = typeOpId(t, "at")
       val sizeId = fieldId(t, "size")
       val appendId = typeOpId(t, ":+")
@@ -249,6 +249,12 @@ import org.sireum.message.Reporter
                        |        (forall ((i Z)) (implies (and (<= 0 i) (< i ($sizeId y)))
                        |                                 (= ($atId z (+ i 1)) ($atId y i)))
                        |        (= ($atId z 0) x)))))""")
+      }
+      if (isAdt(et)) {
+        addTypeDecl(
+          st"""(assert (forall ((x $tId) (i $itId) (v ADT))
+              |  (implies (= ($atId x i) v)
+              |           (sub-type (type-of v) ${typeHierarchyId(et)}))))""")
       }
     }
     def addSub(isRoot: B,
@@ -309,7 +315,7 @@ import org.sireum.message.Reporter
           st"""($tcId
                          |  ${(for (t <- fieldIdTypes) yield st"(${t._1} ${t._2})", "\n")})""")
         addTypeDecl(st"(assert (leaf-type $tId))")
-        for (t <- fieldIdTypes if t._2.render == "ADT") {
+        for (t <- fieldIdTypes if isAdt(t._3)) {
           addTypeDecl(
             st"""(assert (forall ((o ADT) (v ADT))
                          |  (implies (= (${t._1} o) v)
@@ -371,6 +377,10 @@ import org.sireum.message.Reporter
   def valid(title: String, premises: ISZ[State.Claim], conclusion: State.Claim): B = {
     val headers = st"Validity Check for $title:" +: (for (c <- premises) yield c.toST) :+ st"  ⊢" :+ conclusion.toST
     checkUnsat(satQuery(headers, premises :+ State.Claim.Neg(conclusion)).render)
+  }
+
+  def isAdt(t: AST.Typed): B = {
+    return adtId(t).render == "ADT"
   }
 
   @pure def query(headers: ISZ[ST], decls: ISZ[String], claims: ISZ[String]): ST = {

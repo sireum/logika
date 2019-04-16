@@ -899,7 +899,7 @@ object State {
           val symST = sym.toSmt
           val r =  st"""(and
                        |  (= ($sizeId $symST) ${args.size})
-                       |  ${(for (arg <- args) yield st"(= ($atId $symST ${arg._1.toST}) ${arg._2.toST})", "\n")})"""
+                       |  ${(for (arg <- args) yield st"(= ($atId $symST ${arg._1.toSmt}) ${arg._2.toSmt})", "\n")})"""
           return r
         }
       }
