@@ -250,7 +250,7 @@ import org.sireum.message.Reporter
                        |                                 (= ($atId z (+ i 1)) ($atId y i)))
                        |        (= ($atId z 0) x)))))""")
       }
-      if (isAdt(et)) {
+      if (isAdtType(et)) {
         addTypeDecl(
           st"""(assert (forall ((x $tId) (i $itId) (v ADT))
               |  (implies (= ($atId x i) v)
@@ -315,7 +315,7 @@ import org.sireum.message.Reporter
           st"""($tcId
                          |  ${(for (t <- fieldIdTypes) yield st"(${t._1} ${t._2})", "\n")})""")
         addTypeDecl(st"(assert (leaf-type $tId))")
-        for (t <- fieldIdTypes if isAdt(t._3)) {
+        for (t <- fieldIdTypes if isAdtType(t._3)) {
           addTypeDecl(
             st"""(assert (forall ((o ADT) (v ADT))
                          |  (implies (= (${t._1} o) v)
@@ -379,7 +379,7 @@ import org.sireum.message.Reporter
     checkUnsat(satQuery(headers, premises :+ State.Claim.Neg(conclusion)).render)
   }
 
-  def isAdt(t: AST.Typed): B = {
+  def isAdtType(t: AST.Typed): B = {
     return adtId(t).render == "ADT"
   }
 
