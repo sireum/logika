@@ -439,7 +439,7 @@ object Logika {
     }
 
     def evalWhile(s0: State, whileStmt: AST.Stmt.While): State = {
-      val s1 = checkOptNamedExps("Loop invariant", " at the beginning of while-loop", s0, whileStmt.invariants, reporter)
+      val s1 = checkExps("Loop invariant", " at the beginning of while-loop", s0, whileStmt.invariants, reporter)
       if (!s1.status) {
         return s1
       }
@@ -464,7 +464,7 @@ object Logika {
         val s5 = evalStmts(s4(claims = thenClaims), whileStmt.body.stmts, reporter)
         thenSat = s5.status
         if (thenSat) {
-          val s6 = checkOptNamedExps("Loop invariant", " at the end of while-loop",
+          val s6 = checkExps("Loop invariant", " at the end of while-loop",
             s5, whileStmt.invariants, reporter)
           s6.nextFresh
         } else {
@@ -484,12 +484,9 @@ object Logika {
     }
 
     def evalWhileUnroll(s0: State, whileStmt: AST.Stmt.While): State = {
-      val loopId: ISZ[String] = whileStmt.loopIdOpt match {
-        case Some(id) => whileStmt.context :+ id.value
-        case _ => whileStmt.context
-      }
+      val loopId: ISZ[String] = whileStmt.context
       def rec(current: State, numLoops: Z): State = {
-        val s1 = checkOptNamedExps("Loop invariant", " at the beginning of while-loop", current,
+        val s1 = checkExps("Loop invariant", " at the beginning of while-loop", current,
           whileStmt.invariants, reporter)
         if (!s1.status) {
           return s1
@@ -510,14 +507,8 @@ object Logika {
               s5
             } else {
               if (bound > 0) {
-                whileStmt.loopIdOpt match {
-                  case Some(_) =>
-                    reporter.warn(whileStmt.cond.posOpt, Logika.kind,
-                      s"Under-approximation due to loop unrolling at '${(loopId, ".")}' capped with bound $bound")
-                  case _ =>
-                    reporter.warn(whileStmt.cond.posOpt, Logika.kind,
-                      s"Under-approximation due to loop unrolling capped with bound $bound")
-                }
+                reporter.warn(whileStmt.cond.posOpt, Logika.kind,
+                  s"Under-approximation due to loop unrolling capped with bound $bound")
                 s4(status = F)
               } else {
                 s4
@@ -572,7 +563,7 @@ object Logika {
           case _ => halt(s"TODO: $stmt") // TODO
         }
       case stmt: AST.Stmt.If => return evalIf(state, stmt)
-      case stmt: AST.Stmt.While => 
+      case stmt: AST.Stmt.While =>
         return if (stmt.modifies.nonEmpty) evalWhile(state, stmt) else evalWhileUnroll(state, stmt)
       case _: AST.Stmt.Import => return state
       case _ =>
@@ -581,37 +572,29 @@ object Logika {
 
   }
 
-  def checkOptNamedExp(title: String, titleSuffix: String, s0: State, ne: AST.OptNamedExp, reporter: Reporter): State = {
-    val (s1, v) = evalExp(s0, ne.exp, reporter)
-    val pos = ne.exp.posOpt.get
+  def checkExp(title: String, titleSuffix: String, s0: State, exp: AST.Exp, reporter: Reporter): State = {
+    val (s1, v) = evalExp(s0, exp, reporter)
+    val pos = exp.posOpt.get
     val (s2, sym) = value2Sym(s1, v, pos)
     val prop = State.Claim.Prop(sym)
-    val valid: B = ne.idOpt match {
-      case Some(id) =>
-        val valid = smt2.valid(s"$title '${id.value}' at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop)
-        if (!valid) {
-          reporter.error(id.attr.posOpt, Logika.kind,
-            s"Cannot deduce ${ops.StringOps(title).firstToLower} '${id.value}' holds$titleSuffix")
-        }
-        valid
-      case _ =>
-        val valid = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop)
-        if (!valid) {
-          reporter.error(ne.exp.posOpt, Logika.kind,
-            s"Cannot deduce the ${ops.StringOps(title).firstToLower} holds$titleSuffix")
-        }
-        valid
+    val valid: B = {
+      val vld = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop)
+      if (!vld) {
+        reporter.error(exp.posOpt, Logika.kind,
+          s"Cannot deduce the ${ops.StringOps(title).firstToLower} holds$titleSuffix")
+      }
+      vld
     }
     return s2(status = valid, claims = s2.claims :+ prop)
   }
 
-  def checkOptNamedExps(title: String, titleSuffix: String, s0: State, nes: ISZ[AST.OptNamedExp], reporter: Reporter): State = {
+  def checkExps(title: String, titleSuffix: String, s0: State, exps: ISZ[AST.Exp], reporter: Reporter): State = {
     var current = s0
-    for (ne <- nes) {
+    for (exp <- exps) {
       if (!current.status) {
         return current
       }
-      current = checkOptNamedExp(title, titleSuffix, current, ne, reporter)
+      current = checkExp(title, titleSuffix, current, exp, reporter)
     }
     return current
   }

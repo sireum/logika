@@ -73,9 +73,11 @@ class LogikaTest extends TestSuite {
            |var i = 0
            |var r = 0
            |while (i < n) { // loop unrolling (no modify clause)
-           |  l$tqs invariant 0 <= i
-           |                  i <= n
-           |                  r == m * i $tqs
+           |  Invariant(
+           |    0 <= i,
+           |    i <= n,
+           |    r == m * i
+           |  )
            |  r = r + m
            |  i = i + 1
            |}
@@ -89,10 +91,12 @@ class LogikaTest extends TestSuite {
            |var i = 0
            |var r = 0
            |while (i < n) {
-           |  l$tqs invariant 0 <= i
-           |                  i <= n
-           |                  r == m * i
-           |        modifies  i, r       $tqs
+           |  Invariant(
+           |    Modifies(i, r),
+           |    0 <= i,
+           |    i <= n,
+           |    r == m * i
+           |  )
            |  r = r + m
            |  i = i + 1
            |}
@@ -141,9 +145,11 @@ class LogikaTest extends TestSuite {
            |var i = 0
            |var r = 0
            |while (i < n) { // loop unrolling (no modify clause)
-           |  l$tqs invariant 0 <= i
-           |                  i <= n
-           |                  r == m * i $tqs
+           |  Invariant(
+           |    0 <= i,
+           |    i <= n,
+           |    r == m * i
+           |  )
            |  r = r + m
            |  i = i + 1
            |}
