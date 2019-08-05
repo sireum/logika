@@ -54,6 +54,25 @@ object Logika {
   @datatype class Config(defaultLoopBound: Z,
                          loopBounds: HashMap[ISZ[String], Z],
                          smt2TimeoutInSeconds: Z)
+
+  def checkWorksheet(fileUriOpt: Option[String], input: String, config: Config,
+                     smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter): Unit = {
+    lang.parser.Parser(input).parseTopUnit[AST.TopUnit.Program](allowSireum = F, isWorksheet = T, isDiet = F,
+      fileUriOpt = fileUriOpt, reporter = reporter) match {
+      case Some(program) if !reporter.hasIssue =>
+        val (tc, rep) = lang.FrontEnd.libraryReporter
+        reporter.reports(rep.messages)
+        val (th, p) = lang.FrontEnd.checkWorksheet(Some(tc.typeHierarchy), program, reporter)
+        if (!reporter.hasIssue) {
+          lang.tipe.PostTipeAttrChecker.checkProgram(p, reporter)
+        }
+        if (!reporter.hasIssue) {
+          val logika = Logika(config, smt2f(th))
+          logika.evalStmts(State.create, p.body.stmts, reporter)
+        }
+      case _ =>
+    }
+  }
 }
 
 @record class Logika(config: Logika.Config,

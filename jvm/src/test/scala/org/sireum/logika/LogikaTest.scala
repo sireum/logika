@@ -26,16 +26,10 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.lang.{FrontEnd, LibraryTypeCheckingTest}
-import org.sireum.lang.ast.TopUnit
-import org.sireum.lang.parser.Parser
-import org.sireum.lang.tipe.{PostTipeAttrChecker, TypeChecker}
 import org.sireum.message.Reporter
 import org.sireum.test._
 
 class LogikaTest extends TestSuite {
-
-  lazy val typeChecker: TypeChecker = LibraryTypeCheckingTest.tc
 
   val tqs: String = "\"\"\""
 
@@ -172,25 +166,7 @@ class LogikaTest extends TestSuite {
   }
 
   def testWorksheet(input: String, reporter: Reporter, msgOpt: Option[String]): B = {
-    Parser(input).parseTopUnit[TopUnit.Program](allowSireum = F, isWorksheet = T, isDiet = F, None(), reporter) match {
-      case Some(program) if !reporter.hasIssue =>
-        val p = FrontEnd.checkWorksheet(Some(typeChecker.typeHierarchy), program, reporter)
-        if (!reporter.hasIssue) {
-          PostTipeAttrChecker.checkProgram(p._2, reporter)
-        }
-        if (!reporter.hasIssue) {
-          try {
-            val th = p._1
-            val logika = Logika(config, Z3(th, config.smt2TimeoutInSeconds))
-            logika.evalStmts(State.create, p._2.body.stmts, reporter)
-          } catch {
-            case t: Throwable =>
-              t.printStackTrace()
-              return false
-          }
-        }
-      case _ =>
-    }
+    Logika.checkWorksheet(None(), input, config, th => Z3("z3", th, config.smt2TimeoutInSeconds), reporter)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

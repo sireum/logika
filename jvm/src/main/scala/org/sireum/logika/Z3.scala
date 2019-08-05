@@ -45,7 +45,8 @@ object Z3 {
 
 }
 
-@record class Z3(val typeHierarchy: TypeHierarchy,
+@record class Z3(val z3Exe: String,
+                 val typeHierarchy: TypeHierarchy,
                  val timeoutInSeconds: Z)
   extends Smt2 {
 
@@ -96,7 +97,7 @@ object Z3 {
   def checkQuery(query: String): Z3.Result = {
     //println(s"Z3 Query:")
     //println(query)
-    val pr = Os.proc(ISZ("z3", "-smt2", s"-T:$timeoutInSeconds", "-in")).input(query).redirectErr.run()
+    val pr = Os.proc(ISZ(z3Exe, "-smt2", s"-T:$timeoutInSeconds", "-in")).input(query).redirectErr.run()
     val firstLine = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')(0)
     val r: Z3.Result = firstLine match {
       case string"sat" => Z3.Result(Z3.Result.Kind.Sat, pr.out)
