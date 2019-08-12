@@ -29,90 +29,34 @@ import org.sireum._
 import org.sireum.message.Reporter
 import org.sireum.test._
 
-class LogikaTest extends TestSuite {
+object LogikaTest {
+  val platform: String = Os.kind match {
+    case Os.Kind.Win => "win"
+    case Os.Kind.Linux => "linux"
+    case Os.Kind.Mac => "mac"
+    case Os.Kind.Unsupported => "unsupported"
+  }
 
-  val tqs: String = "\"\"\""
+  val z3Exe: String = Os.env("SIREUM_HOME") match {
+    case Some(p) if Os.kind != Os.Kind.Unsupported =>
+      (Os.path(p) / "bin" / platform / "z3" / "bin" / (if (Os.isWin) "z3.exe" else "z3")).string
+    case _ => "z3"
+  }
 
   val config: Logika.Config =
     Logika.Config(
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,
       smt2TimeoutInSeconds = 2)
+}
+
+import LogikaTest._
+
+class LogikaTest extends TestSuite {
 
   val tests = Tests {
 
     "Passing" - {
-
-      * - passingWorksheet(
-        s"""import org.sireum._
-           |val s1 = ISZ(1, 2, 3)
-           |assert(T)
-           |assert(s1(0) == 1)
-           |assert(s1(1) == 2)
-           |assert(s1(2) == 3)
-           |assert(s1.size == 3)
-           |val s2 = ISZ(Some(3))
-           |assert(s2(0).value == 3)""".stripMargin)
-
-      * - passingWorksheet(
-        s"""import org.sireum._
-           |val x = Z.random
-           |val xOpt = Some(Some(x))
-           |assert(xOpt.value.value == x)""".stripMargin)
-
-      * - passingWorksheet(
-        s"""import org.sireum._
-           |val m = Z.random
-           |val n = 3
-           |var i = 0
-           |var r = 0
-           |while (i < n) { // loop unrolling (no modify clause)
-           |  Invariant(
-           |    0 <= i,
-           |    i <= n,
-           |    r == m * i
-           |  )
-           |  r = r + m
-           |  i = i + 1
-           |}
-           |assert(r == m * n)""".stripMargin)
-
-      * - passingWorksheet(
-        s"""import org.sireum._
-           |val m = Z.random
-           |val n = Z.random
-           |assume(n >= 0)
-           |var i = 0
-           |var r = 0
-           |while (i < n) {
-           |  Invariant(
-           |    Modifies(i, r),
-           |    0 <= i,
-           |    i <= n,
-           |    r == m * i
-           |  )
-           |  r = r + m
-           |  i = i + 1
-           |}
-           |assert(r == m * n)""".stripMargin)
-
-      * - passingWorksheet(
-        """import org.sireum._
-          |val x = Z.random
-          |val y = Z.random
-          |var max = x
-          |if (x < y) {
-          |  max = y
-          |}
-          |assert(max >= x & max >= y & (max == x | max == y))""".stripMargin)
-
-      * - passingWorksheet(
-        """import org.sireum._
-          |var x = Z.random
-          |if (x < 0) {
-          |  x = -x
-          |}
-          |assert(x >= 0)""".stripMargin)
 
       * - passingWorksheet(
         """import org.sireum._
@@ -166,7 +110,8 @@ class LogikaTest extends TestSuite {
   }
 
   def testWorksheet(input: String, reporter: Reporter, msgOpt: Option[String]): B = {
-    Logika.checkWorksheet(None(), input, config, th => Z3("z3", th, config.smt2TimeoutInSeconds), reporter)
+    Logika.checkWorksheet(None(), input, config,
+      th => Z3(LogikaTest.z3Exe, th, config.smt2TimeoutInSeconds), reporter)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>
