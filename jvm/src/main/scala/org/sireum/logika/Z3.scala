@@ -95,10 +95,22 @@ object Z3 {
   }
 
   def checkQuery(query: String): Z3.Result = {
+    def err(out: String): Unit = {
+      halt(
+        st"""Error encountered when running $z3Exe query:
+            |$query
+            |
+            |Z3 output:
+            |$out""".render)
+    }
     //println(s"Z3 Query:")
     //println(query)
     val pr = Os.proc(ISZ(z3Exe, "-smt2", s"-T:$timeoutInSeconds", "-in")).input(query).redirectErr.run()
-    val firstLine = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')(0)
+    val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
+    if (out.size == 0) {
+      err(pr.out)
+    }
+    val firstLine = out(0)
     val r: Z3.Result = firstLine match {
       case string"sat" => Z3.Result(Z3.Result.Kind.Sat, pr.out)
       case string"unsat" => Z3.Result(Z3.Result.Kind.Unsat, pr.out)
@@ -109,12 +121,7 @@ object Z3 {
     //println(s"Z3 Result (${r.kind}):")
     //println(r.output)
     if (r.kind == Z3.Result.Kind.Error) {
-      halt(
-        st"""Error encountered when running Z3 query:
-                |$query
-                |
-                |Z3 output:
-                |${r.output}""".render)
+      err(pr.out)
     }
 
     return r
