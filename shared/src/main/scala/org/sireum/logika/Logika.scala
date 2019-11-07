@@ -33,8 +33,6 @@ import org.sireum.message.{Position, Reporter}
 import StateTransformer.{PrePost, PreResult}
 
 object Logika {
-  val kind: String = "Logika"
-
   @datatype class CurrentIdPossCollector(context: ISZ[String], id: String) extends PrePost[ISZ[Position]] {
     override def preStateClaimDefCurrentId(ctx: ISZ[Position], o: State.Claim.Def.CurrentId): PreResult[ISZ[Position], State.Claim.Def] = {
       return if (o.defPosOpt.nonEmpty && o.context == context && o.id == id) PreResult(ctx :+ o.defPosOpt.get, T, None())
@@ -55,6 +53,17 @@ object Logika {
                          loopBounds: HashMap[ISZ[String], Z],
                          smt2TimeoutInSeconds: Z)
 
+  @datatype class Context(typeParams: ISZ[AST.TypeParam],
+                          methodSigOpt: Option[AST.MethodSig],
+                          labels: ISZ[AST.Exp.LitString])
+
+  object Context {
+
+    @strictpure def empty: Context = Context(ISZ(), None(), ISZ())
+  }
+
+  val kind: String = "Logika"
+
   def checkWorksheet(fileUriOpt: Option[String], input: String, config: Config,
                      smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter): Unit = {
     lang.parser.Parser(input).parseTopUnit[AST.TopUnit.Program](allowSireum = F, isWorksheet = T, isDiet = F,
@@ -67,15 +76,57 @@ object Logika {
           lang.tipe.PostTipeAttrChecker.checkProgram(p, reporter)
         }
         if (!reporter.hasIssue) {
-          val logika = Logika(config, smt2f(th))
+          val smt2 = smt2f(th)
+          val logika = Logika(config, Context.empty, smt2)
           logika.evalStmts(State.create, p.body.stmts, reporter)
+          for (stmt <- p.body.stmts) {
+            stmt match {
+              case stmt: AST.Stmt.Method => checkMethod(stmt, config, smt2, reporter)
+              case _ =>
+            }
+          }
         }
       case _ =>
+    }
+  }
+
+  def checkMethod(method: AST.Stmt.Method, config: Config, smt2: Smt2, reporter: Reporter): Unit = {
+    def checkCase(labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ident],
+                  ensures: ISZ[AST.Exp]): Unit = {
+      if (modifies.nonEmpty) {
+        halt("TODO: modifies")
+      }
+      val ctx = Context.empty(methodSigOpt = Some(method.sig),
+        labels = if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
+      val logika = Logika(config, ctx, smt2)
+      var state = State.create
+      for (p <- method.sig.params) {
+        val posOpt = p.id.attr.posOpt
+        val (s, _) = logika.idIntro(posOpt.get, state, ISZ(), p.id.value, p.tipe.typedOpt.get, posOpt)
+        state = s
+      }
+      for (r <- requires) {
+        state = logika.evalAssume("Precondition", state, r, reporter)
+      }
+      state = logika.evalStmts(state, method.bodyOpt.get.stmts, reporter)
+      for (e <- ensures) {
+        state = logika.evalAssert("Postcondition", state, e, reporter)
+      }
+    }
+
+    method.contract match {
+      case contract: AST.MethodContract.Simple =>
+        checkCase(None(), contract.requires, contract.modifies, contract.ensures)
+      case contract: AST.MethodContract.Cases =>
+        for (c <- contract.cases) {
+          checkCase(Some(c.label), c.requires, contract.modifies, c.ensures)
+        }
     }
   }
 }
 
 @record class Logika(config: Logika.Config,
+                     context: Logika.Context,
                      smt2: Smt2) {
 
   @pure def isBasic(t: AST.Typed): B = {
@@ -97,12 +148,18 @@ object Logika {
     if (tipe == AST.Typed.z) {
       return State.Value.Z(0, pos)
     }
-    halt("TODO") // TODO
+    halt(s"TODO: 0 of type $tipe") // TODO
   }
 
   @memoize def adtSmtParamNames(t: AST.Typed.Name): ISZ[ST] = {
     val adt = smt2.typeHierarchy.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
     return for (p <- adt.ast.params) yield smt2.fieldId(t, p.id.value)
+  }
+
+  @pure def idIntro(pos: Position, state: State, idContext: ISZ[String],
+                    id: String, t: AST.Typed, idPosOpt: Option[Position]): (State, State.Value.Sym) = {
+    val (s0, sym) = state.freshSym(t, pos)
+    return (s0.addClaim(State.Claim.Def.CurrentId(sym, idContext, id, idPosOpt)), sym)
   }
 
   def evalExp(state: State, e: AST.Exp, reporter: Reporter): (State, State.Value) = {
@@ -113,8 +170,8 @@ object Logika {
     def evalIdentH(res: AST.ResolvedInfo, t: AST.Typed, pos: Position): (State, State.Value) = {
       res match {
         case res: AST.ResolvedInfo.LocalVar =>
-          val (s0, sym) = state.freshSym(t, pos)
-          return (s0.addClaim(State.Claim.Def.CurrentId(sym, res.context, res.id, None())), sym)
+          val (s, sym) = idIntro(pos, state, res.context, res.id, t, None())
+          return (s, sym)
         case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
           return (state, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
         case _ => halt(s"TODO: $e") // TODO
@@ -186,7 +243,7 @@ object Logika {
         if (valid) {
           return s1.addClaim(claim)
         } else {
-          reporter.error(Some(pos), Logika.kind, s"Could not deduce non-zero second operand for ${exp.op}")
+          error(Some(pos), s"Could not deduce non-zero second operand for ${exp.op}", reporter)
           return s1(status = F)
         }
       }
@@ -324,6 +381,11 @@ object Logika {
       return (s2.addClaim(State.Claim.Def.SeqLookup(v, seq, i, smt2.typeOpId(t, "at"))), v)
     }
 
+    def evalResult(exp: AST.Exp.Result): (State, State.Value) = {
+      val (s, sym) = idIntro(exp.posOpt.get, state, ISZ(), "Res", exp.typedOpt.get, None())
+      return (s, sym)
+    }
+
     val s0 = state
 
     e match {
@@ -349,6 +411,7 @@ object Logika {
           case _ =>
         }
         halt(s"TODO: $e") // TODO
+      case e: AST.Exp.Result => return evalResult(e)
       case _ => halt(s"TODO: $e") // TODO
     }
   }
@@ -362,36 +425,36 @@ object Logika {
     }
   }
 
+  def evalAssume(title: String, s0: State, cond: AST.Exp, reporter: Reporter): State = {
+    val (s1, v) = evalExp(s0, cond, reporter)
+    if (!s1.status) {
+      return s1
+    }
+    val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
+    val s3 = s2(claims = s2.claims :+ State.Claim.Prop(sym))
+    val pos = cond.posOpt.get
+    val sat = smt2.sat(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s3.claims)
+    return s3(status = sat)
+  }
+
+  def evalAssert(title: String, s0: State, cond: AST.Exp, reporter: Reporter): State = {
+    val (s1, v) = evalExp(s0, cond, reporter)
+    if (!s1.status) {
+      return s1
+    }
+    val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
+    val conclusion = State.Claim.Prop(sym)
+    val pos = cond.posOpt.get
+    val valid = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion)
+    if (!valid) {
+      error(cond.posOpt, s"Cannot deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
+    }
+    return s2(status = valid, claims = s2.claims :+ conclusion)
+  }
+
   def evalStmt(state: State, stmt: AST.Stmt, reporter: Reporter): State = {
     if (!state.status) {
       return state
-    }
-
-    def evalAssume(s0: State, cond: AST.Exp): State = {
-      val (s1, v) = evalExp(s0, cond, reporter)
-      if (!s1.status) {
-        return s1
-      }
-      val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
-      val s3 = s2(claims = s2.claims :+ State.Claim.Prop(sym))
-      val pos = cond.posOpt.get
-      val sat = smt2.sat(s"Assumption at [${pos.beginLine}, ${pos.beginColumn}]", s3.claims)
-      return s3(status = sat)
-    }
-
-    def evalAssert(s0: State, cond: AST.Exp): State = {
-      val (s1, v) = evalExp(s0, cond, reporter)
-      if (!s1.status) {
-        return s1
-      }
-      val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
-      val conclusion = State.Claim.Prop(sym)
-      val pos = cond.posOpt.get
-      val valid = smt2.valid(s"Assertion at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion)
-      if (!valid) {
-        reporter.error(cond.posOpt, Logika.kind, s"Cannot deduce that the assertion condition holds")
-      }
-      return s2(status = valid, claims = s2.claims :+ conclusion)
     }
 
     def evalAssignExp(s0: State, ae: AST.AssignExp): (State, State.Value) = {
@@ -526,8 +589,7 @@ object Logika {
               s5
             } else {
               if (bound > 0) {
-                reporter.warn(whileStmt.cond.posOpt, Logika.kind,
-                  s"Under-approximation due to loop unrolling capped with bound $bound")
+                warn(whileStmt.cond.posOpt, s"Under-approximation due to loop unrolling capped with bound $bound", reporter)
                 s4(status = F)
               } else {
                 s4
@@ -554,15 +616,25 @@ object Logika {
       return rec(s0, 0)
     }
 
+    def evalReturn(s0: State, stmt: AST.Stmt.Return): State = {
+      stmt.expOpt match {
+        case Some(exp) =>
+          val (s1, v) = evalExp(s0, exp, reporter)
+          val (s2, sym) = value2Sym(s1, v, exp.posOpt.get)
+          return s2.addClaim(State.Claim.Def.CurrentId(sym, ISZ(), "Res", None()))
+        case _ => return state
+      }
+    }
+
     stmt match {
       case AST.Stmt.Expr(e: AST.Exp.Invoke) =>
         e.attr.resOpt.get match {
           case AST.ResolvedInfo.BuiltIn(kind) =>
             kind match {
-              case AST.ResolvedInfo.BuiltIn.Kind.Assert => return evalAssert(state, e.args(0))
-              case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg => return evalAssert(state, e.args(0))
-              case AST.ResolvedInfo.BuiltIn.Kind.Assume => return evalAssume(state, e.args(0))
-              case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg => return evalAssume(state, e.args(0))
+              case AST.ResolvedInfo.BuiltIn.Kind.Assert => return evalAssert("Assertion", state, e.args(0), reporter)
+              case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg => return evalAssert("Assertion", state, e.args(0), reporter)
+              case AST.ResolvedInfo.BuiltIn.Kind.Assume => return evalAssume("Assumption", state, e.args(0), reporter)
+              case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg => return evalAssume("Assumption", state, e.args(0), reporter)
               case _ =>
                 halt(s"TODO: $stmt") // TODO
             }
@@ -584,7 +656,11 @@ object Logika {
       case stmt: AST.Stmt.If => return evalIf(state, stmt)
       case stmt: AST.Stmt.While =>
         return if (stmt.modifies.nonEmpty) evalWhile(state, stmt) else evalWhileUnroll(state, stmt)
+      case stmt: AST.Stmt.Return => return evalReturn(state, stmt)
       case _: AST.Stmt.Import => return state
+      case _: AST.Stmt.Method => return state
+      case _: AST.Stmt.SpecMethod => return state
+      case _: AST.Stmt.SpecVar => return state
       case _ =>
         halt(s"TODO: $stmt") // TODO
     }
@@ -599,8 +675,7 @@ object Logika {
     val valid: B = {
       val vld = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop)
       if (!vld) {
-        reporter.error(exp.posOpt, Logika.kind,
-          s"Cannot deduce the ${ops.StringOps(title).firstToLower} holds$titleSuffix")
+        error(exp.posOpt, s"Cannot deduce the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
       }
       vld
     }
@@ -669,6 +744,22 @@ object Logika {
 
   def evalBlock(state: State, block: AST.Stmt.Block, reporter: Reporter): State = {
     return evalBody(state, block.body, reporter)
+  }
+
+  def error(posOpt: Option[Position], msg: String, reporter: Reporter): Unit = {
+    if (context.labels.nonEmpty) {
+      reporter.error(posOpt, Logika.kind, st"[${(for (l <- context.labels) yield l.value, "; ")}] $msg".render)
+    } else {
+      reporter.error(posOpt, Logika.kind, msg)
+    }
+  }
+
+  def warn(posOpt: Option[Position], msg: String, reporter: Reporter): Unit = {
+    if (context.labels.nonEmpty) {
+      reporter.warn(posOpt, Logika.kind, st"[${(for (l <- context.labels) yield l.value, "; ")}] $msg".render)
+    } else {
+      reporter.warn(posOpt, Logika.kind, msg)
+    }
   }
 
 }
