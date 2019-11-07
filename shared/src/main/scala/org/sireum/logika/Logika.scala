@@ -53,13 +53,33 @@ object Logika {
                          loopBounds: HashMap[ISZ[String], Z],
                          smt2TimeoutInSeconds: Z)
 
+  object Context {
+    @strictpure def empty: Context = Context(ISZ(), None(), ISZ())
+  }
+
   @datatype class Context(typeParams: ISZ[AST.TypeParam],
-                          methodSigOpt: Option[AST.MethodSig],
+                          methodOpt: Option[MethodContext],
                           labels: ISZ[AST.Exp.LitString])
 
-  object Context {
-
-    @strictpure def empty: Context = Context(ISZ(), None(), ISZ())
+  @datatype class MethodContext(name: ISZ[String],
+                                sig: AST.MethodSig,
+                                reads: ISZ[AST.Exp.Ident],
+                                modifies: ISZ[AST.Exp.Ident],
+                                localInMap: HashMap[String, State.Value.Sym]) {
+    val localMap: HashMap[String, (ISZ[String], AST.Id, AST.Typed)] = {
+      var r = HashMap.empty[String, (ISZ[String], AST.Id, AST.Typed)]
+      for (p <- sig.params) {
+        r = r + p.id.value ~> ((name, p.id, p.tipe.typedOpt.get))
+      }
+      for (x <- reads ++ modifies) {
+        x.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.LocalVar if !r.contains(x.id.value) =>
+            r = r + x.id.value ~> ((res.context, x.id, x.typedOpt.get))
+          case _ =>
+        }
+      }
+      r
+    }
   }
 
   val kind: String = "Logika"
@@ -91,19 +111,23 @@ object Logika {
   }
 
   def checkMethod(method: AST.Stmt.Method, config: Config, smt2: Smt2, reporter: Reporter): Unit = {
-    def checkCase(labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ident],
-                  ensures: ISZ[AST.Exp]): Unit = {
-      if (modifies.nonEmpty) {
-        halt("TODO: modifies")
-      }
-      val ctx = Context.empty(methodSigOpt = Some(method.sig),
-        labels = if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
-      val logika = Logika(config, ctx, smt2)
+    def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
+                  modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
+      val mctx = MethodContext(method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].owner :+ method.sig.id.value,
+        method.sig, reads, modifies, HashMap.empty)
+      val ctx = Context.empty(methodOpt = Some(mctx), labels = if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
       var state = State.create
-      for (p <- method.sig.params) {
-        val posOpt = p.id.attr.posOpt
-        val (s, _) = logika.idIntro(posOpt.get, state, ISZ(), p.id.value, p.tipe.typedOpt.get, posOpt)
-        state = s
+      val logika: Logika = {
+        val l = Logika(config, ctx, smt2)
+        var localInMap = HashMap.empty[String, State.Value.Sym]
+        for (v <- mctx.localMap.values) {
+          val (mname, id, t) = v
+          val posOpt = id.attr.posOpt
+          val (s, sym) = l.idIntro(posOpt.get, state, mname, id.value, t, posOpt)
+          localInMap = localInMap + id.value ~> sym
+          state = s
+        }
+        l(context = ctx(methodOpt = Some(mctx(localInMap = localInMap))))
       }
       for (r <- requires) {
         state = logika.evalAssume("Precondition", state, r, reporter)
@@ -116,10 +140,10 @@ object Logika {
 
     method.contract match {
       case contract: AST.MethodContract.Simple =>
-        checkCase(None(), contract.requires, contract.modifies, contract.ensures)
+        checkCase(None(), contract.reads, contract.requires, contract.modifies, contract.ensures)
       case contract: AST.MethodContract.Cases =>
         for (c <- contract.cases) {
-          checkCase(Some(c.label), c.requires, contract.modifies, c.ensures)
+          checkCase(Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
         }
     }
   }
@@ -386,6 +410,18 @@ object Logika {
       return (s, sym)
     }
 
+    def evalInput(input: AST.Exp.Input): (State, State.Value) = {
+      input.exp match {
+        case exp: AST.Exp.Ident =>
+          exp.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.LocalVar =>
+              return (state, context.methodOpt.get.localInMap.get(res.id).get)
+            case _ => halt("TODO: var input")
+          }
+        case _ => halt("TODO: non-simple input")
+      }
+    }
+
     val s0 = state
 
     e match {
@@ -412,6 +448,7 @@ object Logika {
         }
         halt(s"TODO: $e") // TODO
       case e: AST.Exp.Result => return evalResult(e)
+      case e: AST.Exp.Input => return evalInput(e)
       case _ => halt(s"TODO: $e") // TODO
     }
   }
@@ -464,7 +501,7 @@ object Logika {
       }
     }
 
-    def evalAssignLocal(decl: B, s0: State, context: ISZ[String], id: String, rhs: AST.AssignExp, idPos: Position): State = {
+    def evalAssignLocal(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: AST.AssignExp, idPos: Position): State = {
       val (s1, init) = evalAssignExp(s0, rhs)
       if (!s1.status) {
         return s1
@@ -474,13 +511,13 @@ object Logika {
         if (decl) {
           s2
         } else {
-          val poss = StateTransformer(Logika.CurrentIdPossCollector(context, id)).transformState(ISZ(), s2).ctx
+          val poss = StateTransformer(Logika.CurrentIdPossCollector(lcontext, id)).transformState(ISZ(), s2).ctx
           assert(poss.nonEmpty)
           val (s3, num) = s2.fresh
-          val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (context, id) ~> ((poss, num))
+          val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
           StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, s3).resultOpt.get
         }
-      return s4(claims = s4.claims :+ State.Claim.Def.CurrentId(sym, context, id, Some(idPos)))
+      return s4(claims = s4.claims :+ State.Claim.Def.CurrentId(sym, lcontext, id, Some(idPos)))
     }
 
     def evalIf(s0: State, ifStmt: AST.Stmt.If): State = {
