@@ -616,8 +616,8 @@ object Logika {
       return rec(s0, 0)
     }
 
-    def evalReturn(s0: State, stmt: AST.Stmt.Return): State = {
-      stmt.expOpt match {
+    def evalReturn(s0: State, returnStmt: AST.Stmt.Return): State = {
+      returnStmt.expOpt match {
         case Some(exp) =>
           val (s1, v) = evalExp(s0, exp, reporter)
           val (s2, sym) = value2Sym(s1, v, exp.posOpt.get)
