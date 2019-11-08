@@ -800,23 +800,23 @@ object State {
         }
       }
 
-      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value, @hidden atId: ST) extends Def {
+      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value, @hidden upId: ST) extends Def {
         @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @$seq(${index.toST} ~> ${element.toST})"
+          return st"${sym.toST} ≜ @${seq.toST}(${index.toST} ~> ${element.toST})"
         }
 
         @pure override def toSmt: ST = {
-          halt("TODO") // TODO
+          return st"($upId ${seq.toSmt} ${index.toSmt} ${element.toSmt} ${sym.toSmt})"
         }
       }
 
       @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value, @hidden atId: ST) extends Def {
         @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @$seq(${index.toST})"
+          return st"${sym.toST} ≜ @${seq.toST}(${index.toST})"
         }
 
         @pure override def toSmt: ST = {
-          return st"(= ${sym.toSmt} ($atId ${seq.toSmt} ${index.toSmt}))"
+          return st"($atId ${seq.toSmt} ${index.toSmt} ${sym.toSmt})"
         }
       }
 
@@ -899,7 +899,7 @@ object State {
           val symST = sym.toSmt
           val r =  st"""(and
                        |  (= ($sizeId $symST) ${args.size})
-                       |  ${(for (arg <- args) yield st"(= ($atId $symST ${arg._1.toSmt}) ${arg._2.toSmt})", "\n")})"""
+                       |  ${(for (arg <- args) yield st"($atId $symST ${arg._1.toSmt} ${arg._2.toSmt})", "\n")})"""
           return r
         }
       }

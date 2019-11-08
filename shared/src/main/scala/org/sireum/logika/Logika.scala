@@ -397,12 +397,24 @@ object Logika {
       }
     }
 
-    def evalSeqSelect(exp: AST.Exp.Invoke, res: AST.ResolvedInfo.Method): (State, State.Value) = {
-      val t = exp.ident.typedOpt.get.asInstanceOf[AST.Typed.Name]
-      val (s0, seq) = evalSelectH(exp.ident.attr.resOpt.get, exp.receiverOpt, exp.ident.id.value, t, exp.ident.posOpt.get)
+    def evalReceiver(exp: AST.Exp.Invoke): (State, State.Value) = {
+      exp.receiverOpt match {
+        case Some(rcv) =>
+          exp.ident.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Var =>
+              return evalSelectH(res, exp.receiverOpt, exp.ident.id.value, exp.ident.typedOpt.get, exp.ident.posOpt.get)
+            case _ => return evalExp(state, rcv, reporter)
+          }
+        case _ => return evalExp(state, exp.ident, reporter)
+      }
+    }
+
+    def evalSeqSelect(exp: AST.Exp.Invoke): (State, State.Value) = {
+      val (s0, seq): (State, State.Value) = evalReceiver(exp)
       val (s1, i) = evalExp(s0, exp.args(0), reporter)
       val (s2, v) = s1.freshSym(exp.typedOpt.get, exp.posOpt.get)
-      return (s2.addClaim(State.Claim.Def.SeqLookup(v, seq, i, smt2.typeOpId(t, "at"))), v)
+      return (s2.addClaim(State.Claim.Def.SeqLookup(v, seq, i,
+        smt2.typeOpId(seq.tipe.asInstanceOf[AST.Typed.Name], "at"))), v)
     }
 
     def evalResult(exp: AST.Exp.Result): (State, State.Value) = {
@@ -441,7 +453,7 @@ object Logika {
           case res: AST.ResolvedInfo.Method =>
             res.mode match {
               case AST.MethodMode.Constructor => return evalConstructor(e, res)
-              case AST.MethodMode.Select => return evalSeqSelect(e, res)
+              case AST.MethodMode.Select => return evalSeqSelect(e)
               case _ =>
             }
           case _ =>
@@ -501,23 +513,57 @@ object Logika {
       }
     }
 
+    def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym, idPos: Position): State = {
+      val s2: State =
+        if (decl) {
+          s0
+        } else {
+          val poss = StateTransformer(Logika.CurrentIdPossCollector(lcontext, id)).transformState(ISZ(), s0).ctx
+          assert(poss.nonEmpty)
+          val (s1, num) = s0.fresh
+          val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
+          StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, s1).resultOpt.get
+        }
+      return s2(claims = s2.claims :+ State.Claim.Def.CurrentId(rhs, lcontext, id, Some(idPos)))
+    }
+
     def evalAssignLocal(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: AST.AssignExp, idPos: Position): State = {
       val (s1, init) = evalAssignExp(s0, rhs)
       if (!s1.status) {
         return s1
       }
       val (s2, sym) = value2Sym(s1, init, rhs.asStmt.posOpt.get)
-      val s4: State =
-        if (decl) {
-          s2
-        } else {
-          val poss = StateTransformer(Logika.CurrentIdPossCollector(lcontext, id)).transformState(ISZ(), s2).ctx
-          assert(poss.nonEmpty)
-          val (s3, num) = s2.fresh
-          val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
-          StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, s3).resultOpt.get
+      return evalAssignLocalH(decl, s2, lcontext, id, sym, idPos)
+    }
+
+    def evalAssign(s0: State, assignStmt: AST.Stmt.Assign): State = {
+      def assignRec(s2: State, lhs: AST.Exp, rhs: State.Value.Sym): State = {
+        lhs match {
+          case lhs: AST.Exp.Ident =>
+            lhs.attr.resOpt.get match {
+              case res: AST.ResolvedInfo.LocalVar =>
+                return evalAssignLocalH(F, s2, res.context, res.id, rhs, lhs.posOpt.get)
+              case _ => halt(s"TODO: $assignStmt") // TODO
+            }
+          case lhs: AST.Exp.Invoke =>
+            val receiver = lhs.receiverOpt.get
+            val t = receiver.typedOpt.get.asInstanceOf[AST.Typed.Name]
+            val receiverPos = receiver.posOpt.get
+            val (s3, a) = evalExp(s2, receiver, reporter)
+            val (s4, i) = evalExp(s3, lhs.args(0), reporter)
+            val (s5, newSym) = s4.freshSym(t, receiverPos)
+            return assignRec(s5.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver, newSym)
+          case _: AST.Exp.Select => halt(s"TODO: $assignStmt") // TODO
+          case _ => halt(s"Infeasible: $lhs")
         }
-      return s4(claims = s4.claims :+ State.Claim.Def.CurrentId(sym, lcontext, id, Some(idPos)))
+
+      }
+      val (s1, init) = evalAssignExp(s0, assignStmt.rhs)
+      if (!s1.status) {
+        return s1
+      }
+      val (s2, sym) = value2Sym(s1, init, assignStmt.rhs.asStmt.posOpt.get)
+      return assignRec(s2, assignStmt.lhs, sym)
     }
 
     def evalIf(s0: State, ifStmt: AST.Stmt.If): State = {
@@ -604,7 +650,7 @@ object Logika {
 
     def evalWhileUnroll(s0: State, whileStmt: AST.Stmt.While): State = {
       val loopId: ISZ[String] = whileStmt.context
-      def rec(current: State, numLoops: Z): State = {
+      def whileRec(current: State, numLoops: Z): State = {
         val s1 = checkExps("Loop invariant", " at the beginning of while-loop", current,
           whileStmt.invariants, reporter)
         if (!s1.status) {
@@ -622,7 +668,7 @@ object Logika {
           if (thenSat) {
             val bound = loopBound(loopId)
             if (bound <= 0 || numLoops + 1 < loopBound(loopId)) {
-              val s5 = rec(s4, numLoops + 1)
+              val s5 = whileRec(s4, numLoops + 1)
               s5
             } else {
               if (bound > 0) {
@@ -650,7 +696,7 @@ object Logika {
             return s7(status = F)
         }
       }
-      return rec(s0, 0)
+      return whileRec(s0, 0)
     }
 
     def evalReturn(s0: State, returnStmt: AST.Stmt.Return): State = {
@@ -684,12 +730,7 @@ object Logika {
             return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.id.attr.posOpt.get)
           case _ => halt(s"TODO: $stmt") // TODO
         }
-      case AST.Stmt.Assign(lhs: AST.Exp.Ident, rhs) =>
-        lhs.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.LocalVar =>
-            return evalAssignLocal(F, state, res.context, res.id, rhs, lhs.posOpt.get)
-          case _ => halt(s"TODO: $stmt") // TODO
-        }
+      case stmt: AST.Stmt.Assign => return evalAssign(state, stmt)
       case stmt: AST.Stmt.If => return evalIf(state, stmt)
       case stmt: AST.Stmt.While =>
         return if (stmt.modifies.nonEmpty) evalWhile(state, stmt) else evalWhileUnroll(state, stmt)
