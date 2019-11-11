@@ -189,7 +189,7 @@ object State {
       }
 
       @pure override def toST: ST = {
-        return st"""char${Json.Printer.printC(value)}"""
+        return st"char${Json.Printer.printC(value)}"
       }
 
       @pure override def toSmt: ST = {
@@ -410,32 +410,31 @@ object State {
 
     @datatype class And(claims: ISZ[Claim]) extends Claim {
       @pure override def toST: ST = {
-        if (claims.isEmpty) {
-          return st"T"
-        }
-        val r = st"""∧(
-                    |  ${(for (c <- claims) yield c.toST, ",\n")}
-                    |)"""
+        val r: ST =
+          if (claims.size == 0) st"T"
+          else if (claims.size == 1) claims(0).toST
+          else
+            st"""∧(
+                |  ${(for (c <- claims) yield c.toST, ",\n")}
+                |)"""
         return r
       }
 
       @pure override def toSmt: ST = {
-        if (claims.isEmpty) {
-          return st"true"
-        }
-        val r = st"""(and
-                    |  ${(for (c <- claims) yield c.toSmt, "\n")}
-                    |)"""
+        val r: ST =
+          if (claims.size == 0) st"true"
+          else if (claims.size == 1) claims(0).toSmt
+          else
+            st"""(and
+                |  ${(for (c <- claims) yield c.toSmt, "\n")}
+                |)"""
         return r
       }
 
       @pure override def toSmtDecl: HashSMap[String, ST] = {
         var r = HashSMap.empty[String, ST]
-        for (c <- claims; p <- c.toSmtDecl.entries) {
-          val (k, v) = p
-          if (!r.contains(k)) {
-            r = r + k ~> v
-          }
+        for (c <- claims) {
+          r = r ++ c.toSmtDecl.entries
         }
         return r
       }
@@ -447,32 +446,31 @@ object State {
 
     @datatype class Or(claims: ISZ[Claim]) extends Claim {
       @pure override def toST: ST = {
-        if (claims.isEmpty) {
-          return st"F"
-        }
-        val r =  st"""∨(
-                     |  ${(for (c <- claims) yield c.toST, ",\n")}
-                     |)"""
+        val r: ST =
+          if (claims.size == 0) st"F"
+          else if (claims.size == 1) claims(0).toST
+          else
+            st"""∨(
+                |  ${(for (c <- claims) yield c.toST, ",\n")}
+                |)"""
         return r
       }
 
       @pure override def toSmt: ST = {
-        if (claims.isEmpty) {
-          return st"false"
-        }
-        val r = st"""(or
-                    |  ${(for (c <- claims) yield c.toSmt, "\n")}
-                    |)"""
+        val r: ST =
+          if (claims.size == 0) st"false"
+          else if (claims.size == 1) claims(0).toSmt
+          else
+            st"""(or
+                |  ${(for (c <- claims) yield c.toSmt, "\n")}
+                |)"""
         return r
       }
 
       @pure override def toSmtDecl: HashSMap[String, ST] = {
         var r = HashSMap.empty[String, ST]
-        for (c <- claims; p <- c.toSmtDecl.entries) {
-          val (k, v) = p
-          if (!r.contains(k)) {
-            r = r + k ~> v
-          }
+        for (c <- claims) {
+          r = r ++ c.toSmtDecl.entries
         }
         return r
       }
@@ -491,7 +489,7 @@ object State {
       }
 
       @pure override def toSmt: ST = {
-        val r = st"""(implies
+        val r = st"""(=>
                     |  ${(for (c <- claims) yield c.toSmt, "\n")}
                     |)"""
         return r
@@ -499,11 +497,8 @@ object State {
 
       @pure override def toSmtDecl: HashSMap[String, ST] = {
         var r = HashSMap.empty[String, ST]
-        for (c <- claims; p <- c.toSmtDecl.entries) {
-          val (k, v) = p
-          if (!r.contains(k)) {
-            r = r + k ~> v
-          }
+        for (c <- claims) {
+          r = r ++ c.toSmtDecl.entries
         }
         return r
       }
@@ -513,24 +508,40 @@ object State {
       }
     }
 
-    @datatype class Quant(isAll: B, ids: ISZ[Def.CurrentId], tipe: AST.Typed, claim: Claim) extends Claim {
+    @datatype class Quant(isAll: B, ids: ISZ[Def.CurrentId], tipe: AST.Typed, claims: ISZ[Claim], sym: State.Value.Sym)
+      extends Claim {
       @pure override def toST: ST = {
-        val r = st"""${if (isAll) "∀" else "∃"} ${(for (id <- ids) yield id.toST, ", ")} : ${tipe.string} ${claim.toST}"""
+        val r =
+          st"""${if (isAll) "∀" else "∃"} ${(for (id <- ids) yield id.toST, ", ")} : ${tipe.string}
+              |  ${(for (claim <- claims) yield claim.toST, "\n")}
+              |  ${sym.toST}"""
         return r
       }
 
       @pure override def toSmt: ST = {
-        halt("TODO") // TODO
+        val t = State.smtTypeId(sym.tipe)
+        val r =
+          st"""(${if (isAll) "forall" else "exists"} (${(for (id <- ids) yield st"(${id.toSmt} $t)", " ")})
+              |  (and
+              |    ${(for (claim <- claims) yield claim.toSmt, "\n")}
+              |    ${sym.toSmt}
+              |  )
+              |)"""
+        return r
       }
 
       @pure override def toSmtDecl: HashSMap[String, ST] = {
-        return claim.toSmtDecl --
+        var r = HashSMap.empty[String, ST]
+        for (c <- claims) {
+          r = r ++ c.toSmtDecl.entries
+        }
+        return r --
           (for (id <- ids) yield id.smt2name.render) --
           (for (id <- ids) yield id.sym.toSmt.render)
       }
 
       @pure def types: ISZ[AST.Typed] = {
-        return tipe +: claim.types
+        return tipe +: (for (claim <- claims; t <- claim.types) yield t) :+ sym.tipe
       }
     }
 
@@ -571,27 +582,42 @@ object State {
       }
     }
 
-    @datatype class If(sym: Value.Sym, tClaim: Claim, fClaim: Claim) extends Claim {
+    @datatype class If(sym: Value.Sym,
+                       tClaims: ISZ[Claim],
+                       fClaims: ISZ[Claim]) extends Claim {
+
       @pure override def toST: ST = {
-        return st"""${sym.toST} ?
-                   |  ${tClaim.toST}
-                   |: ${fClaim.toST}"""
+        val r =
+          st"""${sym.toST} ?
+              |  ${And(tClaims).toST}
+              |  ${And(fClaims).toST}"""
+        return r
       }
 
       @pure override def toSmt: ST = {
-        return st"""(ite ${sym.toSmt}
-                   |  ${tClaim.toSmt}
-                   |  ${fClaim.toSmt})"""
+        val r =
+          st"""(ite ${sym.toSmt}
+              |  ${And(tClaims).toSmt}
+              |  ${And(fClaims).toSmt}
+              |)"""
+        return r
       }
 
       @pure override def toSmtDecl: HashSMap[String, ST] = {
-        return (HashSMap.empty[String, ST] + sym.toSmt.render ~>
-          st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})") ++
-          tClaim.toSmtDecl.entries ++ fClaim.toSmtDecl.entries
+        var r = HashSMap.empty[String, ST] +
+          sym.toSmt.render ~> st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})"
+        for (tClaim <- tClaims) {
+          r = r ++ tClaim.toSmtDecl.entries
+        }
+        for (fClaim <- fClaims) {
+          r = r ++ fClaim.toSmtDecl.entries
+        }
+        return r
       }
 
       @pure def types: ISZ[AST.Typed] = {
-        return tClaim.types ++ fClaim.types
+        return sym.tipe +: ((for (tClaim <- tClaims; t <- tClaim.types) yield t) ++
+          (for (fClaim <- fClaims; t <- fClaim.types) yield t))
       }
     }
 

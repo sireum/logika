@@ -427,7 +427,12 @@ object Logika {
         case exp: AST.Exp.Ident =>
           exp.attr.resOpt.get match {
             case res: AST.ResolvedInfo.LocalVar =>
-              return (state, context.methodOpt.get.localInMap.get(res.id).get)
+              context.methodOpt.get.localInMap.get(res.id) match {
+                case Some(sym) => return (state, sym)
+                case _ =>
+                  error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
+                  return (state(status = F), State.Value.B(F, e.posOpt.get))
+              }
             case _ => halt("TODO: var input")
           }
         case _ => halt("TODO: non-simple input")
@@ -773,14 +778,14 @@ object Logika {
 
   def mergeStates(s0: State, cond: State.Value.Sym, sT: State, sF: State, nextFresh: Z): State = {
     @pure def mergeClaimPrefix(tClaim: State.Claim, fClaim: State.Claim): State.Claim = {
-      return if (tClaim == fClaim) tClaim else State.Claim.If(cond, tClaim, fClaim)
+      return if (tClaim == fClaim) tClaim else State.Claim.If(cond, ISZ(tClaim), ISZ(fClaim))
     }
     val size = s0.claims.size
     val prefixClaims: ISZ[State.Claim] =
       for (i <- 0 until size) yield mergeClaimPrefix(sT.claims(i), sF.claims(i))
     return State(s0.status, prefixClaims :+
-      State.Claim.If(cond, State.Claim.And(ops.ISZOps(sT.claims).drop(size + 1)),
-        State.Claim.And(ops.ISZOps(sF.claims).drop(size + 1))), nextFresh)
+      State.Claim.If(cond, ops.ISZOps(sT.claims).drop(size + 1),
+        ops.ISZOps(sF.claims).drop(size + 1)), nextFresh)
   }
 
   def evalStmts(state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): State = {

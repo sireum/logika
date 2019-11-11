@@ -1141,11 +1141,12 @@ import StateTransformer._
             TPostResult(r0.ctx, None())
         case o2: State.Claim.Quant =>
           val r0: TPostResult[Context, IS[Z, State.Claim.Def.CurrentId]] = transformISZ(preR.ctx, o2.ids, transformStateClaimDefCurrentId _)
-          val r1: TPostResult[Context, State.Claim] = transformStateClaim(r0.ctx, o2.claim)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(ids = r0.resultOpt.getOrElse(o2.ids), claim = r1.resultOpt.getOrElse(o2.claim))))
+          val r1: TPostResult[Context, IS[Z, State.Claim]] = transformISZ(r0.ctx, o2.claims, transformStateClaim _)
+          val r2: TPostResult[Context, State.Value.Sym] = transformStateValueSym(r1.ctx, o2.sym)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
+            TPostResult(r2.ctx, Some(o2(ids = r0.resultOpt.getOrElse(o2.ids), claims = r1.resultOpt.getOrElse(o2.claims), sym = r2.resultOpt.getOrElse(o2.sym))))
           else
-            TPostResult(r1.ctx, None())
+            TPostResult(r2.ctx, None())
         case o2: State.Claim.Neg =>
           val r0: TPostResult[Context, State.Claim] = transformStateClaim(preR.ctx, o2.claim)
           if (hasChanged || r0.resultOpt.nonEmpty)
@@ -1160,10 +1161,10 @@ import StateTransformer._
             TPostResult(r0.ctx, None())
         case o2: State.Claim.If =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Claim] = transformStateClaim(r0.ctx, o2.tClaim)
-          val r2: TPostResult[Context, State.Claim] = transformStateClaim(r1.ctx, o2.fClaim)
+          val r1: TPostResult[Context, IS[Z, State.Claim]] = transformISZ(r0.ctx, o2.tClaims, transformStateClaim _)
+          val r2: TPostResult[Context, IS[Z, State.Claim]] = transformISZ(r1.ctx, o2.fClaims, transformStateClaim _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), tClaim = r1.resultOpt.getOrElse(o2.tClaim), fClaim = r2.resultOpt.getOrElse(o2.fClaim))))
+            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), tClaims = r1.resultOpt.getOrElse(o2.tClaims), fClaims = r2.resultOpt.getOrElse(o2.fClaims))))
           else
             TPostResult(r2.ctx, None())
         case o2: State.Claim.Def.CurrentName =>
