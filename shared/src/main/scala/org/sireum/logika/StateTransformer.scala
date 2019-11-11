@@ -1142,11 +1142,10 @@ import StateTransformer._
         case o2: State.Claim.Quant =>
           val r0: TPostResult[Context, IS[Z, State.Claim.Def.CurrentId]] = transformISZ(preR.ctx, o2.ids, transformStateClaimDefCurrentId _)
           val r1: TPostResult[Context, IS[Z, State.Claim]] = transformISZ(r0.ctx, o2.claims, transformStateClaim _)
-          val r2: TPostResult[Context, State.Value.Sym] = transformStateValueSym(r1.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(ids = r0.resultOpt.getOrElse(o2.ids), claims = r1.resultOpt.getOrElse(o2.claims), sym = r2.resultOpt.getOrElse(o2.sym))))
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(ids = r0.resultOpt.getOrElse(o2.ids), claims = r1.resultOpt.getOrElse(o2.claims))))
           else
-            TPostResult(r2.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: State.Claim.Neg =>
           val r0: TPostResult[Context, State.Claim] = transformStateClaim(preR.ctx, o2.claim)
           if (hasChanged || r0.resultOpt.nonEmpty)

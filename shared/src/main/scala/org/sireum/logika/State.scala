@@ -508,24 +508,19 @@ object State {
       }
     }
 
-    @datatype class Quant(isAll: B, ids: ISZ[Def.CurrentId], tipe: AST.Typed, claims: ISZ[Claim], sym: State.Value.Sym)
-      extends Claim {
+    @datatype class Quant(isAll: B, ids: ISZ[Def.CurrentId], tipe: AST.Typed, claims: ISZ[Claim]) extends Claim {
       @pure override def toST: ST = {
         val r =
           st"""${if (isAll) "∀" else "∃"} ${(for (id <- ids) yield id.toST, ", ")} : ${tipe.string}
-              |  ${(for (claim <- claims) yield claim.toST, "\n")}
-              |  ${sym.toST}"""
+              |  ${And(claims).toST}"""
         return r
       }
 
       @pure override def toSmt: ST = {
-        val t = State.smtTypeId(sym.tipe)
+        val t = State.smtTypeId(tipe)
         val r =
           st"""(${if (isAll) "forall" else "exists"} (${(for (id <- ids) yield st"(${id.toSmt} $t)", " ")})
-              |  (and
-              |    ${(for (claim <- claims) yield claim.toSmt, "\n")}
-              |    ${sym.toSmt}
-              |  )
+              |  ${And(claims).toSmt}
               |)"""
         return r
       }
@@ -541,7 +536,7 @@ object State {
       }
 
       @pure def types: ISZ[AST.Typed] = {
-        return tipe +: (for (claim <- claims; t <- claim.types) yield t) :+ sym.tipe
+        return tipe +: (for (claim <- claims; t <- claim.types) yield t)
       }
     }
 
