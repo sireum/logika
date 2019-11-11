@@ -439,6 +439,18 @@ object Logika {
       }
     }
 
+    def evalQuantType(quant: AST.Exp.QuantType): (State, State.Value) = {
+      val s0 = state(claims = ISZ())
+      val (s1, v) = evalAssignExp(s0, quant.fun.exp, reporter)
+      val pos = quant.fun.exp.asStmt.posOpt.get
+      val (s2, expSym) = value2Sym(s1, v, pos)
+      val quantClaims = s1.claims :+ State.Claim.Prop(expSym)
+      val (s3, sym) = s2(claims = state.claims).freshSym(AST.Typed.b, pos)
+      val vars: ISZ[State.Claim.Quant.Var] =
+        for (p <- quant.fun.params) yield State.Claim.Quant.Var(p.idOpt.get.value, p.typedOpt.get)
+      return (s3.addClaim(State.Claim.Quant(quant.isForall, vars, quantClaims)), sym)
+    }
+
     val s0 = state
 
     e match {
@@ -466,6 +478,7 @@ object Logika {
         halt(s"TODO: $e") // TODO
       case e: AST.Exp.Result => return evalResult(e)
       case e: AST.Exp.Input => return evalInput(e)
+      case e: AST.Exp.QuantType => return evalQuantType(e)
       case _ => halt(s"TODO: $e") // TODO
     }
   }
@@ -506,16 +519,16 @@ object Logika {
     return s2(status = valid, claims = s2.claims :+ conclusion)
   }
 
+  def evalAssignExp(s0: State, ae: AST.AssignExp, reporter: Reporter): (State, State.Value) = {
+    ae match {
+      case AST.Stmt.Expr(exp) => return evalExp(s0, exp, reporter)
+      case _ => halt(s"TODO: $ae") // TODO
+    }
+  }
+
   def evalStmt(state: State, stmt: AST.Stmt, reporter: Reporter): State = {
     if (!state.status) {
       return state
-    }
-
-    def evalAssignExp(s0: State, ae: AST.AssignExp): (State, State.Value) = {
-      ae match {
-        case AST.Stmt.Expr(exp) => return evalExp(s0, exp, reporter)
-        case _ => halt(s"TODO: $ae") // TODO
-      }
     }
 
     def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym, idPos: Position): State = {
@@ -533,7 +546,7 @@ object Logika {
     }
 
     def evalAssignLocal(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: AST.AssignExp, idPos: Position): State = {
-      val (s1, init) = evalAssignExp(s0, rhs)
+      val (s1, init) = evalAssignExp(s0, rhs, reporter)
       if (!s1.status) {
         return s1
       }
@@ -563,7 +576,7 @@ object Logika {
         }
 
       }
-      val (s1, init) = evalAssignExp(s0, assignStmt.rhs)
+      val (s1, init) = evalAssignExp(s0, assignStmt.rhs, reporter)
       if (!s1.status) {
         return s1
       }

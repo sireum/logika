@@ -349,6 +349,10 @@ object StateTransformer {
       return PreResult(ctx, T, None())
     }
 
+    @pure def preStateClaimQuantVar(ctx: Context, o: State.Claim.Quant.Var): PreResult[Context, State.Claim.Quant.Var] = {
+      return PreResult(ctx, T, None())
+    }
+
     @pure def preStateClaimQuant(ctx: Context, o: State.Claim.Quant): PreResult[Context, State.Claim] = {
       return PreResult(ctx, T, None())
     }
@@ -751,6 +755,10 @@ object StateTransformer {
       return TPostResult(ctx, None())
     }
 
+    @pure def postStateClaimQuantVar(ctx: Context, o: State.Claim.Quant.Var): TPostResult[Context, State.Claim.Quant.Var] = {
+      return TPostResult(ctx, None())
+    }
+
     @pure def postStateClaimQuant(ctx: Context, o: State.Claim.Quant): TPostResult[Context, State.Claim] = {
       return TPostResult(ctx, None())
     }
@@ -1140,10 +1148,10 @@ import StateTransformer._
           else
             TPostResult(r0.ctx, None())
         case o2: State.Claim.Quant =>
-          val r0: TPostResult[Context, IS[Z, State.Claim.Def.CurrentId]] = transformISZ(preR.ctx, o2.ids, transformStateClaimDefCurrentId _)
+          val r0: TPostResult[Context, IS[Z, State.Claim.Quant.Var]] = transformISZ(preR.ctx, o2.vars, transformStateClaimQuantVar _)
           val r1: TPostResult[Context, IS[Z, State.Claim]] = transformISZ(r0.ctx, o2.claims, transformStateClaim _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(ids = r0.resultOpt.getOrElse(o2.ids), claims = r1.resultOpt.getOrElse(o2.claims))))
+            TPostResult(r1.ctx, Some(o2(vars = r0.resultOpt.getOrElse(o2.vars), claims = r1.resultOpt.getOrElse(o2.claims))))
           else
             TPostResult(r1.ctx, None())
         case o2: State.Claim.Neg =>
@@ -1282,6 +1290,32 @@ import StateTransformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: State.Claim = r.resultOpt.getOrElse(o)
     val postR: TPostResult[Context, State.Claim] = pp.postStateClaim(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformStateClaimQuantVar(ctx: Context, o: State.Claim.Quant.Var): TPostResult[Context, State.Claim.Quant.Var] = {
+    val preR: PreResult[Context, State.Claim.Quant.Var] = pp.preStateClaimQuantVar(ctx, o)
+    val r: TPostResult[Context, State.Claim.Quant.Var] = if (preR.continu) {
+      val o2: State.Claim.Quant.Var = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        TPostResult(preR.ctx, Some(o2))
+      else
+        TPostResult(preR.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: State.Claim.Quant.Var = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, State.Claim.Quant.Var] = pp.postStateClaimQuantVar(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {
@@ -1446,41 +1480,6 @@ import StateTransformer._
      case TPostResult(postCtx, Some(result: State.Value.Sym)) => TPostResult(postCtx, Some[State.Value.Sym](result))
      case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Value.Sym")
      case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Value.Sym]())
-    }
-    if (postR.resultOpt.nonEmpty) {
-      return postR
-    } else if (hasChanged) {
-      return TPostResult(postR.ctx, Some(o2))
-    } else {
-      return TPostResult(postR.ctx, None())
-    }
-  }
-
-  @pure def transformStateClaimDefCurrentId(ctx: Context, o: State.Claim.Def.CurrentId): TPostResult[Context, State.Claim.Def.CurrentId] = {
-    val preR: PreResult[Context, State.Claim.Def.CurrentId] = pp.preStateClaimDefCurrentId(ctx, o) match {
-     case PreResult(preCtx, continu, Some(r: State.Claim.Def.CurrentId)) => PreResult(preCtx, continu, Some[State.Claim.Def.CurrentId](r))
-     case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def.CurrentId")
-     case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def.CurrentId]())
-    }
-    val r: TPostResult[Context, State.Claim.Def.CurrentId] = if (preR.continu) {
-      val o2: State.Claim.Def.CurrentId = preR.resultOpt.getOrElse(o)
-      val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-      else
-        TPostResult(r0.ctx, None())
-    } else if (preR.resultOpt.nonEmpty) {
-      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
-    } else {
-      TPostResult(preR.ctx, None())
-    }
-    val hasChanged: B = r.resultOpt.nonEmpty
-    val o2: State.Claim.Def.CurrentId = r.resultOpt.getOrElse(o)
-    val postR: TPostResult[Context, State.Claim.Def.CurrentId] = pp.postStateClaimDefCurrentId(r.ctx, o2) match {
-     case TPostResult(postCtx, Some(result: State.Claim.Def.CurrentId)) => TPostResult(postCtx, Some[State.Claim.Def.CurrentId](result))
-     case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def.CurrentId")
-     case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def.CurrentId]())
     }
     if (postR.resultOpt.nonEmpty) {
       return postR

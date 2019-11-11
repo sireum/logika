@@ -508,18 +508,30 @@ object State {
       }
     }
 
-    @datatype class Quant(isAll: B, ids: ISZ[Def.CurrentId], tipe: AST.Typed, claims: ISZ[Claim]) extends Claim {
+    object Quant {
+      @datatype class Var(id: String, tipe: AST.Typed) {
+        @pure def toST: ST = {
+          return st"$id: ${tipe.string}"
+        }
+        @pure def toSmt: ST = {
+          return st"($smt2name ${smtTypeId(tipe)})"
+        }
+        @memoize def smt2name: ST = {
+          return st"|l:$id|"
+        }      }
+    }
+
+    @datatype class Quant(isAll: B, vars: ISZ[Quant.Var], claims: ISZ[Claim]) extends Claim {
       @pure override def toST: ST = {
         val r =
-          st"""${if (isAll) "∀" else "∃"} ${(for (id <- ids) yield id.toST, ", ")} : ${tipe.string}
+          st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
               |  ${And(claims).toST}"""
         return r
       }
 
       @pure override def toSmt: ST = {
-        val t = State.smtTypeId(tipe)
         val r =
-          st"""(${if (isAll) "forall" else "exists"} (${(for (id <- ids) yield st"(${id.toSmt} $t)", " ")})
+          st"""(${if (isAll) "forall" else "exists"} (${(for (x <- vars) yield x.toSmt, " ")})
               |  ${And(claims).toSmt}
               |)"""
         return r
@@ -530,13 +542,11 @@ object State {
         for (c <- claims) {
           r = r ++ c.toSmtDecl.entries
         }
-        return r --
-          (for (id <- ids) yield id.smt2name.render) --
-          (for (id <- ids) yield id.sym.toSmt.render)
+        return r -- (for (x <- vars) yield x.smt2name.render)
       }
 
       @pure def types: ISZ[AST.Typed] = {
-        return tipe +: (for (claim <- claims; t <- claim.types) yield t)
+        return for (claim <- claims; t <- claim.types) yield t
       }
     }
 
@@ -692,7 +702,7 @@ object State {
 
       @datatype class Name(val sym: Value.Sym, ids: ISZ[String], num: Z, poss: ISZ[Position]) extends Def {
         @pure override def toST: ST = {
-          return st"${(ids, ".")}@$possLines:$num == ${sym.toST}"
+          return st"${(ids, ".")}@$possLines#$num == ${sym.toST}"
         }
 
         @pure override def toSmt: ST = {
@@ -710,7 +720,7 @@ object State {
         }
 
         @memoize def smt2name: ST = {
-          return st"|g:${(ids, ".")}@$possLines:$num|"
+          return st"|g:${(ids, ".")}@$possLines#$num|"
         }
 
         @pure def possLines: ST = {
@@ -747,8 +757,8 @@ object State {
       @datatype class Id(val sym: Value.Sym, context: ISZ[String], id: String, num: Z, poss: ISZ[Position]) extends Def {
 
         @pure override def toST: ST = {
-          return if (context.isEmpty) st"$id@$possLines:$num == ${sym.toST}"
-          else st"$id:${(context, ".")}@$possLines:$num == ${sym.toST}"
+          return if (context.isEmpty) st"$id@$possLines#$num == ${sym.toST}"
+          else st"$id:${(context, ".")}@$possLines#$num == ${sym.toST}"
         }
 
         @pure override def toSmt: ST = {
@@ -766,7 +776,7 @@ object State {
         }
 
         @memoize def smt2name: ST = {
-          return if (context.isEmpty) st"|l:$id@$possLines:$num|" else st"|l:$id:${(context, ".")}@$possLines:$num|"
+          return if (context.isEmpty) st"|l:$id@$possLines#$num|" else st"|l:$id:${(context, ".")}@$possLines#$num|"
         }
 
         @pure def possLines: ST = {

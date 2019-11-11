@@ -1,7 +1,7 @@
 // #Sireum
 import org.sireum._
 
-@pure def swap(s: ZS, i: Z, j: Z): Unit = {
+def swap(s: ZS, i: Z, j: Z): Unit = {
   Contract(
     Requires(0 <= i, i < s.size, 0 <= j, j < s.size),
     Modifies(s),
@@ -9,6 +9,8 @@ import org.sireum._
       s.size == In(s).size,
       s(i) == In(s)(j),
       s(j) == In(s)(i),
+      All{ k: Z => (0 <= k & k < s.size) imply_: (k != i & k != j) imply_: (s(k) == In(s)(k)) },
+      //All(0 until s.size)(k => (k != i & k != j) imply_: (s(k) == In(s)(k))),
       //All(s.indices)(k => (k != i & k != j) imply_: (s(k) == In(s)(k)))
     )
   )
