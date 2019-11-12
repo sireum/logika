@@ -34,16 +34,16 @@ import StateTransformer.{PrePost, PreResult}
 
 object Logika {
   @datatype class CurrentIdPossCollector(context: ISZ[String], id: String) extends PrePost[ISZ[Position]] {
-    override def preStateClaimDefCurrentId(ctx: ISZ[Position], o: State.Claim.Def.CurrentId): PreResult[ISZ[Position], State.Claim.Def] = {
+    override def preStateClaimLetCurrentId(ctx: ISZ[Position], o: State.Claim.Let.CurrentId): PreResult[ISZ[Position], State.Claim.Let] = {
       return if (o.defPosOpt.nonEmpty && o.context == context && o.id == id) PreResult(ctx :+ o.defPosOpt.get, T, None())
       else PreResult(ctx, T, None())
     }
   }
 
   @datatype class CurrentIdRewriter(map: HashMap[(ISZ[String], String), (ISZ[Position], Z)]) extends PrePost[B] {
-    override def preStateClaimDefCurrentId(ctx: B, o: State.Claim.Def.CurrentId): PreResult[B, State.Claim.Def] = {
+    override def preStateClaimLetCurrentId(ctx: B, o: State.Claim.Let.CurrentId): PreResult[B, State.Claim.Let] = {
       map.get((o.context, o.id)) match {
-        case Some((poss, num)) => return PreResult(ctx, T, Some(State.Claim.Def.Id(o.sym, o.context, o.id, num, poss)))
+        case Some((poss, num)) => return PreResult(ctx, T, Some(State.Claim.Let.Id(o.sym, o.context, o.id, num, poss)))
         case _ => return PreResult(ctx, T, None())
       }
     }
@@ -183,7 +183,7 @@ object Logika {
   @pure def idIntro(pos: Position, state: State, idContext: ISZ[String],
                     id: String, t: AST.Typed, idPosOpt: Option[Position]): (State, State.Value.Sym) = {
     val (s0, sym) = state.freshSym(t, pos)
-    return (s0.addClaim(State.Claim.Def.CurrentId(sym, idContext, id, idPosOpt)), sym)
+    return (s0.addClaim(State.Claim.Let.CurrentId(sym, idContext, id, idPosOpt)), sym)
   }
 
   def evalExp(state: State, e: AST.Exp, reporter: Reporter): (State, State.Value) = {
@@ -220,7 +220,7 @@ object Logika {
             case AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus => return (s1, v)
             case _ =>
               val (s2, sym) = s1.freshSym(v.tipe, exp.posOpt.get)
-              return (s2(claims = s2.claims :+ State.Claim.Def.Unary(sym, exp.op, v)), sym)
+              return (s2(claims = s2.claims :+ State.Claim.Let.Unary(sym, exp.op, v)), sym)
           }
         case _ =>
           halt(s"TODO: $exp") // TODO
@@ -261,9 +261,9 @@ object Logika {
       def checkNonZero(s0: State, op: String, value: State.Value, pos: Position): State = {
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
-        val claim = State.Claim.Def.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
+        val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
         val valid = smt2.valid(s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
-          s0.claims :+ claim, State.Claim.Prop(sym))
+          s0.claims :+ claim, State.Claim.Prop(T, sym))
         if (valid) {
           return s1.addClaim(claim)
         } else {
@@ -294,7 +294,7 @@ object Logika {
             }
             val rTipe = e.typedOpt.get
             val (s4, rExp) = s3.freshSym(rTipe, e.posOpt.get)
-            val s5 = s4.addClaim(State.Claim.Def.Binary(rExp, v1, exp.op, v2, tipe))
+            val s5 = s4.addClaim(State.Claim.Let.Binary(rExp, v1, exp.op, v2, tipe))
             return (s5, rExp)
           } else {
             halt(s"TODO: $e") // TODO
@@ -312,7 +312,7 @@ object Logika {
               return (s0, State.errorValue)
             }
             val (s1, sym) = s0.freshSym(t, pos)
-            return (s1.addClaim(State.Claim.Def.FieldLookup(sym, o, smt2.fieldId(receiver.typedOpt.get, id))), sym)
+            return (s1.addClaim(State.Claim.Let.FieldLookup(sym, o, smt2.fieldId(receiver.typedOpt.get, id))), sym)
           case _ => halt(s"TODO: $e") // TODO
         }
       }
@@ -444,11 +444,11 @@ object Logika {
       val (s1, v) = evalAssignExp(s0, quant.fun.exp, reporter)
       val pos = quant.fun.exp.asStmt.posOpt.get
       val (s2, expSym) = value2Sym(s1, v, pos)
-      val quantClaims = s1.claims :+ State.Claim.Prop(expSym)
+      val quantClaims = s1.claims :+ State.Claim.Prop(T, expSym)
       val (s3, sym) = s2(claims = state.claims).freshSym(AST.Typed.b, pos)
-      val vars: ISZ[State.Claim.Quant.Var] =
-        for (p <- quant.fun.params) yield State.Claim.Quant.Var(p.idOpt.get.value, p.typedOpt.get)
-      return (s3.addClaim(State.Claim.Quant(quant.isForall, vars, quantClaims)), sym)
+      val vars: ISZ[State.Claim.Let.Quant.Var] =
+        for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var(p.idOpt.get.value, p.typedOpt.get)
+      return (s3.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
     }
 
     val s0 = state
@@ -488,7 +488,7 @@ object Logika {
       case v: State.Value.Sym => return (s0, v)
       case _ =>
         val (s2, symV) = s0.freshSym(v.tipe, pos)
-        return (s2.addClaim(State.Claim.Def.Eq(symV, v)), symV)
+        return (s2.addClaim(State.Claim.Let.Eq(symV, v)), symV)
     }
   }
 
@@ -498,7 +498,7 @@ object Logika {
       return s1
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
-    val s3 = s2(claims = s2.claims :+ State.Claim.Prop(sym))
+    val s3 = s2(claims = s2.claims :+ State.Claim.Prop(T, sym))
     val pos = cond.posOpt.get
     val sat = smt2.sat(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s3.claims)
     return s3(status = sat)
@@ -510,7 +510,7 @@ object Logika {
       return s1
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
-    val conclusion = State.Claim.Prop(sym)
+    val conclusion = State.Claim.Prop(T, sym)
     val pos = cond.posOpt.get
     val valid = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion)
     if (!valid) {
@@ -542,7 +542,7 @@ object Logika {
           val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
           StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, s1).resultOpt.get
         }
-      return s2(claims = s2.claims :+ State.Claim.Def.CurrentId(rhs, lcontext, id, Some(idPos)))
+      return s2(claims = s2.claims :+ State.Claim.Let.CurrentId(rhs, lcontext, id, Some(idPos)))
     }
 
     def evalAssignLocal(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: AST.AssignExp, idPos: Position): State = {
@@ -570,7 +570,7 @@ object Logika {
             val (s3, a) = evalExp(s2, receiver, reporter)
             val (s4, i) = evalExp(s3, lhs.args(0), reporter)
             val (s5, newSym) = s4.freshSym(t, receiverPos)
-            return assignRec(s5.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver, newSym)
+            return assignRec(s5.addClaim(State.Claim.Let.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver, newSym)
           case _: AST.Exp.Select => halt(s"TODO: $assignStmt") // TODO
           case _ => halt(s"Infeasible: $lhs")
         }
@@ -591,7 +591,7 @@ object Logika {
       if (!s2.status) {
         return s2
       }
-      val prop = State.Claim.Prop(cond)
+      val prop = State.Claim.Prop(T, cond)
       val thenClaims = s2.claims :+ prop
       var thenSat = smt2.sat(s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims)
       val s4: State = if (thenSat) {
@@ -601,7 +601,7 @@ object Logika {
       } else {
         s2(claims = thenClaims)
       }
-      val negProp = State.Claim.Neg(prop)
+      val negProp = State.Claim.Prop(F, cond)
       val elseClaims = s2.claims :+ negProp
       var elseSat = smt2.sat(s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims)
       val s6: State = if (elseSat) {
@@ -632,7 +632,7 @@ object Logika {
         for (p <- modLocalVars.entries) {
           val (res, (tipe, pos)) = p
           val (srw1, sym) = srw.freshSym(tipe, pos)
-          srw = srw1(claims = srw1.claims :+ State.Claim.Def.CurrentId(sym, res.context, res.id, Some(pos)))
+          srw = srw1(claims = srw1.claims :+ State.Claim.Let.CurrentId(sym, res.context, res.id, Some(pos)))
         }
         srw
       }
@@ -640,7 +640,7 @@ object Logika {
       val (s3, v) = evalExp(s2, whileStmt.cond, reporter)
       val pos = whileStmt.cond.posOpt.get
       val (s4, cond) = value2Sym(s3, v, pos)
-      val prop = State.Claim.Prop(cond)
+      val prop = State.Claim.Prop(T, cond)
       val thenClaims = s4.claims :+ prop
       var thenSat = smt2.sat(s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims)
       val nextFresh: Z = if (thenSat) {
@@ -656,7 +656,7 @@ object Logika {
       } else {
         s4.nextFresh
       }
-      val negProp = State.Claim.Neg(prop)
+      val negProp = State.Claim.Prop(F, cond)
       val elseClaims = s4.claims :+ negProp
       val elseSat = smt2.sat(s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims)
       return State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
@@ -677,7 +677,7 @@ object Logika {
         val (s2, v) = evalExp(s1, whileStmt.cond, reporter)
         val pos = whileStmt.cond.posOpt.get
         val (s3, cond) = value2Sym(s2, v, pos)
-        val prop = State.Claim.Prop(cond)
+        val prop = State.Claim.Prop(T, cond)
         val thenClaims = s3.claims :+ prop
         var thenSat = smt2.sat(s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims)
         val s6: State = if (thenSat) {
@@ -702,7 +702,7 @@ object Logika {
         } else {
           s3
         }
-        val negProp = State.Claim.Neg(prop)
+        val negProp = State.Claim.Prop(F, cond)
         val elseClaims = s3.claims :+ negProp
         val elseSat = smt2.sat(s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims)
         (thenSat, elseSat) match {
@@ -722,7 +722,7 @@ object Logika {
         case Some(exp) =>
           val (s1, v) = evalExp(s0, exp, reporter)
           val (s2, sym) = value2Sym(s1, v, exp.posOpt.get)
-          return s2.addClaim(State.Claim.Def.CurrentId(sym, ISZ(), "Res", None()))
+          return s2.addClaim(State.Claim.Let.CurrentId(sym, ISZ(), "Res", None()))
         case _ => return state
       }
     }
@@ -767,7 +767,7 @@ object Logika {
     val (s1, v) = evalExp(s0, exp, reporter)
     val pos = exp.posOpt.get
     val (s2, sym) = value2Sym(s1, v, pos)
-    val prop = State.Claim.Prop(sym)
+    val prop = State.Claim.Prop(T, sym)
     val valid: B = {
       val vld = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop)
       if (!vld) {

@@ -27,6 +27,7 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.lang.ast.Typed
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.Position
 
@@ -373,7 +374,7 @@ object State {
 
     @pure def toSmt: ST
 
-    @pure def toSmtDecl: HashSMap[String, ST]
+    @pure def toSmtDecl: ISZ[(String, ST)]
 
     @pure def funs: ISZ[Fun] = {
       return ISZ()
@@ -386,7 +387,7 @@ object State {
     }
 
     @memoize def toSmtDeclString: ISZ[(String, String)] = {
-      return (HashSMap.empty[String, String] ++ (for(p <- toSmtDecl.entries) yield (p._1, p._2.render))).entries
+      return (HashSMap.empty[String, String] ++ (for(p <- toSmtDecl) yield (p._1, p._2.render))).entries
     }
 
     @memoize def funsMem: ISZ[State.Fun] = {
@@ -406,180 +407,115 @@ object State {
 
   }
 
+  @datatype class And(claims: ISZ[Claim]) {
+    @pure def toST: ST = {
+      val r: ST =
+        if (claims.size == 0) st"T"
+        else if (claims.size == 1) claims(0).toST
+        else
+          st"""∧(
+              |  ${(for (c <- claims) yield c.toST, ",\n")}
+              |)"""
+      return r
+    }
+
+    @pure def toSmt: ST = {
+      val r: ST =
+        if (claims.size == 0) st"true"
+        else if (claims.size == 1) claims(0).toSmt
+        else
+          st"""(and
+              |  ${(for (c <- claims) yield c.toSmt, "\n")})"""
+      return r
+    }
+
+    @pure def toSmtDecl: ISZ[(String, ST)] = {
+      var r = ISZ[(String, ST)]()
+      for (c <- claims) {
+        r = r ++ c.toSmtDecl
+      }
+      return r
+    }
+
+    @pure def types: ISZ[AST.Typed] = {
+      return for (c <- claims; t <- c.types) yield t
+    }
+  }
+
+  @datatype class Or(claims: ISZ[Claim]) {
+    @pure def toST: ST = {
+      val r: ST =
+        if (claims.size == 0) st"F"
+        else if (claims.size == 1) claims(0).toST
+        else
+          st"""∨(
+              |  ${(for (c <- claims) yield c.toST, ",\n")})"""
+      return r
+    }
+
+    @pure def toSmt: ST = {
+      val r: ST =
+        if (claims.size == 0) st"false"
+        else if (claims.size == 1) claims(0).toSmt
+        else
+          st"""(or
+              |  ${(for (c <- claims) yield c.toSmt, "\n")})"""
+      return r
+    }
+
+    @pure def toSmtDecl: ISZ[(String, ST)] = {
+      var r = ISZ[(String, ST)]()
+      for (c <- claims) {
+        r = r ++ c.toSmtDecl
+      }
+      return r
+    }
+
+    @pure def types: ISZ[AST.Typed] = {
+      return for (c <- claims; t <- c.types) yield t
+    }
+  }
+
+  @datatype class Imply(claims: ISZ[Claim]) {
+    @pure def toST: ST = {
+      val r =  st"""→(
+                   |  ${(for (c <- claims) yield c.toST, ",\n")})"""
+      return r
+    }
+
+    @pure def toSmt: ST = {
+      val r = st"""(=>
+                  |  ${(for (c <- claims) yield c.toSmt, "\n")})"""
+      return r
+    }
+
+    @pure def toSmtDecl: ISZ[(String, ST)] = {
+      var r = ISZ[(String, ST)]()
+      for (c <- claims) {
+        r = r ++ c.toSmtDecl
+      }
+      return r
+    }
+
+    @pure def types: ISZ[AST.Typed] = {
+      return for (c <- claims; t <- c.types) yield t
+    }
+  }
+
   object Claim {
 
-    @datatype class And(claims: ISZ[Claim]) extends Claim {
+    @datatype class Prop(isPos: B, value: Value.Sym) extends Claim {
       @pure override def toST: ST = {
-        val r: ST =
-          if (claims.size == 0) st"T"
-          else if (claims.size == 1) claims(0).toST
-          else
-            st"""∧(
-                |  ${(for (c <- claims) yield c.toST, ",\n")}
-                |)"""
-        return r
+        return if (isPos) value.toST else st"¬(${value.toST})"
       }
 
       @pure override def toSmt: ST = {
-        val r: ST =
-          if (claims.size == 0) st"true"
-          else if (claims.size == 1) claims(0).toSmt
-          else
-            st"""(and
-                |  ${(for (c <- claims) yield c.toSmt, "\n")}
-                |)"""
-        return r
+        return if (isPos) value.toSmt else st"(not ${value.toSmt})"
       }
 
-      @pure override def toSmtDecl: HashSMap[String, ST] = {
-        var r = HashSMap.empty[String, ST]
-        for (c <- claims) {
-          r = r ++ c.toSmtDecl.entries
-        }
-        return r
-      }
-
-      @pure def types: ISZ[AST.Typed] = {
-        return for (c <- claims; t <- c.types) yield t
-      }
-    }
-
-    @datatype class Or(claims: ISZ[Claim]) extends Claim {
-      @pure override def toST: ST = {
-        val r: ST =
-          if (claims.size == 0) st"F"
-          else if (claims.size == 1) claims(0).toST
-          else
-            st"""∨(
-                |  ${(for (c <- claims) yield c.toST, ",\n")}
-                |)"""
-        return r
-      }
-
-      @pure override def toSmt: ST = {
-        val r: ST =
-          if (claims.size == 0) st"false"
-          else if (claims.size == 1) claims(0).toSmt
-          else
-            st"""(or
-                |  ${(for (c <- claims) yield c.toSmt, "\n")}
-                |)"""
-        return r
-      }
-
-      @pure override def toSmtDecl: HashSMap[String, ST] = {
-        var r = HashSMap.empty[String, ST]
-        for (c <- claims) {
-          r = r ++ c.toSmtDecl.entries
-        }
-        return r
-      }
-
-      @pure def types: ISZ[AST.Typed] = {
-        return for (c <- claims; t <- c.types) yield t
-      }
-    }
-
-    @datatype class Imply(claims: ISZ[Claim]) extends Claim {
-      @pure override def toST: ST = {
-        val r =  st"""→(
-                     |  ${(for (c <- claims) yield c.toST, ",\n")}
-                     |)"""
-        return r
-      }
-
-      @pure override def toSmt: ST = {
-        val r = st"""(=>
-                    |  ${(for (c <- claims) yield c.toSmt, "\n")}
-                    |)"""
-        return r
-      }
-
-      @pure override def toSmtDecl: HashSMap[String, ST] = {
-        var r = HashSMap.empty[String, ST]
-        for (c <- claims) {
-          r = r ++ c.toSmtDecl.entries
-        }
-        return r
-      }
-
-      @pure def types: ISZ[AST.Typed] = {
-        return for (c <- claims; t <- c.types) yield t
-      }
-    }
-
-    object Quant {
-      @datatype class Var(id: String, tipe: AST.Typed) {
-        @pure def toST: ST = {
-          return st"$id: ${tipe.string}"
-        }
-        @pure def toSmt: ST = {
-          return st"($smt2name ${smtTypeId(tipe)})"
-        }
-        @memoize def smt2name: ST = {
-          return st"|l:$id|"
-        }      }
-    }
-
-    @datatype class Quant(isAll: B, vars: ISZ[Quant.Var], claims: ISZ[Claim]) extends Claim {
-      @pure override def toST: ST = {
-        val r =
-          st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
-              |  ${And(claims).toST}"""
-        return r
-      }
-
-      @pure override def toSmt: ST = {
-        val r =
-          st"""(${if (isAll) "forall" else "exists"} (${(for (x <- vars) yield x.toSmt, " ")})
-              |  ${And(claims).toSmt}
-              |)"""
-        return r
-      }
-
-      @pure override def toSmtDecl: HashSMap[String, ST] = {
-        var r = HashSMap.empty[String, ST]
-        for (c <- claims) {
-          r = r ++ c.toSmtDecl.entries
-        }
-        return r -- (for (x <- vars) yield x.smt2name.render)
-      }
-
-      @pure def types: ISZ[AST.Typed] = {
-        return for (claim <- claims; t <- claim.types) yield t
-      }
-    }
-
-    @datatype class Neg(claim: Claim) extends Claim {
-      @pure override def toST: ST = {
-        return st"¬(${claim.toST})"
-      }
-
-      @pure override def toSmt: ST = {
-        return st"(not ${claim.toSmt})"
-      }
-
-      @pure override def toSmtDecl: HashSMap[String, ST] = {
-        return claim.toSmtDecl
-      }
-
-      @pure def types: ISZ[AST.Typed] = {
-        return claim.types
-      }
-    }
-
-    @datatype class Prop(value: Value.Sym) extends Claim {
-      @pure override def toST: ST = {
-        return value.toST
-      }
-
-      @pure override def toSmt: ST = {
-        return value.toSmt
-      }
-
-      @pure override def toSmtDecl: HashSMap[String, ST] = {
-        return HashSMap.empty[String, ST] + value.toSmt.render ~>
-          st"(declare-const ${value.toSmt} ${State.smtTypeId(value.tipe)})"
+      @pure override def toSmtDecl: ISZ[(String, ST)] = {
+        return ISZ[(String, ST)](value.toSmt.render ~>
+          st"(declare-const ${value.toSmt} ${State.smtTypeId(value.tipe)})")
       }
 
       @pure def types: ISZ[AST.Typed] = {
@@ -587,13 +523,13 @@ object State {
       }
     }
 
-    @datatype class If(sym: Value.Sym,
+    @datatype class If(cond: Value.Sym,
                        tClaims: ISZ[Claim],
                        fClaims: ISZ[Claim]) extends Claim {
 
       @pure override def toST: ST = {
         val r =
-          st"""${sym.toST} ?
+          st"""${cond.toST} ?
               |  ${And(tClaims).toST}
               |  ${And(fClaims).toST}"""
         return r
@@ -601,37 +537,37 @@ object State {
 
       @pure override def toSmt: ST = {
         val r =
-          st"""(ite ${sym.toSmt}
+          st"""(ite ${cond.toSmt}
               |  ${And(tClaims).toSmt}
               |  ${And(fClaims).toSmt}
               |)"""
         return r
       }
 
-      @pure override def toSmtDecl: HashSMap[String, ST] = {
-        var r = HashSMap.empty[String, ST] +
-          sym.toSmt.render ~> st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})"
+      @pure override def toSmtDecl: ISZ[(String, ST)] = {
+        var r = ISZ[(String, ST)](
+          cond.toSmt.render ~> st"(declare-const ${cond.toSmt} ${State.smtTypeId(cond.tipe)})")
         for (tClaim <- tClaims) {
-          r = r ++ tClaim.toSmtDecl.entries
+          r = r ++ tClaim.toSmtDecl
         }
         for (fClaim <- fClaims) {
-          r = r ++ fClaim.toSmtDecl.entries
+          r = r ++ fClaim.toSmtDecl
         }
         return r
       }
 
       @pure def types: ISZ[AST.Typed] = {
-        return sym.tipe +: ((for (tClaim <- tClaims; t <- tClaim.types) yield t) ++
+        return cond.tipe +: ((for (tClaim <- tClaims; t <- tClaim.types) yield t) ++
           (for (fClaim <- fClaims; t <- fClaim.types) yield t))
       }
     }
 
     @datatype trait Def extends Claim {
-      def sym: Value.Sym
+      @pure def sym: Value.Sym
 
-      @pure override def toSmtDecl: HashSMap[String, ST] = {
-        return HashSMap.empty[String, ST] + sym.toSmt.render ~>
-          st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})"
+      @pure override def toSmtDecl: ISZ[(String, ST)] = {
+        return ISZ[(String, ST)](sym.toSmt.render ~>
+          st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})")
       }
 
       @pure def types: ISZ[AST.Typed] = {
@@ -639,207 +575,20 @@ object State {
       }
     }
 
+    @datatype trait Let extends Def {
+
+      @pure def toSmtRhs: ST
+
+      @pure override def toSmt: ST = {
+        return st"(= ${sym.toSmt} $toSmtRhs)"
+      }
+
+      @pure def toSmtLetDecl: ST = {
+        return st"(${sym.toSmt} $toSmtRhs)"
+      }
+    }
+
     object Def {
-
-      val binop2Smt2Map: HashMap[AST.Typed.Name, HashMap[String, String]] =
-        HashMap.empty[AST.Typed.Name, HashMap[String, String]] ++
-          ISZ[(AST.Typed.Name, HashMap[String, String])](
-            AST.Typed.b ~> (HashMap.empty[String, String] ++ ISZ(
-              AST.Exp.BinaryOp.And ~> "and",
-              AST.Exp.BinaryOp.Or ~> "or",
-              AST.Exp.BinaryOp.Imply ~> "implies"
-            )),
-            AST.Typed.z ~> (HashMap.empty[String, String] ++ ISZ(
-              AST.Exp.BinaryOp.Add ~> "+",
-              AST.Exp.BinaryOp.Sub ~> "-",
-              AST.Exp.BinaryOp.Mul ~> "*",
-              AST.Exp.BinaryOp.Div ~> "div",
-              AST.Exp.BinaryOp.Rem ~> "rem",
-              AST.Exp.BinaryOp.Eq ~> "=",
-              AST.Exp.BinaryOp.Lt ~> "<",
-              AST.Exp.BinaryOp.Le ~> "<=",
-              AST.Exp.BinaryOp.Gt ~> ">",
-              AST.Exp.BinaryOp.Ge ~> ">="
-            )),
-          )
-
-      val unop2Smt2Map: HashMap[AST.Typed, HashMap[AST.Exp.UnaryOp.Type, String]] =
-        HashMap.empty[AST.Typed, HashMap[AST.Exp.UnaryOp.Type, String]] ++
-          ISZ[(AST.Typed, HashMap[AST.Exp.UnaryOp.Type, String])](
-            AST.Typed.b ~> (HashMap.empty[AST.Exp.UnaryOp.Type, String] ++ ISZ(
-              AST.Exp.UnaryOp.Not ~> "not",
-              AST.Exp.UnaryOp.Complement ~> "not",
-            )),
-            AST.Typed.z ~> (HashMap.empty[AST.Exp.UnaryOp.Type, String] ++ ISZ(
-              AST.Exp.UnaryOp.Minus ~> "-"
-            ))
-          )
-
-      @datatype class CurrentName(val sym: Value.Sym, ids: ISZ[String],
-                                  @hidden defPosOpt: Option[Position]) extends Def {
-        @pure override def toST: ST = {
-          return st"${(ids, ".")} == ${sym.toST}"
-        }
-
-        @pure override def toSmt: ST = {
-          return st"(= $smt2name ${sym.toSmt})"
-        }
-
-        @pure override def toSmtDecl: HashSMap[String, ST] = {
-          var r = super.toSmtDecl
-          val n = smt2name
-          val ns = n.render
-          if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
-          }
-          return r
-        }
-
-        @memoize def smt2name: ST = {
-          return st"|g:${(ids, ".")}|"
-        }
-      }
-
-      @datatype class Name(val sym: Value.Sym, ids: ISZ[String], num: Z, poss: ISZ[Position]) extends Def {
-        @pure override def toST: ST = {
-          return st"${(ids, ".")}@$possLines#$num == ${sym.toST}"
-        }
-
-        @pure override def toSmt: ST = {
-          return st"(= $smt2name ${sym.toSmt})"
-        }
-
-        @pure override def toSmtDecl: HashSMap[String, ST] = {
-          var r = super.toSmtDecl
-          val n = smt2name
-          val ns = n.render
-          if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
-          }
-          return r
-        }
-
-        @memoize def smt2name: ST = {
-          return st"|g:${(ids, ".")}@$possLines#$num|"
-        }
-
-        @pure def possLines: ST = {
-          return if (poss.size > 1) st"{${(for (pos <- poss) yield pos.beginLine, ", ")}}"
-          else st"${poss(0).beginLine}"
-        }
-      }
-
-      @datatype class CurrentId(val sym: Value.Sym, context: ISZ[String], id: String,
-                                @hidden defPosOpt: Option[Position]) extends Def {
-        @pure override def toST: ST = {
-          return st"$id == ${sym.toST}"
-        }
-
-        @pure override def toSmt: ST = {
-          return st"(= |l:$id| ${sym.toSmt})"
-        }
-
-        @pure override def toSmtDecl: HashSMap[String, ST] = {
-          var r = super.toSmtDecl
-          val n = smt2name
-          val ns = n.render
-          if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
-          }
-          return r
-        }
-
-        @memoize def smt2name: ST = {
-          return st"|l:$id|"
-        }
-      }
-
-      @datatype class Id(val sym: Value.Sym, context: ISZ[String], id: String, num: Z, poss: ISZ[Position]) extends Def {
-
-        @pure override def toST: ST = {
-          return if (context.isEmpty) st"$id@$possLines#$num == ${sym.toST}"
-          else st"$id:${(context, ".")}@$possLines#$num == ${sym.toST}"
-        }
-
-        @pure override def toSmt: ST = {
-          return st"(= $smt2name ${sym.toSmt})"
-        }
-
-        @pure override def toSmtDecl: HashSMap[String, ST] = {
-          var r = super.toSmtDecl
-          val n = smt2name
-          val ns = n.render
-          if (!r.contains(ns)) {
-            r = r + ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
-          }
-          return r
-        }
-
-        @memoize def smt2name: ST = {
-          return if (context.isEmpty) st"|l:$id@$possLines#$num|" else st"|l:$id:${(context, ".")}@$possLines#$num|"
-        }
-
-        @pure def possLines: ST = {
-          return if (poss.size > 1) st"{${(for (pos <- poss) yield pos.beginLine, ", ")}}"
-          else st"${poss(0).beginLine}"
-        }
-      }
-
-      @datatype class Eq(val sym: Value.Sym, value: Value) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${value.toST}"
-        }
-
-        @pure override def toSmt: ST = {
-          return st"(= ${sym.toSmt} ${value.toSmt})"
-        }
-      }
-
-      @datatype class Binary(val sym: Value.Sym, left: Value, op: String, right: Value, tipe: AST.Typed.Name) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${left.toST} $op ${right.toST}"
-        }
-
-        @pure override def toSmt: ST = {
-          var neg: B = F
-          val binop: String = if (op == "!=") {
-            neg = T
-            "=="
-          } else {
-            op
-          }
-          val r: ST = binop2Smt2Map.get(tipe) match {
-            case Some(m) => st"(= ${sym.toSmt} (${m.get(binop).get} ${left.toSmt} ${right.toSmt}))"
-            case _ =>
-              halt("TODO") // TODO
-          }
-          return if (neg) st"(not $r)" else r
-        }
-      }
-
-      @datatype class Unary(val sym: Value.Sym, op: AST.Exp.UnaryOp.Type, value: Value) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ $op ${value.toST}"
-        }
-
-        @pure override def toSmt: ST = {
-          unop2Smt2Map.get(sym.tipe) match {
-            case Some(m) => return st"(= ${sym.toSmt} (${m.get(op).get} ${sym.toSmt}))"
-            case _ =>
-              halt("TODO") // TODO
-          }
-        }
-      }
-
-      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value, @hidden upId: ST) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @${seq.toST}(${index.toST} ~> ${element.toST})"
-        }
-
-        @pure override def toSmt: ST = {
-          return st"($upId ${seq.toSmt} ${index.toSmt} ${element.toSmt} ${sym.toSmt})"
-        }
-      }
 
       @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value, @hidden atId: ST) extends Def {
         @pure override def toST: ST = {
@@ -848,54 +597,6 @@ object State {
 
         @pure override def toSmt: ST = {
           return st"($atId ${seq.toSmt} ${index.toSmt} ${sym.toSmt})"
-        }
-      }
-
-      @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: ST, value: Value) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @$adt($id = ${value.toST})"
-        }
-
-        @pure override def toSmt: ST = {
-          halt("TODO") // TODO
-        }
-      }
-
-      @datatype class FieldLookup(val sym: Value.Sym, adt: Value, id: ST) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @$adt.$id"
-        }
-
-        @pure override def toSmt: ST = {
-          return st"(= ${sym.toSmt} ($id ${adt.toSmt}))"
-        }
-      }
-
-      @datatype class Apply(val sym: Value.Sym, name: ISZ[String], args: ISZ[Value]) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${(name, ".")}(${(for (arg <- args) yield arg.toST, ", ")})"
-        }
-
-        @pure override def toSmt: ST = {
-          halt("TODO") // TODO
-        }
-
-        @pure override def funs: ISZ[Fun] = {
-          return ISZ(OFun(name))
-        }
-      }
-
-      @datatype class IApply(val sym: Value.Sym, o: Value, oTipe: AST.Typed.Name, id: String, args: ISZ[Value]) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${o.toST}.$id(${(for (arg <- args) yield arg.toST, ", ")})"
-        }
-
-        @pure override def toSmt: ST = {
-          halt("TODO") // TODO
-        }
-
-        @pure override def funs: ISZ[Fun] = {
-          return ISZ(IFun(oTipe, id))
         }
       }
 
@@ -932,6 +633,340 @@ object State {
                        |  (= ($sizeId $symST) ${args.size})
                        |  ${(for (arg <- args) yield st"($atId $symST ${arg._1.toSmt} ${arg._2.toSmt})", "\n")})"""
           return r
+        }
+      }
+    }
+
+    object Let {
+
+      val binop2Smt2Map: HashMap[AST.Typed.Name, HashMap[String, String]] =
+        HashMap.empty[AST.Typed.Name, HashMap[String, String]] ++
+          ISZ[(AST.Typed.Name, HashMap[String, String])](
+            AST.Typed.b ~> (HashMap.empty[String, String] ++ ISZ(
+              AST.Exp.BinaryOp.And ~> "and",
+              AST.Exp.BinaryOp.Or ~> "or",
+              AST.Exp.BinaryOp.Imply ~> "=>"
+            )),
+            AST.Typed.z ~> (HashMap.empty[String, String] ++ ISZ(
+              AST.Exp.BinaryOp.Add ~> "+",
+              AST.Exp.BinaryOp.Sub ~> "-",
+              AST.Exp.BinaryOp.Mul ~> "*",
+              AST.Exp.BinaryOp.Div ~> "div",
+              AST.Exp.BinaryOp.Rem ~> "rem",
+              AST.Exp.BinaryOp.Eq ~> "=",
+              AST.Exp.BinaryOp.Lt ~> "<",
+              AST.Exp.BinaryOp.Le ~> "<=",
+              AST.Exp.BinaryOp.Gt ~> ">",
+              AST.Exp.BinaryOp.Ge ~> ">="
+            )),
+          )
+
+      val unop2Smt2Map: HashMap[AST.Typed, HashMap[AST.Exp.UnaryOp.Type, String]] =
+        HashMap.empty[AST.Typed, HashMap[AST.Exp.UnaryOp.Type, String]] ++
+          ISZ[(AST.Typed, HashMap[AST.Exp.UnaryOp.Type, String])](
+            AST.Typed.b ~> (HashMap.empty[AST.Exp.UnaryOp.Type, String] ++ ISZ(
+              AST.Exp.UnaryOp.Not ~> "not",
+              AST.Exp.UnaryOp.Complement ~> "not",
+            )),
+            AST.Typed.z ~> (HashMap.empty[AST.Exp.UnaryOp.Type, String] ++ ISZ(
+              AST.Exp.UnaryOp.Minus ~> "-"
+            ))
+          )
+
+      @datatype class CurrentName(val sym: Value.Sym, ids: ISZ[String],
+                                  @hidden defPosOpt: Option[Position]) extends Let {
+        @pure override def toST: ST = {
+          return st"${(ids, ".")} == ${sym.toST}"
+        }
+
+        @pure override def toSmt: ST = {
+          return st"(= $smt2name ${sym.toSmt})"
+        }
+
+        @pure override def toSmtDecl: ISZ[(String, ST)] = {
+          var r = super.toSmtDecl
+          val n = smt2name
+          val ns = n.render
+          r = r :+ ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
+          return r
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return st"$smt2name"
+        }
+
+        @memoize def smt2name: ST = {
+          return st"|g:${(ids, ".")}|"
+        }
+      }
+
+      @datatype class Name(val sym: Value.Sym, ids: ISZ[String], num: Z, poss: ISZ[Position]) extends Let {
+        @pure override def toST: ST = {
+          return st"${(ids, ".")}@$possLines#$num == ${sym.toST}"
+        }
+
+        @pure override def toSmt: ST = {
+          return st"(= $smt2name ${sym.toSmt})"
+        }
+
+        @pure override def toSmtDecl: ISZ[(String, ST)] = {
+          var r = super.toSmtDecl
+          val n = smt2name
+          val ns = n.render
+          r = r :+ ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
+          return r
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return st"$smt2name"
+        }
+
+        @memoize def smt2name: ST = {
+          return st"|g:${(ids, ".")}@$possLines#$num|"
+        }
+
+        @pure def possLines: ST = {
+          return if (poss.size > 1) st"{${(for (pos <- poss) yield pos.beginLine, ", ")}}"
+          else st"${poss(0).beginLine}"
+        }
+      }
+
+      @datatype class CurrentId(val sym: Value.Sym, context: ISZ[String], id: String,
+                                @hidden defPosOpt: Option[Position]) extends Let {
+        @pure override def toST: ST = {
+          return st"$id == ${sym.toST}"
+        }
+
+        @pure override def toSmt: ST = {
+          return st"(= $smt2name ${sym.toSmt})"
+        }
+
+        @pure override def toSmtDecl: ISZ[(String, ST)] = {
+          var r = super.toSmtDecl
+          val n = smt2name
+          val ns = n.render
+          r = r :+ ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
+          return r
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return st"$smt2name"
+        }
+
+        @memoize def smt2name: ST = {
+          return st"|l:$id|"
+        }
+      }
+
+      @datatype class Id(val sym: Value.Sym, context: ISZ[String], id: String, num: Z, poss: ISZ[Position]) extends Let {
+
+        @pure override def toST: ST = {
+          return if (context.isEmpty) st"$id@$possLines#$num == ${sym.toST}"
+          else st"$id:${(context, ".")}@$possLines#$num == ${sym.toST}"
+        }
+
+        @pure override def toSmt: ST = {
+          return st"(= $smt2name ${sym.toSmt})"
+        }
+
+        @pure override def toSmtDecl: ISZ[(String, ST)] = {
+          var r = super.toSmtDecl
+          val n = smt2name
+          val ns = n.render
+          r = r :+ ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
+          return r
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return st"$smt2name"
+        }
+
+        @memoize def smt2name: ST = {
+          return if (context.isEmpty) st"|l:$id@$possLines#$num|" else st"|l:$id:${(context, ".")}@$possLines#$num|"
+        }
+
+        @pure def possLines: ST = {
+          return if (poss.size > 1) st"{${(for (pos <- poss) yield pos.beginLine, ", ")}}"
+          else st"${poss(0).beginLine}"
+        }
+      }
+
+      @datatype class Eq(val sym: Value.Sym, value: Value) extends Let {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${value.toST}"
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return st"${value.toSmt}"
+        }
+      }
+
+      object Quant {
+        @datatype class Var(id: String, tipe: AST.Typed) {
+          @pure def toST: ST = {
+            return st"$id: ${tipe.string}"
+          }
+          @pure def toSmt: ST = {
+            return st"($smt2name ${smtTypeId(tipe)})"
+          }
+          @memoize def smt2name: ST = {
+            return st"|l:$id|"
+          }      }
+      }
+
+      @datatype class Quant(val sym: Value.Sym, isAll: B, vars: ISZ[Quant.Var], claims: ISZ[Claim]) extends Let {
+        @pure override def toST: ST = {
+          val r =
+            st"""${sym.toST} ≜
+                |  ${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
+                |  ${And(claims).toST}"""
+          return r
+        }
+
+        @pure override def toSmtRhs: ST = {
+          var lets = ISZ[Claim.Let]()
+          var defs = ISZ[Claim.Def]()
+          var rest = ISZ[Claim]()
+          for (claim <- claims) {
+            claim match {
+              case claim: Claim.Let => lets = lets :+ claim
+              case claim: Claim.Def => defs = defs :+ claim; rest = rest :+ claim
+              case _ => rest = rest :+ claim
+            }
+          }
+          var body: ST = if (isAll) Imply(rest).toSmt else And(rest).toSmt
+          if (lets.nonEmpty) {
+            body =
+              st"""(let (${lets(lets.size - 1).toSmtLetDecl})
+                  |  $body)"""
+            for (i <- (lets.size - 2) to 0 by -1) {
+              val let = lets(i)
+              body =
+                st"""(let (${let.toSmtLetDecl})
+                    |$body)"""
+            }
+          }
+          if (defs.nonEmpty) {
+            body =
+              st"""(forall (${(for (d <- defs) yield st"(${d.sym.toSmt} ${smtTypeId(d.sym.tipe)})", " ")})
+                  |  $body)"""
+          }
+          val r: ST =
+            if (isAll)
+              st"""(forall (${(for (x <- vars) yield x.toSmt, " ")})
+                  |  $body
+                  |)"""
+            else
+              st"""(exists (${(for (x <- vars) yield x.toSmt, " ")})
+                  |  $body
+                  |)"""
+          return r
+        }
+
+        @pure override def toSmtDecl: ISZ[(String, ST)] = {
+          return ISZ[(String, ST)](sym.toSmt.render ~>
+            st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})")
+        }
+
+        @pure override def types: ISZ[Typed] = {
+          return sym.tipe +: (for (claim <- claims; t <- claim.types) yield t)
+        }
+
+      }
+
+      @datatype class Binary(val sym: Value.Sym, left: Value, op: String, right: Value, tipe: AST.Typed.Name) extends Let {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${left.toST} $op ${right.toST}"
+        }
+
+        @pure def toSmtRhs: ST = {
+          var neg: B = F
+          val binop: String = if (op == "!=") {
+            neg = T
+            "=="
+          } else {
+            op
+          }
+          val r: ST = binop2Smt2Map.get(tipe) match {
+            case Some(m) =>
+              if (neg) st"(not (${m.get(binop).get} ${left.toSmt} ${right.toSmt}))"
+              else st"(${m.get(binop).get} ${left.toSmt} ${right.toSmt})"
+            case _ =>
+              halt("TODO") // TODO
+          }
+          return r
+        }
+      }
+
+      @datatype class Unary(val sym: Value.Sym, op: AST.Exp.UnaryOp.Type, value: Value) extends Let {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ $op ${value.toST}"
+        }
+
+        @pure def toSmtRhs: ST = {
+          unop2Smt2Map.get(sym.tipe) match {
+            case Some(m) => return st"(${m.get(op).get} ${sym.toSmt})"
+            case _ =>
+              halt("TODO") // TODO
+          }
+        }
+      }
+
+      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value, @hidden upId: ST) extends Let {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ @${seq.toST}(${index.toST} ~> ${element.toST})"
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return st"($upId ${seq.toSmt} ${index.toSmt} ${element.toSmt})"
+        }
+      }
+
+      @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: ST, value: Value) extends Let {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ @$adt($id = ${value.toST})"
+        }
+
+        @pure override def toSmtRhs: ST = {
+          halt("TODO") // TODO
+        }
+      }
+
+      @datatype class FieldLookup(val sym: Value.Sym, adt: Value, id: ST) extends Let {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ @$adt.$id"
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return st"($id ${adt.toSmt})"
+        }
+      }
+
+      @datatype class Apply(val sym: Value.Sym, name: ISZ[String], args: ISZ[Value]) extends Let {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${(name, ".")}(${(for (arg <- args) yield arg.toST, ", ")})"
+        }
+
+        @pure override def toSmtRhs: ST = {
+          halt("TODO") // TODO
+        }
+
+        @pure override def funs: ISZ[Fun] = {
+          return ISZ(OFun(name))
+        }
+      }
+
+      @datatype class IApply(val sym: Value.Sym, o: Value, oTipe: AST.Typed.Name, id: String, args: ISZ[Value]) extends Let {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${o.toST}.$id(${(for (arg <- args) yield arg.toST, ", ")})"
+        }
+
+        @pure override def toSmtRhs: ST = {
+          halt("TODO") // TODO
+        }
+
+        @pure override def funs: ISZ[Fun] = {
+          return ISZ(IFun(oTipe, id))
         }
       }
 

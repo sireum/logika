@@ -187,7 +187,7 @@ import org.sireum.message.Reporter
 
   def sat(title: String, claims: ISZ[State.Claim]): B = {
     val headers = st"Satisfiability Check for $title:" +: (for (c <- claims) yield c.toST)
-    checkSat(satQuery(headers, claims).render)
+    checkSat(satQuery(headers, claims, None()).render)
   }
 
   def addType(tipe: AST.Typed): Unit = {
@@ -211,37 +211,37 @@ import org.sireum.message.Reporter
       if (aIdOps.startsWith("(ISZ") || aIdOps.startsWith("(MSZ")) {
         addTypeDecl(st"(define-fun $sizeId ((x $tId)) Z (seq.len x))")
         addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId) (z $etId)) B (= (seq.at x y) (seq.unit z)))")
-        addTypeDecl(st"(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B (= z (seq.++ x (seq.unit y))))")
-        addTypeDecl(st"(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B (= z (seq.++ x y)))")
-        addTypeDecl(st"(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B (= z (seq.++ (seq.unit x) y)))")
-        addTypeDecl(st"(define-fun $upId ((x $tId) (y $itId) (z $etId) (x2 $tId)) B (= (seq.++ (seq.extract x 0 y) (seq.unit z) (seq.extract x (+ y 1) (- (seq.len x) y 1))) x2))")
+        addTypeDecl(st"(define-fun $appendId ((x $tId) (y $etId)) $tId (seq.++ x (seq.unit y)))")
+        addTypeDecl(st"(define-fun $appendsId ((x $tId) (y $tId)) $tId (seq.++ x y))")
+        addTypeDecl(st"(define-fun $prependId ((x $etId) (y $tId)) $tId (seq.++ (seq.unit x) y))")
+        addTypeDecl(st"(define-fun $upId ((x $tId) (y $itId) (z $etId)) $tId (seq.++ (seq.extract x 0 y) (seq.unit z) (seq.extract x (+ y 1) (- (seq.len x) y 1))))")
       } else {
         addTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
-        addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId) (z $etId)) B (= (select x y) z))")
         addTypeDecl(st"(assert (forall ((x $tId)) (>= ($sizeId x) 0)))")
-        addTypeDecl(st"(declare-fun $appendId ($tId $etId $tId) B)")
+        addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId) (z $etId)) B (= (select x y) z))")
+        addTypeDecl(st"(declare-fun $appendId ($tId $etId)  $tId)")
         addTypeDecl(
           st"""(assert (forall ((x $tId) (y $etId) (z $tId))
-                       |  (= ($appendId x y z)
+                       |  (= (= ($appendId x y) z)
                        |     (and
                        |        (= ($sizeId z) (+ ($sizeId x) 1))
                        |        (forall ((i Z) (v $etId)) (implies (and (<= 0 i) (< i ($sizeId x)))
                        |                                           (= ($atId z i v) ($atId x i v)))
                        |        ($atId z ($sizeId x) y)))))""")
-        addTypeDecl(st"(declare-fun $appendsId ($tId $tId $tId) B)")
+        addTypeDecl(st"(declare-fun $appendsId ($tId $tId) $tId)")
         addTypeDecl(
           st"""(assert (forall ((x $tId) (y $tId) (z $tId))
-                       |  (= ($appendsId x y z)
+                       |  (= (= ($appendsId x y) z)
                        |     (and
                        |        (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
                        |        (forall ((i Z) (v $etId) (implies (and (<= 0 i) (< i ($sizeId x)))
                        |                                          (= ($atId z i v) ($atId x i v)))
                        |        (forall ((i Z) (v $etId)) (implies (and (<= 0 i) (< i ($sizeId y)))
                        |                                           (= ($atId z (+ ($sizeId x) i) v) ($atId y i v)))))))""")
-        addTypeDecl(st"(declare-fun $prependId ($etId $tId $tId) B)")
+        addTypeDecl(st"(declare-fun $prependId ($etId $tId) $tId)")
         addTypeDecl(
           st"""(assert (forall ((x $etId) (y $tId) (z $tId))
-                       |  (= ($prependId x y z)
+                       |  (= (= ($prependId x y) z)
                        |     (and
                        |        (= ($sizeId z) (+ ($sizeId y) 1))
                        |        (forall ((i Z) (v $etId)) (implies (and (<= 0 i) (< i ($sizeId y)))
@@ -363,18 +363,25 @@ import org.sireum.message.Reporter
     }
   }
 
-  def satQuery(headers: ISZ[ST], claims: ISZ[State.Claim]): ST = {
+  def satQuery(headers: ISZ[ST], claims: ISZ[State.Claim], negClaimOpt: Option[State.Claim]): ST = {
     for (c <- claims; t <- c.types) {
       addType(t)
     }
-    val decls: ISZ[String] = (HashSMap.empty[String, String] ++
-      (for (c <- claims; p <- c.toSmtDeclString) yield p)).values
-    return query(headers, decls, for (c <- claims) yield c.toSmtString)
+    var decls: HashSMap[String, String] = HashSMap.empty[String, String] ++
+      (for (c <- claims; p <- c.toSmtDeclString) yield p)
+    var claimSmts: ISZ[String] = for (c <- claims) yield c.toSmtString
+    negClaimOpt match {
+      case Some(negClaim) =>
+        claimSmts = claimSmts :+ st"(not ${negClaim.toSmt})".render
+        decls = decls ++ negClaim.toSmtDeclString
+      case _ =>
+    }
+    return query(headers, decls.values, claimSmts)
   }
 
   def valid(title: String, premises: ISZ[State.Claim], conclusion: State.Claim): B = {
     val headers = st"Validity Check for $title:" +: (for (c <- premises) yield c.toST) :+ st"  ⊢" :+ conclusion.toST
-    checkUnsat(satQuery(headers, premises :+ State.Claim.Neg(conclusion)).render)
+    checkUnsat(satQuery(headers, premises, Some(conclusion)).render)
   }
 
   def isAdtType(t: AST.Typed): B = {
