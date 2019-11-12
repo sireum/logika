@@ -817,9 +817,8 @@ object State {
       @datatype class Quant(val sym: Value.Sym, isAll: B, vars: ISZ[Quant.Var], claims: ISZ[Claim]) extends Let {
         @pure override def toST: ST = {
           val r =
-            st"""${sym.toST} ≜
-                |  ${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
-                |  ${And(claims).toST}"""
+            st"""${sym.toST} ≜ ${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
+                |  ${if (isAll) Imply(claims).toST else And(claims).toST}"""
           return r
         }
 
