@@ -46,8 +46,7 @@ object Z3 {
 }
 
 @record class Z3(val z3Exe: String,
-                 val typeHierarchy: TypeHierarchy,
-                 val timeoutInSeconds: Z)
+                 val typeHierarchy: TypeHierarchy)
   extends Smt2 {
 
   var types: HashSet[AST.Typed] = basicTypes
@@ -86,15 +85,15 @@ object Z3 {
     poset = newPoset
   }
 
-  def checkSat(query: String): B = {
-    return checkQuery(query).kind == Z3.Result.Kind.Sat
+  def checkSat(query: String, timeoutInMs: Z): B = {
+    return checkQuery(query, timeoutInMs).kind != Z3.Result.Kind.Unsat
   }
 
-  def checkUnsat(query: String): B = {
-    return checkQuery(query).kind == Z3.Result.Kind.Unsat
+  def checkUnsat(query: String, timeoutInMs: Z): B = {
+    return checkQuery(query, timeoutInMs).kind == Z3.Result.Kind.Unsat
   }
 
-  def checkQuery(query: String): Z3.Result = {
+  def checkQuery(query: String, timeoutInMs: Z): Z3.Result = {
     def err(out: String): Unit = {
       halt(
         st"""Error encountered when running $z3Exe query:
@@ -105,7 +104,7 @@ object Z3 {
     }
     //println(s"Z3 Query:")
     //println(query)
-    val pr = Os.proc(ISZ(z3Exe, "-smt2", s"-T:$timeoutInSeconds", "-in")).input(query).redirectErr.run()
+    val pr = Os.proc(ISZ(z3Exe, "-smt2", s"-t:$timeoutInMs", "-in")).input(query).redirectErr.run()
     val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
     if (out.size == 0) {
       err(pr.out)

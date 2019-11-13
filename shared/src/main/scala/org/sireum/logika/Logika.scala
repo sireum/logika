@@ -153,6 +153,8 @@ object Logika {
                      context: Logika.Context,
                      smt2: Smt2) {
 
+  val timeoutInMs: Z = config.smt2TimeoutInSeconds * 1000
+
   @pure def isBasic(t: AST.Typed): B = {
     if (smt2.basicTypes.contains(t)) {
       return T
@@ -263,7 +265,7 @@ object Logika {
         val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
         val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
         val valid = smt2.valid(s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
-          s0.claims :+ claim, State.Claim.Prop(T, sym))
+          s0.claims :+ claim, State.Claim.Prop(T, sym), timeoutInMs)
         if (valid) {
           return s1.addClaim(claim)
         } else {
@@ -512,7 +514,7 @@ object Logika {
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
     val conclusion = State.Claim.Prop(T, sym)
     val pos = cond.posOpt.get
-    val valid = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion)
+    val valid = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion, timeoutInMs)
     if (!valid) {
       error(cond.posOpt, s"Cannot deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
     }
@@ -769,7 +771,7 @@ object Logika {
     val (s2, sym) = value2Sym(s1, v, pos)
     val prop = State.Claim.Prop(T, sym)
     val valid: B = {
-      val vld = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop)
+      val vld = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop, timeoutInMs)
       if (!vld) {
         error(exp.posOpt, s"Cannot deduce the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
       }

@@ -923,7 +923,7 @@ object State {
 
       @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: ST, value: Value) extends Let {
         @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @$adt($id = ${value.toST})"
+          return st"${sym.toST} ≜ @${adt.toST}($id = ${value.toST})"
         }
 
         @pure override def toSmtRhs: ST = {
@@ -933,7 +933,7 @@ object State {
 
       @datatype class FieldLookup(val sym: Value.Sym, adt: Value, id: ST) extends Let {
         @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @$adt.$id"
+          return st"${sym.toST} ≜ @${adt.toST}.$id"
         }
 
         @pure override def toSmtRhs: ST = {

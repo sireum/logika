@@ -111,7 +111,7 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Reporter, msgOpt: Option[String]): B = {
     Logika.checkWorksheet(None(), input, config,
-      th => Z3(LogikaTest.z3Exe, th, config.smt2TimeoutInSeconds), reporter)
+      th => Z3(LogikaTest.z3Exe, th), reporter)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>
