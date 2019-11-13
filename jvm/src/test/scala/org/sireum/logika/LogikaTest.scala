@@ -47,7 +47,7 @@ object LogikaTest {
     Logika.Config(
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,
-      smt2TimeoutInSeconds = 2)
+      smt2TimeoutInSeconds = 5)
 }
 
 import LogikaTest._
