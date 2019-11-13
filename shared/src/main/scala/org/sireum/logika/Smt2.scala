@@ -195,7 +195,6 @@ import org.sireum.message.Reporter
       val et = t.args(1)
       addType(et)
       val tId = typeId(t)
-      val aId = adtId(t)
       val itId = typeId(it)
       val etId = adtId(et)
       val atId = typeOpId(t, "at")
@@ -205,56 +204,45 @@ import org.sireum.message.Reporter
       val prependId = typeOpId(t, "+:")
       val upId = typeOpId(t, "up")
       val eqId = typeOpId(t, "==")
-//      val aIdOps = ops.StringOps(aId.render)
-//      if ((aIdOps.startsWith("(ISZ") || aIdOps.startsWith("(MSZ"))) {
-//        addTypeDecl(st"(define-sort $tId () $aId)")
-//        addTypeDecl(st"(define-fun $sizeId ((x $tId)) Z (seq.len x))")
-//        addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId) (z $etId)) B (= (seq.at x y) (seq.unit z)))")
-//        addTypeDecl(st"(define-fun $appendId ((x $tId) (y $etId)) $tId (seq.++ x (seq.unit y)))")
-//        addTypeDecl(st"(define-fun $appendsId ((x $tId) (y $tId)) $tId (seq.++ x y))")
-//        addTypeDecl(st"(define-fun $prependId ((x $etId) (y $tId)) $tId (seq.++ (seq.unit x) y))")
-//        addTypeDecl(st"(define-fun $upId ((x $tId) (y $itId) (z $etId)) $tId (seq.++ (seq.extract x 0 y) (seq.unit z) (seq.extract x (+ y 1) (- (seq.len x) y 1))))")
-//        addTypeDecl(st"(define-fun $eqId ((x $tId) (y $tId)) B (= x y))")
-//      } else {
-        addTypeDecl(st"(define-sort $tId () (Array $itId $etId))")
-        addTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
-        addTypeDecl(st"(assert (forall ((x $tId)) (>= ($sizeId x) 0)))")
-        addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId) (z $etId)) B (= (select x y) z))")
-        addTypeDecl(st"(declare-fun $appendId ($tId $etId) $tId)")
-        addTypeDecl(
-          st"""(assert (forall ((x $tId) (y $etId) (z $tId))
-                       |  (= (= ($appendId x y) z)
-                       |     (and
-                       |        (= ($sizeId z) (+ ($sizeId x) 1))
-                       |        (forall ((i $itId) (v $etId)) (=> (and (<= 0 i) (< i ($sizeId x)))
-                       |                                          (= ($atId z i v) ($atId x i v))))
-                       |        ($atId z ($sizeId x) y)))))""")
-        addTypeDecl(st"(declare-fun $appendsId ($tId $tId) $tId)")
-        addTypeDecl(
-          st"""(assert (forall ((x $tId) (y $tId) (z $tId))
-                       |  (= (= ($appendsId x y) z)
-                       |     (and
-                       |        (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
-                       |        (forall ((i $itId) (v $etId)) (=> (and (<= 0 i) (< i ($sizeId x)))
-                       |                                          (= ($atId z i v) ($atId x i v))))
-                       |        (forall ((i $itId) (v $etId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-                       |                                          (= ($atId z (+ ($sizeId x) i) v) ($atId y i v))))))))""")
-        addTypeDecl(st"(declare-fun $prependId ($etId $tId) $tId)")
-        addTypeDecl(
-          st"""(assert (forall ((x $etId) (y $tId) (z $tId))
-                       |  (= (= ($prependId x y) z)
-                       |     (and
-                       |        (= ($sizeId z) (+ ($sizeId y) 1))
-                       |        (forall ((i $itId) (v $etId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-                       |                                          (= ($atId z (+ i 1) v) ($atId y i v))))
-                       |        ($atId z 0 x)))))""")
-        addTypeDecl(st"(declare-fun $upId ($tId $itId $etId) $tId)")
-        addTypeDecl(
-          st"""(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
-              |  (= (= ($upId x y z) x2)
-              |     (and
-              |        (= ($sizeId x2) ($sizeId x))
-              |        (= x2 (store x y z))))))""")
+      addTypeDecl(st"(define-sort $tId () (${if (t.ids == AST.Typed.isName) "IS" else "MS"} $itId $etId))")
+      addTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
+      addTypeDecl(st"(assert (forall ((x $tId)) (>= ($sizeId x) 0)))")
+      addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId) (z $etId)) B (= (select x y) z))")
+      addTypeDecl(st"(declare-fun $appendId ($tId $etId) $tId)")
+      addTypeDecl(
+        st"""(assert (forall ((x $tId) (y $etId) (z $tId))
+                     |  (= (= ($appendId x y) z)
+                     |     (and
+                     |        (= ($sizeId z) (+ ($sizeId x) 1))
+                     |        (forall ((i $itId) (v $etId)) (=> (and (<= 0 i) (< i ($sizeId x)))
+                     |                                          (= ($atId z i v) ($atId x i v))))
+                     |        ($atId z ($sizeId x) y)))))""")
+      addTypeDecl(st"(declare-fun $appendsId ($tId $tId) $tId)")
+      addTypeDecl(
+        st"""(assert (forall ((x $tId) (y $tId) (z $tId))
+                     |  (= (= ($appendsId x y) z)
+                     |     (and
+                     |        (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
+                     |        (forall ((i $itId) (v $etId)) (=> (and (<= 0 i) (< i ($sizeId x)))
+                     |                                          (= ($atId z i v) ($atId x i v))))
+                     |        (forall ((i $itId) (v $etId)) (=> (and (<= 0 i) (< i ($sizeId y)))
+                     |                                          (= ($atId z (+ ($sizeId x) i) v) ($atId y i v))))))))""")
+      addTypeDecl(st"(declare-fun $prependId ($etId $tId) $tId)")
+      addTypeDecl(
+        st"""(assert (forall ((x $etId) (y $tId) (z $tId))
+                     |  (= (= ($prependId x y) z)
+                     |     (and
+                     |        (= ($sizeId z) (+ ($sizeId y) 1))
+                     |        (forall ((i $itId) (v $etId)) (=> (and (<= 0 i) (< i ($sizeId y)))
+                     |                                          (= ($atId z (+ i 1) v) ($atId y i v))))
+                     |        ($atId z 0 x)))))""")
+      addTypeDecl(st"(declare-fun $upId ($tId $itId $etId) $tId)")
+      addTypeDecl(
+        st"""(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
+            |  (= (= ($upId x y z) x2)
+            |     (and
+            |        (= ($sizeId x2) ($sizeId x))
+            |        (= x2 (store x y z))))))""")
       addTypeDecl(st"(declare-fun $eqId ($tId $tId) B)")
       addTypeDecl(
         st"""(assert (forall ((x $tId) (y $tId))
@@ -262,12 +250,11 @@ import org.sireum.message.Reporter
             |     (and
             |        (= ($sizeId x) ($sizeId y))
             |        (forall ((i $itId)) (= (select x i) (select y i)))))))""")
-//      }
       if (isAdtType(et)) {
         addTypeDecl(
           st"""(assert (forall ((x $tId) (i $itId) (v ADT))
-              |  (implies ($atId x i v)
-              |           (sub-type (type-of v) ${typeHierarchyId(et)}))))""")
+              |  (=> ($atId x i v)
+              |      (sub-type (type-of v) ${typeHierarchyId(et)}))))""")
       }
     }
     def addSub(isRoot: B,
@@ -331,8 +318,8 @@ import org.sireum.message.Reporter
         for (t <- fieldIdTypes if isAdtType(t._3)) {
           addTypeDecl(
             st"""(assert (forall ((o ADT) (v ADT))
-                         |  (implies (= (${t._1} o) v)
-                         |           (sub-type (type-of v) ${typeHierarchyId(t._3)}))))""")
+                         |  (=> (= (${t._1} o) v)
+                         |      (sub-type (type-of v) ${typeHierarchyId(t._3)}))))""")
         }
       }
     }
@@ -410,35 +397,33 @@ import org.sireum.message.Reporter
                     |  ${(typeHierarchyIds, "\n")}))""")
     return st"""${(for (header <- headers; line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
                |
+               |(set-logic ALL)
                |(define-sort   B            ()           Bool)
                |(define-sort   C            ()           String)
                |(define-sort   Z            ()           Int)
                |(define-sort   R            ()           Real)
                |(define-sort   F32          ()           Float32)
                |(define-sort   F64          ()           Float64)
-               |(define-const  F32_PInf     (F32)        (_ +oo 8 24))
-               |(define-const  F32_NInf     (F32)        (_ -oo 8 24))
-               |(define-const  F32_NaN      (F32)        (_ NaN 8 24))
-               |(define-const  F64_PInf     (F64)        (_ +oo 11 53))
-               |(define-const  F64_NInf     (F64)        (_ -oo 11 53))
-               |(define-const  F64_NaN      (F64)        (_ NaN 11 53))
-               |
+               |(define-const  F32_PInf     F32          (_ +oo 8 24))
+               |(define-const  F32_NInf     F32          (_ -oo 8 24))
+               |(define-const  F32_NaN      F32          (_ NaN 8 24))
+               |(define-const  F64_PInf     F64          (_ +oo 11 53))
+               |(define-const  F64_NInf     F64          (_ -oo 11 53))
+               |(define-const  F64_NaN      F64          (_ NaN 11 53))
                |(define-sort   IS           (I T)        (Array I T))
                |(define-sort   MS           (I T)        (Array I T))
-               |(define-sort   ISZ          (T)          (Seq T))
-               |(define-sort   MSZ          (T)          (Seq T))
                |
                |${(sorts, "\n\n")}
                |
-               |(declare-sort SigData)
-               |(declare-sort MSigData)
+               |(declare-sort SigData 0)
+               |(declare-sort MSigData 0)
                |
                |(declare-datatypes ((ADT 0))
                |  (((Sig (Sig.data SigData))
                |    (MSig (MSig.data MSigData))
                |    ${(typeConstructors, "\n")})))
                |
-               |(declare-sort  Type)
+               |(declare-sort  Type 0)
                |(declare-fun   type-of      (ADT)        Type)
                |(declare-fun   sub-type     (Type Type)  Bool)
                |(define-fun    leaf-type    ((x Type))   Bool
