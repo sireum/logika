@@ -478,14 +478,18 @@ object State {
 
   @datatype class Imply(claims: ISZ[Claim]) {
     @pure def toST: ST = {
-      val r =  st"""→(
-                   |  ${(for (c <- claims) yield c.toST, ",\n")})"""
+      val r: ST =
+        if (claims.size == 1) claims(0).toST
+        else st"""→(
+                 |  ${(for (c <- claims) yield c.toST, ",\n")})"""
       return r
     }
 
     @pure def toSmt: ST = {
-      val r = st"""(=>
-                  |  ${(for (c <- claims) yield c.toSmt, "\n")})"""
+      val r: ST =
+        if (claims.size == 1) claims(0).toSmt
+        else st"""(=>
+                 |  ${(for (c <- claims) yield c.toSmt, "\n")})"""
       return r
     }
 
@@ -575,30 +579,7 @@ object State {
       }
     }
 
-    @datatype trait Let extends Def {
-
-      @pure def toSmtRhs: ST
-
-      @pure override def toSmt: ST = {
-        return st"(= ${sym.toSmt} $toSmtRhs)"
-      }
-
-      @pure def toSmtLetDecl: ST = {
-        return st"(${sym.toSmt} $toSmtRhs)"
-      }
-    }
-
     object Def {
-
-      @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value, @hidden atId: ST) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @${seq.toST}(${index.toST})"
-        }
-
-        @pure override def toSmt: ST = {
-          return st"($atId ${seq.toSmt} ${index.toSmt} ${sym.toSmt})"
-        }
-      }
 
       @datatype class AdtLit(val sym: Value.Sym, @hidden params: ISZ[ST], args: ISZ[Value]) extends Def {
         @pure def tipe: AST.Typed.Name = {
@@ -634,6 +615,19 @@ object State {
                        |  ${(for (arg <- args) yield st"($atId $symST ${arg._1.toSmt} ${arg._2.toSmt})", "\n")})"""
           return r
         }
+      }
+    }
+
+    @datatype trait Let extends Def {
+
+      @pure def toSmtRhs: ST
+
+      @pure override def toSmt: ST = {
+        return st"(= ${sym.toSmt} $toSmtRhs)"
+      }
+
+      @pure def toSmtLetDecl: ST = {
+        return st"(${sym.toSmt} $toSmtRhs)"
       }
     }
 
@@ -908,6 +902,16 @@ object State {
             case _ =>
               halt("TODO") // TODO
           }
+        }
+      }
+
+      @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value, @hidden atId: ST) extends Let {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ @${seq.toST}(${index.toST})"
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return st"($atId ${seq.toSmt} ${index.toSmt})"
         }
       }
 

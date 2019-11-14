@@ -415,7 +415,7 @@ object Logika {
       val (s0, seq): (State, State.Value) = evalReceiver(exp)
       val (s1, i) = evalExp(s0, exp.args(0), reporter)
       val (s2, v) = s1.freshSym(exp.typedOpt.get, exp.posOpt.get)
-      return (s2.addClaim(State.Claim.Def.SeqLookup(v, seq, i,
+      return (s2.addClaim(State.Claim.Let.SeqLookup(v, seq, i,
         smt2.typeOpId(seq.tipe.asInstanceOf[AST.Typed.Name], "at"))), v)
     }
 
