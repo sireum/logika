@@ -61,6 +61,8 @@ object Z3 {
 
   var typeConstructors: ISZ[ST] = ISZ()
 
+  var seqLits: HashSSet[Smt2.SeqLit] = HashSSet.empty
+
   def sortsUp(newSorts: ISZ[ST]): Unit = {
     sorts = newSorts
   }
@@ -83,6 +85,10 @@ object Z3 {
 
   def posetUp(newPoset: Poset[AST.Typed.Name]): Unit = {
     poset = newPoset
+  }
+
+  def seqLitsUp(newSeqLits: HashSSet[Smt2.SeqLit]): Unit = {
+    seqLits = newSeqLits
   }
 
   def checkSat(query: String, timeoutInMs: Z): B = {

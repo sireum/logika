@@ -59,7 +59,8 @@ object Logika {
 
   @datatype class Context(typeParams: ISZ[AST.TypeParam],
                           methodOpt: Option[MethodContext],
-                          labels: ISZ[AST.Exp.LitString])
+                          caseLabels: ISZ[AST.Exp.LitString],
+                          )
 
   @datatype class MethodContext(name: ISZ[String],
                                 sig: AST.MethodSig,
@@ -115,7 +116,8 @@ object Logika {
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
       val mctx = MethodContext(method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].owner :+ method.sig.id.value,
         method.sig, reads, modifies, HashMap.empty)
-      val ctx = Context.empty(methodOpt = Some(mctx), labels = if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
+      val ctx = Context.empty(methodOpt = Some(mctx),
+        caseLabels = if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
       var state = State.create
       val logika: Logika = {
         val l = Logika(config, ctx, smt2)
@@ -392,8 +394,9 @@ object Logika {
             i = i + 1
           }
         }
-        return (s1.addClaim(State.Claim.Def.SeqLit(sym, ops.ISZOps(indices).zip(args),
-          smt2.fieldId(t, "size"), smt2.typeOpId(t, "at"))), sym)
+        smt2.addSeqLit(t, indices.size)
+        return (s1.addClaim(State.Claim.Let.SeqLit(sym, ops.ISZOps(indices).zip(args),
+          smt2.typeOpId(t, s"new.${indices.size}"), smt2.fieldId(t, "size"), smt2.typeOpId(t, "at"))), sym)
       } else {
         return (s1.addClaim(State.Claim.Def.AdtLit(sym, adtSmtParamNames(t), args)), sym)
       }
@@ -845,16 +848,16 @@ object Logika {
   }
 
   def error(posOpt: Option[Position], msg: String, reporter: Reporter): Unit = {
-    if (context.labels.nonEmpty) {
-      reporter.error(posOpt, Logika.kind, st"[${(for (l <- context.labels) yield l.value, "; ")}] $msg".render)
+    if (context.caseLabels.nonEmpty) {
+      reporter.error(posOpt, Logika.kind, st"[${(for (l <- context.caseLabels) yield l.value, "; ")}] $msg".render)
     } else {
       reporter.error(posOpt, Logika.kind, msg)
     }
   }
 
   def warn(posOpt: Option[Position], msg: String, reporter: Reporter): Unit = {
-    if (context.labels.nonEmpty) {
-      reporter.warn(posOpt, Logika.kind, st"[${(for (l <- context.labels) yield l.value, "; ")}] $msg".render)
+    if (context.caseLabels.nonEmpty) {
+      reporter.warn(posOpt, Logika.kind, st"[${(for (l <- context.caseLabels) yield l.value, "; ")}] $msg".render)
     } else {
       reporter.warn(posOpt, Logika.kind, msg)
     }

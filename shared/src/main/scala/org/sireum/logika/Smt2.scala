@@ -32,6 +32,10 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.message.Reporter
 
+object Smt2 {
+  @datatype class SeqLit(t: AST.Typed.Name, size: Z)
+}
+
 @msig trait Smt2 {
 
   def types: HashSet[AST.Typed]
@@ -45,6 +49,10 @@ import org.sireum.message.Reporter
   def sorts: ISZ[ST]
 
   def sortsUp(newSorts: ISZ[ST]): Unit
+
+  def seqLits: HashSSet[Smt2.SeqLit]
+
+  def seqLitsUp(newSeqLits: HashSSet[Smt2.SeqLit]): Unit
 
   def addSort(sort: ST): Unit = {
     sortsUp(sorts :+ sort)
@@ -76,6 +84,10 @@ import org.sireum.message.Reporter
 
   def addTypeConstructor(constructor: ST): Unit = {
     typeConstructorsUp(typeConstructors :+ constructor)
+  }
+
+  def addSeqLit(t: AST.Typed.Name, n: Z): Unit = {
+    seqLitsUp(seqLits + Smt2.SeqLit(t, n))
   }
 
   def typeHierarchy: TypeHierarchy
@@ -253,7 +265,7 @@ import org.sireum.message.Reporter
       if (isAdtType(et)) {
         addTypeDecl(
           st"""(assert (forall ((x $tId) (i $itId) (v ADT))
-              |  (=> ($atId x i v)
+              |  (=> (= ($atId x i) v)
               |      (sub-type (type-of v) ${typeHierarchyId(et)}))))""")
       }
     }
@@ -365,6 +377,27 @@ import org.sireum.message.Reporter
     }
   }
 
+  @memoize def seqLit2SmtDeclString(seqLit: Smt2.SeqLit): String = {
+    val t = seqLit.t
+    val size = seqLit.size
+    val it = t.args(0).asInstanceOf[AST.Typed.Name]
+    val et = t.args(1)
+    val tId = typeId(t)
+    val itId = typeId(it)
+    val etId = adtId(et)
+    val seqLitId = typeOpId(t, s"new.$size")
+    val atId = typeOpId(t, "at")
+    val sizeId = fieldId(t, "size")
+    val r =
+      st"""(declare-fun $seqLitId (${(for (_ <- 0 until size) yield st"$itId $etId", " ")}) $tId)
+          |(assert (forall (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId))
+          |  (= (= x ($seqLitId ${(for (i <- 0 until size) yield st"i$i v$i", " ")}))
+          |     (and
+          |       (= ($sizeId x) $size))
+          |       ${(for (i <- 0 until size) yield st"(= ($atId x i$i) v$i)", "\n")})))"""
+    return r.render
+  }
+
   def satQuery(headers: ISZ[ST], claims: ISZ[State.Claim], negClaimOpt: Option[State.Claim]): ST = {
     for (c <- claims; t <- c.types) {
       addType(t)
@@ -378,7 +411,8 @@ import org.sireum.message.Reporter
         decls = decls ++ negClaim.toSmtDeclString
       case _ =>
     }
-    return query(headers, decls.values, claimSmts)
+    val seqLitDecls: ISZ[String] = for (seqLit <- seqLits.elements) yield seqLit2SmtDeclString(seqLit)
+    return query(headers, decls.values ++ seqLitDecls, claimSmts)
   }
 
   def valid(title: String, premises: ISZ[State.Claim], conclusion: State.Claim, timeoutInMs: Z): B = {

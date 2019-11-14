@@ -598,24 +598,6 @@ object State {
           return r
         }
       }
-
-      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[(Value, Value)], @hidden sizeId: ST, @hidden atId: ST) extends Def {
-        @pure def tipe: AST.Typed.Name = {
-          return sym.tipe.asInstanceOf[AST.Typed.Name]
-        }
-
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg._2.toST, ", ")})"
-        }
-
-        @pure override def toSmt: ST = {
-          val symST = sym.toSmt
-          val r =  st"""(and
-                       |  (= ($sizeId $symST) ${args.size})
-                       |  ${(for (arg <- args) yield st"($atId $symST ${arg._1.toSmt} ${arg._2.toSmt})", "\n")})"""
-          return r
-        }
-      }
     }
 
     @datatype trait Let extends Def {
@@ -970,6 +952,20 @@ object State {
 
         @pure override def funs: ISZ[Fun] = {
           return ISZ(IFun(oTipe, id))
+        }
+      }
+
+      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[(Value, Value)], @hidden seqLitId: ST, @hidden sizeId: ST, @hidden atId: ST) extends Let {
+        @pure def tipe: AST.Typed.Name = {
+          return sym.tipe.asInstanceOf[AST.Typed.Name]
+        }
+
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg._2.toST, ", ")})"
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return st"($seqLitId ${(for (arg <- args) yield st"${arg._1.toSmt} ${arg._2.toSmt}", " ")})"
         }
       }
 
