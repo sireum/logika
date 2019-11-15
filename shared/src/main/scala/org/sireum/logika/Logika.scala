@@ -179,11 +179,6 @@ object Logika {
     halt(s"TODO: 0 of type $tipe") // TODO
   }
 
-  @memoize def adtSmtParamNames(t: AST.Typed.Name): ISZ[ST] = {
-    val adt = smt2.typeHierarchy.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
-    return for (p <- adt.ast.params) yield smt2.fieldId(t, p.id.value)
-  }
-
   @pure def idIntro(pos: Position, state: State, idContext: ISZ[String],
                     id: String, t: AST.Typed, idPosOpt: Option[Position]): (State, State.Value.Sym) = {
     val (s0, sym) = state.freshSym(t, pos)
@@ -398,7 +393,7 @@ object Logika {
         return (s1.addClaim(State.Claim.Let.SeqLit(sym, ops.ISZOps(indices).zip(args),
           smt2.typeOpId(t, s"new.${indices.size}"), smt2.fieldId(t, "size"), smt2.typeOpId(t, "at"))), sym)
       } else {
-        return (s1.addClaim(State.Claim.Def.AdtLit(sym, adtSmtParamNames(t), args)), sym)
+        return (s1.addClaim(State.Claim.Let.AdtLit(sym, args, smt2.typeOpId(t, "new"))), sym)
       }
     }
 

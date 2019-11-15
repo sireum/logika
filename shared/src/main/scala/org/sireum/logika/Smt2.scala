@@ -33,7 +33,9 @@ import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.message.Reporter
 
 object Smt2 {
+
   @datatype class SeqLit(t: AST.Typed.Name, size: Z)
+
 }
 
 @msig trait Smt2 {
@@ -152,6 +154,7 @@ object Smt2 {
           case _ => return F
         }
       }
+
       if (t.ids.size == 3 && t.ids(0) == "org" && t.ids(1) == "sireum") {
         val tid = t.ids(2)
         if (tid == "IS" || tid == "MS") {
@@ -223,45 +226,45 @@ object Smt2 {
       addTypeDecl(st"(declare-fun $appendId ($tId $etId) $tId)")
       addTypeDecl(
         st"""(assert (forall ((x $tId) (y $etId) (z $tId))
-                     |  (= (= ($appendId x y) z)
-                     |     (and
-                     |        (= ($sizeId z) (+ ($sizeId x) 1))
-                     |        (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
-                     |                                (= ($atId z i) ($atId x i))))
-                     |        (= ($atId z ($sizeId x)) y)))))""")
+            |  (=> (= ($appendId x y) z)
+            |      (and
+            |         (= ($sizeId z) (+ ($sizeId x) 1))
+            |         (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
+            |                                 (= ($atId z i) ($atId x i))))
+            |         (= ($atId z ($sizeId x)) y)))))""")
       addTypeDecl(st"(declare-fun $appendsId ($tId $tId) $tId)")
       addTypeDecl(
         st"""(assert (forall ((x $tId) (y $tId) (z $tId))
-                     |  (= (= ($appendsId x y) z)
-                     |     (and
-                     |        (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
-                     |        (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
-                     |                                (= ($atId z i) ($atId x i))))
-                     |        (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-                     |                                (= ($atId z (+ ($sizeId x) i)) ($atId y i))))))))""")
+            |  (=> (= ($appendsId x y) z)
+            |      (and
+            |         (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
+            |         (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
+            |                                 (= ($atId z i) ($atId x i))))
+            |         (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
+            |                                 (= ($atId z (+ ($sizeId x) i)) ($atId y i))))))))""")
       addTypeDecl(st"(declare-fun $prependId ($etId $tId) $tId)")
       addTypeDecl(
         st"""(assert (forall ((x $etId) (y $tId) (z $tId))
-                     |  (= (= ($prependId x y) z)
-                     |     (and
-                     |        (= ($sizeId z) (+ ($sizeId y) 1))
-                     |        (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-                     |                                (= ($atId z (+ i 1)) ($atId y i))))
-                     |        (= ($atId z 0) x)))))""")
+            |  (=> (= ($prependId x y) z)
+            |      (and
+            |         (= ($sizeId z) (+ ($sizeId y) 1))
+            |         (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
+            |                                 (= ($atId z (+ i 1)) ($atId y i))))
+            |         (= ($atId z 0) x)))))""")
       addTypeDecl(st"(declare-fun $upId ($tId $itId $etId) $tId)")
       addTypeDecl(
         st"""(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
-            |  (= (= ($upId x y z) x2)
-            |     (and
-            |        (= ($sizeId x2) ($sizeId x))
-            |        (= x2 (store x y z))))))""")
+            |  (=> (= ($upId x y z) x2)
+            |      (and
+            |         (= ($sizeId x2) ($sizeId x))
+            |         (= x2 (store x y z))))))""")
       addTypeDecl(st"(declare-fun $eqId ($tId $tId) B)")
       addTypeDecl(
         st"""(assert (forall ((x $tId) (y $tId))
-            |  (= ($eqId x y)
-            |     (and
-            |        (= ($sizeId x) ($sizeId y))
-            |        (forall ((i $itId)) (= (select x i) (select y i)))))))""")
+            |  (=> ($eqId x y)
+            |      (and
+            |         (= ($sizeId x) ($sizeId y))
+            |         (forall ((i $itId)) (= (select x i) (select y i)))))))""")
       if (isAdtType(et)) {
         addTypeDecl(
           st"""(assert (forall ((x $tId) (i $itId) (v ADT))
@@ -269,6 +272,7 @@ object Smt2 {
               |      (sub-type (type-of v) ${typeHierarchyId(et)}))))""")
       }
     }
+
     def addSub(isRoot: B,
                t: AST.Typed.Name,
                tTypeParams: ISZ[AST.TypeParam],
@@ -305,36 +309,46 @@ object Smt2 {
       }
       return tsm
     }
+
     def addAdt(t: AST.Typed.Name, ti: TypeInfo.Adt): Unit = {
       for (arg <- t.args) {
         addType(arg)
       }
       posetUp(poset.addNode(t))
-      addTypeDecl(st"(define-sort ${typeId(t)} () ADT)")
-      val tId = typeHierarchyId(t)
-      addTypeHiearchyId(tId)
-      addTypeDecl(st"(declare-const $tId Type)")
-      val sm = addSub(ti.ast.isRoot, t, ti.ast.typeParams, tId, ti.parents)
+      val tId = typeId(t)
+      addTypeDecl(st"(define-sort $tId () ADT)")
+      val thId = typeHierarchyId(t)
+      addTypeHiearchyId(thId)
+      addTypeDecl(st"(declare-const $thId Type)")
+      val sm = addSub(ti.ast.isRoot, t, ti.ast.typeParams, thId, ti.parents)
 
-      @pure def fieldIdType(f: Info.Var): (ST, ST, AST.Typed) = {
+      @pure def fieldIdType(f: Info.Var): (ST, ST, AST.Typed, String) = {
         val ft = f.typedOpt.get.subst(sm)
-        return (fieldId(t, f.ast.id.value), adtId(ft), ft)
+        val id = f.ast.id.value
+        return (fieldId(t, f.ast.id.value), adtId(ft), ft, id)
       }
+
       if (!ti.ast.isRoot) {
-        val tcId = typeConstructorId(t)
-        val fieldIdTypes: ISZ[(ST, ST, AST.Typed)] = for (f <- ti.vars.values) yield fieldIdType(f)
-        addTypeConstructor(
-          st"""($tcId
-                         |  ${(for (t <- fieldIdTypes) yield st"(${t._1} ${t._2})", "\n")})""")
-        addTypeDecl(st"(assert (leaf-type $tId))")
-        for (t <- fieldIdTypes if isAdtType(t._3)) {
-          addTypeDecl(
-            st"""(assert (forall ((o ADT) (v ADT))
-                         |  (=> (= (${t._1} o) v)
-                         |      (sub-type (type-of v) ${typeHierarchyId(t._3)}))))""")
+        val newId = typeOpId(t, "new")
+        val fieldIdTypes: ISZ[(ST, ST, AST.Typed, String)] = for (f <- ti.vars.values) yield fieldIdType(f)
+        addTypeDecl(st"(declare-fun $newId (${(for (q <- fieldIdTypes) yield q._2, " ")}) $tId)")
+        for (q <- fieldIdTypes) {
+          addTypeDecl(st"(declare-fun ${q._1} ($tId) ${q._2})")
         }
+        val newST: ST =
+          if (fieldIdTypes.isEmpty) newId
+          else st"($newId ${(for (q <- fieldIdTypes) yield q._4, " ")})"
+        addTypeDecl(
+          st"""(assert (forall (${(for (q <- fieldIdTypes) yield st"(${q._4} ${q._2})", " ")} (x $tId))
+              |  (=> (= x $newST)
+              |     (and
+              |       (sub-type (type-of x) $thId)
+              |       ${(for (q <- fieldIdTypes) yield st"(= ${q._4} (${q._1} x))", "\n")}))))"""
+        )
+        addTypeDecl(st"(assert (leaf-type $thId))")
       }
     }
+
     def addSig(t: AST.Typed.Name, ti: TypeInfo.Sig): Unit = {
       for (arg <- t.args) {
         addType(arg)
@@ -346,15 +360,19 @@ object Smt2 {
       addTypeDecl(st"(declare-const $tId Type)")
       addSub(T, t, ti.ast.typeParams, tId, ti.parents)
     }
+
     def addSubZ(t: AST.Typed.Name, ti: TypeInfo.SubZ): Unit = {
       halt("TODO") // TODO
     }
+
     def addEnum(name: ISZ[String], ti: Info.Enum): Unit = {
       halt("TODO") // TODO
     }
+
     def addTypeVar(t: AST.Typed.TypeVar): Unit = {
       addTypeDecl(st"(declare-sort ${typeId(t)})")
     }
+
     if (types.contains(tipe)) {
       return
     }
@@ -391,10 +409,10 @@ object Smt2 {
     val r =
       st"""(declare-fun $seqLitId (${(for (_ <- 0 until size) yield st"$itId $etId", " ")}) $tId)
           |(assert (forall (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId))
-          |  (= (= x ($seqLitId ${(for (i <- 0 until size) yield st"i$i v$i", " ")}))
-          |     (and
-          |       (= ($sizeId x) $size))
-          |       ${(for (i <- 0 until size) yield st"(= ($atId x i$i) v$i)", "\n")})))"""
+          |  (=> (= x ($seqLitId ${(for (i <- 0 until size) yield st"i$i v$i", " ")}))
+          |      (and
+          |        (= ($sizeId x) $size)
+          |        ${(for (i <- 0 until size) yield st"(= ($atId x i$i) v$i)", "\n")}))))"""
     return r.render
   }
 
@@ -412,7 +430,7 @@ object Smt2 {
       case _ =>
     }
     val seqLitDecls: ISZ[String] = for (seqLit <- seqLits.elements) yield seqLit2SmtDeclString(seqLit)
-    return query(headers, decls.values ++ seqLitDecls, claimSmts)
+    return query(headers, seqLitDecls ++ decls.values, claimSmts)
   }
 
   def valid(title: String, premises: ISZ[State.Claim], conclusion: State.Claim, timeoutInMs: Z): B = {
@@ -427,47 +445,43 @@ object Smt2 {
   @pure def query(headers: ISZ[ST], decls: ISZ[String], claims: ISZ[String]): ST = {
     val distinctOpt: Option[ST] =
       if (typeHierarchyIds.isEmpty) None()
-      else Some(st"""(assert (distinct
-                    |  ${(typeHierarchyIds, "\n")}))""")
-    return st"""${(for (header <- headers; line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
-               |
-               |(set-logic ALL)
-               |(define-sort   B            ()           Bool)
-               |(define-sort   Z            ()           Int)
-               |(define-sort   IS           (I T)        (Array I T))
-               |(define-sort   MS           (I T)        (Array I T))
-               |
-               |${(sorts, "\n\n")}
-               |
-               |(declare-sort SigData 0)
-               |(declare-sort MSigData 0)
-               |
-               |(declare-datatypes ((ADT 0))
-               |  (((Sig (Sig.data SigData))
-               |    (MSig (MSig.data MSigData))
-               |    ${(typeConstructors, "\n")})))
-               |
-               |(declare-sort  Type 0)
-               |(declare-fun   type-of      (ADT)        Type)
-               |(declare-fun   sub-type     (Type Type)  Bool)
-               |(define-fun    leaf-type    ((x Type))   Bool
-               |                  (forall ((y Type)) (=> (sub-type y x) (= y x))))
-               |(assert        (forall ((x Type))
-               |                  (sub-type x x)))
-               |(assert        (forall ((x Type) (y Type) (z Type))
-               |                  (=> (and (sub-type x y) (sub-type y z)) (sub-type x z))))
-               |(assert        (forall ((x Type) (y Type))
-               |                  (=> (and (sub-type x y) (sub-type y x)) (= x y))))
-               |
-               |${(typeDecls, "\n")}
-               |
-               |$distinctOpt
-               |
-               |${(decls, "\n")}
-               |
-               |${(for (a <- claims) yield st"(assert $a)", "\n")}
-               |
-               |(check-sat)
-               |(exit)"""
+      else Some(
+        st"""(assert (distinct
+            |  ${(typeHierarchyIds, "\n")}))""")
+    val r =
+      st"""${(for (header <- headers; line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
+          |
+          |(set-logic ALL)
+          |(define-sort   B            ()           Bool)
+          |(define-sort   Z            ()           Int)
+          |(define-sort   IS           (I T)        (Array I T))
+          |(define-sort   MS           (I T)        (Array I T))
+          |
+          |${(sorts, "\n\n")}
+          |
+          |(declare-sort  ADT 0)
+          |(declare-sort  Type 0)
+          |(declare-fun   type-of      (ADT)        Type)
+          |(declare-fun   sub-type     (Type Type)  Bool)
+          |(define-fun    leaf-type    ((x Type))   Bool
+          |                  (forall ((y Type)) (=> (sub-type y x) (= y x))))
+          |(assert        (forall ((x Type))
+          |                  (sub-type x x)))
+          |(assert        (forall ((x Type) (y Type) (z Type))
+          |                  (=> (and (sub-type x y) (sub-type y z)) (sub-type x z))))
+          |(assert        (forall ((x Type) (y Type))
+          |                  (=> (and (sub-type x y) (sub-type y x)) (= x y))))
+          |
+          |${(typeDecls, "\n")}
+          |
+          |$distinctOpt
+          |
+          |${(decls, "\n")}
+          |
+          |${(for (a <- claims) yield st"(assert $a)", "\n")}
+          |
+          |(check-sat)
+          |(exit)"""
+    return r
   }
 }

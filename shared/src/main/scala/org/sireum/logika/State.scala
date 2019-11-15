@@ -579,27 +579,6 @@ object State {
       }
     }
 
-    object Def {
-
-      @datatype class AdtLit(val sym: Value.Sym, @hidden params: ISZ[ST], args: ISZ[Value]) extends Def {
-        @pure def tipe: AST.Typed.Name = {
-          return sym.tipe.asInstanceOf[AST.Typed.Name]
-        }
-
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg.toST, ", ")})"
-        }
-
-        @pure override def toSmt: ST = {
-          val symST = sym.toSmt
-          val r =  st"""(and
-                       |  (= (type-of $symST) ${State.smtTypeHierarchyId(sym.tipe)})
-                       |  ${(for (p <- ops.ISZOps(params).zip(args)) yield st"(= (${p._1} $symST) ${p._2.toSmt})", "\n")})"""
-          return r
-        }
-      }
-    }
-
     @datatype trait Let extends Def {
 
       @pure def toSmtRhs: ST
@@ -969,6 +948,19 @@ object State {
         }
       }
 
+      @datatype class AdtLit(val sym: Value.Sym, args: ISZ[Value], @hidden newId: ST) extends Let {
+        @pure def tipe: AST.Typed.Name = {
+          return sym.tipe.asInstanceOf[AST.Typed.Name]
+        }
+
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg.toST, ", ")})"
+        }
+
+        @pure override def toSmtRhs: ST = {
+          return if (args.isEmpty) newId else st"($newId ${(for (arg <- args) yield arg.toSmt, " ")})"
+        }
+      }
     }
   }
 }
