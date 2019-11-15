@@ -59,7 +59,11 @@ object Z3 {
 
   var typeHierarchyIds: ISZ[ST] = ISZ()
 
-  var typeConstructors: ISZ[ST] = ISZ()
+  var shortIds: HashMap[ISZ[String], ISZ[String]] = HashMap.empty
+
+  def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
+    shortIds = newShortIds
+  }
 
   var seqLits: HashSSet[Smt2.SeqLit] = HashSSet.empty
 
@@ -73,10 +77,6 @@ object Z3 {
 
   def typeHierarchyIdsUp(newTypeHierarchyIds: ISZ[ST]): Unit = {
     typeHierarchyIds = newTypeHierarchyIds
-  }
-
-  def typeConstructorsUp(newConstructors: ISZ[ST]): Unit = {
-    typeConstructors = newConstructors
   }
 
   def typesUp(newTypes: HashSet[AST.Typed]): Unit = {

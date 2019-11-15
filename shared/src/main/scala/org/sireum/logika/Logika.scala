@@ -312,7 +312,7 @@ object Logika {
               return (s0, State.errorValue)
             }
             val (s1, sym) = s0.freshSym(t, pos)
-            return (s1.addClaim(State.Claim.Let.FieldLookup(sym, o, smt2.typeOpId(receiver.typedOpt.get, id))), sym)
+            return (s1.addClaim(State.Claim.Let.FieldLookup(sym, o, smt2.typeOpId(receiver.typedOpt.get, id).render)), sym)
           case _ => halt(s"TODO: $e") // TODO
         }
       }
