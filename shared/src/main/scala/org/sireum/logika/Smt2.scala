@@ -223,48 +223,38 @@ object Smt2 {
       addTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
       addTypeDecl(st"(assert (forall ((x $tId)) (>= ($sizeId x) 0)))")
       addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
-      addTypeDecl(st"(declare-fun $appendId ($tId $etId) $tId)")
       addTypeDecl(
-        st"""(assert (forall ((x $tId) (y $etId) (z $tId))
-            |  (=> (= ($appendId x y) z)
-            |      (and
-            |         (= ($sizeId z) (+ ($sizeId x) 1))
-            |         (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
-            |                                 (= ($atId z i) ($atId x i))))
-            |         (= ($atId z ($sizeId x)) y)))))""")
-      addTypeDecl(st"(declare-fun $appendsId ($tId $tId) $tId)")
+        st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
+            |  (and
+            |    (= ($sizeId z) (+ ($sizeId x) 1))
+            |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
+            |                            (= ($atId z i) ($atId x i))))
+            |    (= ($atId z ($sizeId x)) y)))""")
       addTypeDecl(
-        st"""(assert (forall ((x $tId) (y $tId) (z $tId))
-            |  (=> (= ($appendsId x y) z)
-            |      (and
-            |         (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
-            |         (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
-            |                                 (= ($atId z i) ($atId x i))))
-            |         (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-            |                                 (= ($atId z (+ ($sizeId x) i)) ($atId y i))))))))""")
-      addTypeDecl(st"(declare-fun $prependId ($etId $tId) $tId)")
+        st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
+            |  (and
+            |    (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
+            |      (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
+            |                              (= ($atId z i) ($atId x i))))
+            |      (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
+            |                              (= ($atId z (+ ($sizeId x) i)) ($atId y i))))))""")
       addTypeDecl(
-        st"""(assert (forall ((x $etId) (y $tId) (z $tId))
-            |  (=> (= ($prependId x y) z)
-            |      (and
-            |         (= ($sizeId z) (+ ($sizeId y) 1))
-            |         (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-            |                                 (= ($atId z (+ i 1)) ($atId y i))))
-            |         (= ($atId z 0) x)))))""")
-      addTypeDecl(st"(declare-fun $upId ($tId $itId $etId) $tId)")
+        st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
+            |  (and
+            |    (= ($sizeId z) (+ ($sizeId y) 1))
+            |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
+            |                            (= ($atId z (+ i 1)) ($atId y i))))
+            |    (= ($atId z 0) x)))""")
       addTypeDecl(
-        st"""(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
-            |  (=> (= ($upId x y z) x2)
-            |      (and
-            |         (= ($sizeId x2) ($sizeId x))
-            |         (= x2 (store x y z))))))""")
-      addTypeDecl(st"(declare-fun $eqId ($tId $tId) B)")
+        st"""(define-fun $upId ((x $tId) (y $itId) (z $etId) (x2 $tId)) B
+            |  (and
+            |    (= ($sizeId x2) ($sizeId x))
+            |    (= x2 (store x y z))))""")
       addTypeDecl(
-        st"""(assert (forall ((x $tId) (y $tId))
-            |  (=> ($eqId x y)
-            |      (and
-            |         (= ($sizeId x) ($sizeId y))
-            |         (forall ((i $itId)) (= (select x i) (select y i)))))))""")
+        st"""(define-fun $eqId ((x $tId) (y $tId)) B
+            |  (and
+            |    (= ($sizeId x) ($sizeId y))
+            |    (forall ((i $itId)) (= (select x i) (select y i)))))""")
       if (isAdtType(et)) {
         addTypeDecl(
           st"""(assert (forall ((x $tId) (i $itId) (v ADT))
@@ -331,20 +321,14 @@ object Smt2 {
       if (!ti.ast.isRoot) {
         val newId = typeOpId(t, "new")
         val fieldIdTypes: ISZ[(ST, ST, AST.Typed, String)] = for (f <- ti.vars.values) yield fieldIdType(f)
-        addTypeDecl(st"(declare-fun $newId (${(for (q <- fieldIdTypes) yield q._2, " ")}) $tId)")
         for (q <- fieldIdTypes) {
           addTypeDecl(st"(declare-fun ${q._1} ($tId) ${q._2})")
         }
-        val newST: ST =
-          if (fieldIdTypes.isEmpty) newId
-          else st"($newId ${(for (q <- fieldIdTypes) yield q._4, " ")})"
         addTypeDecl(
-          st"""(assert (forall (${(for (q <- fieldIdTypes) yield st"(${q._4} ${q._2})", " ")} (x $tId))
-              |  (=> (= x $newST)
-              |     (and
-              |       (sub-type (type-of x) $thId)
-              |       ${(for (q <- fieldIdTypes) yield st"(= ${q._4} (${q._1} x))", "\n")}))))"""
-        )
+          st"""(define-fun $newId (${(for (q <- fieldIdTypes) yield st"(${q._4} ${q._2})", " ")} (x $tId)) B
+              |  (and
+              |    (sub-type (type-of x) $thId)
+              |    ${(for (q <- fieldIdTypes) yield st"(= (${q._1} x) ${q._4})", "\n")}))""")
         addTypeDecl(st"(assert (leaf-type $thId))")
       }
     }
@@ -407,12 +391,10 @@ object Smt2 {
     val atId = typeOpId(t, "at")
     val sizeId = fieldId(t, "size")
     val r =
-      st"""(declare-fun $seqLitId (${(for (_ <- 0 until size) yield st"$itId $etId", " ")}) $tId)
-          |(assert (forall (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId))
-          |  (=> (= x ($seqLitId ${(for (i <- 0 until size) yield st"i$i v$i", " ")}))
-          |      (and
-          |        (= ($sizeId x) $size)
-          |        ${(for (i <- 0 until size) yield st"(= ($atId x i$i) v$i)", "\n")}))))"""
+      st"""(define-fun $seqLitId (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId)) B
+          |  (and
+          |    (= ($sizeId x) $size)
+          |    ${(for (i <- 0 until size) yield st"(= ($atId x i$i) v$i)", "\n")}))"""
     return r.render
   }
 

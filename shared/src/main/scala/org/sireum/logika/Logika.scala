@@ -33,6 +33,7 @@ import org.sireum.message.{Position, Reporter}
 import StateTransformer.{PrePost, PreResult}
 
 object Logika {
+
   @datatype class CurrentIdPossCollector(context: ISZ[String], id: String) extends PrePost[ISZ[Position]] {
     override def preStateClaimLetCurrentId(ctx: ISZ[Position], o: State.Claim.Let.CurrentId): PreResult[ISZ[Position], State.Claim.Let] = {
       return if (o.defPosOpt.nonEmpty && o.context == context && o.id == id) PreResult(ctx :+ o.defPosOpt.get, T, None())
@@ -60,7 +61,7 @@ object Logika {
   @datatype class Context(typeParams: ISZ[AST.TypeParam],
                           methodOpt: Option[MethodContext],
                           caseLabels: ISZ[AST.Exp.LitString],
-                          )
+                         )
 
   @datatype class MethodContext(name: ISZ[String],
                                 sig: AST.MethodSig,
@@ -315,6 +316,7 @@ object Logika {
           case _ => halt(s"TODO: $e") // TODO
         }
       }
+
       res match {
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
@@ -322,7 +324,7 @@ object Logika {
           } else {
             return evalField(tipe)
           }
-        case res:AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName =>
+        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName =>
           return evalField(res.tpeOpt.get.ret)
         case res: AST.ResolvedInfo.LocalVar => return evalIdentH(res, tipe, pos)
         case _ => halt(s"TODO: $e") // TODO
@@ -360,6 +362,7 @@ object Logika {
           indices = for (i <- 0 until args.size) yield State.Value.Z(i, args(i).pos)
         } else {
           val subz = smt2.typeHierarchy.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast
+
           @pure def z2subz(n: Z, pos: Position): State.Value = {
             if (subz.isBitVector) {
               if (subz.bitWidth == 8) {
@@ -381,6 +384,7 @@ object Logika {
               return State.Value.Range(n, it, pos)
             }
           }
+
           var i = 0
           var index = subz.index
           while (i < args.size) {
@@ -390,10 +394,10 @@ object Logika {
           }
         }
         smt2.addSeqLit(t, indices.size)
-        return (s1.addClaim(State.Claim.Let.SeqLit(sym, ops.ISZOps(indices).zip(args),
+        return (s1.addClaim(State.Claim.Def.SeqLit(sym, ops.ISZOps(indices).zip(args),
           smt2.typeOpId(t, s"new.${indices.size}"), smt2.fieldId(t, "size"), smt2.typeOpId(t, "at"))), sym)
       } else {
-        return (s1.addClaim(State.Claim.Let.AdtLit(sym, args, smt2.typeOpId(t, "new"))), sym)
+        return (s1.addClaim(State.Claim.Def.AdtLit(sym, args, smt2.typeOpId(t, "new"))), sym)
       }
     }
 
@@ -570,12 +574,13 @@ object Logika {
             val (s3, a) = evalExp(s2, receiver, reporter)
             val (s4, i) = evalExp(s3, lhs.args(0), reporter)
             val (s5, newSym) = s4.freshSym(t, receiverPos)
-            return assignRec(s5.addClaim(State.Claim.Let.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver, newSym)
+            return assignRec(s5.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver, newSym)
           case _: AST.Exp.Select => halt(s"TODO: $assignStmt") // TODO
           case _ => halt(s"Infeasible: $lhs")
         }
 
       }
+
       val (s1, init) = evalAssignExp(s0, assignStmt.rhs, reporter)
       if (!s1.status) {
         return s1
@@ -627,7 +632,7 @@ object Logika {
         return s1
       }
       val modLocalVars = whileStmt.modifiedLocalVars
-      val s0R: State = {  // TODO: rewrite Vars as well
+      val s0R: State = { // TODO: rewrite Vars as well
         var srw = rewriteLocalVars(s0(nextFresh = s1.nextFresh), modLocalVars.keys)
         for (p <- modLocalVars.entries) {
           val (res, (tipe, pos)) = p
@@ -668,6 +673,7 @@ object Logika {
 
     def evalWhileUnroll(s0: State, whileStmt: AST.Stmt.While): State = {
       val loopId: ISZ[String] = whileStmt.context
+
       def whileRec(current: State, numLoops: Z): State = {
         val s1 = checkExps("Loop invariant", " at the beginning of while-loop", current,
           whileStmt.invariants, reporter)
@@ -714,6 +720,7 @@ object Logika {
             return s7(status = F)
         }
       }
+
       return whileRec(s0, 0)
     }
 
@@ -793,6 +800,7 @@ object Logika {
     @pure def mergeClaimPrefix(tClaim: State.Claim, fClaim: State.Claim): State.Claim = {
       return if (tClaim == fClaim) tClaim else State.Claim.If(cond, ISZ(tClaim), ISZ(fClaim))
     }
+
     val size = s0.claims.size
     val prefixClaims: ISZ[State.Claim] =
       for (i <- 0 until size) yield mergeClaimPrefix(sT.claims(i), sF.claims(i))

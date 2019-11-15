@@ -36,26 +36,27 @@ import org.sireum.message.Position
                       nextFresh: org.sireum.Z) {
 
   @pure def toST: ST = {
-    val r =  st"""State {
-                 |  status = $status,
-                 |  claims = {
-                 |    ${(for (c <- claims) yield c.toST, ",\n")}
-                 |  },
-                 |  nextFresh = $nextFresh
-                 |}"""
+    val r =
+      st"""State {
+          |  status = $status,
+          |  claims = {
+          |    ${(for (c <- claims) yield c.toST, ",\n")}
+          |  },
+          |  nextFresh = $nextFresh
+          |}"""
     return r
   }
 
   @pure def addClaim(claim: State.Claim): State = {
-    return this(claims = this.claims :+ claim)
+    return this (claims = this.claims :+ claim)
   }
 
   @pure def addClaims(claims: ISZ[State.Claim]): State = {
-    return this(claims = this.claims ++ claims)
+    return this (claims = this.claims ++ claims)
   }
 
   @pure def fresh: (State, org.sireum.Z) = {
-    return (this(nextFresh = nextFresh + 1), nextFresh)
+    return (this (nextFresh = nextFresh + 1), nextFresh)
   }
 
   @pure def freshSym(tipe: AST.Typed, pos: Position): (State, State.Value.Sym) = {
@@ -387,7 +388,7 @@ object State {
     }
 
     @memoize def toSmtDeclString: ISZ[(String, String)] = {
-      return (HashSMap.empty[String, String] ++ (for(p <- toSmtDecl) yield (p._1, p._2.render))).entries
+      return (HashSMap.empty[String, String] ++ (for (p <- toSmtDecl) yield (p._1, p._2.render))).entries
     }
 
     @memoize def funsMem: ISZ[State.Fun] = {
@@ -480,16 +481,18 @@ object State {
     @pure def toST: ST = {
       val r: ST =
         if (claims.size == 1) claims(0).toST
-        else st"""→(
-                 |  ${(for (c <- claims) yield c.toST, ",\n")})"""
+        else
+          st"""→(
+              |  ${(for (c <- claims) yield c.toST, ",\n")})"""
       return r
     }
 
     @pure def toSmt: ST = {
       val r: ST =
         if (claims.size == 1) claims(0).toSmt
-        else st"""(=>
-                 |  ${(for (c <- claims) yield c.toSmt, "\n")})"""
+        else
+          st"""(=>
+              |  ${(for (c <- claims) yield c.toSmt, "\n")})"""
       return r
     }
 
@@ -577,6 +580,48 @@ object State {
       @pure def types: ISZ[AST.Typed] = {
         return ISZ(sym.tipe)
       }
+    }
+
+    object Def {
+
+      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[(Value, Value)], @hidden seqLitId: ST, @hidden sizeId: ST, @hidden atId: ST) extends Def {
+        @pure def tipe: AST.Typed.Name = {
+          return sym.tipe.asInstanceOf[AST.Typed.Name]
+        }
+
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg._2.toST, ", ")})"
+        }
+
+        @pure override def toSmt: ST = {
+          return st"($seqLitId ${(for (arg <- args) yield st"${arg._1.toSmt} ${arg._2.toSmt}", " ")} ${sym.toSmt})"
+        }
+      }
+
+      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value, @hidden upId: ST) extends Def {
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ @${seq.toST}(${index.toST} ~> ${element.toST})"
+        }
+
+        @pure override def toSmt: ST = {
+          return st"($upId ${seq.toSmt} ${index.toSmt} ${element.toSmt} ${sym.toSmt})"
+        }
+      }
+
+      @datatype class AdtLit(val sym: Value.Sym, args: ISZ[Value], @hidden newId: ST) extends Def {
+        @pure def tipe: AST.Typed.Name = {
+          return sym.tipe.asInstanceOf[AST.Typed.Name]
+        }
+
+        @pure override def toST: ST = {
+          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg.toST, ", ")})"
+        }
+
+        @pure override def toSmt: ST = {
+          return st"($newId ${(for (arg <- args) yield arg.toSmt, " ")} ${sym.toSmt})"
+        }
+      }
+
     }
 
     @datatype trait Let extends Def {
@@ -757,16 +802,21 @@ object State {
       }
 
       object Quant {
+
         @datatype class Var(id: String, tipe: AST.Typed) {
           @pure def toST: ST = {
             return st"$id: ${tipe.string}"
           }
+
           @pure def toSmt: ST = {
             return st"($smt2name ${smtTypeId(tipe)})"
           }
+
           @memoize def smt2name: ST = {
             return st"|l:$id|"
-          }      }
+          }
+        }
+
       }
 
       @datatype class Quant(val sym: Value.Sym, isAll: B, vars: ISZ[Quant.Var], claims: ISZ[Claim]) extends Let {
@@ -876,16 +926,6 @@ object State {
         }
       }
 
-      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value, @hidden upId: ST) extends Let {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @${seq.toST}(${index.toST} ~> ${element.toST})"
-        }
-
-        @pure override def toSmtRhs: ST = {
-          return st"($upId ${seq.toSmt} ${index.toSmt} ${element.toSmt})"
-        }
-      }
-
       @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: ST, value: Value) extends Let {
         @pure override def toST: ST = {
           return st"${sym.toST} ≜ @${adt.toST}($id = ${value.toST})"
@@ -934,33 +974,8 @@ object State {
         }
       }
 
-      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[(Value, Value)], @hidden seqLitId: ST, @hidden sizeId: ST, @hidden atId: ST) extends Let {
-        @pure def tipe: AST.Typed.Name = {
-          return sym.tipe.asInstanceOf[AST.Typed.Name]
-        }
-
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg._2.toST, ", ")})"
-        }
-
-        @pure override def toSmtRhs: ST = {
-          return st"($seqLitId ${(for (arg <- args) yield st"${arg._1.toSmt} ${arg._2.toSmt}", " ")})"
-        }
-      }
-
-      @datatype class AdtLit(val sym: Value.Sym, args: ISZ[Value], @hidden newId: ST) extends Let {
-        @pure def tipe: AST.Typed.Name = {
-          return sym.tipe.asInstanceOf[AST.Typed.Name]
-        }
-
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg.toST, ", ")})"
-        }
-
-        @pure override def toSmtRhs: ST = {
-          return if (args.isEmpty) newId else st"($newId ${(for (arg <- args) yield arg.toSmt, " ")})"
-        }
-      }
     }
+
   }
+
 }
