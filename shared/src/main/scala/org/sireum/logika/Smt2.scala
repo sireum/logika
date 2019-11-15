@@ -36,6 +36,62 @@ object Smt2 {
 
   @datatype class SeqLit(t: AST.Typed.Name, size: Z)
 
+  @pure def typeId(t: AST.Typed): ST = {
+    return id(t, "")
+  }
+
+  @pure def typeHierarchyId(t: AST.Typed): ST = {
+    return id(t, "T")
+  }
+
+  @pure def id(t: AST.Typed, prefix: String): ST = {
+    t match {
+      case t: AST.Typed.Name =>
+        shorten(t) match {
+          case Some((r, raw)) => return if (raw) r else st"|$r|"
+          case _ =>
+            if (t.args.nonEmpty) {
+              return if (prefix == "") st"|${(t.ids, ".")}[${(for (arg <- t.args) yield idRaw(arg), ", ")}]|"
+              else st"|$prefix:${(t.ids, ".")}[${(for (arg <- t.args) yield idRaw(arg), ", ")}]|"
+            } else {
+              return if (prefix == "") st"|${(t.ids, ".")}|" else st"|$prefix:${(t.ids, ".")}|"
+            }
+        }
+      case _ => return if (prefix == "") st"|${idRaw(t)}|" else st"|$prefix:${idRaw(t)}|"
+    }
+  }
+
+  @pure def idRaw(t: AST.Typed): ST = {
+    t match {
+      case t: AST.Typed.Name =>
+        shorten(t) match {
+          case Some((r, _)) => return r
+          case _ =>
+            if (t.args.nonEmpty) {
+              return st"${(t.ids, ".")}[${(for (arg <- t.args) yield idRaw(arg), ", ")}]"
+            } else {
+              return st"${(t.ids, ".")}"
+            }
+        }
+      case t: AST.Typed.TypeVar => return st"'${quotedEscape(t.id)}"
+      case _ => halt("TODO") // TODO
+    }
+  }
+
+  @pure def shorten(t: AST.Typed.Name): Option[(ST, B)] = {
+    if (t.ids.size == 3 && t.ids(0) == "org" && t.ids(1) == "sireum") {
+      val tid = t.ids(2)
+      if (tid == "IS" || tid == "MS") {
+        val it = t.args(0).asInstanceOf[AST.Typed.Name]
+        return Some((st"$tid[${idRaw(it)}, ${idRaw(t.args(1))}]", F))
+      } else if (t.args.isEmpty) {
+        return Some((st"${t.ids(2)}", T))
+      }
+    }
+    return None()
+  }
+
+  @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 }
 
 @msig trait Smt2 {
@@ -105,11 +161,11 @@ object Smt2 {
   }
 
   @memoize def typeHierarchyId(t: AST.Typed): ST = {
-    return State.smtTypeHierarchyId(t)
+    return Smt2.typeHierarchyId(t)
   }
 
   @memoize def typeId(t: AST.Typed): ST = {
-    return State.smtTypeId(t)
+    return Smt2.typeId(t)
   }
 
   @memoize def adtId(tipe: AST.Typed): ST = {
@@ -178,24 +234,16 @@ object Smt2 {
     return smtId(tipe)
   }
 
-  @memoize def typeOpId(tipe: AST.Typed.Name, op: String): ST = {
-    return st"|${typeIdRaw(tipe)}.$op|"
+  @memoize def typeOpId(tipe: AST.Typed, op: String): ST = {
+    return st"|${typeIdRaw(tipe)}.${Smt2.quotedEscape(op)}|"
   }
 
   @memoize def typeIdRaw(t: AST.Typed): ST = {
-    return State.smtIdRaw(t)
-  }
-
-  @pure def typeConstructorId(t: AST.Typed.Name): ST = {
-    return State.smtTypeConstructorId(t)
+    return Smt2.idRaw(t)
   }
 
   @memoize def globalId(owner: ISZ[String], id: String): ST = {
     return st"|g:${(owner, ".")}.$id|"
-  }
-
-  @memoize def fieldId(receiver: AST.Typed, id: String): ST = {
-    return st"|f:${typeIdRaw(receiver)}.$id|"
   }
 
   def sat(title: String, claims: ISZ[State.Claim]): B = {
@@ -213,14 +261,17 @@ object Smt2 {
       val itId = typeId(it)
       val etId = adtId(et)
       val atId = typeOpId(t, "at")
-      val sizeId = fieldId(t, "size")
+      val sizeId = typeOpId(t, "size")
       val appendId = typeOpId(t, ":+")
       val appendsId = typeOpId(t, "++")
       val prependId = typeOpId(t, "+:")
       val upId = typeOpId(t, "up")
       val eqId = typeOpId(t, "==")
-      addTypeDecl(st"(define-sort $tId () (${if (t.ids == AST.Typed.isName) "IS" else "MS"} $itId $etId))")
+      val firstIndexId = typeOpId(t, "firstIndex")
+      val lastIndexId = typeOpId(t, "lastIndex")
+      addTypeDecl(st"(define-sort $tId () (Array $itId $etId))")
       addTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
+      //addTypeDecl(st"(define-fun $firstIndexId ($tId) $itId )")
       addTypeDecl(st"(assert (forall ((x $tId)) (>= ($sizeId x) 0)))")
       addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       addTypeDecl(
@@ -315,7 +366,7 @@ object Smt2 {
       @pure def fieldIdType(f: Info.Var): (ST, ST, AST.Typed, String) = {
         val ft = f.typedOpt.get.subst(sm)
         val id = f.ast.id.value
-        return (fieldId(t, f.ast.id.value), adtId(ft), ft, id)
+        return (typeOpId(t, f.ast.id.value), adtId(ft), ft, id)
       }
 
       if (!ti.ast.isRoot) {
@@ -389,7 +440,7 @@ object Smt2 {
     val etId = adtId(et)
     val seqLitId = typeOpId(t, s"new.$size")
     val atId = typeOpId(t, "at")
-    val sizeId = fieldId(t, "size")
+    val sizeId = typeOpId(t, "size")
     val r =
       st"""(define-fun $seqLitId (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId)) B
           |  (and
@@ -432,27 +483,38 @@ object Smt2 {
             |  ${(typeHierarchyIds, "\n")}))""")
     val r =
       st"""${(for (header <- headers; line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
-          |
           |(set-logic ALL)
-          |(define-sort   B            ()           Bool)
-          |(define-sort   Z            ()           Int)
-          |(define-sort   IS           (I T)        (Array I T))
-          |(define-sort   MS           (I T)        (Array I T))
+          |
+          |(define-sort B () Bool)
+          |(define-fun |B.!| ((x B)) B (not x))
+          |(define-fun |B.&| ((x B) (y B)) B (and x y))
+          |(define-fun |B.│| ((x B) (y B)) B (or x y))
+          |(define-fun |B.│^| ((x B) (y B)) B (xor x y))
+          |(define-fun |B.imply_:| ((x B) (y B)) B (=> x y))
+          |
+          |(define-sort Z () Int)
+          |(define-fun |Z.<=| ((x Z) (y Z)) B (<= x y))
+          |(define-fun |Z.<| ((x Z) (y Z)) B (< x y))
+          |(define-fun |Z.>| ((x Z) (y Z)) B (> x y))
+          |(define-fun |Z.>=| ((x Z) (y Z)) B (>= x y))
+          |(define-fun |Z.==| ((x Z) (y Z)) B (= x y))
+          |(define-fun |Z.!=| ((x Z) (y Z)) B (not (= x y)))
+          |(define-fun |Z.+| ((x Z) (y Z)) Z (+ x y))
+          |(define-fun |Z.-| ((x Z) (y Z)) Z (- x y))
+          |(define-fun |Z.*| ((x Z) (y Z)) Z (* x y))
+          |(define-fun |Z./| ((x Z) (y Z)) Z (div x y))
+          |(define-fun |Z.%| ((x Z) (y Z)) Z (mod x y))
           |
           |${(sorts, "\n\n")}
           |
-          |(declare-sort  ADT 0)
-          |(declare-sort  Type 0)
-          |(declare-fun   type-of      (ADT)        Type)
-          |(declare-fun   sub-type     (Type Type)  Bool)
-          |(define-fun    leaf-type    ((x Type))   Bool
-          |                  (forall ((y Type)) (=> (sub-type y x) (= y x))))
-          |(assert        (forall ((x Type))
-          |                  (sub-type x x)))
-          |(assert        (forall ((x Type) (y Type) (z Type))
-          |                  (=> (and (sub-type x y) (sub-type y z)) (sub-type x z))))
-          |(assert        (forall ((x Type) (y Type))
-          |                  (=> (and (sub-type x y) (sub-type y x)) (= x y))))
+          |(declare-sort ADT 0)
+          |(declare-sort Type 0)
+          |(declare-fun type-of (ADT) Type)
+          |(declare-fun sub-type (Type Type) Bool)
+          |(define-fun leaf-type ((x Type)) Bool (forall ((y Type)) (=> (sub-type y x) (= y x))))
+          |(assert (forall ((x Type)) (sub-type x x)))
+          |(assert (forall ((x Type) (y Type) (z Type)) (=> (and (sub-type x y) (sub-type y z)) (sub-type x z))))
+          |(assert (forall ((x Type) (y Type)) (=> (and (sub-type x y) (sub-type y x)) (= x y))))
           |
           |${(typeDecls, "\n")}
           |

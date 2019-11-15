@@ -77,65 +77,6 @@ object State {
     return State(T, ISZ(), 1)
   }
 
-  @pure def smtTypeId(t: AST.Typed): ST = {
-    return smtId(t, "")
-  }
-
-  @pure def smtTypeHierarchyId(t: AST.Typed): ST = {
-    return smtId(t, "T")
-  }
-
-  @pure def smtTypeConstructorId(t: AST.Typed): ST = {
-    return smtId(t, "C")
-  }
-
-  @pure def smtId(t: AST.Typed, prefix: String): ST = {
-    t match {
-      case t: AST.Typed.Name =>
-        shorten(t) match {
-          case Some((r, raw)) => return if (raw) r else st"|$r|"
-          case _ =>
-            if (t.args.nonEmpty) {
-              return if (prefix == "") st"|${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]|"
-              else st"|$prefix:${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]|"
-            } else {
-              return if (prefix == "") st"|${(t.ids, ".")}|" else st"|$prefix:${(t.ids, ".")}|"
-            }
-        }
-      case _ => return if (prefix == "") st"|${smtIdRaw(t)}|" else st"|$prefix:${smtIdRaw(t)}|"
-    }
-  }
-
-  @pure def smtIdRaw(t: AST.Typed): ST = {
-    t match {
-      case t: AST.Typed.Name =>
-        shorten(t) match {
-          case Some((r, _)) => return r
-          case _ =>
-            if (t.args.nonEmpty) {
-              return st"${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]"
-            } else {
-              return st"${(t.ids, ".")}"
-            }
-        }
-      case t: AST.Typed.TypeVar => return st"'${t.id}"
-      case _ => halt("TODO") // TODO
-    }
-  }
-
-  @pure def shorten(t: AST.Typed.Name): Option[(ST, B)] = {
-    if (t.ids.size == 3 && t.ids(0) == "org" && t.ids(1) == "sireum") {
-      val tid = t.ids(2)
-      if (tid == "IS" || tid == "MS") {
-        val it = t.args(0).asInstanceOf[AST.Typed.Name]
-        return Some((st"$tid[${smtIdRaw(it)}, ${smtIdRaw(t.args(1))}]", F))
-      } else if (t.args.isEmpty) {
-        return Some((st"${t.ids(2)}", T))
-      }
-    }
-    return None()
-  }
-
   @datatype trait Value {
 
     @pure def tipe: AST.Typed
@@ -522,7 +463,7 @@ object State {
 
       @pure override def toSmtDecl: ISZ[(String, ST)] = {
         return ISZ[(String, ST)](value.toSmt.render ~>
-          st"(declare-const ${value.toSmt} ${State.smtTypeId(value.tipe)})")
+          st"(declare-const ${value.toSmt} ${Smt2.typeId(value.tipe)})")
       }
 
       @pure def types: ISZ[AST.Typed] = {
@@ -553,7 +494,7 @@ object State {
 
       @pure override def toSmtDecl: ISZ[(String, ST)] = {
         var r = ISZ[(String, ST)](
-          cond.toSmt.render ~> st"(declare-const ${cond.toSmt} ${State.smtTypeId(cond.tipe)})")
+          cond.toSmt.render ~> st"(declare-const ${cond.toSmt} ${Smt2.typeId(cond.tipe)})")
         for (tClaim <- tClaims) {
           r = r ++ tClaim.toSmtDecl
         }
@@ -574,7 +515,7 @@ object State {
 
       @pure override def toSmtDecl: ISZ[(String, ST)] = {
         return ISZ[(String, ST)](sym.toSmt.render ~>
-          st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})")
+          st"(declare-const ${sym.toSmt} ${Smt2.typeId(sym.tipe)})")
       }
 
       @pure def types: ISZ[AST.Typed] = {
@@ -687,7 +628,7 @@ object State {
           var r = super.toSmtDecl
           val n = smt2name
           val ns = n.render
-          r = r :+ ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
+          r = r :+ ns ~> st"(declare-const $n ${Smt2.typeId(sym.tipe)})"
           return r
         }
 
@@ -713,7 +654,7 @@ object State {
           var r = super.toSmtDecl
           val n = smt2name
           val ns = n.render
-          r = r :+ ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
+          r = r :+ ns ~> st"(declare-const $n ${Smt2.typeId(sym.tipe)})"
           return r
         }
 
@@ -745,7 +686,7 @@ object State {
           var r = super.toSmtDecl
           val n = smt2name
           val ns = n.render
-          r = r :+ ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
+          r = r :+ ns ~> st"(declare-const $n ${Smt2.typeId(sym.tipe)})"
           return r
         }
 
@@ -773,7 +714,7 @@ object State {
           var r = super.toSmtDecl
           val n = smt2name
           val ns = n.render
-          r = r :+ ns ~> st"(declare-const $n ${State.smtTypeId(sym.tipe)})"
+          r = r :+ ns ~> st"(declare-const $n ${Smt2.typeId(sym.tipe)})"
           return r
         }
 
@@ -809,7 +750,7 @@ object State {
           }
 
           @pure def toSmt: ST = {
-            return st"($smt2name ${smtTypeId(tipe)})"
+            return st"($smt2name ${Smt2.typeId(tipe)})"
           }
 
           @memoize def smt2name: ST = {
@@ -852,7 +793,7 @@ object State {
           }
           if (defs.nonEmpty) {
             body =
-              st"""(forall (${(for (d <- defs) yield st"(${d.sym.toSmt} ${smtTypeId(d.sym.tipe)})", " ")})
+              st"""(forall (${(for (d <- defs) yield st"(${d.sym.toSmt} ${Smt2.typeId(d.sym.tipe)})", " ")})
                   |  $body)"""
           }
           val r: ST =
@@ -869,7 +810,7 @@ object State {
 
         @pure override def toSmtDecl: ISZ[(String, ST)] = {
           return ISZ[(String, ST)](sym.toSmt.render ~>
-            st"(declare-const ${sym.toSmt} ${State.smtTypeId(sym.tipe)})")
+            st"(declare-const ${sym.toSmt} ${Smt2.typeId(sym.tipe)})")
         }
 
         @pure override def types: ISZ[Typed] = {

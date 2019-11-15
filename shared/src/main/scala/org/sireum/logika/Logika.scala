@@ -312,7 +312,7 @@ object Logika {
               return (s0, State.errorValue)
             }
             val (s1, sym) = s0.freshSym(t, pos)
-            return (s1.addClaim(State.Claim.Let.FieldLookup(sym, o, smt2.fieldId(receiver.typedOpt.get, id))), sym)
+            return (s1.addClaim(State.Claim.Let.FieldLookup(sym, o, smt2.typeOpId(receiver.typedOpt.get, id))), sym)
           case _ => halt(s"TODO: $e") // TODO
         }
       }
@@ -395,7 +395,7 @@ object Logika {
         }
         smt2.addSeqLit(t, indices.size)
         return (s1.addClaim(State.Claim.Def.SeqLit(sym, ops.ISZOps(indices).zip(args),
-          smt2.typeOpId(t, s"new.${indices.size}"), smt2.fieldId(t, "size"), smt2.typeOpId(t, "at"))), sym)
+          smt2.typeOpId(t, s"new.${indices.size}"), smt2.typeOpId(t, "size"), smt2.typeOpId(t, "at"))), sym)
       } else {
         return (s1.addClaim(State.Claim.Def.AdtLit(sym, args, smt2.typeOpId(t, "new"))), sym)
       }
