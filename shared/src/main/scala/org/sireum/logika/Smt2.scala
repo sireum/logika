@@ -763,9 +763,9 @@ object Smt2 {
   }
 
   def c2DeclST(c: State.Claim): ISZ[(String, ST)] = {
-    def def2DeclST(c: State.Claim.Def): ISZ[(String, ST)] = {
-      val symST = v2ST(c.sym)
-      return ISZ[(String, ST)](symST.render ~> st"(declare-const $symST ${Smt2.typeId(c.sym.tipe)})")
+    def def2DeclST(cDef: State.Claim.Def): ISZ[(String, ST)] = {
+      val symST = v2ST(cDef.sym)
+      return ISZ[(String, ST)](symST.render ~> st"(declare-const $symST ${Smt2.typeId(cDef.sym.tipe)})")
     }
     c match {
       case c: State.Claim.Prop =>
