@@ -49,7 +49,7 @@ object Z3 {
                  val typeHierarchy: TypeHierarchy)
   extends Smt2 {
 
-  var types: HashSet[AST.Typed] = basicTypes
+  var types: HashSet[AST.Typed] = Smt2.basicTypes
 
   var poset: Poset[AST.Typed.Name] = Poset.empty
 

@@ -36,6 +36,16 @@ object Smt2 {
 
   @datatype class SeqLit(t: AST.Typed.Name, size: Z)
 
+  val basicTypes: HashSet[AST.Typed] = HashSet ++ ISZ[AST.Typed](
+    AST.Typed.b,
+    AST.Typed.z,
+    AST.Typed.c,
+    AST.Typed.f32,
+    AST.Typed.f64,
+    AST.Typed.r,
+    AST.Typed.string,
+  )
+
   val binop2Smt2Map: HashMap[AST.Typed.Name, HashMap[String, String]] =
     HashMap.empty[AST.Typed.Name, HashMap[String, String]] ++
       ISZ[(AST.Typed.Name, HashMap[String, String])](
@@ -69,61 +79,6 @@ object Smt2 {
           AST.Exp.UnaryOp.Minus ~> "-"
         ))
       )
-
-  @pure def typeId(t: AST.Typed): ST = {
-    return id(t, "")
-  }
-
-  @pure def typeHierarchyId(t: AST.Typed): ST = {
-    return id(t, "T")
-  }
-
-  @pure def id(t: AST.Typed, prefix: String): ST = {
-    t match {
-      case t: AST.Typed.Name =>
-        shorten(t) match {
-          case Some((r, raw)) => return if (raw) r else st"|$r|"
-          case _ =>
-            if (t.args.nonEmpty) {
-              return if (prefix == "") st"|${(t.ids, ".")}[${(for (arg <- t.args) yield idRaw(arg), ", ")}]|"
-              else st"|$prefix:${(t.ids, ".")}[${(for (arg <- t.args) yield idRaw(arg), ", ")}]|"
-            } else {
-              return if (prefix == "") st"|${(t.ids, ".")}|" else st"|$prefix:${(t.ids, ".")}|"
-            }
-        }
-      case _ => return if (prefix == "") st"|${idRaw(t)}|" else st"|$prefix:${idRaw(t)}|"
-    }
-  }
-
-  @pure def idRaw(t: AST.Typed): ST = {
-    t match {
-      case t: AST.Typed.Name =>
-        shorten(t) match {
-          case Some((r, _)) => return r
-          case _ =>
-            if (t.args.nonEmpty) {
-              return st"${(t.ids, ".")}[${(for (arg <- t.args) yield idRaw(arg), ", ")}]"
-            } else {
-              return st"${(t.ids, ".")}"
-            }
-        }
-      case t: AST.Typed.TypeVar => return st"'${quotedEscape(t.id)}"
-      case _ => halt("TODO") // TODO
-    }
-  }
-
-  @pure def shorten(t: AST.Typed.Name): Option[(ST, B)] = {
-    if (t.ids.size == 3 && t.ids(0) == "org" && t.ids(1) == "sireum") {
-      val tid = t.ids(2)
-      if (tid == "IS" || tid == "MS") {
-        val it = t.args(0).asInstanceOf[AST.Typed.Name]
-        return Some((st"$tid[${idRaw(it)}, ${idRaw(t.args(1))}]", F))
-      } else if (t.args.isEmpty) {
-        return Some((st"${t.ids(2)}", T))
-      }
-    }
-    return None()
-  }
 
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 }
@@ -188,96 +143,32 @@ object Smt2 {
 
   def checkUnsat(query: String, timeoutInMs: Z): B
 
-  @memoize def basicTypes: HashSet[AST.Typed] = {
-    return HashSet.empty[AST.Typed] ++ ISZ[AST.Typed](
-      AST.Typed.b, AST.Typed.c, AST.Typed.f32, AST.Typed.f64, AST.Typed.r, AST.Typed.string, AST.Typed.z
-    )
-  }
-
-  @memoize def typeHierarchyId(t: AST.Typed): ST = {
-    return Smt2.typeHierarchyId(t)
-  }
-
-  @memoize def typeId(t: AST.Typed): ST = {
-    return Smt2.typeId(t)
-  }
-
   @memoize def adtId(tipe: AST.Typed): ST = {
-    @pure def smtId(t: AST.Typed): ST = {
-      t match {
-        case t: AST.Typed.Name =>
-          shorten(t) match {
-            case Some(r) => return r
-            case _ =>
-              if (t.args.nonEmpty) {
-                return st"|${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]|"
-              } else {
-                return st"|${(t.ids, ".")}|"
-              }
+    @pure def isAdt(t: AST.Typed.Name): B = {
+      typeHierarchy.typeMap.get(t.ids).get match {
+        case _: TypeInfo.Adt => return T
+        case _: TypeInfo.Sig =>
+          if (Smt2.basicTypes.contains(t)) {
+            return F
+          } else if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
+            return F
           }
-        case _ => return st"|${smtIdRaw(t)}|"
+          return T
+        case _ => return F
       }
     }
-
-    @pure def smtIdRaw(t: AST.Typed): ST = {
-      t match {
-        case t: AST.Typed.Name =>
-          shorten(t) match {
-            case Some(r) => return r
-            case _ =>
-              if (t.args.nonEmpty) {
-                return st"${(t.ids, ".")}[${(for (arg <- t.args) yield smtIdRaw(arg), ", ")}]"
-              } else {
-                return st"${(t.ids, ".")}"
-              }
-          }
-        case t: AST.Typed.TypeVar => return st"'${t.id}"
-        case _ => halt("TODO") // TODO
-      }
+    tipe match {
+      case tipe: AST.Typed.Name if isAdt(tipe) => return st"ADT"
+      case _ => typeId(tipe)
     }
-
-    @pure def shorten(t: AST.Typed.Name): Option[ST] = {
-      @pure def isAdt: B = {
-        typeHierarchy.typeMap.get(t.ids).get match {
-          case _: TypeInfo.Adt => return T
-          case _: TypeInfo.Sig => return T
-          case _ => return F
-        }
-      }
-
-      if (t.ids.size == 3 && t.ids(0) == "org" && t.ids(1) == "sireum") {
-        val tid = t.ids(2)
-        if (tid == "IS" || tid == "MS") {
-          val it = t.args(0).asInstanceOf[AST.Typed.Name]
-          var zIndex: B = it == AST.Typed.z
-          if (!zIndex) {
-            typeHierarchy.typeMap.get(it.ids).get match {
-              case ti: TypeInfo.SubZ if ti.ast.isBitVector =>
-              case _ => zIndex = T
-            }
-          }
-          return if (zIndex) Some(st"(${tid}Z ${smtIdRaw(t.args(1))})")
-          else Some(st"($tid ${smtIdRaw(it)} ${smtIdRaw(t.args(1))})")
-        } else if (t.args.isEmpty) {
-          return if (!basicTypes.contains(t) && isAdt) Some(st"ADT") else Some(st"${t.ids(2)}")
-        }
-      }
-      return if (isAdt) Some(st"ADT") else None()
-    }
-
-    return smtId(tipe)
   }
 
   @memoize def typeOpId(tipe: AST.Typed, op: String): ST = {
     return st"|${typeIdRaw(tipe)}.${Smt2.quotedEscape(op)}|"
   }
 
-  @memoize def typeIdRaw(t: AST.Typed): ST = {
-    return Smt2.idRaw(t)
-  }
-
   @memoize def globalId(owner: ISZ[String], id: String): ST = {
-    return st"|g:${(owner, ".")}.$id|"
+    return st"|g:${(shorten(owner), ".")}.$id|"
   }
 
   def sat(title: String, claims: ISZ[State.Claim]): B = {
@@ -313,22 +204,22 @@ object Smt2 {
             |  (and
             |    (= ($sizeId z) (+ ($sizeId x) 1))
             |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
-            |                            (= ($atId z i) ($atId x i))))
+            |                        (= ($atId z i) ($atId x i))))
             |    (= ($atId z ($sizeId x)) y)))""")
       addTypeDecl(
         st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
             |  (and
             |    (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
             |      (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
-            |                              (= ($atId z i) ($atId x i))))
+            |                          (= ($atId z i) ($atId x i))))
             |      (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-            |                              (= ($atId z (+ ($sizeId x) i)) ($atId y i))))))""")
+            |                          (= ($atId z (+ ($sizeId x) i)) ($atId y i))))))""")
       addTypeDecl(
         st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
             |  (and
             |    (= ($sizeId z) (+ ($sizeId y) 1))
             |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-            |                            (= ($atId z (+ i 1)) ($atId y i))))
+            |                        (= ($atId z (+ i 1)) ($atId y i))))
             |    (= ($atId z 0) x)))""")
       addTypeDecl(
         st"""(define-fun $upId ((x $tId) (y $itId) (z $etId) (x2 $tId)) B
@@ -574,26 +465,34 @@ object Smt2 {
     }
   }
 
-  def rawShorten(ids: ISZ[String]): ST = {
+  @memoize def ids2ST(ids: ISZ[String]): ST = {
+    return st"${(ids, ".")}"
+  }
+
+  def shorten(ids: ISZ[String]): ST = {
     def rec(suffix: ISZ[String]): ST = {
       shortIds.get(suffix) match {
-        case Some(_) =>
-          if (suffix.size == ids.size) {
-            shortIdsUp(shortIds + ids ~> ids)
-            return st"${(ids, ".")}"
+        case Some(other) =>
+          if (other != ids) {
+            if (suffix.size == ids.size) {
+              shortIdsUp(shortIds + ids ~> ids)
+              return ids2ST(ids)
+            } else {
+              return rec(ops.ISZOps(ids).takeRight(suffix.size + 1))
+            }
           } else {
-            return rec(ops.ISZOps(ids).takeRight(suffix.size + 1))
+            return ids2ST(suffix)
           }
         case _ =>
           shortIdsUp(shortIds + suffix ~> ids)
-          return st"${(suffix, ".")}"
+          return ids2ST(suffix)
       }
     }
     return rec(ISZ(ids(ids.size - 1)))
   }
 
   def currentNameId(c: State.Claim.Let.CurrentName): ST = {
-    return st"|g:${(rawShorten(c.ids), ".")}|"
+    return st"|g:${(shorten(c.ids), ".")}|"
   }
 
   def currentLocalId(c: State.Claim.Let.CurrentId): ST = {
@@ -606,11 +505,11 @@ object Smt2 {
   }
 
   def nameId(c: State.Claim.Let.Name): ST = {
-    return st"|g:${(rawShorten(c.ids), ".")}@${State.Claim.possLines(c.poss)}#${c.num}|"
+    return st"|g:${(shorten(c.ids), ".")}@${State.Claim.possLines(c.poss)}#${c.num}|"
   }
 
   def qvar2ST(x: State.Claim.Let.Quant.Var): ST = {
-    return st"(|l:${x.id}| ${Smt2.typeId(x.tipe)})"
+    return st"(|l:${x.id}| ${typeId(x.tipe)})"
   }
 
   def l2DeclST(c: State.Claim.Let): ST = {
@@ -654,7 +553,7 @@ object Smt2 {
         }
         if (defs.nonEmpty) {
           body =
-            st"""(forall (${(for (d <- defs) yield st"(${v2ST(d.sym)} ${Smt2.typeId(d.sym.tipe)})", " ")})
+            st"""(forall (${(for (d <- defs) yield st"(${v2ST(d.sym)} ${typeId(d.sym.tipe)})", " ")})
                 |  $body)"""
         }
         return if (c.isAll)
@@ -765,15 +664,15 @@ object Smt2 {
   def c2DeclST(c: State.Claim): ISZ[(String, ST)] = {
     def def2DeclST(cDef: State.Claim.Def): ISZ[(String, ST)] = {
       val symST = v2ST(cDef.sym)
-      return ISZ[(String, ST)](symST.render ~> st"(declare-const $symST ${Smt2.typeId(cDef.sym.tipe)})")
+      return ISZ[(String, ST)](symST.render ~> st"(declare-const $symST ${typeId(cDef.sym.tipe)})")
     }
     c match {
       case c: State.Claim.Prop =>
         val vST = v2ST(c.value)
-        return ISZ[(String, ST)](vST.render ~> st"(declare-const $vST ${Smt2.typeId(c.value.tipe)})")
+        return ISZ[(String, ST)](vST.render ~> st"(declare-const $vST ${typeId(c.value.tipe)})")
       case c: State.Claim.If =>
         val condST = v2ST(c.cond)
-        var r = ISZ[(String, ST)](condST.render ~> st"(declare-const $condST ${Smt2.typeId(c.cond.tipe)})")
+        var r = ISZ[(String, ST)](condST.render ~> st"(declare-const $condST ${typeId(c.cond.tipe)})")
         for (tClaim <- c.tClaims) {
           r = r ++ c2DeclST(tClaim)
         }
@@ -785,27 +684,63 @@ object Smt2 {
         var r = def2DeclST(c)
         val n = currentNameId(c)
         val ns = n.render
-        r = r :+ ns ~> st"(declare-const $n ${Smt2.typeId(c.sym.tipe)})"
+        r = r :+ ns ~> st"(declare-const $n ${typeId(c.sym.tipe)})"
         return r
       case c: State.Claim.Let.Name =>
         var r = def2DeclST(c)
         val n = nameId(c)
         val ns = n.render
-        r = r :+ ns ~> st"(declare-const $n ${Smt2.typeId(c.sym.tipe)})"
+        r = r :+ ns ~> st"(declare-const $n ${typeId(c.sym.tipe)})"
         return r
       case c: State.Claim.Let.CurrentId =>
         var r = def2DeclST(c)
         val n = currentLocalId(c)
         val ns = n.render
-        r = r :+ ns ~> st"(declare-const $n ${Smt2.typeId(c.sym.tipe)})"
+        r = r :+ ns ~> st"(declare-const $n ${typeId(c.sym.tipe)})"
         return r
       case c: State.Claim.Let.Id =>
         var r = def2DeclST(c)
         val n = localId(c)
         val ns = n.render
-        r = r :+ ns ~> st"(declare-const $n ${Smt2.typeId(c.sym.tipe)})"
+        r = r :+ ns ~> st"(declare-const $n ${typeId(c.sym.tipe)})"
         return r
       case c: State.Claim.Def => return def2DeclST(c)
     }
+  }
+
+  def typeIdRaw(t: AST.Typed): ST = {
+    t match {
+      case t: AST.Typed.Name =>
+        if (t.args.isEmpty) {
+          return st"${(shorten(t.ids), ".")}"
+        } else {
+          return st"${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]"
+        }
+      case t: AST.Typed.TypeVar => return st"${t.id}"
+      case _ => halt("TODO") // TODO
+    }
+  }
+
+  @pure def id(t: AST.Typed, prefix: String): ST = {
+    t match {
+      case t: AST.Typed.Name if t.ids.size == 3 && t.args.isEmpty && t.ids(0) == "org" && t.ids(1) == "sireum" =>
+        return st"${t.ids(2)}"
+      case t: AST.Typed.Name =>
+        if (t.args.nonEmpty) {
+          return if (prefix == "") st"|${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
+          else st"|$prefix:${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
+        } else {
+          return if (prefix == "") st"|${(t.ids, ".")}|" else st"|$prefix:${(t.ids, ".")}|"
+        }
+      case _ => return if (prefix == "") st"|${typeIdRaw(t)}|" else st"|$prefix:${typeIdRaw(t)}|"
+    }
+  }
+
+  @pure def typeId(t: AST.Typed): ST = {
+    return id(t, "")
+  }
+
+  @pure def typeHierarchyId(t: AST.Typed): ST = {
+    return id(t, "T")
   }
 }

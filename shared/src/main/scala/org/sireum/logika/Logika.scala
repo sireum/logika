@@ -159,7 +159,7 @@ object Logika {
   val timeoutInMs: Z = config.smt2TimeoutInSeconds * 1000
 
   @pure def isBasic(t: AST.Typed): B = {
-    if (smt2.basicTypes.contains(t)) {
+    if (Smt2.basicTypes.contains(t)) {
       return T
     }
     t match {
