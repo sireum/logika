@@ -171,17 +171,17 @@ object Smt2 {
     return st"|g:${(shorten(owner), ".")}.$id|"
   }
 
-  def sat(title: String, claims: ISZ[State.Claim]): B = {
+  def sat(title: String, claims: ISZ[State.Claim], reporter: Reporter): B = {
     val headers = st"Satisfiability Check for $title:" +: (for (c <- claims) yield c.toST)
-    checkSat(satQuery(headers, claims, None()).render, 500)
+    checkSat(satQuery(headers, claims, None(), reporter).render, 500)
   }
 
-  def addType(tipe: AST.Typed): Unit = {
+  def addType(tipe: AST.Typed, reporter: Reporter): Unit = {
     def addS(t: AST.Typed.Name): Unit = {
       val it = t.args(0).asInstanceOf[AST.Typed.Name]
-      addType(it)
+      addType(it, reporter)
       val et = t.args(1)
-      addType(et)
+      addType(et, reporter)
       val tId = typeId(t)
       val itId = typeId(it)
       val etId = adtId(et)
@@ -248,11 +248,11 @@ object Smt2 {
         return ops.ISZOps(names).sortWith((n1, n2) => st"${(n1, ".")}".render <= st"${(n2, ".")}".render)
       }
 
-      val reporter = Reporter.create
-      val tsm = TypeChecker.buildTypeSubstMap(t.ids, None(), tTypeParams, t.args, reporter).get
-      assert(!reporter.hasMessage)
+      val rep = Reporter.create
+      val tsm = TypeChecker.buildTypeSubstMap(t.ids, None(), tTypeParams, t.args, rep).get
+      assert(!rep.hasMessage)
       for (parent <- parents) {
-        addType(parent.subst(tsm))
+        addType(parent.subst(tsm), reporter)
       }
       if (isRoot) {
         var children = ISZ[AST.Typed.Name]()
@@ -267,7 +267,7 @@ object Smt2 {
             assert(sm.size == tpSize)
             val childT = tipe.subst(sm)
             children = children :+ childT
-            addType(childT)
+            addType(childT, reporter)
           }
         }
         posetUp(poset.addChildren(t, children))
@@ -278,7 +278,7 @@ object Smt2 {
 
     def addAdt(t: AST.Typed.Name, ti: TypeInfo.Adt): Unit = {
       for (arg <- t.args) {
-        addType(arg)
+        addType(arg, reporter)
       }
       posetUp(poset.addNode(t))
       val tId = typeId(t)
@@ -294,7 +294,26 @@ object Smt2 {
         return (typeOpId(t, f.ast.id.value), adtId(ft), ft, id)
       }
 
-      if (!ti.ast.isRoot) {
+      if (ti.ast.isRoot) {
+        var leaves: ISZ[ST] = ISZ()
+        for (child <- poset.childrenOf(t).elements) {
+          typeHierarchy.typeMap.get(child.ids) match {
+            case Some(info: TypeInfo.Adt) if !info.ast.isRoot => leaves = leaves :+ typeHierarchyId(child)
+            case _ =>
+          }
+        }
+        if (leaves.isEmpty) {
+          reporter.warn(ti.ast.posOpt, Logika.kind, s"$t does not have any concrete implementation")
+        } else {
+          addTypeDecl(
+            st"""(assert (forall ((x $tId))
+                |  (let ((t (type-of x)))
+                |  (=> (sub-type t $thId)
+                |      (or
+                |        ${(for (leaf <- leaves) yield st"(= t $leaf)", "\n")})))))"""
+          )
+        }
+      } else {
         val newId = typeOpId(t, "new")
         val fieldIdTypes: ISZ[(ST, ST, AST.Typed, String)] = for (f <- ti.vars.values) yield fieldIdType(f)
         for (q <- fieldIdTypes) {
@@ -311,7 +330,7 @@ object Smt2 {
 
     def addSig(t: AST.Typed.Name, ti: TypeInfo.Sig): Unit = {
       for (arg <- t.args) {
-        addType(arg)
+        addType(arg, reporter)
       }
       posetUp(poset.addNode(t))
       addTypeDecl(st"(define-sort ${typeId(t)} () ADT)")
@@ -374,9 +393,9 @@ object Smt2 {
     return r.render
   }
 
-  def satQuery(headers: ISZ[ST], claims: ISZ[State.Claim], negClaimOpt: Option[State.Claim]): ST = {
+  def satQuery(headers: ISZ[ST], claims: ISZ[State.Claim], negClaimOpt: Option[State.Claim], reporter: Reporter): ST = {
     for (c <- claims; t <- c.types) {
-      addType(t)
+      addType(t, reporter)
     }
     var decls: HashSMap[String, ST] = HashSMap.empty[String, ST] ++
       (for (c <- claims; p <- c2DeclST(c)) yield p)
@@ -391,9 +410,9 @@ object Smt2 {
     return query(headers, seqLitDecls ++ (for (d <- decls.values) yield d.render), claimSmts)
   }
 
-  def valid(title: String, premises: ISZ[State.Claim], conclusion: State.Claim, timeoutInMs: Z): B = {
+  def valid(title: String, premises: ISZ[State.Claim], conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): B = {
     val headers = st"Validity Check for $title:" +: (for (c <- premises) yield c.toST) :+ st"  ⊢" :+ conclusion.toST
-    checkUnsat(satQuery(headers, premises, Some(conclusion)).render, timeoutInMs)
+    checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
   }
 
   def isAdtType(t: AST.Typed): B = {
