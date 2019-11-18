@@ -40,6 +40,7 @@ class LogikaRcTest extends SireumRcSpec {
     val reporter = Reporter.create
     Logika.checkWorksheet(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, config,
       th => Z3(z3Exe, th), reporter)
+    reporter.printMessages()
     !reporter.hasIssue
   }
 
