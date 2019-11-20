@@ -230,7 +230,7 @@ object Smt2 {
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
             |    (= ($sizeId x) ($sizeId y))
-            |    (forall ((i $itId)) (= (select x i) (select y i)))))""")
+            |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x))) (= (select x i) (select y i))))))""")
       if (isAdtType(et)) {
         addTypeDecl(
           st"""(assert (forall ((x $tId) (i $itId) (v ADT))
