@@ -167,6 +167,10 @@ object Smt2 {
     return st"|${typeIdRaw(tipe)}.${Smt2.quotedEscape(op)}|"
   }
 
+  @memoize def adtTypeOpId(t: AST.Typed, op: String): ST = {
+    return if (adtId(t).render == "ADT") st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
+  }
+
   @memoize def globalId(owner: ISZ[String], id: String): ST = {
     return st"|g:${(shorten(owner), ".")}.$id|"
   }
@@ -315,6 +319,7 @@ object Smt2 {
         }
       } else {
         val newId = typeOpId(t, "new")
+        val eqId = typeOpId(t, "==")
         val fieldIdTypes: ISZ[(ST, ST, AST.Typed, String)] = for (f <- ti.vars.values) yield fieldIdType(f)
         for (q <- fieldIdTypes) {
           addTypeDecl(st"(declare-fun ${q._1} ($tId) ${q._2})")
@@ -322,9 +327,14 @@ object Smt2 {
         addTypeDecl(
           st"""(define-fun $newId (${(for (q <- fieldIdTypes) yield st"(${q._4} ${q._2})", " ")} (x $tId)) B
               |  (and
-              |    (sub-type (type-of x) $thId)
+              |    (= (type-of x) $thId)
               |    ${(for (q <- fieldIdTypes) yield st"(= (${q._1} x) ${q._4})", "\n")}))""")
-        addTypeDecl(st"(assert (leaf-type $thId))")
+        addTypeDecl(
+          st"""(define-fun $eqId ((x $tId) (y $tId)) B
+              |  (and
+              |    (= (type-of x) (type-of y) $thId)
+              |    ${(for (q <- fieldIdTypes) yield st"(${if (adtId(q._3).render == "ADT") st"|ADT.==|" else typeOpId(q._3, "==")} (${q._1} x) (${q._1} y))", "\n")}))"""
+        )
       }
     }
 
@@ -425,6 +435,15 @@ object Smt2 {
       else Some(
         st"""(assert (distinct
             |  ${(typeHierarchyIds, "\n")}))""")
+
+    var adtEqs = ISZ[ST]()
+    for (t <- poset.nodes.keys) {
+      typeHierarchy.typeMap.get(t.ids) match {
+        case Some(info: TypeInfo.Adt) if !info.ast.isRoot =>
+          adtEqs = adtEqs :+ st"(=> (= t ${typeHierarchyId(t)}) (${typeOpId(t, "==")} x y))"
+        case _ =>
+      }
+    }
     val r =
       st"""${(for (header <- headers; line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
           |(set-logic ALL)
@@ -455,12 +474,18 @@ object Smt2 {
           |(declare-sort Type 0)
           |(declare-fun type-of (ADT) Type)
           |(declare-fun sub-type (Type Type) Bool)
-          |(define-fun leaf-type ((x Type)) Bool (forall ((y Type)) (=> (sub-type y x) (= y x))))
           |(assert (forall ((x Type)) (sub-type x x)))
           |(assert (forall ((x Type) (y Type) (z Type)) (=> (and (sub-type x y) (sub-type y z)) (sub-type x z))))
           |(assert (forall ((x Type) (y Type)) (=> (and (sub-type x y) (sub-type y x)) (= x y))))
           |
           |${(typeDecls, "\n")}
+          |
+          |(define-fun-rec |ADT.==| ((x ADT) (y ADT)) B
+          |  (let ((t (type-of x)))
+          |  (and
+          |    (= t (type-of y))
+          |    (=> (= t |T:None[Z]|) (|None[Z].==| x y))
+          |    (=> (= t |T:Some[Z]|) (|Some[Z].==| x y)))))
           |
           |$distinctOpt
           |
