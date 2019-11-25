@@ -482,10 +482,11 @@ object Smt2 {
           |${(typeDecls, "\n")}
           |
           |(assert (forall ((x ADT) (y ADT))
-          |  (let ((t (type-of x)))
-          |  (and
-          |    (= t (type-of y))
-          |    ${(adtEqs, "\n")}))))
+          |  (=> (|ADT.==| x y)
+          |      (let ((t (type-of x)))
+          |        (and
+          |          (= t (type-of y))
+          |          ${(adtEqs, "\n")})))))
           |
           |$distinctOpt
           |
