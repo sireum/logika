@@ -477,15 +477,15 @@ object Smt2 {
           |(assert (forall ((x Type)) (sub-type x x)))
           |(assert (forall ((x Type) (y Type) (z Type)) (=> (and (sub-type x y) (sub-type y z)) (sub-type x z))))
           |(assert (forall ((x Type) (y Type)) (=> (and (sub-type x y) (sub-type y x)) (= x y))))
+          |(declare-fun |ADT.==| (ADT ADT) B)
           |
           |${(typeDecls, "\n")}
           |
-          |(define-fun-rec |ADT.==| ((x ADT) (y ADT)) B
+          |(assert (forall ((x ADT) (y ADT))
           |  (let ((t (type-of x)))
           |  (and
           |    (= t (type-of y))
-          |    (=> (= t |T:None[Z]|) (|None[Z].==| x y))
-          |    (=> (= t |T:Some[Z]|) (|Some[Z].==| x y)))))
+          |    ${(adtEqs, "\n")}))))
           |
           |$distinctOpt
           |
