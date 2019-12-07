@@ -52,7 +52,7 @@ import org.sireum._
 
 def usage(): Unit = {
   println("Sireum Logika /build")
-  println("Usage: ( compile | test | test-js | m2 | jitpack )+")
+  println("Usage: ( compile | test | test-js )+")
 }
 
 
@@ -68,7 +68,6 @@ val sireumJar = homeBin / "sireum.jar"
 val mill = homeBin / "mill.bat"
 var didTipe = F
 var didCompile = F
-var didM2 = F
 
 
 def downloadMill(): Unit = {
@@ -105,10 +104,6 @@ def tipe(): Unit = {
 def compile(): Unit = {
   if (!didCompile) {
     didCompile = T
-    if (didM2) {
-      didM2 = F
-      (home / "out").removeAll()
-    }
     tipe()
     println("Compiling ...")
     Os.proc(ISZ(mill.string, "all", "logika.shared.tests.compile")).at(home).console.runCheck()
@@ -133,56 +128,6 @@ def testJs(): Unit = {
 }
 
 
-def jitpack(): Unit = {
-  println("Triggering jitpack ...")
-  val r = Os.proc(ISZ(mill.string, "jitPack", "--owner", "sireum", "--repo", "logika")).at(home).console.run()
-  r match {
-    case r: Os.Proc.Result.Normal =>
-      println(r.out)
-      println(r.err)
-      if (!r.ok) {
-        eprintln(s"Exit code: ${r.exitCode}")
-      }
-    case r: Os.Proc.Result.Exception =>
-      eprintln(s"Exception: ${r.err}")
-    case _: Os.Proc.Result.Timeout =>
-      eprintln("Timeout")
-      eprintln()
-  }
-  println()
-}
-
-
-def m2(): Unit = {
-  didM2 = T
-  didCompile = F
-
-  val m2s: ISZ[ISZ[String]] = for (plat <- ISZ("shared", "js")) yield ISZ("logika", plat, "m2")
-
-  val m2Paths: ISZ[Os.Path] =
-    for (cd <- for (m2 <- m2s) yield st"${(m2, Os.fileSep)}".render) yield  home / "out" / cd
-
-  for (m2p <- m2Paths) {
-    m2p.removeAll()
-  }
-
-  (home / "out").removeAll()
-
-  Os.proc(ISZ[String](mill.string, "all") ++ (for (m2 <- m2s) yield st"${(m2, ".")}".render)).
-    at(home).env(ISZ("SIREUM_SOURCE_BUILD" ~> "false")).console.runCheck()
-
-  val repository = Os.home / ".m2" / "repository"
-  repository.removeAll()
-
-  println()
-  println("Artifacts")
-  for (m2p <- m2Paths; p <- (m2p / "dest").overlayMove(repository, F, F, _ => T, T).values) {
-    println(s"* $p")
-  }
-  println()
-}
-
-
 downloadMill()
 
 for (m <- ISZ("runtime", "slang")) {
@@ -194,8 +139,6 @@ for (i <- 0 until Os.cliArgs.size) {
     case string"compile" => compile()
     case string"test" => test()
     case string"test-js" => testJs()
-    case string"m2" => m2()
-    case string"jitpack" => jitpack()
     case cmd =>
       usage()
       eprintln(s"Unrecognized command: $cmd")
