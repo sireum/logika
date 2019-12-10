@@ -47,7 +47,9 @@ object LogikaTest {
     Logika.Config(
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,
-      smt2TimeoutInSeconds = 5)
+      smt2TimeoutInSeconds = 5,
+      logPc = F,
+      logVc = F)
 }
 
 import LogikaTest._
@@ -122,6 +124,7 @@ class LogikaTest extends TestSuite {
       }
     }
     assert(msgOpt.isEmpty)
+    reporter.printMessages()
     !reporter.hasIssue
   }
 

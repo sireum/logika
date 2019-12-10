@@ -45,7 +45,17 @@ object cli {
         tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
         description = "Timeout (seconds) for SMT2 solver"),
     ),
-    groups = ISZ()
+    groups = ISZ(
+      OptGroup(name = "Logging", opts = ISZ(
+        Opt(name = "logPc", longKey = "log-pc", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Display path conditions before each statement"),
+        Opt(name = "logVc", longKey = "log-vc", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Display all verification conditions"),
+        )
+      )
+    )
   )
 
   val group: Group = Group(

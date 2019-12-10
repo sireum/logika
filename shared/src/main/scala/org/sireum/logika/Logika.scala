@@ -52,7 +52,9 @@ object Logika {
 
   @datatype class Config(defaultLoopBound: Z,
                          loopBounds: HashMap[ISZ[String], Z],
-                         smt2TimeoutInSeconds: Z)
+                         smt2TimeoutInSeconds: Z,
+                         logPc: B,
+                         logVc: B)
 
   object Context {
     @strictpure def empty: Context = Context(ISZ(), None(), ISZ())
@@ -262,7 +264,7 @@ object Logika {
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
         val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
-        val valid = smt2.valid(s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
+        val valid = smt2.valid(config.logVc, s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
           s0.claims :+ claim, State.Claim.Prop(T, sym), timeoutInMs, reporter)
         if (valid) {
           return s1.addClaim(claim)
@@ -504,7 +506,7 @@ object Logika {
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
     val s3 = s2(claims = s2.claims :+ State.Claim.Prop(T, sym))
     val pos = cond.posOpt.get
-    val sat = smt2.sat(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s3.claims, reporter)
+    val sat = smt2.sat(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s3.claims, reporter)
     return s3(status = sat)
   }
 
@@ -516,7 +518,7 @@ object Logika {
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
     val conclusion = State.Claim.Prop(T, sym)
     val pos = cond.posOpt.get
-    val valid = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion, timeoutInMs,
+    val valid = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion, timeoutInMs,
       reporter)
     if (!valid) {
       error(cond.posOpt, s"Cannot deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
@@ -599,7 +601,7 @@ object Logika {
       }
       val prop = State.Claim.Prop(T, cond)
       val thenClaims = s2.claims :+ prop
-      var thenSat = smt2.sat(s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims, reporter)
+      var thenSat = smt2.sat(config.logVc, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims, reporter)
       val s4: State = if (thenSat) {
         val s3 = evalBody(s2(claims = thenClaims), ifStmt.thenBody, reporter)
         thenSat = s3.status
@@ -609,7 +611,7 @@ object Logika {
       }
       val negProp = State.Claim.Prop(F, cond)
       val elseClaims = s2.claims :+ negProp
-      var elseSat = smt2.sat(s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims, reporter)
+      var elseSat = smt2.sat(config.logVc, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims, reporter)
       val s6: State = if (elseSat) {
         val s5 = evalBody(s2(claims = elseClaims, nextFresh = s4.nextFresh), ifStmt.elseBody, reporter)
         elseSat = s5.status
@@ -648,7 +650,7 @@ object Logika {
       val (s4, cond) = value2Sym(s3, v, pos)
       val prop = State.Claim.Prop(T, cond)
       val thenClaims = s4.claims :+ prop
-      var thenSat = smt2.sat(s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims, reporter)
+      var thenSat = smt2.sat(config.logVc, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims, reporter)
       val nextFresh: Z = if (thenSat) {
         val s5 = evalStmts(s4(claims = thenClaims), whileStmt.body.stmts, reporter)
         thenSat = s5.status
@@ -664,7 +666,7 @@ object Logika {
       }
       val negProp = State.Claim.Prop(F, cond)
       val elseClaims = s4.claims :+ negProp
-      val elseSat = smt2.sat(s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims, reporter)
+      val elseSat = smt2.sat(config.logVc, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims, reporter)
       return State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
     }
 
@@ -686,7 +688,7 @@ object Logika {
         val (s3, cond) = value2Sym(s2, v, pos)
         val prop = State.Claim.Prop(T, cond)
         val thenClaims = s3.claims :+ prop
-        var thenSat = smt2.sat(s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims, reporter)
+        var thenSat = smt2.sat(config.logVc, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", thenClaims, reporter)
         val s6: State = if (thenSat) {
           val s4 = evalStmts(s3(claims = thenClaims), whileStmt.body.stmts, reporter)
           thenSat = s4.status
@@ -711,7 +713,7 @@ object Logika {
         }
         val negProp = State.Claim.Prop(F, cond)
         val elseClaims = s3.claims :+ negProp
-        val elseSat = smt2.sat(s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims, reporter)
+        val elseSat = smt2.sat(config.logVc, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", elseClaims, reporter)
         (thenSat, elseSat) match {
           case (T, T) => return mergeStates(s3, cond, s6, s3, s6.nextFresh)
           case (T, F) => return s6(status = s6.status && !reporter.hasError)
@@ -735,8 +737,24 @@ object Logika {
       }
     }
 
+    def logPc(): Unit = {
+      if (config.logPc) {
+        val sts = State.Claim.claimsSTs(state.claims, State.Claim.Defs.empty)
+        if (sts.isEmpty) {
+          reporter.info(stmt.posOpt, Logika.kind, "Path conditions = {}")
+        } else {
+          reporter.info(stmt.posOpt, Logika.kind,
+            st"""Path conditions = {
+                |    ${(sts, ",\n")}
+                |  }""".render
+          )
+        }
+      }
+    }
+
     stmt match {
       case AST.Stmt.Expr(e: AST.Exp.Invoke) =>
+        logPc()
         e.attr.resOpt.get match {
           case AST.ResolvedInfo.BuiltIn(kind) =>
             kind match {
@@ -751,16 +769,24 @@ object Logika {
             halt(s"TODO: $stmt") // TODO
         }
       case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
+        logPc()
         stmt.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar =>
             return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.id.attr.posOpt.get)
           case _ => halt(s"TODO: $stmt") // TODO
         }
-      case stmt: AST.Stmt.Assign => return evalAssign(state, stmt)
-      case stmt: AST.Stmt.If => return evalIf(state, stmt)
+      case stmt: AST.Stmt.Assign =>
+        logPc()
+        return evalAssign(state, stmt)
+      case stmt: AST.Stmt.If =>
+        logPc()
+        return evalIf(state, stmt)
       case stmt: AST.Stmt.While =>
+        logPc()
         return if (stmt.modifies.nonEmpty) evalWhile(state, stmt) else evalWhileUnroll(state, stmt)
-      case stmt: AST.Stmt.Return => return evalReturn(state, stmt)
+      case stmt: AST.Stmt.Return =>
+        logPc()
+        return evalReturn(state, stmt)
       case _: AST.Stmt.Import => return state
       case _: AST.Stmt.Method => return state
       case _: AST.Stmt.SpecMethod => return state
@@ -777,7 +803,7 @@ object Logika {
     val (s2, sym) = value2Sym(s1, v, pos)
     val prop = State.Claim.Prop(T, sym)
     val valid: B = {
-      val vld = smt2.valid(s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop, timeoutInMs, reporter)
+      val vld = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop, timeoutInMs, reporter)
       if (!vld) {
         error(exp.posOpt, s"Cannot deduce the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
       }

@@ -40,7 +40,7 @@ import org.sireum.message.Position
       st"""State {
           |  status = $status,
           |  claims = {
-          |    ${(for (c <- claims) yield c.toST, ",\n")}
+          |    ${(for (c <- claims) yield c.toRawST, ",\n")}
           |  },
           |  nextFresh = $nextFresh
           |}"""
@@ -81,9 +81,13 @@ object State {
 
     @pure def tipe: AST.Typed
 
-    @pure def toST: ST
+    @pure def toRawST: ST
 
     @pure def pos: Position
+
+    @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
+      return toRawST
+    }
   }
 
 
@@ -101,7 +105,7 @@ object State {
         return AST.Typed.b
       }
 
-      @pure override def toST: ST = {
+      @pure override def toRawST: ST = {
         return if (value) st"T" else st"F"
       }
     }
@@ -111,7 +115,7 @@ object State {
         return AST.Typed.z
       }
 
-      @pure override def toST: ST = {
+      @pure override def toRawST: ST = {
         return st"$value"
       }
     }
@@ -121,7 +125,7 @@ object State {
         return AST.Typed.c
       }
 
-      @pure override def toST: ST = {
+      @pure override def toRawST: ST = {
         return st"char${Json.Printer.printC(value)}"
       }
     }
@@ -131,7 +135,7 @@ object State {
         return AST.Typed.f32
       }
 
-      @pure override def toST: ST = {
+      @pure override def toRawST: ST = {
         return st"${value}f"
       }
     }
@@ -141,7 +145,7 @@ object State {
         return AST.Typed.f64
       }
 
-      @pure override def toST: ST = {
+      @pure override def toRawST: ST = {
         return st"${value}d"
       }
     }
@@ -151,7 +155,7 @@ object State {
         return AST.Typed.r
       }
 
-      @pure override def toST: ST = {
+      @pure override def toRawST: ST = {
         return st"$value"
       }
     }
@@ -161,7 +165,7 @@ object State {
         return AST.Typed.string
       }
 
-      @pure override def toST: ST = {
+      @pure override def toRawST: ST = {
         return Json.Printer.printString(value)
       }
     }
@@ -169,7 +173,7 @@ object State {
     @datatype trait SubZ extends Value {
       @pure override def tipe: AST.Typed.Name
 
-      @pure override def toST: ST = {
+      @pure override def toRawST: ST = {
         val id = tipe.ids(tipe.ids.size - 1)
         return st"""${ops.StringOps(id).firstToLower}"$valueString""""
       }
@@ -233,16 +237,28 @@ object State {
 
     @datatype class Sym(num: org.sireum.Z, @hidden val tipe: AST.Typed, @hidden val pos: Position) extends Value {
 
-      @pure override def toST: ST = {
+      @pure override def toRawST: ST = {
         return st"$symPrefix$num@[${pos.beginLine}:${pos.beginColumn}]"
+      }
+
+      @pure override def toST(defs: HashMap[org.sireum.Z, Claim.Def]): ST = {
+        return defs.get(num).get.toST(defs)
       }
     }
 
   }
 
+  @record class ClaimSTs(var value: ISZ[ST]) {
+    def add(st: ST): Unit = {
+      value = value :+ st
+    }
+  }
+
   @datatype trait Claim {
 
-    @pure def toST: ST
+    @pure def toRawST: ST
+
+    def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit
 
     @pure def funs: ISZ[Fun] = {
       return ISZ()
@@ -265,16 +281,64 @@ object State {
       return r.elements
     }
 
+    def collectDefs(defs: Claim.Defs): Unit = {
+      def rec(c: Claim): Unit = {
+        c match {
+          case c: Claim.Let.CurrentId =>
+            if (!defs.hasDef(c)) {
+              defs.addDef(c)
+            }
+          case c: Claim.Let.CurrentName =>
+            if (!defs.hasDef(c)) {
+              defs.addDef(c)
+            }
+          case c: Claim.Let.Id =>
+            if (!defs.hasDef(c)) {
+              defs.addDef(c)
+            }
+          case c: Claim.Let.Name =>
+            if (!defs.hasDef(c)) {
+              defs.addDef(c)
+            }
+          case c: Claim.Def => defs.addDef(c)
+          case _ =>
+        }
+        c match {
+          case c: Claim.Composite =>
+            for (cc <- c.claims) {
+              rec(cc)
+            }
+          case _ =>
+        }
+      }
+      rec(this)
+    }
+
   }
 
   @datatype class And(claims: ISZ[Claim]) {
-    @pure def toST: ST = {
+    @pure def toRawST: ST = {
       val r: ST =
         if (claims.size == 0) st"T"
-        else if (claims.size == 1) claims(0).toST
+        else if (claims.size == 1) claims(0).toRawST
         else
           st"""∧(
-              |  ${(for (c <- claims) yield c.toST, ",\n")}
+              |  ${(for (c <- claims) yield c.toRawST, ",\n")}
+              |)"""
+      return r
+    }
+
+    @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
+      val claimSTs = ClaimSTs(ISZ())
+      for (c <- claims) {
+        c.toSTs(claimSTs, defs)
+      }
+      val r: ST =
+        if (claimSTs.value.size == 0) st"T"
+        else if (claimSTs.value.size == 1) claimSTs.value(0)
+        else
+          st"""∧(
+              |  ${(claimSTs.value, ",\n")}
               |)"""
       return r
     }
@@ -285,13 +349,28 @@ object State {
   }
 
   @datatype class Or(claims: ISZ[Claim]) {
-    @pure def toST: ST = {
+    @pure def toRawST: ST = {
       val r: ST =
         if (claims.size == 0) st"F"
-        else if (claims.size == 1) claims(0).toST
+        else if (claims.size == 1) claims(0).toRawST
         else
           st"""∨(
-              |  ${(for (c <- claims) yield c.toST, ",\n")})"""
+              |  ${(for (c <- claims) yield c.toRawST, ",\n")})"""
+      return r
+    }
+
+    @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
+      val claimSTs = ClaimSTs(ISZ())
+      for (c <- claims) {
+        c.toSTs(claimSTs, defs)
+      }
+      val r: ST =
+        if (claimSTs.value.size == 0) st"F"
+        else if (claimSTs.value.size == 1) claimSTs.value(0)
+        else
+          st"""∨(
+              |  ${(claimSTs.value, ",\n")}
+              |)"""
       return r
     }
 
@@ -301,12 +380,26 @@ object State {
   }
 
   @datatype class Imply(claims: ISZ[Claim]) {
-    @pure def toST: ST = {
+    @pure def toRawST: ST = {
       val r: ST =
-        if (claims.size == 1) claims(0).toST
+        if (claims.size == 1) claims(0).toRawST
         else
           st"""→(
-              |  ${(for (c <- claims) yield c.toST, ",\n")})"""
+              |  ${(for (c <- claims) yield c.toRawST, ",\n")})"""
+      return r
+    }
+
+    @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
+      val claimSTs = ClaimSTs(ISZ())
+      for (c <- claims) {
+        c.toSTs(claimSTs, defs)
+      }
+      val r: ST =
+        if (claimSTs.value.size == 1) claimSTs.value(0)
+        else
+          st"""→(
+              |  ${(claimSTs.value, ",\n")}
+              |)"""
       return r
     }
 
@@ -317,9 +410,21 @@ object State {
 
   object Claim {
 
+    @datatype trait Composite extends Claim {
+      @pure def claims: ISZ[Claim]
+    }
+
     @datatype class Prop(isPos: B, value: Value.Sym) extends Claim {
-      @pure override def toST: ST = {
-        return if (isPos) value.toST else st"¬(${value.toST})"
+      @pure override def toRawST: ST = {
+        return if (isPos) value.toRawST else st"¬(${value.toRawST})"
+      }
+
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+        if (isPos) {
+          claimSTs.add(value.toST(defs))
+        } else {
+          claimSTs.add(st"¬(${value.toST(defs)})")
+        }
       }
 
       @pure def types: ISZ[AST.Typed] = {
@@ -329,14 +434,23 @@ object State {
 
     @datatype class If(cond: Value.Sym,
                        tClaims: ISZ[Claim],
-                       fClaims: ISZ[Claim]) extends Claim {
+                       fClaims: ISZ[Claim]) extends Composite {
 
-      @pure override def toST: ST = {
+      @strictpure override def claims: ISZ[Claim] = tClaims ++ fClaims
+
+      @pure override def toRawST: ST = {
         val r =
-          st"""${cond.toST} ?
-              |  ${And(tClaims).toST}
-              |  ${And(fClaims).toST}"""
+          st"""${cond.toRawST} ?
+              |  ${And(tClaims).toRawST}
+              |: ${And(fClaims).toRawST}"""
         return r
+      }
+
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+        claimSTs.add(
+          st"""${cond.toST(defs)} ?
+              |  ${And(tClaims).toST(defs)}
+              |: ${And(fClaims).toST(defs)}""")
       }
 
       @pure def types: ISZ[AST.Typed] = {
@@ -351,6 +465,23 @@ object State {
       @pure def types: ISZ[AST.Typed] = {
         return ISZ(sym.tipe)
       }
+
+      @pure def toST(defs: HashMap[Z, Claim.Def]): ST
+
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {}
+    }
+
+    @record class Defs(var value: HashMap[Z, Def]) {
+      def addDef(d: Claim.Def): Unit = {
+        value = value + d.sym.num ~> d
+      }
+      def hasDef(d: Claim.Def): B = {
+        return value.contains(d.sym.num)
+      }
+    }
+
+    object Defs {
+      @strictpure def empty: Defs = Defs(HashMap.empty)
     }
 
     object Def {
@@ -360,14 +491,22 @@ object State {
           return sym.tipe.asInstanceOf[AST.Typed.Name]
         }
 
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg._2.toST, ", ")})"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg._2.toRawST, ", ")})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${sym.tipe.string}(${(for (arg <- args) yield arg._2.toST(defs), ", ")})"
         }
       }
 
       @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value, @hidden upId: ST) extends Def {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @${seq.toST}(${index.toST} ~> ${element.toST})"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${seq.toRawST}(${index.toRawST} ~> ${element.toRawST})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${seq.toST(defs)}(${index.toST(defs)} ~> ${element.toST(defs)})"
         }
       }
 
@@ -376,8 +515,12 @@ object State {
           return sym.tipe.asInstanceOf[AST.Typed.Name]
         }
 
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg.toST, ", ")})"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg.toRawST, ", ")})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${sym.tipe.string}(${(for (arg <- args) yield arg.toST(defs), ", ")})"
         }
       }
 
@@ -389,35 +532,80 @@ object State {
 
       @datatype class CurrentName(val sym: Value.Sym, ids: ISZ[String],
                                   @hidden defPosOpt: Option[Position]) extends Let {
-        @pure override def toST: ST = {
-          return st"${(ids, ".")} == ${sym.toST}"
+        @pure override def toRawST: ST = {
+          return st"${(ids, ".")} == ${sym.toRawST}"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${(ids, ".")}"
+        }
+
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+          if (!defs.get(sym.num).get.isInstanceOf[CurrentName]) {
+            claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
+          }
         }
       }
 
       @datatype class Name(val sym: Value.Sym, ids: ISZ[String], num: Z, poss: ISZ[Position]) extends Let {
-        @pure override def toST: ST = {
-          return st"${(ids, ".")}@${possLines(poss)}#$num == ${sym.toST}"
+        @pure override def toRawST: ST = {
+          return st"${(ids, ".")}@${possLines(poss)}#$num == ${sym.toRawST}"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${(ids, ".")}@${possLines(poss)}#$num"
+        }
+
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+          if (!defs.get(sym.num).get.isInstanceOf[Name]) {
+            claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
+          }
         }
       }
 
       @datatype class CurrentId(val sym: Value.Sym, context: ISZ[String], id: String,
                                 @hidden defPosOpt: Option[Position]) extends Let {
-        @pure override def toST: ST = {
-          return st"$id == ${sym.toST}"
+        @pure override def toRawST: ST = {
+          return st"$id == ${sym.toRawST}"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"$id"
+        }
+
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+          if (!defs.get(sym.num).get.isInstanceOf[CurrentId]) {
+            claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
+          }
         }
      }
 
       @datatype class Id(val sym: Value.Sym, context: ISZ[String], id: String, num: Z, poss: ISZ[Position]) extends Let {
 
-        @pure override def toST: ST = {
-          return if (context.isEmpty) st"$id@${possLines(poss)}#$num == ${sym.toST}"
-          else st"$id:${(context, ".")}@${possLines(poss)}#$num == ${sym.toST}"
+        @pure override def toRawST: ST = {
+          return if (context.isEmpty) st"$id@${possLines(poss)}#$num == ${sym.toRawST}"
+          else st"$id:${(context, ".")}@${possLines(poss)}#$num == ${sym.toRawST}"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return if (context.isEmpty) st"$id@${possLines(poss)}#$num"
+          else st"$id:${(context, ".")}@${possLines(poss)}#$num"
+        }
+
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+          if (!defs.get(sym.num).get.isInstanceOf[Id]) {
+            claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
+          }
         }
       }
 
       @datatype class Eq(val sym: Value.Sym, value: Value) extends Let {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${value.toST}"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${value.toRawST}"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${value.toST(defs)}"
         }
       }
 
@@ -429,11 +617,20 @@ object State {
         }
       }
 
-      @datatype class Quant(val sym: Value.Sym, isAll: B, vars: ISZ[Quant.Var], claims: ISZ[Claim]) extends Let {
-        @pure override def toST: ST = {
+      @datatype class Quant(val sym: Value.Sym,
+                            isAll: B, vars: ISZ[Quant.Var],
+                            val claims: ISZ[Claim]) extends Let with Composite {
+        @pure override def toRawST: ST = {
           val r =
-            st"""${sym.toST} ≜ ${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
-                |  ${if (isAll) Imply(claims).toST else And(claims).toST}"""
+            st"""${sym.toRawST} ≜ ${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
+                |  ${if (isAll) Imply(claims).toRawST else And(claims).toRawST}"""
+          return r
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          val r =
+            st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
+                |  ${if (isAll) Imply(claims).toST(defs) else And(claims).toST(defs)}"""
           return r
         }
 
@@ -443,38 +640,62 @@ object State {
       }
 
       @datatype class Binary(val sym: Value.Sym, left: Value, op: String, right: Value, tipe: AST.Typed.Name) extends Let {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${left.toST} $op ${right.toST}"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${left.toRawST} $op ${right.toRawST}"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${left.toST(defs)} $op ${right.toST(defs)}"
         }
       }
 
       @datatype class Unary(val sym: Value.Sym, op: AST.Exp.UnaryOp.Type, value: Value) extends Let {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ $op ${value.toST}"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ $op ${value.toRawST}"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"$op ${value.toST(defs)}"
         }
       }
 
       @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value, @hidden atId: ST) extends Let {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @${seq.toST}(${index.toST})"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${seq.toRawST}(${index.toRawST})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${seq.toST(defs)}(${index.toST(defs)})"
         }
       }
 
       @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: String, value: Value) extends Let {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @${adt.toST}($id = ${value.toST})"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${adt.toRawST}($id = ${value.toRawST})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${adt.toST(defs)}($id = ${value.toST(defs)})"
         }
       }
 
       @datatype class FieldLookup(val sym: Value.Sym, adt: Value, id: String) extends Let {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ @${adt.toST}.$id"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${adt.toRawST}.$id"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${adt.toST(defs)}.$id"
         }
       }
 
       @datatype class Apply(val sym: Value.Sym, name: ISZ[String], args: ISZ[Value]) extends Let {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${(name, ".")}(${(for (arg <- args) yield arg.toST, ", ")})"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${(name, ".")}(${(for (arg <- args) yield arg.toRawST, ", ")})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${(name, ".")}(${(for (arg <- args) yield arg.toST(defs), ", ")})"
         }
 
         @pure override def funs: ISZ[Fun] = {
@@ -483,8 +704,12 @@ object State {
       }
 
       @datatype class IApply(val sym: Value.Sym, o: Value, oTipe: AST.Typed.Name, id: String, args: ISZ[Value]) extends Let {
-        @pure override def toST: ST = {
-          return st"${sym.toST} ≜ ${o.toST}.$id(${(for (arg <- args) yield arg.toST, ", ")})"
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${o.toRawST}.$id(${(for (arg <- args) yield arg.toRawST, ", ")})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${o.toST(defs)}.$id(${(for (arg <- args) yield arg.toST(defs), ", ")})"
         }
 
         @pure override def funs: ISZ[Fun] = {
@@ -494,11 +719,24 @@ object State {
 
     }
 
-    def possLines(poss: ISZ[Position]): ST = {
+    @pure def claimsSTs(claims: ISZ[Claim], defs: Claim.Defs): ISZ[ST] = {
+      for (c <- claims) {
+        c.collectDefs(defs)
+      }
+      val claimSTs = ClaimSTs(ISZ())
+      val m = defs.value
+      for (c <- claims) {
+        c.toSTs(claimSTs, m)
+      }
+      return claimSTs.value
+    }
+
+    @pure def possLines(poss: ISZ[Position]): ST = {
       return if (poss.size > 1) st"{${(for (pos <- poss) yield pos.beginLine, ", ")}}"
       else st"${poss(0).beginLine}"
     }
 
   }
+
 
 }

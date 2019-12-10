@@ -34,6 +34,18 @@ import org.sireum.message.Reporter
 
 object Smt2 {
 
+  object Result {
+    @enum object Kind {
+      'Sat
+      'Unsat
+      'Unknown
+      'Timeout
+      'Error
+    }
+  }
+
+  @datatype class Result(kind: Result.Kind.Type, query: String, output: String)
+
   @datatype class SeqLit(t: AST.Typed.Name, size: Z)
 
   val basicTypes: HashSet[AST.Typed] = HashSet ++ ISZ[AST.Typed](
@@ -139,9 +151,9 @@ object Smt2 {
 
   def typeHierarchy: TypeHierarchy
 
-  def checkSat(query: String, timeoutInMs: Z): B
+  def checkSat(query: String, timeoutInMs: Z): (B, Smt2.Result)
 
-  def checkUnsat(query: String, timeoutInMs: Z): B
+  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2.Result)
 
   @memoize def adtId(tipe: AST.Typed): ST = {
     @pure def isAdt(t: AST.Typed.Name): B = {
@@ -175,9 +187,15 @@ object Smt2 {
     return st"|g:${(shorten(owner), ".")}.$id|"
   }
 
-  def sat(title: String, claims: ISZ[State.Claim], reporter: Reporter): B = {
-    val headers = st"Satisfiability Check for $title:" +: (for (c <- claims) yield c.toST)
-    checkSat(satQuery(headers, claims, None(), reporter).render, 500)
+  def sat(log: B, title: String, claims: ISZ[State.Claim], reporter: Reporter): B = {
+    val headers = st"Satisfiability Check for $title:" +: State.Claim.claimsSTs(claims, State.Claim.Defs.empty)
+    val (r, res) = checkSat(satQuery(headers, claims, None(), reporter).render, 500)
+    if (log) {
+      reporter.info(None(), Logika.kind,
+        st"""Verification condition: $r
+            |  ${res.query}""".render)
+    }
+    return r
   }
 
   def addType(tipe: AST.Typed, reporter: Reporter): Unit = {
@@ -420,9 +438,17 @@ object Smt2 {
     return query(headers, seqLitDecls ++ (for (d <- decls.values) yield d.render), claimSmts)
   }
 
-  def valid(title: String, premises: ISZ[State.Claim], conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): B = {
-    val headers = st"Validity Check for $title:" +: (for (c <- premises) yield c.toST) :+ st"  ⊢" :+ conclusion.toST
-    checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
+  def valid(log: B, title: String, premises: ISZ[State.Claim], conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): B = {
+    val defs = State.Claim.Defs.empty
+    val ps = State.Claim.claimsSTs(premises, defs)
+    val headers = (st"Validity Check for $title:" +: ps :+ st"  ⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs)
+    val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
+    if (log) {
+      reporter.info(None(), Logika.kind,
+        st"""Verification condition: $r
+            |  ${res.query}""".render)
+    }
+    return r
   }
 
   def isAdtType(t: AST.Typed): B = {
