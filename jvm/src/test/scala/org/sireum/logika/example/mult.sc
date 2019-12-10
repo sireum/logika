@@ -1,4 +1,4 @@
-// #sireum
+// #Sireum
 import org.sireum._
 
 val m = Z.random
