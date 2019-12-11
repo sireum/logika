@@ -214,11 +214,10 @@ object Smt2 {
       val prependId = typeOpId(t, "+:")
       val upId = typeOpId(t, "up")
       val eqId = typeOpId(t, "==")
-      val firstIndexId = typeOpId(t, "firstIndex")
-      val lastIndexId = typeOpId(t, "lastIndex")
+      val inBoundId = typeOpId(t, "inBound")
       addTypeDecl(st"(define-sort $tId () (Array $itId $etId))")
       addTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
-      //addTypeDecl(st"(define-fun $firstIndexId ($tId) $itId )")
+      addTypeDecl(st"(define-fun $inBoundId ((x $tId) (y $itId)) B (and (<= 0 y) (< y ($sizeId x))))")
       addTypeDecl(st"(assert (forall ((x $tId)) (>= ($sizeId x) 0)))")
       addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       addTypeDecl(
@@ -445,7 +444,7 @@ object Smt2 {
     val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
     if (log) {
       reporter.info(None(), Logika.kind,
-        st"""Verification condition: $r
+        st"""Verification condition: ${if (r) "discharged" else "undischarged"}
             |  ${res.query}""".render)
     }
     return r
@@ -663,6 +662,8 @@ object Smt2 {
         halt("TODO") // TODO
       case c: State.Claim.Let.FieldLookup =>
         return st"(${c.id} ${v2ST(c.adt)})"
+      case c: State.Claim.Let.SeqInBound =>
+        return st"(${c.inBound} ${v2ST(c.seq)} ${v2ST(c.index)})"
       case c: State.Claim.Let.Apply =>
         halt("TODO") // TODO
       case c: State.Claim.Let.IApply =>

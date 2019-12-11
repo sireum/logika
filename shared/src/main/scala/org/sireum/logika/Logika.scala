@@ -135,11 +135,11 @@ object Logika {
         l(context = ctx(methodOpt = Some(mctx(localInMap = localInMap))))
       }
       for (r <- requires) {
-        state = logika.evalAssume("Precondition", state, r, reporter)
+        state = logika.evalAssume(F, "Precondition", state, r, reporter)
       }
       state = logika.evalStmts(state, method.bodyOpt.get.stmts, reporter)
       for (e <- ensures) {
-        state = logika.evalAssert("Postcondition", state, e, reporter)
+        state = logika.evalAssert(F, "Postcondition", state, e, reporter)
       }
     }
 
@@ -188,7 +188,27 @@ object Logika {
     return (s0.addClaim(State.Claim.Let.CurrentId(sym, idContext, id, idPosOpt)), sym)
   }
 
-  def evalExp(state: State, e: AST.Exp, reporter: Reporter): (State, State.Value) = {
+  def checkSeqIndexing(rtCheck: B, s0: State, seq: State.Value, i: State.Value, posOpt: Option[Position],
+                       reporter: Reporter): State = {
+    if (!rtCheck) {
+      return s0
+    }
+    val pos = posOpt.get
+    val inBoundId = smt2.typeOpId(seq.tipe, "inBound")
+    val (s1, v) = s0.freshSym(AST.Typed.b, pos)
+    val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i, inBoundId))
+    val claim = State.Claim.Prop(T, v)
+    val valid = smt2.valid(config.logVc, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims,
+      claim, timeoutInMs, reporter)
+    if (valid) {
+      return s2.addClaim(claim)
+    } else {
+      error(Some(pos), s"Could not deduce sequence indexing is in bound", reporter)
+      return s2(status = F)
+    }
+  }
+
+  def evalExp(rtCheck: B, state: State, e: AST.Exp, reporter: Reporter): (State, State.Value) = {
     if (!state.status) {
       return (state, State.errorValue)
     }
@@ -214,7 +234,7 @@ object Logika {
 
       exp.attr.resOpt.get match {
         case AST.ResolvedInfo.BuiltIn(kind) if isBasic(exp.typedOpt.get) =>
-          val (s1, v) = evalExp(s0, exp.exp, reporter)
+          val (s1, v) = evalExp(rtCheck, s0, exp.exp, reporter)
           if (!s1.status) {
             return (s1, State.errorValue)
           }
@@ -257,7 +277,7 @@ object Logika {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryRem =>
           case _ => return F
         }
-        return T
+        return rtCheck
       }
 
       def checkNonZero(s0: State, op: String, value: State.Value, pos: Position): State = {
@@ -278,14 +298,14 @@ object Logika {
 
       exp.attr.resOpt.get match {
         case AST.ResolvedInfo.BuiltIn(kind) =>
-          val (s1, v1) = evalExp(s0, exp.left, reporter)
+          val (s1, v1) = evalExp(rtCheck, s0, exp.left, reporter)
           val tipe = v1.tipe.asInstanceOf[AST.Typed.Name]
           if (isCond(kind)) {
             halt(s"TODO: $e") // TODO
           } else if (isSeq(kind)) {
             halt(s"TODO: $e") // TODO
           } else if (isBasic(tipe)) {
-            val (s2, v2) = evalExp(s1, exp.right, reporter)
+            val (s2, v2) = evalExp(rtCheck, s1, exp.right, reporter)
             val s3: State = if (reqNonZeroCheck(kind)) {
               checkNonZero(s2, exp.op, v2, exp.right.posOpt.get)
             } else {
@@ -309,7 +329,7 @@ object Logika {
       def evalField(t: AST.Typed): (State, State.Value) = {
         receiverOpt match {
           case Some(receiver) =>
-            val (s0, o) = evalExp(state, receiver, reporter)
+            val (s0, o) = evalExp(rtCheck, state, receiver, reporter)
             if (!s0.status) {
               return (s0, State.errorValue)
             }
@@ -349,7 +369,7 @@ object Logika {
       var current = state
       var args = ISZ[State.Value]()
       for (arg <- exp.args) {
-        val (s0, v) = evalExp(current, arg, reporter)
+        val (s0, v) = evalExp(rtCheck, current, arg, reporter)
         if (!s0.status) {
           return (s0, State.errorValue)
         }
@@ -409,17 +429,18 @@ object Logika {
           exp.ident.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Var =>
               return evalSelectH(res, exp.receiverOpt, exp.ident.id.value, exp.ident.typedOpt.get, exp.ident.posOpt.get)
-            case _ => return evalExp(state, rcv, reporter)
+            case _ => return evalExp(rtCheck, state, rcv, reporter)
           }
-        case _ => return evalExp(state, exp.ident, reporter)
+        case _ => return evalExp(rtCheck, state, exp.ident, reporter)
       }
     }
 
     def evalSeqSelect(exp: AST.Exp.Invoke): (State, State.Value) = {
       val (s0, seq): (State, State.Value) = evalReceiver(exp)
-      val (s1, i) = evalExp(s0, exp.args(0), reporter)
-      val (s2, v) = s1.freshSym(exp.typedOpt.get, exp.posOpt.get)
-      return (s2.addClaim(State.Claim.Let.SeqLookup(v, seq, i,
+      val (s1, i) = evalExp(rtCheck, s0, exp.args(0), reporter)
+      val s2 = checkSeqIndexing(rtCheck, s1, seq, i, exp.args(0).posOpt, reporter)
+      val (s3, v) = s2.freshSym(exp.typedOpt.get, exp.posOpt.get)
+      return (s3.addClaim(State.Claim.Let.SeqLookup(v, seq, i,
         smt2.typeOpId(seq.tipe.asInstanceOf[AST.Typed.Name], "at"))), v)
     }
 
@@ -447,7 +468,7 @@ object Logika {
 
     def evalQuantType(quant: AST.Exp.QuantType): (State, State.Value) = {
       val s0 = state(claims = ISZ())
-      val (s1, v) = evalAssignExp(s0, quant.fun.exp, reporter)
+      val (s1, v) = evalAssignExp(rtCheck, s0, quant.fun.exp, reporter)
       val pos = quant.fun.exp.asStmt.posOpt.get
       val (s2, expSym) = value2Sym(s1, v, pos)
       val quantClaims = s1.claims :+ State.Claim.Prop(T, expSym)
@@ -498,8 +519,8 @@ object Logika {
     }
   }
 
-  def evalAssume(title: String, s0: State, cond: AST.Exp, reporter: Reporter): State = {
-    val (s1, v) = evalExp(s0, cond, reporter)
+  def evalAssume(rtCheck: B, title: String, s0: State, cond: AST.Exp, reporter: Reporter): State = {
+    val (s1, v) = evalExp(rtCheck, s0, cond, reporter)
     if (!s1.status) {
       return s1
     }
@@ -510,8 +531,8 @@ object Logika {
     return s3(status = sat)
   }
 
-  def evalAssert(title: String, s0: State, cond: AST.Exp, reporter: Reporter): State = {
-    val (s1, v) = evalExp(s0, cond, reporter)
+  def evalAssert(rtCheck: B, title: String, s0: State, cond: AST.Exp, reporter: Reporter): State = {
+    val (s1, v) = evalExp(rtCheck, s0, cond, reporter)
     if (!s1.status) {
       return s1
     }
@@ -526,9 +547,9 @@ object Logika {
     return s2(status = valid, claims = s2.claims :+ conclusion)
   }
 
-  def evalAssignExp(s0: State, ae: AST.AssignExp, reporter: Reporter): (State, State.Value) = {
+  def evalAssignExp(rtCheck: B, s0: State, ae: AST.AssignExp, reporter: Reporter): (State, State.Value) = {
     ae match {
-      case AST.Stmt.Expr(exp) => return evalExp(s0, exp, reporter)
+      case AST.Stmt.Expr(exp) => return evalExp(rtCheck, s0, exp, reporter)
       case _ => halt(s"TODO: $ae") // TODO
     }
   }
@@ -553,7 +574,7 @@ object Logika {
     }
 
     def evalAssignLocal(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: AST.AssignExp, idPos: Position): State = {
-      val (s1, init) = evalAssignExp(s0, rhs, reporter)
+      val (s1, init) = evalAssignExp(T, s0, rhs, reporter)
       if (!s1.status) {
         return s1
       }
@@ -574,17 +595,18 @@ object Logika {
             val receiver = lhs.receiverOpt.get
             val t = receiver.typedOpt.get.asInstanceOf[AST.Typed.Name]
             val receiverPos = receiver.posOpt.get
-            val (s3, a) = evalExp(s2, receiver, reporter)
-            val (s4, i) = evalExp(s3, lhs.args(0), reporter)
-            val (s5, newSym) = s4.freshSym(t, receiverPos)
-            return assignRec(s5.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver, newSym)
+            val (s3, a) = evalExp(T, s2, receiver, reporter)
+            val (s4, i) = evalExp(T, s3, lhs.args(0), reporter)
+            val s5 = checkSeqIndexing(T, s4, a, i, lhs.args(0).posOpt, reporter)
+            val (s6, newSym) = s5.freshSym(t, receiverPos)
+            return assignRec(s6.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver, newSym)
           case _: AST.Exp.Select => halt(s"TODO: $assignStmt") // TODO
           case _ => halt(s"Infeasible: $lhs")
         }
 
       }
 
-      val (s1, init) = evalAssignExp(s0, assignStmt.rhs, reporter)
+      val (s1, init) = evalAssignExp(T, s0, assignStmt.rhs, reporter)
       if (!s1.status) {
         return s1
       }
@@ -593,7 +615,7 @@ object Logika {
     }
 
     def evalIf(s0: State, ifStmt: AST.Stmt.If): State = {
-      val (s1, v) = evalExp(s0, ifStmt.cond, reporter)
+      val (s1, v) = evalExp(T, s0, ifStmt.cond, reporter)
       val pos = ifStmt.cond.posOpt.get
       val (s2, cond) = value2Sym(s1, v, pos)
       if (!s2.status) {
@@ -630,7 +652,7 @@ object Logika {
     }
 
     def evalWhile(s0: State, whileStmt: AST.Stmt.While): State = {
-      val s1 = checkExps("Loop invariant", " at the beginning of while-loop", s0, whileStmt.invariants, reporter)
+      val s1 = checkExps(F, "Loop invariant", " at the beginning of while-loop", s0, whileStmt.invariants, reporter)
       if (!s1.status) {
         return s1
       }
@@ -645,7 +667,7 @@ object Logika {
         srw
       }
       val s2 = State(T, s0R.claims ++ (for (i <- s0.claims.size until s1.claims.size) yield s1.claims(i)), s0R.nextFresh)
-      val (s3, v) = evalExp(s2, whileStmt.cond, reporter)
+      val (s3, v) = evalExp(T, s2, whileStmt.cond, reporter)
       val pos = whileStmt.cond.posOpt.get
       val (s4, cond) = value2Sym(s3, v, pos)
       val prop = State.Claim.Prop(T, cond)
@@ -655,7 +677,7 @@ object Logika {
         val s5 = evalStmts(s4(claims = thenClaims), whileStmt.body.stmts, reporter)
         thenSat = s5.status
         if (thenSat) {
-          val s6 = checkExps("Loop invariant", " at the end of while-loop",
+          val s6 = checkExps(F, "Loop invariant", " at the end of while-loop",
             s5, whileStmt.invariants, reporter)
           s6.nextFresh
         } else {
@@ -678,12 +700,12 @@ object Logika {
       val loopId: ISZ[String] = whileStmt.context
 
       def whileRec(current: State, numLoops: Z): State = {
-        val s1 = checkExps("Loop invariant", " at the beginning of while-loop", current,
+        val s1 = checkExps(F, "Loop invariant", " at the beginning of while-loop", current,
           whileStmt.invariants, reporter)
         if (!s1.status) {
           return s1
         }
-        val (s2, v) = evalExp(s1, whileStmt.cond, reporter)
+        val (s2, v) = evalExp(T, s1, whileStmt.cond, reporter)
         val pos = whileStmt.cond.posOpt.get
         val (s3, cond) = value2Sym(s2, v, pos)
         val prop = State.Claim.Prop(T, cond)
@@ -730,7 +752,7 @@ object Logika {
     def evalReturn(s0: State, returnStmt: AST.Stmt.Return): State = {
       returnStmt.expOpt match {
         case Some(exp) =>
-          val (s1, v) = evalExp(s0, exp, reporter)
+          val (s1, v) = evalExp(T, s0, exp, reporter)
           val (s2, sym) = value2Sym(s1, v, exp.posOpt.get)
           return s2.addClaim(State.Claim.Let.CurrentId(sym, ISZ(), "Res", None()))
         case _ => return state
@@ -745,8 +767,8 @@ object Logika {
         } else {
           reporter.info(stmt.posOpt, Logika.kind,
             st"""Path conditions = {
-                |    ${(sts, ",\n")}
-                |  }""".render
+                |      ${(sts, ",\n")}
+                |    }""".render
           )
         }
       }
@@ -758,10 +780,10 @@ object Logika {
         e.attr.resOpt.get match {
           case AST.ResolvedInfo.BuiltIn(kind) =>
             kind match {
-              case AST.ResolvedInfo.BuiltIn.Kind.Assert => return evalAssert("Assertion", state, e.args(0), reporter)
-              case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg => return evalAssert("Assertion", state, e.args(0), reporter)
-              case AST.ResolvedInfo.BuiltIn.Kind.Assume => return evalAssume("Assumption", state, e.args(0), reporter)
-              case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg => return evalAssume("Assumption", state, e.args(0), reporter)
+              case AST.ResolvedInfo.BuiltIn.Kind.Assert => return evalAssert(T, "Assertion", state, e.args(0), reporter)
+              case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg => return evalAssert(T, "Assertion", state, e.args(0), reporter)
+              case AST.ResolvedInfo.BuiltIn.Kind.Assume => return evalAssume(T,"Assumption", state, e.args(0), reporter)
+              case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg => return evalAssume(T, "Assumption", state, e.args(0), reporter)
               case _ =>
                 halt(s"TODO: $stmt") // TODO
             }
@@ -797,8 +819,8 @@ object Logika {
 
   }
 
-  def checkExp(title: String, titleSuffix: String, s0: State, exp: AST.Exp, reporter: Reporter): State = {
-    val (s1, v) = evalExp(s0, exp, reporter)
+  def checkExp(rtCheck: B, title: String, titleSuffix: String, s0: State, exp: AST.Exp, reporter: Reporter): State = {
+    val (s1, v) = evalExp(rtCheck, s0, exp, reporter)
     val pos = exp.posOpt.get
     val (s2, sym) = value2Sym(s1, v, pos)
     val prop = State.Claim.Prop(T, sym)
@@ -812,13 +834,13 @@ object Logika {
     return s2(status = valid, claims = s2.claims :+ prop)
   }
 
-  def checkExps(title: String, titleSuffix: String, s0: State, exps: ISZ[AST.Exp], reporter: Reporter): State = {
+  def checkExps(rtCheck: B, title: String, titleSuffix: String, s0: State, exps: ISZ[AST.Exp], reporter: Reporter): State = {
     var current = s0
     for (exp <- exps) {
       if (!current.status) {
         return current
       }
-      current = checkExp(title, titleSuffix, current, exp, reporter)
+      current = checkExp(rtCheck, title, titleSuffix, current, exp, reporter)
     }
     return current
   }
