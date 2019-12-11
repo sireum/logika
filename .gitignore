@@ -18,5 +18,6 @@ target
 /lib
 /runtime
 /slang
+/cache
 *.cmd.jar
 *.cmd.com
