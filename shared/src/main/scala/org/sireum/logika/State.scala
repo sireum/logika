@@ -1,6 +1,6 @@
 // #Sireum
 /*
- Copyright (c) 2019, Robby, Kansas State University
+ Copyright (c) 2020, Robby, Kansas State University
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -99,6 +99,16 @@ object State {
 
 
   object Value {
+
+    @datatype class Unit(@hidden val pos: Position) extends Value {
+      @pure override def tipe: AST.Typed.Name = {
+        return AST.Typed.unit
+      }
+
+      @pure override def toRawST: ST = {
+        return st"()"
+      }
+    }
 
     @datatype class B(value: org.sireum.B, @hidden val pos: Position) extends Value {
       @pure override def tipe: AST.Typed.Name = {

@@ -2,7 +2,7 @@
 // @formatter:off
 
 /*
- Copyright (c) 2019, Robby, Kansas State University
+ Copyright (c) 2020, Robby, Kansas State University
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -49,6 +49,7 @@ object StateTransformer {
 
     @pure def preStateValue(ctx: Context, o: State.Value): PreResult[Context, State.Value] = {
       o match {
+        case o: State.Value.Unit => return preStateValueUnit(ctx, o)
         case o: State.Value.B => return preStateValueB(ctx, o)
         case o: State.Value.Z => return preStateValueZ(ctx, o)
         case o: State.Value.C => return preStateValueC(ctx, o)
@@ -135,6 +136,10 @@ object StateTransformer {
     }
 
     @pure def preStateOFun(ctx: Context, o: State.OFun): PreResult[Context, State.Fun] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateValueUnit(ctx: Context, o: State.Value.Unit): PreResult[Context, State.Value] = {
       return PreResult(ctx, T, None())
     }
 
@@ -575,6 +580,7 @@ object StateTransformer {
 
     @pure def postStateValue(ctx: Context, o: State.Value): TPostResult[Context, State.Value] = {
       o match {
+        case o: State.Value.Unit => return postStateValueUnit(ctx, o)
         case o: State.Value.B => return postStateValueB(ctx, o)
         case o: State.Value.Z => return postStateValueZ(ctx, o)
         case o: State.Value.C => return postStateValueC(ctx, o)
@@ -661,6 +667,10 @@ object StateTransformer {
     }
 
     @pure def postStateOFun(ctx: Context, o: State.OFun): TPostResult[Context, State.Fun] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateValueUnit(ctx: Context, o: State.Value.Unit): TPostResult[Context, State.Value] = {
       return TPostResult(ctx, None())
     }
 
@@ -1154,6 +1164,11 @@ import StateTransformer._
       val o2: State.Value = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val rOpt: TPostResult[Context, State.Value] = o2 match {
+        case o2: State.Value.Unit =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
         case o2: State.Value.B =>
           if (hasChanged)
             TPostResult(preR.ctx, Some(o2))
