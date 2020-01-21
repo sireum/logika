@@ -27,10 +27,12 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.lang.symbol.TypeInfo
+import org.sireum.lang.symbol._
+import org.sireum.lang.symbol.Resolver.QName
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Position, Reporter}
 import StateTransformer.{PrePost, PreResult}
+import org.sireum.lang.tipe.TypeHierarchy
 
 object Logika {
 
@@ -101,11 +103,11 @@ object Logika {
         }
         if (!reporter.hasIssue) {
           val smt2 = smt2f(th)
-          val logika = Logika(config, Context.empty, smt2)
+          val logika = Logika(th, config, Context.empty, smt2)
           logika.evalStmts(State.create, p.body.stmts, reporter)
           for (stmt <- p.body.stmts) {
             stmt match {
-              case stmt: AST.Stmt.Method => checkMethod(stmt, config, smt2, reporter)
+              case stmt: AST.Stmt.Method => checkMethod(th, stmt, config, smt2, reporter)
               case _ =>
             }
           }
@@ -114,7 +116,7 @@ object Logika {
     }
   }
 
-  def checkMethod(method: AST.Stmt.Method, config: Config, smt2: Smt2, reporter: Reporter): Unit = {
+  def checkMethod(th: TypeHierarchy, method: AST.Stmt.Method, config: Config, smt2: Smt2, reporter: Reporter): Unit = {
     def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
       val mctx = MethodContext(method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].owner :+ method.sig.id.value,
@@ -123,7 +125,7 @@ object Logika {
         caseLabels = if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
       var state = State.create
       val logika: Logika = {
-        val l = Logika(config, ctx, smt2)
+        val l = Logika(th, config, ctx, smt2)
         var localInMap = HashMap.empty[String, State.Value.Sym]
         for (v <- mctx.localMap.values) {
           val (mname, id, t) = v
@@ -154,7 +156,8 @@ object Logika {
   }
 }
 
-@record class Logika(config: Logika.Config,
+@record class Logika(th: lang.tipe.TypeHierarchy,
+                     config: Logika.Config,
                      context: Logika.Context,
                      smt2: Smt2) {
 
@@ -186,6 +189,10 @@ object Logika {
                     id: String, t: AST.Typed, idPosOpt: Option[Position]): (State, State.Value.Sym) = {
     val (s0, sym) = state.freshSym(t, pos)
     return (s0.addClaim(State.Claim.Let.CurrentId(sym, idContext, id, idPosOpt)), sym)
+  }
+
+  @pure def resIntro(pos: Position, state: State, context: ISZ[String], t: AST.Typed, posOpt: Option[Position]): (State, State.Value.Sym) = {
+    return idIntro(pos, state, context, "Res", t, posOpt)
   }
 
   def checkSeqIndexing(rtCheck: B, s0: State, seq: State.Value, i: State.Value, posOpt: Option[Position],
@@ -445,7 +452,7 @@ object Logika {
     }
 
     def evalResult(exp: AST.Exp.Result): (State, State.Value) = {
-      val (s, sym) = idIntro(exp.posOpt.get, state, ISZ(), "Res", exp.typedOpt.get, None())
+      val (s, sym) = resIntro(exp.posOpt.get, state, context.methodOpt.get.name, exp.typedOpt.get, None())
       return (s, sym)
     }
 
@@ -478,8 +485,73 @@ object Logika {
       return (s3.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
     }
 
-    val s0 = state
+    def methodInfo(name: QName): Info.Method = {
+      th.nameMap.get(name) match {
+        case Some(info: lang.symbol.Info.Method) => return info
+        case _ =>halt("Infeasible")
+      }
+    }
 
+    def evalObjectInvoke(invoke: AST.Exp.Invoke): (State, State.Value) = {
+      val res = invoke.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+      var s1 = state
+      var paramArgs = HashSMap.empty[AST.ResolvedInfo.LocalVar, (AST.Typed, AST.Exp)]
+      val ctx = res.owner :+ res.id
+      val info = methodInfo(ctx)
+      val contract = info.ast.contract
+      val isUnit = info.ast.sig.returnType.typedOpt == AST.Typed.unitOpt
+      for (pArg <- ops.ISZOps(info.ast.sig.params).zip(invoke.args)) {
+        val (p, arg) = pArg
+        val (s2, v) = evalExp(rtCheck, s1, arg, reporter)
+        val pos = arg.posOpt.get
+        val (s3, sym) = value2Sym(s2, v, pos)
+        val (s4, num) = s3.fresh
+        val id = p.id.value
+        paramArgs = paramArgs + AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, id) ~>
+          ((p.tipe.typedOpt.get, arg))
+        s1 = s4.addClaim(State.Claim.Let.Id(sym, ctx, id, num, ISZ(pos)))
+      }
+      contract match {
+        case contract: AST.MethodContract.Simple =>
+          for (require <- contract.requires) {
+            s1 = evalAssert(F, "Pre-condition", s1, require, reporter)
+          }
+          if (contract.modifiedObjectVars.nonEmpty || contract.modifiedRecordVars.nonEmpty) {
+            halt("TODO: rewrite Vars/fields as well") // TODO
+          }
+          val modLocals = contract.modifiedLocalVars
+          s1 = rewriteLocalVars(s1, modLocals.keys)
+          val result: State.Value = if (isUnit) {
+            State.Value.Unit(invoke.posOpt.get)
+          } else {
+            val posOpt = invoke.posOpt
+            val (s5, v) = resIntro(posOpt.get, s1, ctx, info.ast.sig.returnType.typedOpt.get, posOpt)
+            s1 = s5
+            v
+          }
+          for (ensure <- contract.ensures) {
+            s1 = evalAssume(F, "Post-condition", s1, ensure, reporter)
+          }
+          for (ptarg <- paramArgs.entries) {
+            val (p, (t, arg)) = ptarg
+            if (modLocals.contains(p)) {
+              val (s6, v) = idIntro(arg.posOpt.get, s1, p.context, p.id, t, None())
+              s1 = assignRec(s6, arg, v, reporter)
+            }
+          }
+          if (isUnit) {
+            s1 = rewriteLocalVars(s1, paramArgs.keys)
+          } else {
+            s1 = rewriteLocalVars(s1, paramArgs.keys :+
+              AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, "Res"))
+          }
+          return (s1, result)
+        case contract: AST.MethodContract.Cases =>
+          halt("TODO: contract cases") // TODO
+      }
+    }
+
+    val s0 = state
     e match {
       case e: AST.Exp.LitB => return (s0, State.Value.B(e.value, e.posOpt.get))
       case e: AST.Exp.LitC => return (s0, State.Value.C(e.value, e.posOpt.get))
@@ -498,6 +570,10 @@ object Logika {
             res.mode match {
               case AST.MethodMode.Constructor => return evalConstructor(e, res)
               case AST.MethodMode.Select => return evalSeqSelect(e)
+              case AST.MethodMode.Method =>
+                if (res.isInObject) {
+                  return evalObjectInvoke(e)
+                }
               case _ =>
             }
           case _ =>
@@ -508,6 +584,7 @@ object Logika {
       case e: AST.Exp.QuantType => return evalQuantType(e)
       case _ => halt(s"TODO: $e") // TODO
     }
+
   }
 
   def value2Sym(s0: State, v: State.Value, pos: Position): (State, State.Value.Sym) = {
@@ -554,23 +631,47 @@ object Logika {
     }
   }
 
+  def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym, idPos: Position): State = {
+    val s2: State =
+      if (decl) {
+        s0
+      } else {
+        val poss = StateTransformer(Logika.CurrentIdPossCollector(lcontext, id)).transformState(ISZ(), s0).ctx
+        assert(poss.nonEmpty)
+        val (s1, num) = s0.fresh
+        val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
+        StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, s1).resultOpt.get
+      }
+    return s2(claims = s2.claims :+ State.Claim.Let.CurrentId(rhs, lcontext, id, Some(idPos)))
+  }
+
+  def assignRec(s2: State, lhs: AST.Exp, rhs: State.Value.Sym, reporter: Reporter): State = {
+    lhs match {
+      case lhs: AST.Exp.Ident =>
+        lhs.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.LocalVar =>
+            return evalAssignLocalH(F, s2, res.context, res.id, rhs, lhs.posOpt.get)
+          case _ => halt(s"TODO: $lhs") // TODO
+        }
+      case lhs: AST.Exp.Invoke =>
+        val receiver = lhs.receiverOpt.get
+        val t = receiver.typedOpt.get.asInstanceOf[AST.Typed.Name]
+        val receiverPos = receiver.posOpt.get
+        val (s3, a) = evalExp(T, s2, receiver, reporter)
+        val (s4, i) = evalExp(T, s3, lhs.args(0), reporter)
+        val s5 = checkSeqIndexing(T, s4, a, i, lhs.args(0).posOpt, reporter)
+        val (s6, newSym) = s5.freshSym(t, receiverPos)
+        return assignRec(s6.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver,
+          newSym, reporter)
+      case _: AST.Exp.Select => halt(s"TODO: $lhs") // TODO
+      case _ => halt(s"Infeasible: $lhs")
+    }
+
+  }
+
   def evalStmt(state: State, stmt: AST.Stmt, reporter: Reporter): State = {
     if (!state.status) {
       return state
-    }
-
-    def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym, idPos: Position): State = {
-      val s2: State =
-        if (decl) {
-          s0
-        } else {
-          val poss = StateTransformer(Logika.CurrentIdPossCollector(lcontext, id)).transformState(ISZ(), s0).ctx
-          assert(poss.nonEmpty)
-          val (s1, num) = s0.fresh
-          val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
-          StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, s1).resultOpt.get
-        }
-      return s2(claims = s2.claims :+ State.Claim.Let.CurrentId(rhs, lcontext, id, Some(idPos)))
     }
 
     def evalAssignLocal(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: AST.AssignExp, idPos: Position): State = {
@@ -583,35 +684,13 @@ object Logika {
     }
 
     def evalAssign(s0: State, assignStmt: AST.Stmt.Assign): State = {
-      def assignRec(s2: State, lhs: AST.Exp, rhs: State.Value.Sym): State = {
-        lhs match {
-          case lhs: AST.Exp.Ident =>
-            lhs.attr.resOpt.get match {
-              case res: AST.ResolvedInfo.LocalVar =>
-                return evalAssignLocalH(F, s2, res.context, res.id, rhs, lhs.posOpt.get)
-              case _ => halt(s"TODO: $assignStmt") // TODO
-            }
-          case lhs: AST.Exp.Invoke =>
-            val receiver = lhs.receiverOpt.get
-            val t = receiver.typedOpt.get.asInstanceOf[AST.Typed.Name]
-            val receiverPos = receiver.posOpt.get
-            val (s3, a) = evalExp(T, s2, receiver, reporter)
-            val (s4, i) = evalExp(T, s3, lhs.args(0), reporter)
-            val s5 = checkSeqIndexing(T, s4, a, i, lhs.args(0).posOpt, reporter)
-            val (s6, newSym) = s5.freshSym(t, receiverPos)
-            return assignRec(s6.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver, newSym)
-          case _: AST.Exp.Select => halt(s"TODO: $assignStmt") // TODO
-          case _ => halt(s"Infeasible: $lhs")
-        }
-
-      }
 
       val (s1, init) = evalAssignExp(T, s0, assignStmt.rhs, reporter)
       if (!s1.status) {
         return s1
       }
       val (s2, sym) = value2Sym(s1, init, assignStmt.rhs.asStmt.posOpt.get)
-      return assignRec(s2, assignStmt.lhs, sym)
+      return assignRec(s2, assignStmt.lhs, sym, reporter)
     }
 
     def evalIf(s0: State, ifStmt: AST.Stmt.If): State = {
@@ -657,7 +736,10 @@ object Logika {
         return s1
       }
       val modLocalVars = whileStmt.modifiedLocalVars
-      val s0R: State = { // TODO: rewrite Vars as well
+      if (whileStmt.modifiedObjectVars.nonEmpty || whileStmt.modifiedRecordVars.nonEmpty) {
+        halt("TODO: rewrite Vars/fields as well") // TODO
+      }
+      val s0R: State = {
         var srw = rewriteLocalVars(s0(nextFresh = s1.nextFresh), modLocalVars.keys)
         for (p <- modLocalVars.entries) {
           val (res, (tipe, pos)) = p
@@ -753,8 +835,9 @@ object Logika {
       returnStmt.expOpt match {
         case Some(exp) =>
           val (s1, v) = evalExp(T, s0, exp, reporter)
-          val (s2, sym) = value2Sym(s1, v, exp.posOpt.get)
-          return s2.addClaim(State.Claim.Let.CurrentId(sym, ISZ(), "Res", None()))
+          val pos = exp.posOpt.get
+          val (s2, sym) = value2Sym(s1, v, pos)
+          return s2.addClaim(State.Claim.Let.CurrentId(sym, context.methodOpt.get.name, "Res", Some(pos)))
         case _ => return state
       }
     }
