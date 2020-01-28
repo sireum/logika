@@ -121,17 +121,24 @@ object Logika {
     }
   }
 
+  def logikaMethod(th: TypeHierarchy, config: Config, smt2: Smt2, name: ISZ[String],
+                   sig: AST.MethodSig, reads: ISZ[AST.Exp.Ident], modifies: ISZ[AST.Exp.Ident],
+                   caseLabels: ISZ[AST.Exp.LitString]): Logika = {
+    val mctx = MethodContext(name, sig, reads, modifies, HashMap.empty)
+    val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels)
+    return Logika(th, config, ctx, smt2)
+  }
+
   def checkMethod(th: TypeHierarchy, method: AST.Stmt.Method, config: Config, smt2: Smt2, reporter: Reporter): Unit = {
     def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
-      val mctx = MethodContext(method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].owner :+ method.sig.id.value,
-        method.sig, reads, modifies, HashMap.empty)
-      val ctx = Context.empty(methodOpt = Some(mctx),
-        caseLabels = if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
       var state = State.create
       val logika: Logika = {
-        val l = Logika(th, config, ctx, smt2)
+        val l = logikaMethod(th, config, smt2,
+          method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].owner :+ method.sig.id.value,
+          method.sig, reads, modifies, if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
         var localInMap = HashMap.empty[String, State.Value.Sym]
+        val mctx = l.context.methodOpt.get
         for (v <- mctx.localMap.values) {
           val (mname, id, t) = v
           val posOpt = id.attr.posOpt
@@ -139,7 +146,7 @@ object Logika {
           localInMap = localInMap + id.value ~> sym
           state = s
         }
-        l(context = ctx(methodOpt = Some(mctx(localInMap = localInMap))))
+        l(context = l.context(methodOpt = Some(mctx(localInMap = localInMap))))
       }
       for (r <- requires) {
         state = logika.evalAssume(F, "Precondition", state, r, reporter)
@@ -518,24 +525,26 @@ object Logika {
       }
       contract match {
         case contract: AST.MethodContract.Simple =>
+          val logikaComp = Logika.logikaMethod(th, config, smt2, ctx, info.ast.sig, contract.reads, contract.modifies,
+            ISZ())
           for (require <- contract.requires) {
-            s1 = evalAssert(F, "Pre-condition", s1, require, reporter)
+            s1 = logikaComp.evalAssert(F, "Pre-condition", s1, require, reporter)
           }
           if (contract.modifiedObjectVars.nonEmpty || contract.modifiedRecordVars.nonEmpty) {
             halt("TODO: rewrite Vars/fields as well") // TODO
           }
           val modLocals = contract.modifiedLocalVars
-          s1 = rewriteLocalVars(s1, modLocals.keys)
+          s1 = logikaComp.rewriteLocalVars(s1, modLocals.keys)
           val result: State.Value = if (isUnit) {
             State.Value.Unit(invoke.posOpt.get)
           } else {
             val posOpt = invoke.posOpt
-            val (s5, v) = resIntro(posOpt.get, s1, ctx, info.ast.sig.returnType.typedOpt.get, posOpt)
+            val (s5, v) = logikaComp.resIntro(posOpt.get, s1, ctx, info.ast.sig.returnType.typedOpt.get, posOpt)
             s1 = s5
             v
           }
           for (ensure <- contract.ensures) {
-            s1 = evalAssume(F, "Post-condition", s1, ensure, reporter)
+            s1 = logikaComp.evalAssume(F, "Post-condition", s1, ensure, reporter)
           }
           for (ptarg <- paramArgs.entries) {
             val (p, (t, arg)) = ptarg
@@ -620,11 +629,6 @@ object Logika {
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
     val conclusion = State.Claim.Prop(T, sym)
-    // ;{
-    //   val s3 = s2.addClaim(conclusion)
-    //   logPc(T, T, s3, reporter, None())
-    //   logPc(T, F, s3, reporter, None())
-    // }
     val pos = cond.posOpt.get
     val valid = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion, timeoutInMs,
       reporter)
