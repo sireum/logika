@@ -751,6 +751,10 @@ object State {
       return claimSTs.value
     }
 
+    @pure def claimsRawSTs(claims: ISZ[Claim]): ISZ[ST] = {
+      return for (c <- claims) yield c.toRawST
+    }
+
     @pure def possLines(poss: ISZ[Position]): ST = {
       return if (poss.size > 1) st"{${(for (pos <- poss) yield pos.beginLine, ", ")}}"
       else st"${poss(0).beginLine}"

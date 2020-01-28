@@ -56,6 +56,7 @@ object Logika {
                          loopBounds: HashMap[ISZ[String], Z],
                          smt2TimeoutInSeconds: Z,
                          logPc: B,
+                         logRawPc: B,
                          logVc: B)
 
   object Context {
@@ -105,12 +106,16 @@ object Logika {
           val smt2 = smt2f(th)
           val logika = Logika(th, config, Context.empty, smt2)
           logika.evalStmts(State.create, p.body.stmts, reporter)
-          for (stmt <- p.body.stmts) {
-            stmt match {
-              case stmt: AST.Stmt.Method => checkMethod(th, stmt, config, smt2, reporter)
-              case _ =>
+          def rec(stmts: ISZ[AST.Stmt]): Unit = {
+            for (stmt <- stmts) {
+              stmt match {
+                case stmt: AST.Stmt.Method => checkMethod(th, stmt, config, smt2, reporter)
+                case stmt: AST.Stmt.Object => rec(stmt.stmts)
+                case _ =>
+              }
             }
           }
+          rec(p.body.stmts)
         }
       case _ =>
     }
@@ -505,11 +510,11 @@ object Logika {
         val (s2, v) = evalExp(rtCheck, s1, arg, reporter)
         val pos = arg.posOpt.get
         val (s3, sym) = value2Sym(s2, v, pos)
-        val (s4, num) = s3.fresh
         val id = p.id.value
+        val t = p.tipe.typedOpt.get
         paramArgs = paramArgs + AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, id) ~>
-          ((p.tipe.typedOpt.get, arg))
-        s1 = s4.addClaim(State.Claim.Let.Id(sym, ctx, id, num, ISZ(pos)))
+          ((t, arg))
+        s1 = s3.addClaim(State.Claim.Let.CurrentId(sym, ctx, id, Some(pos)))
       }
       contract match {
         case contract: AST.MethodContract.Simple =>
@@ -615,6 +620,11 @@ object Logika {
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
     val conclusion = State.Claim.Prop(T, sym)
+    // ;{
+    //   val s3 = s2.addClaim(conclusion)
+    //   logPc(T, T, s3, reporter, None())
+    //   logPc(T, F, s3, reporter, None())
+    // }
     val pos = cond.posOpt.get
     val valid = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, conclusion, timeoutInMs,
       reporter)
@@ -842,24 +852,9 @@ object Logika {
       }
     }
 
-    def logPc(): Unit = {
-      if (config.logPc) {
-        val sts = State.Claim.claimsSTs(state.claims, State.Claim.Defs.empty)
-        if (sts.isEmpty) {
-          reporter.info(stmt.posOpt, Logika.kind, "Path conditions = {}")
-        } else {
-          reporter.info(stmt.posOpt, Logika.kind,
-            st"""Path conditions = {
-                |      ${(sts, ",\n")}
-                |    }""".render
-          )
-        }
-      }
-    }
-
     stmt match {
       case AST.Stmt.Expr(e: AST.Exp.Invoke) =>
-        logPc()
+        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
         e.attr.resOpt.get match {
           case AST.ResolvedInfo.BuiltIn(kind) =>
             kind match {
@@ -874,24 +869,25 @@ object Logika {
             halt(s"TODO: $stmt") // TODO
         }
       case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
-        logPc()
+        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
         stmt.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar =>
             return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.id.attr.posOpt.get)
           case _ => halt(s"TODO: $stmt") // TODO
         }
       case stmt: AST.Stmt.Assign =>
-        logPc()
+        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
         return evalAssign(state, stmt)
       case stmt: AST.Stmt.If =>
-        logPc()
+        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
         return evalIf(state, stmt)
       case stmt: AST.Stmt.While =>
-        logPc()
+        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
         return if (stmt.modifies.nonEmpty) evalWhile(state, stmt) else evalWhileUnroll(state, stmt)
       case stmt: AST.Stmt.Return =>
-        logPc()
+        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
         return evalReturn(state, stmt)
+      case stmt: AST.Stmt.Object => return state
       case _: AST.Stmt.Import => return state
       case _: AST.Stmt.Method => return state
       case _: AST.Stmt.SpecMethod => return state
@@ -900,6 +896,24 @@ object Logika {
         halt(s"TODO: $stmt") // TODO
     }
 
+  }
+
+  def logPc(enabled: B, raw: B, state: State, reporter: Reporter, posOpt: Option[Position]): Unit = {
+    if (enabled || raw) {
+      val sts: ISZ[ST] =
+        if (raw) State.Claim.claimsRawSTs(state.claims)
+        else State.Claim.claimsSTs(state.claims, State.Claim.Defs.empty)
+      if (sts.isEmpty) {
+        reporter.info(posOpt, Logika.kind, "Path conditions = {}")
+      } else {
+        reporter.info(posOpt, Logika.kind,
+          st"""Path conditions = {
+              |      ${(sts, ",\n")}
+              |    }""".
+          render
+        )
+      }
+    }
   }
 
   def checkExp(rtCheck: B, title: String, titleSuffix: String, s0: State, exp: AST.Exp, reporter: Reporter): State = {
@@ -969,7 +983,7 @@ object Logika {
     for (l <- localVars) {
       val poss = StateTransformer(Logika.CurrentIdPossCollector(l.context, l.id)).
         transformState(ISZ(), current).ctx
-      assert(poss.nonEmpty)
+      assert(poss.nonEmpty, s"No definition for $l")
       val (s1, num) = current.fresh
       current = s1
       locals = locals + (l.context, l.id) ~> ((poss, num))

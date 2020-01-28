@@ -49,6 +49,7 @@ object LogikaTest {
       loopBounds = HashMap.empty,
       smt2TimeoutInSeconds = 5,
       logPc = F,
+      logRawPc = F,
       logVc = F)
 }
 
