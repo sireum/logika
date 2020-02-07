@@ -360,8 +360,8 @@ object Logika {
         }
       }
 
-      def evalEnumElement(res: AST.ResolvedInfo.EnumElement): (State, State.Value) = {
-        return (state, State.Value.Enum(tipe.asInstanceOf[AST.Typed.Name], res.owner, res.name, res.ordinal, pos))
+      def evalEnumElement(eres: AST.ResolvedInfo.EnumElement): (State, State.Value) = {
+        return (state, State.Value.Enum(tipe.asInstanceOf[AST.Typed.Name], eres.owner, eres.name, eres.ordinal, pos))
       }
 
       res match {
