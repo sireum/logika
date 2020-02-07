@@ -245,6 +245,11 @@ object State {
       }
     }
 
+    @datatype class Enum(val tipe: AST.Typed.Name, owner: ISZ[org.sireum.String], id: org.sireum.String,
+                         ordinal: org.sireum.Z, @hidden val pos: Position) extends Value {
+      @strictpure override def toRawST: ST = st"${(owner, ".")}.$id"
+    }
+
     @datatype class Sym(num: org.sireum.Z, @hidden val tipe: AST.Typed, @hidden val pos: Position) extends Value {
 
       @pure override def toRawST: ST = {

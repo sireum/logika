@@ -120,6 +120,7 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Value]())
           }
           return r
+        case o: State.Value.Enum => return preStateValueEnum(ctx, o)
         case o: State.Value.Sym => return preStateValueSym(ctx, o)
       }
     }
@@ -218,6 +219,10 @@ object StateTransformer {
     }
 
     @pure def preStateValueU64(ctx: Context, o: State.Value.U64): PreResult[Context, State.Value.SubZ] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateValueEnum(ctx: Context, o: State.Value.Enum): PreResult[Context, State.Value] = {
       return PreResult(ctx, T, None())
     }
 
@@ -651,6 +656,7 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Value]())
           }
           return r
+        case o: State.Value.Enum => return postStateValueEnum(ctx, o)
         case o: State.Value.Sym => return postStateValueSym(ctx, o)
       }
     }
@@ -749,6 +755,10 @@ object StateTransformer {
     }
 
     @pure def postStateValueU64(ctx: Context, o: State.Value.U64): TPostResult[Context, State.Value.SubZ] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateValueEnum(ctx: Context, o: State.Value.Enum): TPostResult[Context, State.Value] = {
       return TPostResult(ctx, None())
     }
 
@@ -1245,6 +1255,11 @@ import StateTransformer._
           else
             TPostResult(preR.ctx, None())
         case o2: State.Value.U64 =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: State.Value.Enum =>
           if (hasChanged)
             TPostResult(preR.ctx, Some(o2))
           else

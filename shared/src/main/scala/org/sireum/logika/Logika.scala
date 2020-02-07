@@ -183,8 +183,10 @@ object Logika {
       case t: AST.Typed.Name =>
         smt2.typeHierarchy.typeMap.get(t.ids) match {
           case Some(_: TypeInfo.SubZ) => return T
+          case Some(_: TypeInfo.Enum) => return T
           case _ => return F
         }
+      case _: AST.Typed.Enum => return T
       case _ => return F
     }
     return T
@@ -358,6 +360,10 @@ object Logika {
         }
       }
 
+      def evalEnumElement(res: AST.ResolvedInfo.EnumElement): (State, State.Value) = {
+        return (state, State.Value.Enum(tipe.asInstanceOf[AST.Typed.Name], res.owner, res.name, res.ordinal, pos))
+      }
+
       res match {
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
@@ -368,6 +374,7 @@ object Logika {
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName =>
           return evalField(res.tpeOpt.get.ret)
         case res: AST.ResolvedInfo.LocalVar => return evalIdentH(res, tipe, pos)
+        case res: AST.ResolvedInfo.EnumElement => return evalEnumElement(res)
         case _ => halt(s"TODO: $e") // TODO
       }
     }
@@ -896,6 +903,7 @@ object Logika {
       case _: AST.Stmt.Method => return state
       case _: AST.Stmt.SpecMethod => return state
       case _: AST.Stmt.SpecVar => return state
+      case _: AST.Stmt.Enum => return state
       case _ =>
         halt(s"TODO: $stmt") // TODO
     }

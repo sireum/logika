@@ -371,8 +371,23 @@ object Smt2 {
       halt("TODO") // TODO
     }
 
-    def addEnum(name: ISZ[String], ti: Info.Enum): Unit = {
-      halt("TODO") // TODO
+    def addEnum(t: AST.Typed.Name, ti: TypeInfo.Enum): Unit = {
+      val tid = typeId(t)
+      val owner = ops.ISZOps(ti.name).dropRight(1)
+      val ordinalOp = typeOpId(t, "ordinal")
+      addTypeDecl(
+        st"""(declare-datatypes () (($tid
+            |  ${for (element <- ti.elements.keys) yield typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})))""")
+      addTypeDecl(
+        st"""(declare-fun $ordinalOp ($tid) Int)"""
+      )
+      val elements: ISZ[ST] = for (element <- ti.elements.keys) yield enumId(owner, element)
+      var ordinal = 0
+      for (element <- elements) {
+        addTypeDecl(st"(declare-const $element $tid)")
+        addTypeDecl(st"(assert (= ($ordinalOp $element) $ordinal))")
+        ordinal = ordinal + 1
+      }
     }
 
     def addTypeVar(t: AST.Typed.TypeVar): Unit = {
@@ -392,11 +407,11 @@ object Smt2 {
             case ti: TypeInfo.Adt => addAdt(t, ti)
             case ti: TypeInfo.Sig => addSig(t, ti)
             case ti: TypeInfo.SubZ => addSubZ(t, ti)
+            case ti: TypeInfo.Enum => addEnum(t, ti)
             case _ => halt(s"Infeasible: $t")
           }
         }
       case t: AST.Typed.TypeVar => addTypeVar(t)
-      case t: AST.Typed.Enum => addEnum(t.name, typeHierarchy.nameMap.get(t.name).get.asInstanceOf[Info.Enum])
       case _ => halt(s"TODO: $tipe") // TODO
     }
   }
@@ -530,6 +545,7 @@ object Smt2 {
       case v: State.Value.Z => return st"${v.value}"
       case v: State.Value.Sym => return st"cx!${v.num}"
       case v: State.Value.Range => return st"${v.value}"
+      case v: State.Value.Enum => return enumId(v.owner, v.id)
       case _ =>
         halt("TODO") // TODO
     }
@@ -580,6 +596,10 @@ object Smt2 {
 
   def qvar2ST(x: State.Claim.Let.Quant.Var): ST = {
     return st"(|l:${x.id}| ${typeId(x.tipe)})"
+  }
+
+  def enumId(owner: ISZ[String], id: String): ST = {
+    return st"|e:${(shorten(owner), ".")}.$id|"
   }
 
   def l2DeclST(c: State.Claim.Let): ST = {
@@ -642,14 +662,21 @@ object Smt2 {
         } else {
           c.op
         }
-        val r: ST = Smt2.binop2Smt2Map.get(c.tipe) match {
+        Smt2.binop2Smt2Map.get(c.tipe) match {
           case Some(m) =>
-            if (neg) st"(not (${m.get(binop).get} ${v2ST(c.left)} ${v2ST(c.right)}))"
+            return if (neg) st"(not (${m.get(binop).get} ${v2ST(c.left)} ${v2ST(c.right)}))"
             else st"(${m.get(binop).get} ${v2ST(c.left)} ${v2ST(c.right)})"
           case _ =>
-            halt("TODO") // TODO
         }
-        return r
+        typeHierarchy.typeMap.get(c.tipe.ids) match {
+          case Some(_: TypeInfo.Enum) =>
+            c.op match {
+              case string"==" => return st"(= ${v2ST(c.left)} ${v2ST(c.right)})"
+              case string"!=" => return st"(not (= ${v2ST(c.left)} ${v2ST(c.right)}))"
+            }
+          case _ =>
+        }
+        halt("TODO") // TODO
       case c: State.Claim.Let.Unary =>
         Smt2.unop2Smt2Map.get(c.sym.tipe) match {
           case Some(m) => return st"(${m.get(c.op).get} ${v2ST(c.sym)})"
@@ -789,6 +816,7 @@ object Smt2 {
           return st"${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]"
         }
       case t: AST.Typed.TypeVar => return st"${t.id}"
+      case t: AST.Typed.Enum => return st"${(shorten(t.name), ".")}"
       case _ => halt("TODO") // TODO
     }
   }
