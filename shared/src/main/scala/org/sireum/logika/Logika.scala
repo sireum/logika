@@ -43,10 +43,26 @@ object Logika {
     }
   }
 
+  @datatype class CurrentNamePossCollector(ids: ISZ[String]) extends PrePost[ISZ[Position]] {
+    override def preStateClaimLetCurrentName(ctx: ISZ[Position], o: State.Claim.Let.CurrentName): PreResult[ISZ[Position], State.Claim.Let] = {
+      return if (o.defPosOpt.nonEmpty && o.ids == ids) PreResult(ctx :+ o.defPosOpt.get, T, None())
+      else PreResult(ctx, T, None())
+    }
+  }
+
   @datatype class CurrentIdRewriter(map: HashMap[(ISZ[String], String), (ISZ[Position], Z)]) extends PrePost[B] {
     override def preStateClaimLetCurrentId(ctx: B, o: State.Claim.Let.CurrentId): PreResult[B, State.Claim.Let] = {
       map.get((o.context, o.id)) match {
         case Some((poss, num)) => return PreResult(ctx, T, Some(State.Claim.Let.Id(o.sym, o.context, o.id, num, poss)))
+        case _ => return PreResult(ctx, T, None())
+      }
+    }
+  }
+
+  @datatype class CurrentNameRewriter(map: HashMap[ISZ[String], (ISZ[Position], Z)]) extends PrePost[B] {
+    override def preStateClaimLetCurrentName(ctx: B, o: State.Claim.Let.CurrentName): PreResult[B, State.Claim.Let] = {
+      map.get(o.ids) match {
+        case Some((poss, num)) => return PreResult(ctx, T, Some(State.Claim.Let.Name(o.sym, o.ids, num, poss)))
         case _ => return PreResult(ctx, T, None())
       }
     }
@@ -72,9 +88,22 @@ object Logika {
                                 sig: AST.MethodSig,
                                 reads: ISZ[AST.Exp.Ident],
                                 modifies: ISZ[AST.Exp.Ident],
+                                objectVarInMap: HashMap[ISZ[String], State.Value.Sym],
                                 localInMap: HashMap[String, State.Value.Sym]) {
-    val localMap: HashMap[String, (ISZ[String], AST.Id, AST.Typed)] = {
-      var r = HashMap.empty[String, (ISZ[String], AST.Id, AST.Typed)]
+    val objectVarMap: HashSMap[ISZ[String], AST.Typed] = {
+      var r = HashSMap.empty[ISZ[String], AST.Typed]
+      for (x <- reads ++ modifies) {
+        x.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.Var if res.isInObject && !r.contains(res.owner :+ res.id) =>
+            val ids = res.owner :+ res.id
+            r = r + ids ~> x.typedOpt.get
+          case _ =>
+        }
+      }
+      r
+    }
+    val localMap: HashSMap[String, (ISZ[String], AST.Id, AST.Typed)] = {
+      var r = HashSMap.empty[String, (ISZ[String], AST.Id, AST.Typed)]
       for (p <- sig.params) {
         r = r + p.id.value ~> ((name, p.id, p.tipe.typedOpt.get))
       }
@@ -124,7 +153,7 @@ object Logika {
   def logikaMethod(th: TypeHierarchy, config: Config, smt2: Smt2, name: ISZ[String],
                    sig: AST.MethodSig, reads: ISZ[AST.Exp.Ident], modifies: ISZ[AST.Exp.Ident],
                    caseLabels: ISZ[AST.Exp.LitString]): Logika = {
-    val mctx = MethodContext(name, sig, reads, modifies, HashMap.empty)
+    val mctx = MethodContext(name, sig, reads, modifies, HashMap.empty, HashMap.empty)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels)
     return Logika(th, config, ctx, smt2)
   }
@@ -137,8 +166,16 @@ object Logika {
         val l = logikaMethod(th, config, smt2,
           method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].owner :+ method.sig.id.value,
           method.sig, reads, modifies, if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
-        var localInMap = HashMap.empty[String, State.Value.Sym]
         val mctx = l.context.methodOpt.get
+        var objectVarInMap = mctx.objectVarInMap
+        for (p <- mctx.objectVarMap.entries) {
+          val (ids, t) = p
+          val posOpt = th.nameMap.get(ids).get.posOpt
+          val (s, sym) = l.nameIntro(posOpt.get, state, ids, t, posOpt)
+          objectVarInMap = objectVarInMap + ids ~> sym
+          state = s
+        }
+        var localInMap = mctx.localInMap
         for (v <- mctx.localMap.values) {
           val (mname, id, t) = v
           val posOpt = id.attr.posOpt
@@ -146,7 +183,7 @@ object Logika {
           localInMap = localInMap + id.value ~> sym
           state = s
         }
-        l(context = l.context(methodOpt = Some(mctx(localInMap = localInMap))))
+        l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, localInMap = localInMap))))
       }
       for (r <- requires) {
         state = logika.evalAssume(F, "Precondition", state, r, reporter)
@@ -205,6 +242,12 @@ object Logika {
     return (s0.addClaim(State.Claim.Let.CurrentId(sym, idContext, id, idPosOpt)), sym)
   }
 
+  @pure def nameIntro(pos: Position, state: State, ids: ISZ[String], t: AST.Typed,
+                      namePosOpt: Option[Position]): (State, State.Value.Sym) = {
+    val (s0, sym) = state.freshSym(t, pos)
+    return (s0.addClaim(State.Claim.Let.CurrentName(sym, ids, namePosOpt)), sym)
+  }
+
   @pure def resIntro(pos: Position, state: State, context: ISZ[String], t: AST.Typed, posOpt: Option[Position]): (State, State.Value.Sym) = {
     return idIntro(pos, state, context, "Res", t, posOpt)
   }
@@ -236,11 +279,14 @@ object Logika {
 
     def evalIdentH(res: AST.ResolvedInfo, t: AST.Typed, pos: Position): (State, State.Value) = {
       res match {
+        case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
+          return (state, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
         case res: AST.ResolvedInfo.LocalVar =>
           val (s, sym) = idIntro(pos, state, res.context, res.id, t, None())
           return (s, sym)
-        case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
-          return (state, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
+        case res: AST.ResolvedInfo.Var if res.isInObject =>
+          val (s, sym) = nameIntro(pos, state, res.owner :+ res.id, t, None())
+          return (s, sym)
         case _ => halt(s"TODO: $e") // TODO
       }
     }
@@ -486,6 +532,14 @@ object Logika {
                   error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
                   return (state(status = F), State.Value.B(F, e.posOpt.get))
               }
+            case res: AST.ResolvedInfo.Var if res.isInObject =>
+              val ids = res.owner :+ res.id
+              context.methodOpt.get.objectVarInMap.get(ids) match {
+                case Some(sym) => return (state, sym)
+                case _ =>
+                  error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
+                  return (state(status = F), State.Value.B(F, e.posOpt.get))
+              }
             case _ => halt("TODO: var input")
           }
         case _ => halt("TODO: non-simple input")
@@ -532,21 +586,42 @@ object Logika {
       }
       contract match {
         case contract: AST.MethodContract.Simple =>
-          val logikaComp = Logika.logikaMethod(th, config, smt2, ctx, info.ast.sig, contract.reads, contract.modifies,
-            ISZ())
+          val posOpt = invoke.posOpt
+          val pos = posOpt.get
+          val logikaComp: Logika = {
+            val l = Logika.logikaMethod(th, config, smt2, ctx, info.ast.sig, contract.reads, contract.modifies,
+              ISZ())
+            val mctx = l.context.methodOpt.get
+            var objectVarInMap = mctx.objectVarInMap
+            for (p <- mctx.objectVarMap.entries) {
+              val (ids, t) = p
+              val (s4, sym) = nameIntro(pos, s1, ids, t, None())
+              objectVarInMap = objectVarInMap + ids ~> sym
+              s1 = s4
+            }
+            var localInMap = mctx.localInMap
+            for (p <- mctx.localMap.entries) {
+              val (id, (ctx, _, t)) = p
+              val (s5, sym) = idIntro(pos, s1, ctx, id, t, None())
+              localInMap = localInMap + id ~> sym
+              s1 = s5
+            }
+            l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, localInMap = localInMap))))
+          }
           for (require <- contract.requires) {
             s1 = logikaComp.evalAssert(F, "Pre-condition", s1, require, reporter)
           }
-          if (contract.modifiedObjectVars.nonEmpty || contract.modifiedRecordVars.nonEmpty) {
+          if (contract.modifiedRecordVars.nonEmpty) {
             halt("TODO: rewrite Vars/fields as well") // TODO
           }
+          val modObjectVars = contract.modifiedObjectVars
+          s1 = logikaComp.rewriteObjectVars(s1, modObjectVars, pos)
           val modLocals = contract.modifiedLocalVars
           s1 = logikaComp.rewriteLocalVars(s1, modLocals.keys)
           val result: State.Value = if (isUnit) {
             State.Value.Unit(invoke.posOpt.get)
           } else {
-            val posOpt = invoke.posOpt
-            val (s5, v) = logikaComp.resIntro(posOpt.get, s1, ctx, info.ast.sig.returnType.typedOpt.get, posOpt)
+            val (s5, v) = logikaComp.resIntro(pos, s1, ctx, info.ast.sig.returnType.typedOpt.get, posOpt)
             s1 = s5
             v
           }
@@ -666,12 +741,28 @@ object Logika {
     return s2(claims = s2.claims :+ State.Claim.Let.CurrentId(rhs, lcontext, id, Some(idPos)))
   }
 
+  def evalAssignObjectVarH(decl: B, s0: State, ids: ISZ[String], rhs: State.Value.Sym, namePos: Position): State = {
+    val s2: State =
+      if (decl) {
+        s0
+      } else {
+        val poss = StateTransformer(Logika.CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
+        assert(poss.nonEmpty)
+        val (s1, num) = s0.fresh
+        val objectVars = HashMap.empty[ISZ[String], (ISZ[Position], Z)] + ids ~> ((poss, num))
+        StateTransformer(Logika.CurrentNameRewriter(objectVars)).transformState(T, s1).resultOpt.get
+      }
+    return s2(claims = s2.claims :+ State.Claim.Let.CurrentName(rhs, ids, Some(namePos)))
+  }
+
   def assignRec(s2: State, lhs: AST.Exp, rhs: State.Value.Sym, reporter: Reporter): State = {
     lhs match {
       case lhs: AST.Exp.Ident =>
         lhs.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar =>
             return evalAssignLocalH(F, s2, res.context, res.id, rhs, lhs.posOpt.get)
+          case res: AST.ResolvedInfo.Var if res.isInObject =>
+            return evalAssignObjectVarH(F, s2, res.owner :+ res.id, rhs, lhs.posOpt.get)
           case _ => halt(s"TODO: $lhs") // TODO
         }
       case lhs: AST.Exp.Invoke =>
@@ -876,8 +967,7 @@ object Logika {
               case _ =>
                 halt(s"TODO: $stmt") // TODO
             }
-          case _ =>
-            halt(s"TODO: $stmt") // TODO
+          case _ => return evalExp(T, state, e, reporter)._1
         }
       case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
         logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
@@ -990,6 +1080,9 @@ object Logika {
   }
 
   def rewriteLocalVars(state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar]): State = {
+    if (localVars.isEmpty) {
+      return state
+    }
     var current = state
     var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)]
     for (l <- localVars) {
@@ -1000,8 +1093,30 @@ object Logika {
       current = s1
       locals = locals + (l.context, l.id) ~> ((poss, num))
     }
-    return if (locals.isEmpty) current
-    else StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, current).resultOpt.get
+    return StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, current).resultOpt.get
+  }
+
+  def rewriteObjectVars(state: State, objectVars: HashSMap[AST.ResolvedInfo.Var, (AST.Typed, Position)], pos: Position): State = {
+    if (objectVars.isEmpty) {
+      return state
+    }
+    var current = state
+    var vars = HashMap.empty[ISZ[String], (ISZ[Position], Z)]
+    for (l <- objectVars.keys) {
+      val ids = l.owner :+ l.id
+      val poss = StateTransformer(Logika.CurrentNamePossCollector(ids)).
+        transformState(ISZ(), current).ctx
+      assert(poss.nonEmpty, s"No definition for $l")
+      val (s1, num) = current.fresh
+      current = s1
+      vars = vars + ids ~> ((poss, num))
+    }
+    current = StateTransformer(Logika.CurrentNameRewriter(vars)).transformState(T, current).resultOpt.get
+    for (p <- objectVars.entries) {
+      val (x, (t, namePos)) = p
+      current = nameIntro(pos, current, x.owner :+ x.id, t, Some(namePos))._1
+    }
+    return current
   }
 
   def evalBlock(state: State, block: AST.Stmt.Block, reporter: Reporter): State = {
