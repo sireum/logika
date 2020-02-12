@@ -2,7 +2,7 @@
 
 import org.sireum._
 
-@spec var y: Z = $
+@spec var y: Z = 0
 
 var z: Z = 0
 
@@ -28,6 +28,10 @@ def test(x: Z): Unit = {
     Ensures(y == In(y) + 2)
   )
   val preZ = z
+  @spec val preY = y
   val r = inc(x)
   assert(r == x + 1 & z == preZ + 3)
+  Contract {
+    assert(y == preY + 2)
+  }
 }
