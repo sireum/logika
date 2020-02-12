@@ -580,7 +580,7 @@ object Logika {
         val (s3, sym) = value2Sym(s2, v, pos)
         val id = p.id.value
         val t = p.tipe.typedOpt.get
-        paramArgs = paramArgs + AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, id) ~>
+        paramArgs = paramArgs + AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id) ~>
           ((t, arg))
         s1 = s3.addClaim(State.Claim.Let.CurrentId(sym, ctx, id, Some(pos)))
       }
@@ -639,7 +639,7 @@ object Logika {
             s1 = rewriteLocalVars(s1, paramArgs.keys)
           } else {
             s1 = rewriteLocalVars(s1, paramArgs.keys :+
-              AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, "Res"))
+              AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "Res"))
           }
           return (s1, result)
         case contract: AST.MethodContract.Cases =>
@@ -954,6 +954,14 @@ object Logika {
       }
     }
 
+    def evalBlock(s0: State, block: AST.Stmt.Block): State = {
+      return evalBody(s0, block.body, reporter)
+    }
+
+    def evalSpecBlock(s0: State, block: AST.Stmt.SpecBlock): State = {
+      return evalBlock(s0, block.block)
+    }
+
     stmt match {
       case AST.Stmt.Expr(e: AST.Exp.Invoke) =>
         logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
@@ -988,7 +996,9 @@ object Logika {
       case stmt: AST.Stmt.Return =>
         logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
         return evalReturn(state, stmt)
-      case stmt: AST.Stmt.Object => return state
+      case stmt: AST.Stmt.Block => return evalBlock(state, stmt)
+      case stmt: AST.Stmt.SpecBlock => return evalSpecBlock(state, stmt)
+      case _: AST.Stmt.Object => return state
       case _: AST.Stmt.Import => return state
       case _: AST.Stmt.Method => return state
       case _: AST.Stmt.SpecMethod => return state
@@ -1117,10 +1127,6 @@ object Logika {
       current = nameIntro(pos, current, x.owner :+ x.id, t, Some(namePos))._1
     }
     return current
-  }
-
-  def evalBlock(state: State, block: AST.Stmt.Block, reporter: Reporter): State = {
-    return evalBody(state, block.body, reporter)
   }
 
   def error(posOpt: Option[Position], msg: String, reporter: Reporter): Unit = {
