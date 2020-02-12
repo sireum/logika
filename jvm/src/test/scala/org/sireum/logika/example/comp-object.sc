@@ -2,22 +2,16 @@
 
 import org.sireum._
 
-object Object {
+var z: Z = 0
 
-  var z: Z = 0
-
-  def inc(n: Z): Z = {
-    Contract(
-      Modifies(z),
-      Ensures(Res == n + 1, z == In(z) + 1)
-    )
-    z = z + 1
-    return n + 1
-  }
-
+def inc(n: Z): Z = {
+  Contract(
+    Modifies(z),
+    Ensures(Res == n + 1, z == In(z) + 1)
+  )
+  z = z + 1
+  return n + 1
 }
-
-import Object._
 
 def test(x: Z): Unit = {
   Contract(
