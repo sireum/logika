@@ -1002,6 +1002,7 @@ object Logika {
       case _: AST.Stmt.Import => return state
       case _: AST.Stmt.Method => return state
       case _: AST.Stmt.SpecMethod => return state
+      case stmt: AST.Stmt.Var if stmt.isSpec => return state
       case _: AST.Stmt.SpecVar => return state
       case _: AST.Stmt.Enum => return state
       case _ =>
