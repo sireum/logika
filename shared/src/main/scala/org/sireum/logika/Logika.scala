@@ -211,7 +211,7 @@ object Logika {
               state = s1.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
               fieldVarInMap = fieldVarInMap + id ~> sym
             }
-          case _ => None()
+          case _ =>
         }
         var localInMap = mctx.localInMap
         for (v <- mctx.localMap.values) {
@@ -320,10 +320,12 @@ object Logika {
         case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
           return (state, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
         case res: AST.ResolvedInfo.LocalVar =>
-          return idIntro(pos, state, res.context, res.id, t, None())
+          val (s0, r) = idIntro(pos, state, res.context, res.id, t, None())
+          return (s0, r)
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
-            return nameIntro(pos, state, res.owner :+ res.id, t, None())
+            val (s0, r) = nameIntro(pos, state, res.owner :+ res.id, t, None())
+            return (s0, r)
           } else {
             val mc = context.methodOpt.get
             val (s0, receiver) = idIntro(pos, state, mc.name, "this", mc.receiverTypeOpt.get, None())
