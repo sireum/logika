@@ -6,7 +6,15 @@ import org.sireum._
 
 @datatype class Bar(y: Z)
 
-@record class Baz(foo: Foo, var bar: Bar, z: Z)
+@record class Baz(foo: Foo, var bar: Bar, z: Z) {
+  def incBar(): Unit = {
+    Contract(
+      Modifies(bar),
+      Ensures(bar.y == In(bar).y + 1)
+    )
+    bar = Bar(bar.y + 1)
+  }
+}
 
 
 val baz = Baz(Foo(0), Bar(10), 100)

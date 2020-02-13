@@ -708,7 +708,7 @@ object Smt2 {
       case c: State.Claim.Let.SeqLookup =>
         return st"(${c.atId} ${v2ST(c.seq)} ${v2ST(c.index)})"
       case c: State.Claim.Let.FieldLookup =>
-        return st"(${c.id} ${v2ST(c.adt)})"
+        return st"(${typeOpId(c.adt.tipe, c.id)} ${v2ST(c.adt)})"
       case c: State.Claim.Let.SeqInBound =>
         return st"(${c.inBound} ${v2ST(c.seq)} ${v2ST(c.index)})"
       case c: State.Claim.Let.Apply =>

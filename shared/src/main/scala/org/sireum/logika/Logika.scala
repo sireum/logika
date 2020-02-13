@@ -90,6 +90,7 @@ object Logika {
                                 reads: ISZ[AST.Exp.Ident],
                                 modifies: ISZ[AST.Exp.Ident],
                                 objectVarInMap: HashMap[ISZ[String], State.Value.Sym],
+                                fieldVarInMap: HashMap[String, State.Value.Sym],
                                 localInMap: HashMap[String, State.Value.Sym]) {
     val objectVarMap: HashSMap[ISZ[String], AST.Typed] = {
       var r = HashSMap.empty[ISZ[String], AST.Typed]
@@ -98,6 +99,17 @@ object Logika {
           case res: AST.ResolvedInfo.Var if res.isInObject && !r.contains(res.owner :+ res.id) =>
             val ids = res.owner :+ res.id
             r = r + ids ~> x.typedOpt.get
+          case _ =>
+        }
+      }
+      r
+    }
+    val fieldVarMap: HashSMap[String, (AST.Typed, Option[Position])] = {
+      var r = HashSMap.empty[String, (AST.Typed, Option[Position])]
+      for (x <- reads ++ modifies) {
+        x.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.Var if !res.isInObject && !r.contains(res.id) =>
+            r = r + res.id ~> ((x.typedOpt.get, x.posOpt))
           case _ =>
         }
       }
@@ -156,7 +168,7 @@ object Logika {
   def logikaMethod(th: TypeHierarchy, config: Config, smt2: Smt2, name: ISZ[String], receiverTypeOpt: Option[AST.Typed],
                    sig: AST.MethodSig, reads: ISZ[AST.Exp.Ident], modifies: ISZ[AST.Exp.Ident],
                    caseLabels: ISZ[AST.Exp.LitString]): Logika = {
-    val mctx = MethodContext(name, receiverTypeOpt, sig, reads, modifies, HashMap.empty, HashMap.empty)
+    val mctx = MethodContext(name, receiverTypeOpt, sig, reads, modifies, HashMap.empty, HashMap.empty, HashMap.empty)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels)
     return Logika(th, config, ctx, smt2)
   }
@@ -167,6 +179,7 @@ object Logika {
       var state = State.create
       val logika: Logika = {
         val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+        val mname = res.owner :+ method.sig.id.value
         val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
           None()
         } else {
@@ -176,7 +189,7 @@ object Logika {
             case _ => halt("Infeasible")
           }
         }
-        val l = logikaMethod(th, config, smt2, res.owner :+ method.sig.id.value, receiverTypeOpt,
+        val l = logikaMethod(th, config, smt2, mname, receiverTypeOpt,
           method.sig, reads, modifies, if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
@@ -187,6 +200,19 @@ object Logika {
           objectVarInMap = objectVarInMap + ids ~> sym
           state = s
         }
+        var fieldVarInMap = mctx.fieldVarInMap
+        mctx.receiverTypeOpt match {
+          case Some(receiverType) =>
+            val (s0, thiz) = l.idIntro(method.posOpt.get, state, mname, "this", receiverType, method.sig.id.attr.posOpt)
+            state = s0
+            for (p <- mctx.fieldVarMap.entries) {
+              val (id, (t, posOpt)) = p
+              val (s1, sym) = s0.freshSym(t, posOpt.get)
+              state = s1.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
+              fieldVarInMap = fieldVarInMap + id ~> sym
+            }
+          case _ => None()
+        }
         var localInMap = mctx.localInMap
         for (v <- mctx.localMap.values) {
           val (mname, id, t) = v
@@ -195,7 +221,8 @@ object Logika {
           localInMap = localInMap + id.value ~> sym
           state = s
         }
-        l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, localInMap = localInMap))))
+        l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
+          localInMap = localInMap))))
       }
       for (r <- requires) {
         state = logika.evalAssume(F, "Precondition", state, r, reporter)
@@ -294,11 +321,16 @@ object Logika {
         case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
           return (state, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
         case res: AST.ResolvedInfo.LocalVar =>
-          val (s, sym) = idIntro(pos, state, res.context, res.id, t, None())
-          return (s, sym)
-        case res: AST.ResolvedInfo.Var if res.isInObject =>
-          val (s, sym) = nameIntro(pos, state, res.owner :+ res.id, t, None())
-          return (s, sym)
+          return idIntro(pos, state, res.context, res.id, t, None())
+        case res: AST.ResolvedInfo.Var =>
+          if (res.isInObject) {
+            return nameIntro(pos, state, res.owner :+ res.id, t, None())
+          } else {
+            val mc = context.methodOpt.get
+            val (s0, receiver) = idIntro(pos, state, mc.name, "this", mc.receiverTypeOpt.get, None())
+            val (s1, r) = s0.freshSym(t, pos)
+            return (s1.addClaim(State.Claim.Let.FieldLookup(r, receiver, res.id)), r)
+          }
         case _ => halt(s"TODO: $e") // TODO
       }
     }
@@ -378,6 +410,9 @@ object Logika {
       exp.attr.resOpt.get match {
         case AST.ResolvedInfo.BuiltIn(kind) =>
           val (s1, v1) = evalExp(rtCheck, s0, exp.left, reporter)
+          if (reporter.hasError) {
+            return (s1, State.errorValue)
+          }
           val tipe = v1.tipe.asInstanceOf[AST.Typed.Name]
           if (isCond(kind)) {
             halt(s"TODO: $e") // TODO
@@ -413,7 +448,7 @@ object Logika {
               return (s0, State.errorValue)
             }
             val (s1, sym) = s0.freshSym(t, pos)
-            return (s1.addClaim(State.Claim.Let.FieldLookup(sym, o, smt2.typeOpId(receiver.typedOpt.get, id).render)), sym)
+            return (s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id)), sym)
           case _ => halt(s"TODO: $e") // TODO
         }
       }
@@ -544,15 +579,24 @@ object Logika {
                   error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
                   return (state(status = F), State.Value.B(F, e.posOpt.get))
               }
-            case res: AST.ResolvedInfo.Var if res.isInObject =>
-              val ids = res.owner :+ res.id
-              context.methodOpt.get.objectVarInMap.get(ids) match {
-                case Some(sym) => return (state, sym)
-                case _ =>
-                  error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
-                  return (state(status = F), State.Value.B(F, e.posOpt.get))
+            case res: AST.ResolvedInfo.Var =>
+              if (res.isInObject) {
+                val ids = res.owner :+ res.id
+                context.methodOpt.get.objectVarInMap.get(ids) match {
+                  case Some(sym) => return (state, sym)
+                  case _ =>
+                    error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
+                    return (state(status = F), State.Value.B(F, e.posOpt.get))
+                }
+              } else {
+                context.methodOpt.get.fieldVarInMap.get(res.id) match {
+                  case Some(sym) => return (state, sym)
+                  case _ =>
+                    error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
+                    return (state(status = F), State.Value.B(F, e.posOpt.get))
+                }
               }
-            case _ => halt("TODO: var input")
+            case _ => halt(s"Infeasible: $exp")
           }
         case _ => halt("TODO: non-simple input")
       }
