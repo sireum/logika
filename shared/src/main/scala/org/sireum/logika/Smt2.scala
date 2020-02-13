@@ -706,11 +706,11 @@ object Smt2 {
             halt("TODO") // TODO
         }
       case c: State.Claim.Let.SeqLookup =>
-        return st"(${c.atId} ${v2ST(c.seq)} ${v2ST(c.index)})"
+        return st"(${typeOpId(c.seq.tipe, "at")} ${v2ST(c.seq)} ${v2ST(c.index)})"
       case c: State.Claim.Let.FieldLookup =>
         return st"(${typeOpId(c.adt.tipe, c.id)} ${v2ST(c.adt)})"
       case c: State.Claim.Let.SeqInBound =>
-        return st"(${c.inBound} ${v2ST(c.seq)} ${v2ST(c.index)})"
+        return st"(${typeOpId(c.seq.tipe, "inBound")} ${v2ST(c.seq)} ${v2ST(c.index)})"
       case c: State.Claim.Let.Apply =>
         halt("TODO") // TODO
       case c: State.Claim.Let.IApply =>
@@ -734,13 +734,13 @@ object Smt2 {
         }
         return st"(= ${v2ST(c.sym)} $rhs)"
       case c: State.Claim.Def.SeqLit =>
-        return st"(${c.seqLitId} ${(for (arg <- c.args) yield st"${v2ST(arg._1)} ${v2ST(arg._2)}", " ")} ${v2ST(c.sym)})"
+        return st"(${typeOpId(c.sym.tipe, s"new.${c.args.size}")} ${(for (arg <- c.args) yield st"${v2ST(arg._1)} ${v2ST(arg._2)}", " ")} ${v2ST(c.sym)})"
       case c: State.Claim.Def.SeqStore =>
-        return st"(${c.upId} ${v2ST(c.seq)} ${v2ST(c.index)} ${v2ST(c.element)} ${v2ST(c.sym)})"
+        return st"(${typeOpId(c.seq.tipe, "up")} ${v2ST(c.seq)} ${v2ST(c.index)} ${v2ST(c.element)} ${v2ST(c.sym)})"
       case c: State.Claim.Def.FieldStore =>
-        return st"(${c.upId} ${v2ST(c.adt)} ${v2ST(c.value)} ${v2ST(c.sym)})"
+        return st"(${typeOpId(c.adt.tipe, s"${c.id}_=")} ${v2ST(c.adt)} ${v2ST(c.value)} ${v2ST(c.sym)})"
       case c: State.Claim.Def.AdtLit =>
-        return st"(${c.newId} ${(for (arg <- c.args) yield v2ST(arg), " ")} ${v2ST(c.sym)})"
+        return st"(${typeOpId(c.sym.tipe, "new")} ${(for (arg <- c.args) yield v2ST(arg), " ")} ${v2ST(c.sym)})"
       case c: State.Claim.Prop =>
         return if (c.isPos) v2ST(c.value) else st"(not ${v2ST(c.value)})"
       case c: State.Claim.If =>

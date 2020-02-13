@@ -297,9 +297,8 @@ object Logika {
       return s0
     }
     val pos = posOpt.get
-    val inBoundId = smt2.typeOpId(seq.tipe, "inBound")
     val (s1, v) = s0.freshSym(AST.Typed.b, pos)
-    val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i, inBoundId))
+    val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
     val claim = State.Claim.Prop(T, v)
     val valid = smt2.valid(config.logVc, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims,
       claim, timeoutInMs, reporter)
@@ -535,10 +534,9 @@ object Logika {
           }
         }
         smt2.addSeqLit(t, indices.size)
-        return (s1.addClaim(State.Claim.Def.SeqLit(sym, ops.ISZOps(indices).zip(args),
-          smt2.typeOpId(t, s"new.${indices.size}"), smt2.typeOpId(t, "size"), smt2.typeOpId(t, "at"))), sym)
+        return (s1.addClaim(State.Claim.Def.SeqLit(sym, ops.ISZOps(indices).zip(args))), sym)
       } else {
-        return (s1.addClaim(State.Claim.Def.AdtLit(sym, args, smt2.typeOpId(t, "new"))), sym)
+        return (s1.addClaim(State.Claim.Def.AdtLit(sym, args)), sym)
       }
     }
 
@@ -559,8 +557,7 @@ object Logika {
       val (s1, i) = evalExp(rtCheck, s0, exp.args(0), reporter)
       val s2 = checkSeqIndexing(rtCheck, s1, seq, i, exp.args(0).posOpt, reporter)
       val (s3, v) = s2.freshSym(exp.typedOpt.get, exp.posOpt.get)
-      return (s3.addClaim(State.Claim.Let.SeqLookup(v, seq, i,
-        smt2.typeOpId(seq.tipe.asInstanceOf[AST.Typed.Name], "at"))), v)
+      return (s3.addClaim(State.Claim.Let.SeqLookup(v, seq, i)), v)
     }
 
     def evalResult(exp: AST.Exp.Result): (State, State.Value) = {
@@ -813,8 +810,8 @@ object Logika {
     val receiverType = context.methodOpt.get.receiverTypeOpt.get
     val (s1, o) = idIntro(pos, s0, lcontext, "this", receiverType, None())
     val (s2, newSym) = s1.freshSym(receiverType, pos)
-    return evalAssignLocalH(F, s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs,
-      smt2.typeOpId(receiverType, s"${id}_="))), lcontext, "this", newSym, pos)
+    return evalAssignLocalH(F, s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs)), lcontext, "this",
+      newSym, pos)
   }
 
   def assignRec(s0: State, lhs: AST.Exp, rhs: State.Value.Sym, reporter: Reporter): State = {
@@ -839,7 +836,7 @@ object Logika {
         val (s2, i) = evalExp(T, s1, lhs.args(0), reporter)
         val s3 = checkSeqIndexing(T, s2, a, i, lhs.args(0).posOpt, reporter)
         val (s4, newSym) = s3.freshSym(t, receiverPos)
-        return assignRec(s4.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver,
+        return assignRec(s4.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs)), receiver,
           newSym, reporter)
       case lhs: AST.Exp.Select =>
         val receiver = lhs.receiverOpt.get
@@ -848,7 +845,7 @@ object Logika {
         val (s1, o) = evalExp(T, s0, receiver, reporter)
         val (s2, newSym) = s1.freshSym(t, receiverPos)
         val id = lhs.id.value
-        return assignRec(s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs, smt2.typeOpId(t, s"${id}_="))),
+        return assignRec(s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs)),
           receiver, newSym, reporter)
       case _ => halt(s"Infeasible: $lhs")
     }

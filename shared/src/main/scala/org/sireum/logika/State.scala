@@ -501,7 +501,7 @@ object State {
 
     object Def {
 
-      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[(Value, Value)], @hidden seqLitId: ST, @hidden sizeId: ST, @hidden atId: ST) extends Def {
+      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[(Value, Value)]) extends Def {
         @pure def tipe: AST.Typed.Name = {
           return sym.tipe.asInstanceOf[AST.Typed.Name]
         }
@@ -515,7 +515,7 @@ object State {
         }
       }
 
-      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value, @hidden upId: ST) extends Def {
+      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value) extends Def {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${seq.toRawST}(${index.toRawST} ~> ${element.toRawST})"
         }
@@ -525,7 +525,7 @@ object State {
         }
       }
 
-      @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: String, value: Value, @hidden upId: ST) extends Def {
+      @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: String, value: Value) extends Def {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${adt.toRawST}($id = ${value.toRawST})"
         }
@@ -535,7 +535,7 @@ object State {
         }
       }
 
-      @datatype class AdtLit(val sym: Value.Sym, args: ISZ[Value], @hidden newId: ST) extends Def {
+      @datatype class AdtLit(val sym: Value.Sym, args: ISZ[Value]) extends Def {
         @pure def tipe: AST.Typed.Name = {
           return sym.tipe.asInstanceOf[AST.Typed.Name]
         }
@@ -684,7 +684,7 @@ object State {
         }
       }
 
-      @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value, @hidden atId: ST) extends Let {
+      @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${seq.toRawST}(${index.toRawST})"
         }
@@ -694,7 +694,7 @@ object State {
         }
       }
 
-      @datatype class SeqInBound(val sym: Value.Sym, seq: Value, index: Value, @hidden inBound: ST) extends Let {
+      @datatype class SeqInBound(val sym: Value.Sym, seq: Value, index: Value) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ inBound(${seq.toRawST}, ${index.toRawST})"
         }
