@@ -85,6 +85,7 @@ object Logika {
                          )
 
   @datatype class MethodContext(name: ISZ[String],
+                                receiverTypeOpt: Option[AST.Typed],
                                 sig: AST.MethodSig,
                                 reads: ISZ[AST.Exp.Ident],
                                 modifies: ISZ[AST.Exp.Ident],
@@ -138,8 +139,10 @@ object Logika {
           def rec(stmts: ISZ[AST.Stmt]): Unit = {
             for (stmt <- stmts) {
               stmt match {
-                case stmt: AST.Stmt.Method => checkMethod(th, stmt, config, smt2, reporter)
+                case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty => checkMethod(th, stmt, config, smt2, reporter)
                 case stmt: AST.Stmt.Object => rec(stmt.stmts)
+                case stmt: AST.Stmt.Adt => rec(stmt.stmts)
+                case stmt: AST.Stmt.Sig => rec(stmt.stmts)
                 case _ =>
               }
             }
@@ -150,10 +153,10 @@ object Logika {
     }
   }
 
-  def logikaMethod(th: TypeHierarchy, config: Config, smt2: Smt2, name: ISZ[String],
+  def logikaMethod(th: TypeHierarchy, config: Config, smt2: Smt2, name: ISZ[String], receiverTypeOpt: Option[AST.Typed],
                    sig: AST.MethodSig, reads: ISZ[AST.Exp.Ident], modifies: ISZ[AST.Exp.Ident],
                    caseLabels: ISZ[AST.Exp.LitString]): Logika = {
-    val mctx = MethodContext(name, sig, reads, modifies, HashMap.empty, HashMap.empty)
+    val mctx = MethodContext(name, receiverTypeOpt, sig, reads, modifies, HashMap.empty, HashMap.empty)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels)
     return Logika(th, config, ctx, smt2)
   }
@@ -163,8 +166,17 @@ object Logika {
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
       var state = State.create
       val logika: Logika = {
-        val l = logikaMethod(th, config, smt2,
-          method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].owner :+ method.sig.id.value,
+        val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+        val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
+          None()
+        } else {
+          th.typeMap.get(res.owner).get match {
+            case ti: TypeInfo.Sig => Some(ti.tpe)
+            case ti: TypeInfo.Adt => Some(ti.tpe)
+            case _ => halt("Infeasible")
+          }
+        }
+        val l = logikaMethod(th, config, smt2, res.owner :+ method.sig.id.value, receiverTypeOpt,
           method.sig, reads, modifies, if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
@@ -589,7 +601,7 @@ object Logika {
           val posOpt = invoke.posOpt
           val pos = posOpt.get
           val logikaComp: Logika = {
-            val l = Logika.logikaMethod(th, config, smt2, ctx, info.ast.sig, contract.reads, contract.modifies,
+            val l = Logika.logikaMethod(th, config, smt2, ctx, None(), info.ast.sig, contract.reads, contract.modifies,
               ISZ())
             val mctx = l.context.methodOpt.get
             var objectVarInMap = mctx.objectVarInMap
@@ -741,41 +753,59 @@ object Logika {
     return s2(claims = s2.claims :+ State.Claim.Let.CurrentId(rhs, lcontext, id, Some(idPos)))
   }
 
-  def evalAssignObjectVarH(decl: B, s0: State, ids: ISZ[String], rhs: State.Value.Sym, namePos: Position): State = {
-    val s2: State =
-      if (decl) {
-        s0
-      } else {
-        val poss = StateTransformer(Logika.CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
-        assert(poss.nonEmpty)
-        val (s1, num) = s0.fresh
-        val objectVars = HashMap.empty[ISZ[String], (ISZ[Position], Z)] + ids ~> ((poss, num))
-        StateTransformer(Logika.CurrentNameRewriter(objectVars)).transformState(T, s1).resultOpt.get
-      }
+  def evalAssignObjectVarH(s0: State, ids: ISZ[String], rhs: State.Value.Sym, namePos: Position): State = {
+    val s2: State = {
+      val poss = StateTransformer(Logika.CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
+      assert(poss.nonEmpty)
+      val (s1, num) = s0.fresh
+      val objectVars = HashMap.empty[ISZ[String], (ISZ[Position], Z)] + ids ~> ((poss, num))
+      StateTransformer(Logika.CurrentNameRewriter(objectVars)).transformState(T, s1).resultOpt.get
+    }
     return s2(claims = s2.claims :+ State.Claim.Let.CurrentName(rhs, ids, Some(namePos)))
   }
 
-  def assignRec(s2: State, lhs: AST.Exp, rhs: State.Value.Sym, reporter: Reporter): State = {
+  def evalAssignThisVarH(s0: State, id: String, rhs: State.Value, pos: Position): State = {
+    val lcontext = context.methodOpt.get.name
+    val receiverType = context.methodOpt.get.receiverTypeOpt.get
+    val (s1, o) = idIntro(pos, s0, lcontext, "this", receiverType, None())
+    val (s2, newSym) = s1.freshSym(receiverType, pos)
+    return evalAssignLocalH(F, s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs,
+      smt2.typeOpId(receiverType, s"${id}_="))), lcontext, "this", newSym, pos)
+  }
+
+  def assignRec(s0: State, lhs: AST.Exp, rhs: State.Value.Sym, reporter: Reporter): State = {
     lhs match {
       case lhs: AST.Exp.Ident =>
         lhs.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar =>
-            return evalAssignLocalH(F, s2, res.context, res.id, rhs, lhs.posOpt.get)
-          case res: AST.ResolvedInfo.Var if res.isInObject =>
-            return evalAssignObjectVarH(F, s2, res.owner :+ res.id, rhs, lhs.posOpt.get)
-          case _ => halt(s"TODO: $lhs") // TODO
+            return evalAssignLocalH(F, s0, res.context, res.id, rhs, lhs.posOpt.get)
+          case res: AST.ResolvedInfo.Var =>
+            if (res.isInObject) {
+              return evalAssignObjectVarH(s0, res.owner :+ res.id, rhs, lhs.posOpt.get)
+            } else {
+              return evalAssignThisVarH(s0, lhs.id.value, rhs, lhs.posOpt.get)
+            }
+          case _ => halt(s"Infeasible: $lhs")
         }
       case lhs: AST.Exp.Invoke =>
         val receiver = lhs.receiverOpt.get
         val t = receiver.typedOpt.get.asInstanceOf[AST.Typed.Name]
         val receiverPos = receiver.posOpt.get
-        val (s3, a) = evalExp(T, s2, receiver, reporter)
-        val (s4, i) = evalExp(T, s3, lhs.args(0), reporter)
-        val s5 = checkSeqIndexing(T, s4, a, i, lhs.args(0).posOpt, reporter)
-        val (s6, newSym) = s5.freshSym(t, receiverPos)
-        return assignRec(s6.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver,
+        val (s1, a) = evalExp(T, s0, receiver, reporter)
+        val (s2, i) = evalExp(T, s1, lhs.args(0), reporter)
+        val s3 = checkSeqIndexing(T, s2, a, i, lhs.args(0).posOpt, reporter)
+        val (s4, newSym) = s3.freshSym(t, receiverPos)
+        return assignRec(s4.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs, smt2.typeOpId(t, "up"))), receiver,
           newSym, reporter)
-      case _: AST.Exp.Select => halt(s"TODO: $lhs") // TODO
+      case lhs: AST.Exp.Select =>
+        val receiver = lhs.receiverOpt.get
+        val t = receiver.typedOpt.get.asInstanceOf[AST.Typed.Name]
+        val receiverPos = receiver.posOpt.get
+        val (s1, o) = evalExp(T, s0, receiver, reporter)
+        val (s2, newSym) = s1.freshSym(t, receiverPos)
+        val id = lhs.id.value
+        return assignRec(s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs, smt2.typeOpId(t, s"${id}_="))),
+          receiver, newSym, reporter)
       case _ => halt(s"Infeasible: $lhs")
     }
 
@@ -1005,6 +1035,8 @@ object Logika {
       case stmt: AST.Stmt.Var if stmt.isSpec => return state
       case _: AST.Stmt.SpecVar => return state
       case _: AST.Stmt.Enum => return state
+      case _: AST.Stmt.Adt => return state
+      case _: AST.Stmt.Sig => return state
       case _ =>
         halt(s"TODO: $stmt") // TODO
     }

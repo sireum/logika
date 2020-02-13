@@ -48,6 +48,12 @@ object Smt2 {
 
   @datatype class SeqLit(t: AST.Typed.Name, size: Z)
 
+  @datatype class AdtFieldInfo(fieldId: String,
+                               fieldLookupId: ST,
+                               fieldStoreId: ST,
+                               fieldAdtType: ST,
+                               fieldType: AST.Typed)
+
   val basicTypes: HashSet[AST.Typed] = HashSet ++ ISZ[AST.Typed](
     AST.Typed.b,
     AST.Typed.z,
@@ -309,10 +315,10 @@ object Smt2 {
       addTypeDecl(st"(declare-const $thId Type)")
       val sm = addSub(ti.ast.isRoot, t, ti.ast.typeParams, thId, ti.parents)
 
-      @pure def fieldIdType(f: Info.Var): (ST, ST, AST.Typed, String) = {
+      @pure def fieldIdType(f: Info.Var): Smt2.AdtFieldInfo = {
         val ft = f.typedOpt.get.subst(sm)
         val id = f.ast.id.value
-        return (typeOpId(t, f.ast.id.value), adtId(ft), ft, id)
+        return Smt2.AdtFieldInfo(id, typeOpId(t, id), typeOpId(t, s"${id}_="), adtId(ft), ft)
       }
 
       if (ti.ast.isRoot) {
@@ -337,21 +343,37 @@ object Smt2 {
       } else {
         val newId = typeOpId(t, "new")
         val eqId = typeOpId(t, "==")
-        val fieldIdTypes: ISZ[(ST, ST, AST.Typed, String)] = for (f <- ti.vars.values) yield fieldIdType(f)
+        val neId = typeOpId(t, "!=")
+        val fieldIdTypes: ISZ[Smt2.AdtFieldInfo] = for (f <- ti.vars.values) yield fieldIdType(f)
         for (q <- fieldIdTypes) {
-          addTypeDecl(st"(declare-fun ${q._1} ($tId) ${q._2})")
+          addTypeDecl(st"(declare-fun ${q.fieldLookupId} ($tId) ${q.fieldAdtType})")
+        }
+        for (q <- fieldIdTypes) {
+          val upOp = typeOpId(t, s"${q.fieldId}_=")
+          val feqs: ISZ[ST] = for (q2 <- fieldIdTypes) yield
+            if (q2.fieldId == q.fieldId) st"(= (${q2.fieldLookupId} x!2) x!1)"
+            else st"(= (${q2.fieldLookupId} x!2) (${q2.fieldLookupId} x!0))"
+          addTypeDecl(
+            st"""(define-fun $upOp ((x!0 $tId) (x!1 ${q.fieldAdtType}) (x!2 $tId)) B
+                |  (and
+                |    (= (type-of x!2) (type-of x!0))
+                |    ${(feqs, "\n")}
+                |  )
+                |)"""
+          )
         }
         addTypeDecl(
-          st"""(define-fun $newId (${(for (q <- fieldIdTypes) yield st"(${q._4} ${q._2})", " ")} (x $tId)) B
+          st"""(define-fun $newId (${(for (q <- fieldIdTypes) yield st"(${q.fieldId} ${q.fieldAdtType})", " ")} (x!0 $tId)) B
               |  (and
-              |    (= (type-of x) $thId)
-              |    ${(for (q <- fieldIdTypes) yield st"(= (${q._1} x) ${q._4})", "\n")}))""")
+              |    (= (type-of x!0) $thId)
+              |    ${(for (q <- fieldIdTypes) yield st"(= (${q.fieldLookupId} x!0) ${q.fieldId})", "\n")}))""")
         addTypeDecl(
-          st"""(define-fun $eqId ((x $tId) (y $tId)) B
+          st"""(define-fun $eqId ((x!0 $tId) (x!1 $tId)) B
               |  (and
-              |    (= (type-of x) (type-of y) $thId)
-              |    ${(for (q <- fieldIdTypes) yield st"(${if (adtId(q._3).render == "ADT") st"|ADT.==|" else typeOpId(q._3, "==")} (${q._1} x) (${q._1} y))", "\n")}))"""
+              |    (= (type-of x!0) (type-of x!1) $thId)
+              |    ${(for (q <- fieldIdTypes) yield st"(${if (q.fieldAdtType.render == "ADT") st"|ADT.==|" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
+        addTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       }
     }
 
@@ -685,8 +707,6 @@ object Smt2 {
         }
       case c: State.Claim.Let.SeqLookup =>
         return st"(${c.atId} ${v2ST(c.seq)} ${v2ST(c.index)})"
-      case c: State.Claim.Let.FieldStore =>
-        halt("TODO") // TODO
       case c: State.Claim.Let.FieldLookup =>
         return st"(${c.id} ${v2ST(c.adt)})"
       case c: State.Claim.Let.SeqInBound =>
@@ -717,6 +737,8 @@ object Smt2 {
         return st"(${c.seqLitId} ${(for (arg <- c.args) yield st"${v2ST(arg._1)} ${v2ST(arg._2)}", " ")} ${v2ST(c.sym)})"
       case c: State.Claim.Def.SeqStore =>
         return st"(${c.upId} ${v2ST(c.seq)} ${v2ST(c.index)} ${v2ST(c.element)} ${v2ST(c.sym)})"
+      case c: State.Claim.Def.FieldStore =>
+        return st"(${c.upId} ${v2ST(c.adt)} ${v2ST(c.value)} ${v2ST(c.sym)})"
       case c: State.Claim.Def.AdtLit =>
         return st"(${c.newId} ${(for (arg <- c.args) yield v2ST(arg), " ")} ${v2ST(c.sym)})"
       case c: State.Claim.Prop =>

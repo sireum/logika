@@ -525,6 +525,16 @@ object State {
         }
       }
 
+      @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: String, value: Value, @hidden upId: ST) extends Def {
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${adt.toRawST}($id = ${value.toRawST})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${adt.toST(defs)}($id = ${value.toST(defs)})"
+        }
+      }
+
       @datatype class AdtLit(val sym: Value.Sym, args: ISZ[Value], @hidden newId: ST) extends Def {
         @pure def tipe: AST.Typed.Name = {
           return sym.tipe.asInstanceOf[AST.Typed.Name]
@@ -691,16 +701,6 @@ object State {
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
           return st"inBound(${seq.toST(defs)}, ${index.toST(defs)})"
-        }
-      }
-
-      @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: String, value: Value) extends Let {
-        @pure override def toRawST: ST = {
-          return st"${sym.toRawST} ≜ ${adt.toRawST}($id = ${value.toRawST})"
-        }
-
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
-          return st"${adt.toST(defs)}($id = ${value.toST(defs)})"
         }
       }
 

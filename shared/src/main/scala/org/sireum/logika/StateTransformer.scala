@@ -254,6 +254,13 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Def.FieldStore =>
+          val r: PreResult[Context, State.Claim] = preStateClaimDefFieldStore(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
+          }
+          return r
         case o: State.Claim.Def.AdtLit =>
           val r: PreResult[Context, State.Claim] = preStateClaimDefAdtLit(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
@@ -331,13 +338,6 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Let.FieldStore =>
-          val r: PreResult[Context, State.Claim] = preStateClaimLetFieldStore(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
-          }
-          return r
         case o: State.Claim.Let.FieldLookup =>
           val r: PreResult[Context, State.Claim] = preStateClaimLetFieldLookup(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
@@ -386,6 +386,7 @@ object StateTransformer {
       o match {
         case o: State.Claim.Def.SeqLit => return preStateClaimDefSeqLit(ctx, o)
         case o: State.Claim.Def.SeqStore => return preStateClaimDefSeqStore(ctx, o)
+        case o: State.Claim.Def.FieldStore => return preStateClaimDefFieldStore(ctx, o)
         case o: State.Claim.Def.AdtLit => return preStateClaimDefAdtLit(ctx, o)
         case o: State.Claim.Let.CurrentName =>
           val r: PreResult[Context, State.Claim.Def] = preStateClaimLetCurrentName(ctx, o) match {
@@ -457,13 +458,6 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
           }
           return r
-        case o: State.Claim.Let.FieldStore =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetFieldStore(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
         case o: State.Claim.Let.FieldLookup =>
           val r: PreResult[Context, State.Claim.Def] = preStateClaimLetFieldLookup(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
@@ -496,6 +490,10 @@ object StateTransformer {
       return PreResult(ctx, T, None())
     }
 
+    @pure def preStateClaimDefFieldStore(ctx: Context, o: State.Claim.Def.FieldStore): PreResult[Context, State.Claim.Def] = {
+      return PreResult(ctx, T, None())
+    }
+
     @pure def preStateClaimDefAdtLit(ctx: Context, o: State.Claim.Def.AdtLit): PreResult[Context, State.Claim.Def] = {
       return PreResult(ctx, T, None())
     }
@@ -512,7 +510,6 @@ object StateTransformer {
         case o: State.Claim.Let.Unary => return preStateClaimLetUnary(ctx, o)
         case o: State.Claim.Let.SeqLookup => return preStateClaimLetSeqLookup(ctx, o)
         case o: State.Claim.Let.SeqInBound => return preStateClaimLetSeqInBound(ctx, o)
-        case o: State.Claim.Let.FieldStore => return preStateClaimLetFieldStore(ctx, o)
         case o: State.Claim.Let.FieldLookup => return preStateClaimLetFieldLookup(ctx, o)
         case o: State.Claim.Let.Apply => return preStateClaimLetApply(ctx, o)
         case o: State.Claim.Let.IApply => return preStateClaimLetIApply(ctx, o)
@@ -560,10 +557,6 @@ object StateTransformer {
     }
 
     @pure def preStateClaimLetSeqInBound(ctx: Context, o: State.Claim.Let.SeqInBound): PreResult[Context, State.Claim.Let] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateClaimLetFieldStore(ctx: Context, o: State.Claim.Let.FieldStore): PreResult[Context, State.Claim.Let] = {
       return PreResult(ctx, T, None())
     }
 
@@ -790,6 +783,13 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Def.FieldStore =>
+          val r: TPostResult[Context, State.Claim] = postStateClaimDefFieldStore(ctx, o) match {
+           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
+          }
+          return r
         case o: State.Claim.Def.AdtLit =>
           val r: TPostResult[Context, State.Claim] = postStateClaimDefAdtLit(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
@@ -867,13 +867,6 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Let.FieldStore =>
-          val r: TPostResult[Context, State.Claim] = postStateClaimLetFieldStore(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
-          }
-          return r
         case o: State.Claim.Let.FieldLookup =>
           val r: TPostResult[Context, State.Claim] = postStateClaimLetFieldLookup(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
@@ -922,6 +915,7 @@ object StateTransformer {
       o match {
         case o: State.Claim.Def.SeqLit => return postStateClaimDefSeqLit(ctx, o)
         case o: State.Claim.Def.SeqStore => return postStateClaimDefSeqStore(ctx, o)
+        case o: State.Claim.Def.FieldStore => return postStateClaimDefFieldStore(ctx, o)
         case o: State.Claim.Def.AdtLit => return postStateClaimDefAdtLit(ctx, o)
         case o: State.Claim.Let.CurrentName =>
           val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetCurrentName(ctx, o) match {
@@ -993,13 +987,6 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
           }
           return r
-        case o: State.Claim.Let.FieldStore =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetFieldStore(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
         case o: State.Claim.Let.FieldLookup =>
           val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetFieldLookup(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
@@ -1032,6 +1019,10 @@ object StateTransformer {
       return TPostResult(ctx, None())
     }
 
+    @pure def postStateClaimDefFieldStore(ctx: Context, o: State.Claim.Def.FieldStore): TPostResult[Context, State.Claim.Def] = {
+      return TPostResult(ctx, None())
+    }
+
     @pure def postStateClaimDefAdtLit(ctx: Context, o: State.Claim.Def.AdtLit): TPostResult[Context, State.Claim.Def] = {
       return TPostResult(ctx, None())
     }
@@ -1048,7 +1039,6 @@ object StateTransformer {
         case o: State.Claim.Let.Unary => return postStateClaimLetUnary(ctx, o)
         case o: State.Claim.Let.SeqLookup => return postStateClaimLetSeqLookup(ctx, o)
         case o: State.Claim.Let.SeqInBound => return postStateClaimLetSeqInBound(ctx, o)
-        case o: State.Claim.Let.FieldStore => return postStateClaimLetFieldStore(ctx, o)
         case o: State.Claim.Let.FieldLookup => return postStateClaimLetFieldLookup(ctx, o)
         case o: State.Claim.Let.Apply => return postStateClaimLetApply(ctx, o)
         case o: State.Claim.Let.IApply => return postStateClaimLetIApply(ctx, o)
@@ -1096,10 +1086,6 @@ object StateTransformer {
     }
 
     @pure def postStateClaimLetSeqInBound(ctx: Context, o: State.Claim.Let.SeqInBound): TPostResult[Context, State.Claim.Let] = {
-      return TPostResult(ctx, None())
-    }
-
-    @pure def postStateClaimLetFieldStore(ctx: Context, o: State.Claim.Let.FieldStore): TPostResult[Context, State.Claim.Let] = {
       return TPostResult(ctx, None())
     }
 
@@ -1428,6 +1414,14 @@ import StateTransformer._
             TPostResult(r3.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), seq = r1.resultOpt.getOrElse(o2.seq), index = r2.resultOpt.getOrElse(o2.index), element = r3.resultOpt.getOrElse(o2.element))))
           else
             TPostResult(r3.ctx, None())
+        case o2: State.Claim.Def.FieldStore =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.adt)
+          val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.value)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
+            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt), value = r2.resultOpt.getOrElse(o2.value))))
+          else
+            TPostResult(r2.ctx, None())
         case o2: State.Claim.Def.AdtLit =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
@@ -1503,14 +1497,6 @@ import StateTransformer._
           val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.index)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
             TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), seq = r1.resultOpt.getOrElse(o2.seq), index = r2.resultOpt.getOrElse(o2.index))))
-          else
-            TPostResult(r2.ctx, None())
-        case o2: State.Claim.Let.FieldStore =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.adt)
-          val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.value)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt), value = r2.resultOpt.getOrElse(o2.value))))
           else
             TPostResult(r2.ctx, None())
         case o2: State.Claim.Let.FieldLookup =>
@@ -1656,6 +1642,14 @@ import StateTransformer._
             TPostResult(r3.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), seq = r1.resultOpt.getOrElse(o2.seq), index = r2.resultOpt.getOrElse(o2.index), element = r3.resultOpt.getOrElse(o2.element))))
           else
             TPostResult(r3.ctx, None())
+        case o2: State.Claim.Def.FieldStore =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.adt)
+          val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.value)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
+            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt), value = r2.resultOpt.getOrElse(o2.value))))
+          else
+            TPostResult(r2.ctx, None())
         case o2: State.Claim.Def.AdtLit =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
@@ -1731,14 +1725,6 @@ import StateTransformer._
           val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.index)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
             TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), seq = r1.resultOpt.getOrElse(o2.seq), index = r2.resultOpt.getOrElse(o2.index))))
-          else
-            TPostResult(r2.ctx, None())
-        case o2: State.Claim.Let.FieldStore =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.adt)
-          val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.value)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt), value = r2.resultOpt.getOrElse(o2.value))))
           else
             TPostResult(r2.ctx, None())
         case o2: State.Claim.Let.FieldLookup =>
@@ -1856,14 +1842,6 @@ import StateTransformer._
           val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.index)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
             TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), seq = r1.resultOpt.getOrElse(o2.seq), index = r2.resultOpt.getOrElse(o2.index))))
-          else
-            TPostResult(r2.ctx, None())
-        case o2: State.Claim.Let.FieldStore =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.adt)
-          val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.value)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt), value = r2.resultOpt.getOrElse(o2.value))))
           else
             TPostResult(r2.ctx, None())
         case o2: State.Claim.Let.FieldLookup =>
