@@ -48,7 +48,9 @@ object Smt2 {
 
   @datatype class SeqLit(t: AST.Typed.Name, size: Z)
 
-  @datatype class AdtFieldInfo(fieldId: String,
+  @datatype class AdtFieldInfo(isParam: B,
+                               isSpec: B,
+                               fieldId: String,
                                fieldLookupId: ST,
                                fieldStoreId: ST,
                                fieldAdtType: ST,
@@ -315,10 +317,16 @@ object Smt2 {
       addTypeDecl(st"(declare-const $thId Type)")
       val sm = addSub(ti.ast.isRoot, t, ti.ast.typeParams, thId, ti.parents)
 
-      @pure def fieldIdType(f: Info.Var): Smt2.AdtFieldInfo = {
+      @pure def fieldInfo(isParam: B, f: Info.Var): Smt2.AdtFieldInfo = {
         val ft = f.typedOpt.get.subst(sm)
         val id = f.ast.id.value
-        return Smt2.AdtFieldInfo(id, typeOpId(t, id), typeOpId(t, s"${id}_="), adtId(ft), ft)
+        return Smt2.AdtFieldInfo(isParam, F, id, typeOpId(t, id), typeOpId(t, s"${id}_="), adtId(ft), ft)
+      }
+
+      @pure def specFieldInfo(f: Info.SpecVar): Smt2.AdtFieldInfo = {
+        val ft = f.typedOpt.get.subst(sm)
+        val id = f.ast.id.value
+        return Smt2.AdtFieldInfo(F, T, id, typeOpId(t, id), typeOpId(t, s"${id}_="), adtId(ft), ft)
       }
 
       if (ti.ast.isRoot) {
@@ -344,13 +352,15 @@ object Smt2 {
         val newId = typeOpId(t, "new")
         val eqId = typeOpId(t, "==")
         val neId = typeOpId(t, "!=")
-        val fieldIdTypes: ISZ[Smt2.AdtFieldInfo] = for (f <- ti.vars.values) yield fieldIdType(f)
-        for (q <- fieldIdTypes) {
+        val params = HashSet.empty[String] ++ (for (p <- ti.ast.params) yield p.id.value)
+        val fieldInfos: ISZ[Smt2.AdtFieldInfo] =
+          (for (f <- ti.vars.values) yield fieldInfo(params.contains(f.ast.id.value), f)) ++ (for (f <- ti.specVars.values) yield specFieldInfo(f))
+        for (q <- fieldInfos) {
           addTypeDecl(st"(declare-fun ${q.fieldLookupId} ($tId) ${q.fieldAdtType})")
         }
-        for (q <- fieldIdTypes) {
+        for (q <- fieldInfos) {
           val upOp = typeOpId(t, s"${q.fieldId}_=")
-          val feqs: ISZ[ST] = for (q2 <- fieldIdTypes) yield
+          val feqs: ISZ[ST] = for (q2 <- fieldInfos) yield
             if (q2.fieldId == q.fieldId) st"(= (${q2.fieldLookupId} x!2) x!1)"
             else st"(= (${q2.fieldLookupId} x!2) (${q2.fieldLookupId} x!0))"
           addTypeDecl(
@@ -363,15 +373,15 @@ object Smt2 {
           )
         }
         addTypeDecl(
-          st"""(define-fun $newId (${(for (q <- fieldIdTypes) yield st"(${q.fieldId} ${q.fieldAdtType})", " ")} (x!0 $tId)) B
+          st"""(define-fun $newId (${(for (q <- fieldInfos if q.isParam) yield st"(${q.fieldId} ${q.fieldAdtType})", " ")} (x!0 $tId)) B
               |  (and
               |    (= (type-of x!0) $thId)
-              |    ${(for (q <- fieldIdTypes) yield st"(= (${q.fieldLookupId} x!0) ${q.fieldId})", "\n")}))""")
+              |    ${(for (q <- fieldInfos if q.isParam) yield st"(= (${q.fieldLookupId} x!0) ${q.fieldId})", "\n")}))""")
         addTypeDecl(
           st"""(define-fun $eqId ((x!0 $tId) (x!1 $tId)) B
               |  (and
               |    (= (type-of x!0) (type-of x!1) $thId)
-              |    ${(for (q <- fieldIdTypes) yield st"(${if (q.fieldAdtType.render == "ADT") st"|ADT.==|" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
+              |    ${(for (q <- fieldInfos) yield st"(${if (q.fieldAdtType.render == "ADT") st"|ADT.==|" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
         addTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       }

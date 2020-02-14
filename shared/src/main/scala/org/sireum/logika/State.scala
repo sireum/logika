@@ -257,7 +257,10 @@ object State {
       }
 
       @pure override def toST(defs: HashMap[org.sireum.Z, Claim.Def]): ST = {
-        return defs.get(num).get.toST(defs)
+        defs.get(num) match {
+          case Some(d) => return d.toST(defs)
+          case _ => halt("Infeasible")
+        }
       }
     }
 
