@@ -569,7 +569,7 @@ object State {
         }
 
         override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          if (!defs.get(sym.num).get.isInstanceOf[CurrentName]) {
+          if (defs.get(sym.num).get != this) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -585,7 +585,7 @@ object State {
         }
 
         override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          if (!defs.get(sym.num).get.isInstanceOf[Name]) {
+          if (defs.get(sym.num).get != this) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -602,7 +602,7 @@ object State {
         }
 
         override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          if (!defs.get(sym.num).get.isInstanceOf[CurrentId]) {
+          if (defs.get(sym.num).get != this) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -621,7 +621,7 @@ object State {
         }
 
         override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          if (!defs.get(sym.num).get.isInstanceOf[Id]) {
+          if (defs.get(sym.num).get != this) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -667,7 +667,7 @@ object State {
         }
       }
 
-      @datatype class Binary(val sym: Value.Sym, left: Value, op: String, right: Value, tipe: AST.Typed.Name) extends Let {
+      @datatype class Binary(val sym: Value.Sym, left: Value, op: String, right: Value, tipe: AST.Typed) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${left.toRawST} $op ${right.toRawST}"
         }

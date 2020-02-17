@@ -406,13 +406,15 @@ object Smt2 {
     def addEnum(t: AST.Typed.Name, ti: TypeInfo.Enum): Unit = {
       val tid = typeId(t)
       val owner = ops.ISZOps(ti.name).dropRight(1)
+      val eqOp = typeOpId(t, "==")
+      val neOp = typeOpId(t, "!=")
       val ordinalOp = typeOpId(t, "ordinal")
       addTypeDecl(
         st"""(declare-datatypes () (($tid
-            |  ${for (element <- ti.elements.keys) yield typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})))""")
-      addTypeDecl(
-        st"""(declare-fun $ordinalOp ($tid) Int)"""
-      )
+            |  ${for (element <- ti.elements.keys) yield typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})))
+            |(declare-fun $ordinalOp ($tid) Int)
+            |(define-fun $eqOp ((x $tid) (y $tid)) B (= x y))
+            |(define-fun $neOp ((x $tid) (y $tid)) B (not (= x y)))""")
       val elements: ISZ[ST] = for (element <- ti.elements.keys) yield enumId(owner, element)
       var ordinal = 0
       for (element <- elements) {
@@ -420,10 +422,18 @@ object Smt2 {
         addTypeDecl(st"(assert (= ($ordinalOp $element) $ordinal))")
         ordinal = ordinal + 1
       }
+      addTypeDecl(st"(assert (distinct ${(elements, " ")}))")
     }
 
     def addTypeVar(t: AST.Typed.TypeVar): Unit = {
-      addTypeDecl(st"(declare-sort ${typeId(t)})")
+      val tid = typeId(t)
+      addTypeDecl(st"(declare-sort $tid)")
+      val eqId = typeOpId(t, "==")
+      val neId = typeOpId(t, "!=")
+      addTypeDecl(
+        st"""(define-fun $eqId ((x $tid) (y $tid)) B (= x y))
+            |(define-fun $neId ((x $tid) (y $tid)) B (not (= x y)))"""
+      )
     }
 
     if (types.contains(tipe)) {
@@ -522,6 +532,8 @@ object Smt2 {
           |
           |(define-sort B () Bool)
           |(define-fun |B.!| ((x B)) B (not x))
+          |(define-fun |B.==| ((x B) (y B)) B (= x y))
+          |(define-fun |B.!=| ((x B) (y B)) B (not (= x y)))
           |(define-fun |B.&| ((x B) (y B)) B (and x y))
           |(define-fun |B.│| ((x B) (y B)) B (or x y))
           |(define-fun |B.│^| ((x B) (y B)) B (xor x y))
@@ -602,8 +614,12 @@ object Smt2 {
             return ids2ST(suffix)
           }
         case _ =>
-          shortIdsUp(shortIds + suffix ~> ids)
-          return ids2ST(suffix)
+          if (suffix == ISZ("Type") && ids.size != 1) {
+            return rec(ops.ISZOps(ids).takeRight(suffix.size + 1))
+          } else {
+            shortIdsUp(shortIds + suffix ~> ids)
+            return ids2ST(suffix)
+          }
       }
     }
     return rec(ISZ(ids(ids.size - 1)))
@@ -694,17 +710,16 @@ object Smt2 {
         } else {
           c.op
         }
-        Smt2.binop2Smt2Map.get(c.tipe) match {
-          case Some(m) =>
-            return if (neg) st"(not (${m.get(binop).get} ${v2ST(c.left)} ${v2ST(c.right)}))"
-            else st"(${m.get(binop).get} ${v2ST(c.left)} ${v2ST(c.right)})"
+        c.op match {
+          case string"==" => return st"(${typeOpId(c.tipe, "==")} ${v2ST(c.left)} ${v2ST(c.right)})"
+          case string"!=" => return st"(${typeOpId(c.tipe, "!=")} ${v2ST(c.left)} ${v2ST(c.right)})"
           case _ =>
         }
-        typeHierarchy.typeMap.get(c.tipe.ids) match {
-          case Some(_: TypeInfo.Enum) =>
-            c.op match {
-              case string"==" => return st"(= ${v2ST(c.left)} ${v2ST(c.right)})"
-              case string"!=" => return st"(not (= ${v2ST(c.left)} ${v2ST(c.right)}))"
+        c.tipe match {
+          case tipe: AST.Typed.Name =>
+            Smt2.binop2Smt2Map.get(tipe) match {
+              case Some(m) => return st"(${m.get(binop).get} ${v2ST(c.left)} ${v2ST(c.right)})"
+              case _ =>
             }
           case _ =>
         }
@@ -847,7 +862,7 @@ object Smt2 {
         } else {
           return st"${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]"
         }
-      case t: AST.Typed.TypeVar => return st"${t.id}"
+      case t: AST.Typed.TypeVar => return st"$$${t.id}"
       case t: AST.Typed.Enum => return st"${(shorten(t.name), ".")}"
       case _ => halt("TODO") // TODO
     }
@@ -855,15 +870,18 @@ object Smt2 {
 
   @pure def id(t: AST.Typed, prefix: String): ST = {
     t match {
-      case t: AST.Typed.Name if t.ids.size == 3 && t.args.isEmpty && t.ids(0) == "org" && t.ids(1) == "sireum" =>
-        return st"${t.ids(2)}"
       case t: AST.Typed.Name =>
-        if (t.args.nonEmpty) {
-          return if (prefix == "") st"|${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
-          else st"|$prefix:${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
+        if (t.ids.size == 3 && t.args.isEmpty && t.ids(0) == "org" && t.ids(1) == "sireum") {
+          return st"${t.ids(2)}"
         } else {
-          return if (prefix == "") st"|${(t.ids, ".")}|" else st"|$prefix:${(t.ids, ".")}|"
+          if (t.args.nonEmpty) {
+            return if (prefix == "") st"|${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
+            else st"|$prefix:${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
+          } else {
+            return if (prefix == "") st"|${(t.ids, ".")}|" else st"|$prefix:${(t.ids, ".")}|"
+          }
         }
+      case t: AST.Typed.TypeVar => return st"$$${t.id}"
       case _ => return if (prefix == "") st"|${typeIdRaw(t)}|" else st"|$prefix:${typeIdRaw(t)}|"
     }
   }

@@ -267,6 +267,7 @@ object Logika {
           case _ => return F
         }
       case _: AST.Typed.Enum => return T
+      case _: AST.Typed.TypeVar => return T
       case _ => return F
     }
     return T
@@ -418,7 +419,7 @@ object Logika {
           if (!s1.status) {
             return (s1, State.errorValue)
           }
-          val tipe = v1.tipe.asInstanceOf[AST.Typed.Name]
+          val tipe = v1.tipe
           if (isCond(kind)) {
             halt(s"TODO: $e") // TODO
           } else if (isSeq(kind)) {
