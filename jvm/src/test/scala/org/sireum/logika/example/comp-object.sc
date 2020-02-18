@@ -22,6 +22,20 @@ def inc(n: Z): Z = {
   return n + 1
 }
 
+def ite[T](cond: B, t: T, f: T): T = {
+  Contract(
+    Ensures(
+      cond imply_: (Res == t),
+      (!cond) imply_: (Res == f)
+    )
+  )
+  if (cond) {
+    return t
+  } else {
+    return f
+  }
+}
+
 def test(x: Z): Unit = {
   Contract(
     Modifies(y, z),
@@ -34,4 +48,6 @@ def test(x: Z): Unit = {
   Contract {
     assert(y == preY + 2)
   }
+  assert(ite(r > x, 3, 1) == 3)
+  assert(ite(r <= x, 3, 1) == 1)
 }

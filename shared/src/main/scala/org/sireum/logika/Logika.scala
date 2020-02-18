@@ -27,12 +27,12 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.lang.symbol._
+import org.sireum.lang.symbol.TypeInfo
 import org.sireum.lang.symbol.Resolver.QName
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Position, Reporter}
 import StateTransformer.{PrePost, PreResult}
-import org.sireum.lang.tipe.TypeHierarchy
+import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.InvokeMethodInfo
 
 object Logika {
@@ -94,42 +94,42 @@ object Logika {
                                 fieldVarInMap: HashMap[String, State.Value.Sym],
                                 localInMap: HashMap[String, State.Value.Sym],
                                 posOpt: Option[Position]) {
-    val objectVarMap: HashSMap[ISZ[String], AST.Typed] = {
+    def objectVarMap(sm: HashMap[String, AST.Typed]): HashSMap[ISZ[String], AST.Typed] = {
       var r = HashSMap.empty[ISZ[String], AST.Typed]
       for (x <- reads ++ modifies) {
         x.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Var if res.isInObject && !r.contains(res.owner :+ res.id) =>
             val ids = res.owner :+ res.id
-            r = r + ids ~> x.typedOpt.get
+            r = r + ids ~> x.typedOpt.get.subst(sm)
           case _ =>
         }
       }
-      r
+      return r
     }
-    val fieldVarMap: HashSMap[String, (AST.Typed, Option[Position])] = {
+    def fieldVarMap(sm: HashMap[String, AST.Typed]): HashSMap[String, (AST.Typed, Option[Position])] = {
       var r = HashSMap.empty[String, (AST.Typed, Option[Position])]
       for (x <- reads ++ modifies) {
         x.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Var if !res.isInObject && !r.contains(res.id) =>
-            r = r + res.id ~> ((x.typedOpt.get, x.posOpt))
+            r = r + res.id ~> ((x.typedOpt.get.subst(sm), x.posOpt))
           case _ =>
         }
       }
-      r
+      return r
     }
-    val localMap: HashSMap[String, (ISZ[String], AST.Id, AST.Typed)] = {
+    def localMap(sm: HashMap[String, AST.Typed]): HashSMap[String, (ISZ[String], AST.Id, AST.Typed)] = {
       var r = HashSMap.empty[String, (ISZ[String], AST.Id, AST.Typed)]
       for (p <- sig.params) {
-        r = r + p.id.value ~> ((name, p.id, p.tipe.typedOpt.get))
+        r = r + p.id.value ~> ((name, p.id, p.tipe.typedOpt.get.subst(sm)))
       }
       for (x <- reads ++ modifies) {
         x.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar if !r.contains(x.id.value) =>
-            r = r + x.id.value ~> ((res.context, x.id, x.typedOpt.get))
+            r = r + x.id.value ~> ((res.context, x.id, x.typedOpt.get.subst(sm)))
           case _ =>
         }
       }
-      r
+      return r
     }
   }
 
@@ -197,7 +197,7 @@ object Logika {
           if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
-        for (p <- mctx.objectVarMap.entries) {
+        for (p <- mctx.objectVarMap(TypeChecker.emptySubstMap).entries) {
           val (ids, t) = p
           val posOpt = th.nameMap.get(ids).get.posOpt
           val (s, sym) = l.nameIntro(posOpt.get, state, ids, t, posOpt)
@@ -209,7 +209,7 @@ object Logika {
           case Some(receiverType) =>
             val (s0, thiz) = l.idIntro(method.posOpt.get, state, mname, "this", receiverType, method.sig.id.attr.posOpt)
             state = s0
-            for (p <- mctx.fieldVarMap.entries) {
+            for (p <- mctx.fieldVarMap(TypeChecker.emptySubstMap).entries) {
               val (id, (t, posOpt)) = p
               val (s1, sym) = state.freshSym(t, posOpt.get)
               state = s1.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
@@ -218,7 +218,7 @@ object Logika {
           case _ =>
         }
         var localInMap = mctx.localInMap
-        for (v <- mctx.localMap.values) {
+        for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
           val (mname, id, t) = v
           val posOpt = id.attr.posOpt
           val (s, sym) = l.idIntro(posOpt.get, state, mname, id.value, t, posOpt)
@@ -657,6 +657,7 @@ object Logika {
       val receiverPosOpt: Option[Position] =
         if (invoke.receiverOpt.nonEmpty) invoke.receiverOpt.get.posOpt
         else invoke.ident.posOpt
+      var typeSubstMap = TypeChecker.emptySubstMap
       val receiverOpt: Option[State.Value.Sym] = if (res.isInObject) {
         None()
       } else {
@@ -664,6 +665,22 @@ object Logika {
         val p2 = value2Sym(p._1, p._2, receiverPosOpt.get)
         s1 = p2._1
         val receiver = p2._2
+        val receiverType = receiver.tipe.asInstanceOf[AST.Typed.Name]
+        th.typeMap.get(receiverType.ids) match {
+          case Some(ti: TypeInfo.Adt) =>
+            TypeChecker.buildTypeSubstMap(receiverType.ids, receiverPosOpt, ti.ast.typeParams, receiverType.args,
+              reporter) match {
+              case Some(sm) => typeSubstMap = typeSubstMap ++ sm.entries
+              case _ => return (s1, State.errorValue)
+            }
+          case Some(ti: TypeInfo.Sig) =>
+            TypeChecker.buildTypeSubstMap(receiverType.ids, receiverPosOpt, ti.ast.typeParams, receiverType.args,
+              reporter) match {
+              case Some(sm) => typeSubstMap = typeSubstMap ++ sm.entries
+              case _ => return (s1, State.errorValue)
+            }
+          case _ => halt(s"Infeasible: $receiverType")
+        }
         Some(receiver)
       }
       val currentReceiverOpt: Option[State.Value.Sym] = context.methodOpt.get.receiverTypeOpt match {
@@ -682,6 +699,7 @@ object Logika {
         case _ =>
       }
       var paramArgs = HashSMap.empty[AST.ResolvedInfo.LocalVar, (AST.Typed, AST.Exp)]
+      var argTypes = ISZ[AST.Typed]()
       val info = methodInfo(res.isInObject, res.owner, res.id)
       val contract = info.contract
       val isUnit = info.sig.returnType.typedOpt == AST.Typed.unitOpt
@@ -692,10 +710,17 @@ object Logika {
         val pos = arg.posOpt.get
         val (s3, sym) = value2Sym(s2, v, pos)
         val id = p.id.value
-        val t = p.tipe.typedOpt.get
+        val argType = arg.typedOpt.get
+        argTypes = argTypes :+ argType
         paramArgs = paramArgs + AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id) ~>
-          ((t, arg))
+          ((argType, arg))
         s1 = s3.addClaim(State.Claim.Let.CurrentId(sym, ctx, id, Some(pos)))
+      }
+      val mType = info.sig.funType
+      val invokeType = mType(args = argTypes, ret = invoke.typedOpt.get)
+      TypeChecker.unify(th, invoke.posOpt, TypeChecker.TypeRelation.Equal, invokeType, mType, reporter) match {
+        case Some(sm) => typeSubstMap = typeSubstMap ++ sm.entries
+        case _ => return (s1, State.errorValue)
       }
       contract match {
         case contract: AST.MethodContract.Simple =>
@@ -706,7 +731,7 @@ object Logika {
               contract.reads, contract.modifies, ISZ())
             val mctx = l.context.methodOpt.get
             var objectVarInMap = mctx.objectVarInMap
-            for (p <- mctx.objectVarMap.entries) {
+            for (p <- mctx.objectVarMap(typeSubstMap).entries) {
               val (ids, t) = p
               val (s4, sym) = nameIntro(pos, s1, ids, t, None())
               objectVarInMap = objectVarInMap + ids ~> sym
@@ -717,7 +742,7 @@ object Logika {
               case Some(receiverType) =>
                 val (s5, thiz) = l.idIntro(mctx.posOpt.get, s1, mctx.name, "this", receiverType, mctx.sig.id.attr.posOpt)
                 s1 = s5
-                for (p <- mctx.fieldVarMap.entries) {
+                for (p <- mctx.fieldVarMap(typeSubstMap).entries) {
                   val (id, (t, posOpt)) = p
                   val (s6, sym) = s1.freshSym(t, posOpt.get)
                   s1 = s6.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
@@ -726,7 +751,7 @@ object Logika {
               case _ =>
             }
             var localInMap = mctx.localInMap
-            for (p <- mctx.localMap.entries) {
+            for (p <- mctx.localMap(typeSubstMap).entries) {
               val (id, (ctx, _, t)) = p
               val (s7, sym) = idIntro(pos, s1, ctx, id, t, None())
               localInMap = localInMap + id ~> sym
@@ -736,7 +761,7 @@ object Logika {
               localInMap = localInMap))))
           }
           for (require <- contract.requires if s1.status) {
-            s1 = logikaComp.evalAssert(F, "Pre-condition", s1, require, reporter)
+            s1 = logikaComp.evalAssert(F, "Pre-condition", s1, AST.Util.substExp(require, typeSubstMap), reporter)
           }
           if (!s1.status) {
             return (s1, State.errorValue)
@@ -748,12 +773,12 @@ object Logika {
           val result: State.Value = if (isUnit) {
             State.Value.Unit(invoke.posOpt.get)
           } else {
-            val (s5, v) = logikaComp.resIntro(pos, s1, ctx, info.sig.returnType.typedOpt.get, posOpt)
+            val (s5, v) = logikaComp.resIntro(pos, s1, ctx, info.sig.returnType.typedOpt.get.subst(typeSubstMap), posOpt)
             s1 = s5
             v
           }
           for (ensure <- contract.ensures if s1.status) {
-            s1 = logikaComp.evalAssume(F, "Post-condition", s1, ensure, reporter)
+            s1 = logikaComp.evalAssume(F, "Post-condition", s1, AST.Util.substExp(ensure, typeSubstMap), reporter)
           }
           if (!s1.status) {
             return (s1, State.errorValue)
