@@ -33,7 +33,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Position, Reporter}
 import StateTransformer.{PrePost, PreResult}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
-import org.sireum.logika.Logika.InvokeMethodInfo
+import org.sireum.logika.Logika.{ContractCaseResult, InvokeMethodInfo}
 
 object Logika {
 
@@ -134,6 +134,13 @@ object Logika {
   }
 
   @datatype class InvokeMethodInfo(sig: AST.MethodSig, contract: AST.MethodContract)
+
+  @datatype class ContractCaseResult(state: State,
+                                     retVal: State.Value,
+                                     requiresClaim: State.Claim.Prop,
+                                     messages: ISZ[message.Message]) {
+    @strictpure def isOK: B = state.status
+  }
 
   val kind: String = "Logika"
 
@@ -712,6 +719,7 @@ object Logika {
       val isUnit = info.sig.returnType.typedOpt == AST.Typed.unitOpt
       val ctx = res.owner :+ res.id
       val modLocals = contract.modifiedLocalVars
+      val retType = info.sig.returnType.typedOpt.get.subst(typeSubstMap)
       def modVarsResult(ms0: State, posOpt: Option[Position]): (State, State.Value) = {
         var ms1 = ms0
         val modObjectVars = contract.modifiedObjectVars
@@ -721,7 +729,7 @@ object Logika {
         if (isUnit) {
           return (ms1, State.Value.Unit(invoke.posOpt.get))
         } else {
-          val (s5, v) = Logika.resIntro(pos, ms1, ctx, info.sig.returnType.typedOpt.get.subst(typeSubstMap), posOpt)
+          val (s5, v) = Logika.resIntro(pos, ms1, ctx, retType, posOpt)
           ms1 = s5
           return (ms1, v)
         }
@@ -848,26 +856,86 @@ object Logika {
         l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
           localInMap = localInMap))))
       }
+      def evalContractCase(cs0: State, requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp]): ContractCaseResult = {
+        val rep = Reporter.create
+        var cs1 = cs0
+        var requireSyms = ISZ[State.Value]()
+        for (require <- requires if cs1.status) {
+          val (cs2, sym) = logikaComp.evalAssert(F, "Pre-condition", cs1, AST.Util.substExp(require, typeSubstMap),
+            rep)
+          cs1 = cs2
+          requireSyms = requireSyms :+ sym
+          if (!cs1.status) {
+            val (cs3, rsym) = cs1.freshSym(AST.Typed.b, pos)
+            cs1 = cs3.addClaim(State.Claim.Let.And(rsym, requireSyms))
+            return ContractCaseResult(cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+          }
+        }
+        val (cs4, result) = modVarsResult(cs1, posOpt)
+        cs1 = cs4
+        for (ensure <- ensures if cs1.status) {
+          cs1 = logikaComp.evalAssume(F, "Post-condition", cs1, AST.Util.substExp(ensure, typeSubstMap), rep)._1
+          if (!cs1.status) {
+            val (cs5, rsym) = cs1.freshSym(AST.Typed.b, pos)
+            cs1 = cs5.addClaim(State.Claim.Let.And(rsym, requireSyms))
+            return ContractCaseResult(cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+          }
+        }
+        cs1 = modVarsRewrite(cs1, currentReceiverOpt, receiverOpt)
+        val (cs6, rsym) = cs1.freshSym(AST.Typed.b, pos)
+        cs1 = cs6.addClaim(State.Claim.Let.And(rsym, requireSyms))
+        return ContractCaseResult(cs1, result, State.Claim.Prop(T, rsym), rep.messages)
+      }
       contract match {
         case contract: AST.MethodContract.Simple =>
-          for (require <- contract.requires if s1.status) {
-            s1 = logikaComp.evalAssert(F, "Pre-condition", s1, AST.Util.substExp(require, typeSubstMap), reporter)._1
-            if (!s1.status) {
-              return (s1, State.errorValue)
-            }
-          }
-          val (s7, result) = modVarsResult(s1, posOpt)
-          s1 = s7
-          for (ensure <- contract.ensures if s1.status) {
-            s1 = logikaComp.evalAssume(F, "Post-condition", s1, AST.Util.substExp(ensure, typeSubstMap), reporter)._1
-            if (!s1.status) {
-              return (s1, State.errorValue)
-            }
-          }
-          s1 = modVarsRewrite(s1, currentReceiverOpt, receiverOpt)
-          return (s1, result)
+          val ccr = evalContractCase(s1, contract.requires, contract.ensures)
+          reporter.reports(ccr.messages)
+          return (ccr.state, ccr.retVal)
         case contract: AST.MethodContract.Cases =>
-          halt("TODO: contract cases") // TODO
+          val root = s1
+          var isOK = T
+          var ccrs = ISZ[ContractCaseResult]()
+          var okCcrs = ISZ[ContractCaseResult]()
+          for (cas <- contract.cases) {
+            val ccr = evalContractCase(s1, cas.requires, cas.ensures)
+            ccrs = ccrs :+ ccr
+            isOK = isOK && ccr.isOK
+            if (isOK) {
+              okCcrs = okCcrs :+ ccr
+            }
+            s1 = s1(nextFresh = ccr.state.nextFresh)
+          }
+          if (!isOK) {
+            for (ccr <- ccrs) {
+              reporter.reports(ccr.messages)
+            }
+            return (s1, State.errorValue)
+          }
+          var claims = ISZ[State.Claim]()
+          for (i <- 0 until root.claims.size) {
+            val rootClaim = root.claims(i)
+            if (ops.ISZOps(okCcrs).forall((ccr: ContractCaseResult) => ccr.state.claims(i) == rootClaim)) {
+              claims = claims :+ rootClaim
+            } else {
+              claims = claims :+ State.Claim.And(
+                for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim, ccr.state.claims(i))))
+            }
+          }
+          claims = claims :+ State.Claim.And(
+            for (ccr <- okCcrs) yield
+              State.Claim.Imply(ISZ(ccr.requiresClaim,
+                State.Claim.And(for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i)))))
+          claims = claims :+ State.Claim.Or(for (ccr <- okCcrs) yield ccr.requiresClaim)
+          s1 = s1(claims = claims)
+          if (isUnit) {
+            return (s1, okCcrs(0).retVal)
+          } else {
+            val (s7, sym) = s1.freshSym(retType, pos)
+            s1 = s7
+            return (s1.addClaim(State.Claim.And(
+              for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
+                State.Claim.Let.Eq(sym, ccr.retVal))))), sym)
+          }
       }
     }
 
