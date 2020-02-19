@@ -736,6 +736,16 @@ object Smt2 {
         return st"(${typeOpId(c.adt.tipe, c.id)} ${v2ST(c.adt)})"
       case c: State.Claim.Let.SeqInBound =>
         return st"(${typeOpId(c.seq.tipe, "inBound")} ${v2ST(c.seq)} ${v2ST(c.index)})"
+      case c: State.Claim.Let.And =>
+        return if (c.args.size == 0) st"false"
+        else if (c.args.size == 1) v2ST(c.args(0))
+        else st"(and ${(c.args.map(v2ST _), " ")})"
+      case c: State.Claim.Let.Or =>
+        return if (c.args.size == 0) st"true"
+        else if (c.args.size == 1) v2ST(c.args(0))
+        else st"(or ${(c.args.map(v2ST _), " ")})"
+      case c: State.Claim.Let.Imply =>
+        return st"(or ${(c.args.map(v2ST _), " ")})"
       case c: State.Claim.Let.Apply =>
         halt("TODO") // TODO
       case c: State.Claim.Let.IApply =>
@@ -775,6 +785,9 @@ object Smt2 {
               |  ${andST(c.fClaims)}
               |)"""
         return r
+      case c: State.Claim.And => return andST(c.claims)
+      case c: State.Claim.Or => return orST(c.claims)
+      case c: State.Claim.Imply => return implyST(c.claims)
     }
   }
 
@@ -826,6 +839,9 @@ object Smt2 {
           r = r ++ c2DeclST(fClaim)
         }
         return r
+      case c: State.Claim.And => return for (claim <- c.claims; p <- c2DeclST(claim)) yield p
+      case c: State.Claim.Or => return for (claim <- c.claims; p <- c2DeclST(claim)) yield p
+      case c: State.Claim.Imply => return for (claim <- c.claims; p <- c2DeclST(claim)) yield p
       case c: State.Claim.Let.CurrentName =>
         var r = def2DeclST(c)
         val n = currentNameId(c)

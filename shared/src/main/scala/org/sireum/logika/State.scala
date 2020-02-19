@@ -334,98 +334,6 @@ object State {
 
   }
 
-  @datatype class And(claims: ISZ[Claim]) {
-    @pure def toRawST: ST = {
-      val r: ST =
-        if (claims.size == 0) st"T"
-        else if (claims.size == 1) claims(0).toRawST
-        else
-          st"""∧(
-              |  ${(for (c <- claims) yield c.toRawST, ",\n")}
-              |)"""
-      return r
-    }
-
-    @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
-      val claimSTs = ClaimSTs(ISZ())
-      for (c <- claims) {
-        c.toSTs(claimSTs, defs)
-      }
-      val r: ST =
-        if (claimSTs.value.size == 0) st"T"
-        else if (claimSTs.value.size == 1) claimSTs.value(0)
-        else
-          st"""∧(
-              |  ${(claimSTs.value, ",\n")}
-              |)"""
-      return r
-    }
-
-    @pure def types: ISZ[AST.Typed] = {
-      return for (c <- claims; t <- c.types) yield t
-    }
-  }
-
-  @datatype class Or(claims: ISZ[Claim]) {
-    @pure def toRawST: ST = {
-      val r: ST =
-        if (claims.size == 0) st"F"
-        else if (claims.size == 1) claims(0).toRawST
-        else
-          st"""∨(
-              |  ${(for (c <- claims) yield c.toRawST, ",\n")})"""
-      return r
-    }
-
-    @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
-      val claimSTs = ClaimSTs(ISZ())
-      for (c <- claims) {
-        c.toSTs(claimSTs, defs)
-      }
-      val r: ST =
-        if (claimSTs.value.size == 0) st"F"
-        else if (claimSTs.value.size == 1) claimSTs.value(0)
-        else
-          st"""∨(
-              |  ${(claimSTs.value, ",\n")}
-              |)"""
-      return r
-    }
-
-    @pure def types: ISZ[AST.Typed] = {
-      return for (c <- claims; t <- c.types) yield t
-    }
-  }
-
-  @datatype class Imply(claims: ISZ[Claim]) {
-    @pure def toRawST: ST = {
-      val r: ST =
-        if (claims.size == 1) claims(0).toRawST
-        else
-          st"""→(
-              |  ${(for (c <- claims) yield c.toRawST, ",\n")})"""
-      return r
-    }
-
-    @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
-      val claimSTs = ClaimSTs(ISZ())
-      for (c <- claims) {
-        c.toSTs(claimSTs, defs)
-      }
-      val r: ST =
-        if (claimSTs.value.size == 1) claimSTs.value(0)
-        else
-          st"""→(
-              |  ${(claimSTs.value, ",\n")}
-              |)"""
-      return r
-    }
-
-    @pure def types: ISZ[AST.Typed] = {
-      return for (c <- claims; t <- c.types) yield t
-    }
-  }
-
   object Claim {
 
     @datatype trait Composite extends Claim {
@@ -447,6 +355,111 @@ object State {
 
       @pure def types: ISZ[AST.Typed] = {
         return ISZ(value.tipe)
+      }
+    }
+
+
+    @datatype class And(val claims: ISZ[Claim]) extends Composite {
+      @pure def toRawST: ST = {
+        val r: ST =
+          if (claims.size == 0) st"T"
+          else if (claims.size == 1) claims(0).toRawST
+          else
+            st"""∧(
+                |  ${(for (c <- claims) yield c.toRawST, ",\n")}
+                |)"""
+        return r
+      }
+
+      @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
+        val claimSTs = ClaimSTs(ISZ())
+        for (c <- claims) {
+          c.toSTs(claimSTs, defs)
+        }
+        val r: ST =
+          if (claimSTs.value.size == 0) st"T"
+          else if (claimSTs.value.size == 1) claimSTs.value(0)
+          else
+            st"""∧(
+                |  ${(claimSTs.value, ",\n")}
+                |)"""
+        return r
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return for (c <- claims; t <- c.types) yield t
+      }
+
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+        claimSTs.add(toST(defs))
+      }
+    }
+
+    @datatype class Or(val claims: ISZ[Claim]) extends Composite {
+      @pure def toRawST: ST = {
+        val r: ST =
+          if (claims.size == 0) st"F"
+          else if (claims.size == 1) claims(0).toRawST
+          else
+            st"""∨(
+                |  ${(for (c <- claims) yield c.toRawST, ",\n")})"""
+        return r
+      }
+
+      @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
+        val claimSTs = ClaimSTs(ISZ())
+        for (c <- claims) {
+          c.toSTs(claimSTs, defs)
+        }
+        val r: ST =
+          if (claimSTs.value.size == 0) st"F"
+          else if (claimSTs.value.size == 1) claimSTs.value(0)
+          else
+            st"""∨(
+                |  ${(claimSTs.value, ",\n")}
+                |)"""
+        return r
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return for (c <- claims; t <- c.types) yield t
+      }
+
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+        claimSTs.add(toST(defs))
+      }
+    }
+
+    @datatype class Imply(val claims: ISZ[Claim]) extends Composite {
+      @pure def toRawST: ST = {
+        val r: ST =
+          if (claims.size == 1) claims(0).toRawST
+          else
+            st"""→(
+                |  ${(for (c <- claims) yield c.toRawST, ",\n")})"""
+        return r
+      }
+
+      @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
+        val claimSTs = ClaimSTs(ISZ())
+        for (c <- claims) {
+          c.toSTs(claimSTs, defs)
+        }
+        val r: ST =
+          if (claimSTs.value.size == 1) claimSTs.value(0)
+          else
+            st"""→(
+                |  ${(claimSTs.value, ",\n")}
+                |)"""
+        return r
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return for (c <- claims; t <- c.types) yield t
+      }
+
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+        claimSTs.add(toST(defs))
       }
     }
 
@@ -651,14 +664,14 @@ object State {
         @pure override def toRawST: ST = {
           val r =
             st"""${sym.toRawST} ≜ ${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
-                |  ${if (isAll) Imply(claims).toRawST else And(claims).toRawST}"""
+                |  ${if (isAll) Claim.Imply(claims).toRawST else Claim.And(claims).toRawST}"""
           return r
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
           val r =
             st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
-                |  ${if (isAll) Imply(claims).toST(defs) else And(claims).toST(defs)}"""
+                |  ${if (isAll) Claim.Imply(claims).toST(defs) else Claim.And(claims).toST(defs)}"""
           return r
         }
 
@@ -745,6 +758,55 @@ object State {
         }
       }
 
+      @datatype class And(val sym: Value.Sym, args: ISZ[Value]) extends Let {
+        @pure override def toRawST: ST = {
+          return if (args.size == 0) st"F"
+          else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
+          else st"${sym.toRawST} ≜ ∧(${(for (arg <- args) yield arg.toRawST, ", ")})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return if (args.size == 0) st"F"
+          else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toST(defs)}"
+          else st"∧(${(for (arg <- args) yield arg.toST(defs), ", ")})"
+        }
+
+        @pure override def funs: ISZ[Fun] = {
+          return ISZ()
+        }
+      }
+
+      @datatype class Or(val sym: Value.Sym, args: ISZ[Value]) extends Let {
+        @pure override def toRawST: ST = {
+          return if (args.size == 0) st"T"
+          else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
+          else st"${sym.toRawST} ≜ ∨(${(for (arg <- args) yield arg.toRawST, ", ")})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return if (args.size == 0) st"T"
+          else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toST(defs)}"
+          else st"∨(${(for (arg <- args) yield arg.toST(defs), ", ")})"
+        }
+
+        @pure override def funs: ISZ[Fun] = {
+          return ISZ()
+        }
+      }
+
+      @datatype class Imply(val sym: Value.Sym, args: ISZ[Value]) extends Let {
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ →(${(for (arg <- args) yield arg.toRawST, ", ")})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"→(${(for (arg <- args) yield arg.toST(defs), ", ")})"
+        }
+
+        @pure override def funs: ISZ[Fun] = {
+          return ISZ()
+        }
+      }
     }
 
     @pure def claimsSTs(claims: ISZ[Claim], defs: Claim.Defs): ISZ[ST] = {
