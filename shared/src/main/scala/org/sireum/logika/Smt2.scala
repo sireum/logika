@@ -200,7 +200,7 @@ object Smt2 {
     val (r, res) = checkSat(satQuery(headers, claims, None(), reporter).render, 500)
     if (log) {
       reporter.info(None(), Logika.kind,
-        st"""Verification condition: $r
+        st"""Satisfiability: ${res.kind}
             |  ${res.query}""".render)
     }
     return r
@@ -501,7 +501,7 @@ object Smt2 {
     val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
     if (log) {
       reporter.info(None(), Logika.kind,
-        st"""Verification condition: ${if (r) "discharged" else "undischarged"}
+        st"""Verification Condition: ${if (r) "Discharged" else "Undischarged"}
             |  ${res.query}""".render)
     }
     return r
@@ -726,7 +726,7 @@ object Smt2 {
         halt("TODO") // TODO
       case c: State.Claim.Let.Unary =>
         Smt2.unop2Smt2Map.get(c.sym.tipe) match {
-          case Some(m) => return st"(${m.get(c.op).get} ${v2ST(c.sym)})"
+          case Some(m) => return st"(${m.get(c.op).get} ${v2ST(c.value)})"
           case _ =>
             halt("TODO") // TODO
         }

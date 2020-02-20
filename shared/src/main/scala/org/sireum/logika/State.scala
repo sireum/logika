@@ -253,7 +253,7 @@ object State {
     @datatype class Sym(num: org.sireum.Z, @hidden val tipe: AST.Typed, @hidden val pos: Position) extends Value {
 
       @pure override def toRawST: ST = {
-        return st"$symPrefix$num@[${pos.beginLine}:${pos.beginColumn}]"
+        return st"$symPrefix$num@[${pos.beginLine},${pos.beginColumn}]"
       }
 
       @pure override def toST(defs: HashMap[org.sireum.Z, Claim.Def]): ST = {
@@ -433,7 +433,9 @@ object State {
     @datatype class Imply(val claims: ISZ[Claim]) extends Composite {
       @pure def toRawST: ST = {
         val r: ST =
-          if (claims.size == 1) claims(0).toRawST
+          if (claims.size == 2)
+            st"""${claims(0).toRawST} →
+                |  ${claims(1).toRawST}"""
           else
             st"""→(
                 |  ${(for (c <- claims) yield c.toRawST, ",\n")})"""
@@ -446,7 +448,10 @@ object State {
           c.toSTs(claimSTs, defs)
         }
         val r: ST =
-          if (claimSTs.value.size == 1) claimSTs.value(0)
+          if (claimSTs.value.size == 1 && claims.size == 2) st"T"
+          else if (claimSTs.value.size == 2)
+            st"""${claimSTs.value(0)} →
+                |  ${claimSTs.value(1)}"""
           else
             st"""→(
                 |  ${(claimSTs.value, ",\n")}
@@ -648,6 +653,10 @@ object State {
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
           return st"${value.toST(defs)}"
         }
+
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+          claimSTs.add(st"${sym.toST(defs)} == ${value.toST(defs)}")
+        }
       }
 
       object Quant {
@@ -692,11 +701,18 @@ object State {
 
       @datatype class Unary(val sym: Value.Sym, op: AST.Exp.UnaryOp.Type, value: Value) extends Let {
         @pure override def toRawST: ST = {
-          return st"${sym.toRawST} ≜ $op ${value.toRawST}"
+          return st"${sym.toRawST} ≜ $opString${value.toRawST}"
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
-          return st"$op ${value.toST(defs)}"
+          return st"$opString${value.toST(defs)}"
+        }
+
+        @strictpure def opString: String = op match {
+          case AST.Exp.UnaryOp.Complement => "~"
+          case AST.Exp.UnaryOp.Minus => "-"
+          case AST.Exp.UnaryOp.Not => "!"
+          case AST.Exp.UnaryOp.Plus => "+"
         }
       }
 
@@ -762,12 +778,14 @@ object State {
         @pure override def toRawST: ST = {
           return if (args.size == 0) st"F"
           else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
+          else if (args.size == 2) st"${sym.toRawST} ≜ ${args(0).toRawST} ∧ ${args(1).toRawST}"
           else st"${sym.toRawST} ≜ ∧(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
           return if (args.size == 0) st"F"
-          else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toST(defs)}"
+          else if (args.size == 1) st"${args(0).toST(defs)}"
+          else if (args.size == 2) st"${args(0).toST(defs)} ∧ ${args(1).toST(defs)}"
           else st"∧(${(for (arg <- args) yield arg.toST(defs), ", ")})"
         }
 
@@ -780,12 +798,14 @@ object State {
         @pure override def toRawST: ST = {
           return if (args.size == 0) st"T"
           else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
+          else if (args.size == 2) st"${sym.toRawST} ≜ ${args(0).toRawST} ∨ ${args(1).toRawST}"
           else st"${sym.toRawST} ≜ ∨(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
           return if (args.size == 0) st"T"
-          else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toST(defs)}"
+          else if (args.size == 1) st"${args(0).toST(defs)}"
+          else if (args.size == 2) st"${args(0).toST(defs)} ∨ ${args(1).toST(defs)}"
           else st"∨(${(for (arg <- args) yield arg.toST(defs), ", ")})"
         }
 
@@ -796,11 +816,13 @@ object State {
 
       @datatype class Imply(val sym: Value.Sym, args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
-          return st"${sym.toRawST} ≜ →(${(for (arg <- args) yield arg.toRawST, ", ")})"
+          return if (args.size == 2) st"${sym.toRawST} ≜ ${args(0).toRawST} → ${args(1).toRawST}"
+          else st"${sym.toRawST} ≜ →(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
-          return st"→(${(for (arg <- args) yield arg.toST(defs), ", ")})"
+          return if (args.size == 2) st"${args(0).toST(defs)} → ${args(1).toST(defs)}"
+          else st"→(${(for (arg <- args) yield arg.toST(defs), ", ")})"
         }
 
         @pure override def funs: ISZ[Fun] = {
