@@ -235,11 +235,11 @@ object Logika {
         l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
           localInMap = localInMap))))
       }
-      for (r <- requires) {
+      for (r <- requires if state.status) {
         state = logika.evalAssume(F, "Precondition", state, r, reporter)._1
       }
       state = logika.evalStmts(state, method.bodyOpt.get.stmts, reporter)
-      for (e <- ensures) {
+      for (e <- ensures if state.status) {
         state = logika.evalAssert(F, "Postcondition", state, e, reporter)._1
       }
     }
@@ -856,13 +856,14 @@ object Logika {
           localInMap = localInMap))))
       }
       val retType = info.sig.returnType.typedOpt.get.subst(typeSubstMap)
-      def evalContractCase(cs0: State, requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp]): ContractCaseResult = {
+      def evalContractCase(assume: B, cs0: State, requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp]): ContractCaseResult = {
         val rep = Reporter.create
         var cs1 = cs0
         var requireSyms = ISZ[State.Value]()
         for (require <- requires if cs1.status) {
-          val (cs2, sym) = logikaComp.evalAssert(F, "Pre-condition", cs1, AST.Util.substExp(require, typeSubstMap),
-            rep)
+          val (cs2, sym): (State, State.Value.Sym) =
+            if (assume) logikaComp.evalAssume(F, "Pre-condition", cs1, AST.Util.substExp(require, typeSubstMap), rep)
+            else logikaComp.evalAssert(F, "Pre-condition", cs1, AST.Util.substExp(require, typeSubstMap), rep)
           cs1 = cs2
           requireSyms = requireSyms :+ sym
           if (!cs1.status) {
@@ -888,18 +889,18 @@ object Logika {
       }
       contract match {
         case contract: AST.MethodContract.Simple =>
-          val ccr = evalContractCase(s1, contract.requires, contract.ensures)
+          val ccr = evalContractCase(F, s1, contract.requires, contract.ensures)
           reporter.reports(ccr.messages)
           return (ccr.state, ccr.retVal)
         case contract: AST.MethodContract.Cases =>
           val root = s1
-          var isOK = T
+          var isOK = F
           var ccrs = ISZ[ContractCaseResult]()
           var okCcrs = ISZ[ContractCaseResult]()
           for (cas <- contract.cases) {
-            val ccr = evalContractCase(s1, cas.requires, cas.ensures)
+            val ccr = evalContractCase(T, s1, cas.requires, cas.ensures)
             ccrs = ccrs :+ ccr
-            isOK = isOK && ccr.isOK
+            isOK = isOK || ccr.isOK
             if (isOK) {
               okCcrs = okCcrs :+ ccr
             }
@@ -909,7 +910,7 @@ object Logika {
             for (ccr <- ccrs) {
               reporter.reports(ccr.messages)
             }
-            return (s1, State.errorValue)
+            return (s1(status = F), State.errorValue)
           }
           var claims = ISZ[State.Claim]()
           for (i <- 0 until root.claims.size) {
@@ -1381,10 +1382,7 @@ object Logika {
   def evalStmts(state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): State = {
     var current = state
 
-    for (stmt <- stmts) {
-      if (!current.status) {
-        return current
-      }
+    for (stmt <- stmts if current.status) {
       current = evalStmt(current, stmt, reporter)
     }
 
