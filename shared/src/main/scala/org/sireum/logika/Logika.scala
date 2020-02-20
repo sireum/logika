@@ -719,8 +719,7 @@ object Logika {
       val isUnit = info.sig.returnType.typedOpt == AST.Typed.unitOpt
       val ctx = res.owner :+ res.id
       val modLocals = contract.modifiedLocalVars
-      val retType = info.sig.returnType.typedOpt.get.subst(typeSubstMap)
-      def modVarsResult(ms0: State, posOpt: Option[Position]): (State, State.Value) = {
+      def modVarsResult(ms0: State, posOpt: Option[Position], retType: AST.Typed): (State, State.Value) = {
         var ms1 = ms0
         val modObjectVars = contract.modifiedObjectVars
         val pos = posOpt.get
@@ -856,6 +855,7 @@ object Logika {
         l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
           localInMap = localInMap))))
       }
+      val retType = info.sig.returnType.typedOpt.get.subst(typeSubstMap)
       def evalContractCase(cs0: State, requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp]): ContractCaseResult = {
         val rep = Reporter.create
         var cs1 = cs0
@@ -871,7 +871,7 @@ object Logika {
             return ContractCaseResult(cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
           }
         }
-        val (cs4, result) = modVarsResult(cs1, posOpt)
+        val (cs4, result) = modVarsResult(cs1, posOpt, retType)
         cs1 = cs4
         for (ensure <- ensures if cs1.status) {
           cs1 = logikaComp.evalAssume(F, "Post-condition", cs1, AST.Util.substExp(ensure, typeSubstMap), rep)._1
