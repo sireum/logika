@@ -232,6 +232,7 @@ object StateTransformer {
 
     @pure def preStateClaim(ctx: Context, o: State.Claim): PreResult[Context, State.Claim] = {
       o match {
+        case o: State.Claim.Label => return preStateClaimLabel(ctx, o)
         case o: State.Claim.Prop => return preStateClaimProp(ctx, o)
         case o: State.Claim.And =>
           val r: PreResult[Context, State.Claim] = preStateClaimAnd(ctx, o) match {
@@ -402,6 +403,10 @@ object StateTransformer {
           }
           return r
       }
+    }
+
+    @pure def preStateClaimLabel(ctx: Context, o: State.Claim.Label): PreResult[Context, State.Claim] = {
+      return PreResult(ctx, T, None())
     }
 
     @pure def preStateClaimProp(ctx: Context, o: State.Claim.Prop): PreResult[Context, State.Claim] = {
@@ -839,6 +844,7 @@ object StateTransformer {
 
     @pure def postStateClaim(ctx: Context, o: State.Claim): TPostResult[Context, State.Claim] = {
       o match {
+        case o: State.Claim.Label => return postStateClaimLabel(ctx, o)
         case o: State.Claim.Prop => return postStateClaimProp(ctx, o)
         case o: State.Claim.And =>
           val r: TPostResult[Context, State.Claim] = postStateClaimAnd(ctx, o) match {
@@ -1009,6 +1015,10 @@ object StateTransformer {
           }
           return r
       }
+    }
+
+    @pure def postStateClaimLabel(ctx: Context, o: State.Claim.Label): TPostResult[Context, State.Claim] = {
+      return TPostResult(ctx, None())
     }
 
     @pure def postStateClaimProp(ctx: Context, o: State.Claim.Prop): TPostResult[Context, State.Claim] = {
@@ -1541,6 +1551,11 @@ import StateTransformer._
       val o2: State.Claim = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val rOpt: TPostResult[Context, State.Claim] = o2 match {
+        case o2: State.Claim.Label =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
         case o2: State.Claim.Prop =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.value)
           if (hasChanged || r0.resultOpt.nonEmpty)

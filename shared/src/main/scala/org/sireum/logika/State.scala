@@ -340,6 +340,28 @@ object State {
       @pure def claims: ISZ[Claim]
     }
 
+    @datatype class Label(label: String, pos: Position) extends Claim {
+      @pure override def toRawST: ST = {
+        pos.uriOpt match {
+          case Some(uri) =>
+            val sops = ops.StringOps(uri)
+            val i = sops.lastIndexOf('/')
+            val filename: String = if (i < 0) uri else sops.substring(i + 1, uri.size)
+            return st"$filename@[${pos.beginLine},${pos.beginLine}]: $label"
+          case _ =>
+            return st"[${pos.beginLine},${pos.beginLine}]: $label"
+        }
+      }
+
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+        claimSTs.add(toRawST)
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return ISZ()
+      }
+    }
+
     @datatype class Prop(isPos: B, value: Value.Sym) extends Claim {
       @pure override def toRawST: ST = {
         return if (isPos) value.toRawST else st"¬(${value.toRawST})"

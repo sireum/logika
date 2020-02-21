@@ -5,10 +5,12 @@ import org.sireum._
 def abs(n: Z): Z = {
   Contract(
     Case(
+      "Negative",
       Requires(n < 0),
       Ensures(Res == -n)
     ),
     Case(
+      "Non-negative",
       Requires(n >= 0),
       Ensures(Res == n)
     )

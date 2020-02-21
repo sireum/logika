@@ -1,6 +1,6 @@
 // #Sireum
 /*
- Copyright (c) 2019, Robby, Kansas State University
+ Copyright (c) 2020, Robby, Kansas State University
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -497,7 +497,7 @@ object Smt2 {
   def valid(log: B, title: String, premises: ISZ[State.Claim], conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): B = {
     val defs = State.Claim.Defs.empty
     val ps = State.Claim.claimsSTs(premises, defs)
-    val headers = (st"Validity Check for $title:" +: ps :+ st"  ⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs)
+    val headers = (st"Validity Check for $title:" +: ps :+ st"⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs)
     val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
     if (log) {
       reporter.info(None(), Logika.kind,
@@ -778,6 +778,8 @@ object Smt2 {
         return st"(${typeOpId(c.sym.tipe, "new")} ${(for (arg <- c.args) yield v2ST(arg), " ")} ${v2ST(c.sym)})"
       case c: State.Claim.Prop =>
         return if (c.isPos) v2ST(c.value) else st"(not ${v2ST(c.value)})"
+      case _: State.Claim.Label =>
+        return st"true"
       case c: State.Claim.If =>
         val r =
           st"""(ite ${v2ST(c.cond)}
@@ -826,6 +828,7 @@ object Smt2 {
       return ISZ[(String, ST)](symST.render ~> st"(declare-const $symST ${typeId(cDef.sym.tipe)})")
     }
     c match {
+      case c: State.Claim.Label => return ISZ()
       case c: State.Claim.Prop =>
         val vST = v2ST(c.value)
         return ISZ[(String, ST)](vST.render ~> st"(declare-const $vST ${typeId(c.value.tipe)})")
