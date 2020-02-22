@@ -974,30 +974,40 @@ object Logika {
           if (!isPreOK || okCcrs.isEmpty) {
             return (s1(status = F), State.errorValue)
           }
-          var claims = ISZ[State.Claim]()
-          for (i <- 0 until root.claims.size) {
-            val rootClaim = root.claims(i)
-            if (ops.ISZOps(okCcrs).forall((ccr: ContractCaseResult) => ccr.state.claims(i) == rootClaim)) {
-              claims = claims :+ rootClaim
-            } else {
-              claims = claims :+ State.Claim.And(
-                for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim, ccr.state.claims(i))))
-            }
-          }
-          claims = claims :+ State.Claim.And(
-            for (ccr <- okCcrs) yield
-              State.Claim.Imply(ISZ(ccr.requiresClaim,
-                State.Claim.And(for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i)))))
-          claims = claims :+ State.Claim.Or(for (ccr <- okCcrs) yield ccr.requiresClaim)
-          s1 = s1(claims = claims)
-          if (isUnit) {
-            return (s1, okCcrs(0).retVal)
+          if (okCcrs.size == 1) {
+            val ccr = okCcrs(0)
+            s1 = s1(claims = ccr.state.claims :+ ccr.requiresClaim)
+            reporter.reports(ccr.messages)
+            return (s1, ccr.retVal)
           } else {
-            val (s7, sym) = s1.freshSym(retType, pos)
-            s1 = s7
-            return (s1.addClaim(State.Claim.And(
-              for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
-                State.Claim.Let.Eq(sym, ccr.retVal))))), sym)
+            for (ccr <- okCcrs) {
+              reporter.reports(ccr.messages)
+            }
+            var claims = ISZ[State.Claim]()
+            for (i <- 0 until root.claims.size) {
+              val rootClaim = root.claims(i)
+              if (ops.ISZOps(okCcrs).forall((ccr: ContractCaseResult) => ccr.state.claims(i) == rootClaim)) {
+                claims = claims :+ rootClaim
+              } else {
+                claims = claims :+ State.Claim.And(
+                  for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim, ccr.state.claims(i))))
+              }
+            }
+            claims = claims :+ State.Claim.And(
+              for (ccr <- okCcrs) yield
+                State.Claim.Imply(ISZ(ccr.requiresClaim,
+                  State.Claim.And(for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i)))))
+            claims = claims :+ State.Claim.Or(for (ccr <- okCcrs) yield ccr.requiresClaim)
+            s1 = s1(claims = claims)
+            if (isUnit) {
+              return (s1, okCcrs(0).retVal)
+            } else {
+              val (s7, sym) = s1.freshSym(retType, pos)
+              s1 = s7
+              return (s1.addClaim(State.Claim.And(
+                for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
+                  State.Claim.Let.Eq(sym, ccr.retVal))))), sym)
+            }
           }
       }
     }
