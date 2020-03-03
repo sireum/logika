@@ -666,6 +666,8 @@ object Smt2 {
         return localId(c)
       case c: State.Claim.Let.Eq =>
         return v2ST(c.value)
+      case c: State.Claim.Let.TypeTest =>
+        return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2ST(c.sym)}) ${typeHierarchyId(c.tipe)})"
       case c: State.Claim.Let.Quant =>
         var lets = ISZ[State.Claim.Let]()
         var defs = ISZ[State.Claim.Def]()

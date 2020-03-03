@@ -681,10 +681,26 @@ object State {
         }
       }
 
+      @datatype class TypeTest(val sym: Value.Sym, isEq: B, value: Value, tipe: AST.Typed) extends Let {
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ typeOf(${value.toRawST}) $testRel $tipe"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"typeOf(${value.toST(defs)}) $testRel $tipe"
+        }
+
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+          claimSTs.add(st"${sym.toST(defs)} == typeOf(${value.toST(defs)}) $testRel $tipe")
+        }
+
+        @strictpure def testRel: String = if (isEq) "=:" else "<:"
+      }
+
       object Quant {
         @datatype class Var(id: String, tipe: AST.Typed) {
           @pure def toST: ST = {
-            return st"$id: ${tipe.string}"
+            return st"$id: $tipe"
           }
         }
       }
