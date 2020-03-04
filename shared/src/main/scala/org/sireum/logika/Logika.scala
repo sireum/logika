@@ -1200,6 +1200,7 @@ object Logika {
       val pos = stmt.posOpt.get
       if (smt2.sat(config.logVc, s"Match inexhaustiveness at [${pos.beginLine}, ${pos.beginColumn}]",
         s2.claims :+ State.Claim.And(for (p <- caseSyms) yield State.Claim.Prop(F, p._2)), reporter)) {
+        error(stmt.posOpt, "Inexhaustive match pattern", reporter)
         return s2(status = F)
       }
     }
@@ -1461,6 +1462,7 @@ object Logika {
         return evalReturn(state, stmt)
       case stmt: AST.Stmt.Block => return evalBlock(state, stmt)
       case stmt: AST.Stmt.SpecBlock => return evalSpecBlock(state, stmt)
+      case stmt: AST.Stmt.Match => return evalMatch(state, stmt, reporter)
       case _: AST.Stmt.Object => return state
       case _: AST.Stmt.Import => return state
       case _: AST.Stmt.Method => return state
@@ -1515,7 +1517,15 @@ object Logika {
         val (s1, cond) = s0.freshSym(AST.Typed.b, pattern.posOpt.get)
         return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==", evalLit(pattern.lit), AST.Typed.b)), cond)
       case pattern: AST.Pattern.LitInterpolate => halt(s"TODO: $pattern") // TODO
-      case pattern: AST.Pattern.Ref => halt(s"TODO: $pattern") // TODO
+      case pattern: AST.Pattern.Ref =>
+        pattern.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.Var if res.owner == AST.Typed.sireumName && res.id == "T" || res.id == "F" =>
+            val (s1, cond) = s0.freshSym(AST.Typed.b, pattern.posOpt.get)
+            return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==",
+              State.Value.B(res.id == "T", pattern.posOpt.get), AST.Typed.b)), cond)
+          case _ =>
+        }
+        halt(s"TODO: $pattern") // TODO
       case pattern: AST.Pattern.SeqWildcard => halt(s"TODO: $pattern") // TODO
       case pattern: AST.Pattern.Structure => halt(s"TODO: $pattern") // TODO
       case pattern: AST.Pattern.VarBinding =>
@@ -1531,7 +1541,15 @@ object Logika {
             val (s2, r) = Logika.idIntro(posOpt.get, s1, lcontext, pattern.id.value, v.tipe, posOpt)
             return (s2.addClaim(State.Claim.Let.Eq(r, v)), State.Value.B(T, pattern.posOpt.get))
         }
-      case pattern: AST.Pattern.Wildcard => halt(s"TODO: $pattern") // TODO
+      case pattern: AST.Pattern.Wildcard =>
+        pattern.typeOpt match {
+          case Some(tipe) =>
+            val (s1, cond) = evalTypeTestH(s0, v, tipe.typedOpt.get, tipe.posOpt.get)
+            return (s1, cond)
+          case _ =>
+            return (s0, State.Value.B(T, pattern.posOpt.get))
+        }
+        halt(s"TODO: $pattern") // TODO
     }
   }
 
