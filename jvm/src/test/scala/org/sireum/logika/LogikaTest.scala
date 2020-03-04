@@ -63,6 +63,30 @@ class LogikaTest extends TestSuite {
 
       * - passingWorksheet(
         """import org.sireum._
+          |var b = B.random
+          |b match {
+          |  case T =>
+          |  case F =>
+          |}
+          |
+          |b match {
+          |  case T =>
+          |  case _ =>
+          |}
+          |
+          |b match {
+          |  case _ =>
+          |}
+          |
+          |b match {
+          |  case F => b = T
+          |  case _ =>
+          |}
+          |
+          |assert(b)""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
           |var x = Z.random
           |x = x * x
           |assert(x >= 0)""".stripMargin)
@@ -78,6 +102,21 @@ class LogikaTest extends TestSuite {
     }
 
     "Failing" - {
+
+      * - failingWorksheet(
+        """import org.sireum._
+          |val b = B.random
+          |b match {
+          |  case true =>
+          |}""".stripMargin, "Inexhaustive")
+
+      * - failingWorksheet(
+        """import org.sireum._
+          |val b = B.random
+          |b match {
+          |  case true => assert(false)
+          |  case false =>
+          |}""".stripMargin, "Cannot deduce")
 
       * - failingWorksheet(
         s"""import org.sireum._
@@ -97,7 +136,6 @@ class LogikaTest extends TestSuite {
            |assert(r == m * n)""".stripMargin, "loop unrolling capped")
 
     }
-
   }
 
   def passingWorksheet(worksheet: String): Unit = {
