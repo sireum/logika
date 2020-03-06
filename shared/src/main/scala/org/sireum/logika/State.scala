@@ -592,6 +592,15 @@ object State {
         }
       }
 
+      @datatype class Random(val sym: Value.Sym, pos: Position) extends Def {
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${sym.tipe}.random@[${pos.beginLine},${pos.beginColumn}]"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return st"${sym.tipe}.random@[${pos.beginLine},${pos.beginColumn}]"
+        }
+      }
     }
 
     @datatype trait Let extends Def
@@ -809,6 +818,22 @@ object State {
 
         @pure override def funs: ISZ[Fun] = {
           return ISZ(IFun(oTipe, id))
+        }
+      }
+
+      @datatype class TupleLit(val sym: Value.Sym, args: ISZ[Value]) extends Let {
+        @pure override def toRawST: ST = {
+          return if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
+          else st"${sym.toRawST} ≜ (${(for (arg <- args) yield arg.toRawST, ", ")})"
+        }
+
+        @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
+          return if (args.size == 1) st"${args(0).toST(defs)}"
+          else st"(${(for (arg <- args) yield arg.toST(defs), ", ")})"
+        }
+
+        @pure override def funs: ISZ[Fun] = {
+          return ISZ()
         }
       }
 

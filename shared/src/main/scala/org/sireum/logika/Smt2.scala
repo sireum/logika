@@ -100,6 +100,9 @@ object Smt2 {
         ))
       )
 
+  val stTrue: ST = st"true"
+  val stFalse: ST = st"false"
+
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 }
 
@@ -411,7 +414,7 @@ object Smt2 {
       val ordinalOp = typeOpId(t, "ordinal")
       addTypeDecl(
         st"""(declare-datatypes () (($tid
-            |  ${for (element <- ti.elements.keys) yield typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})))
+            |  ${(for (element <- ti.elements.keys) yield typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ())), " ")})))
             |(declare-fun $ordinalOp ($tid) Int)
             |(define-fun $eqOp ((x $tid) (y $tid)) B (= x y))
             |(define-fun $neOp ((x $tid) (y $tid)) B (not (= x y)))""")
@@ -436,6 +439,23 @@ object Smt2 {
       )
     }
 
+    def addTuple(t: AST.Typed.Tuple): Unit = {
+      for (arg <- t.args) {
+        addType(arg, reporter)
+      }
+      val tId = typeId(t)
+      val eqOp = typeOpId(t, "==")
+      val neOp = typeOpId(t, "!=")
+      addTypeDecl(
+        st"""(declare-datatypes () (($tId (${typeOpId(t, "new")} ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t, s"_$i")} ${adtId(t.args(i - 1))})", " ")}))))
+            |(define-fun $eqOp ((x $tId) (y $tId)) B
+            |  (and
+            |    ${(for (i <- 1 to t.args.size) yield st"(${adtTypeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
+            |  )
+            |)
+            |(define-fun $neOp ((x $tId) (y $tId)) B (not ($eqOp x y)))""")
+    }
+
     if (types.contains(tipe)) {
       return
     }
@@ -454,6 +474,7 @@ object Smt2 {
           }
         }
       case t: AST.Typed.TypeVar => addTypeVar(t)
+      case t: AST.Typed.Tuple => addTuple(t)
       case _ => halt(s"TODO: $tipe") // TODO
     }
   }
@@ -585,7 +606,7 @@ object Smt2 {
 
   @pure def v2ST(v: State.Value): ST = {
     v match {
-      case v: State.Value.B => return if (v.value) st"true" else st"false"
+      case v: State.Value.B => return if (v.value) Smt2.stTrue else Smt2.stFalse
       case v: State.Value.Z => return st"${v.value}"
       case v: State.Value.Sym => return st"cx!${v.num}"
       case v: State.Value.Range => return st"${v.value}"
@@ -738,12 +759,14 @@ object Smt2 {
         return st"(${typeOpId(c.adt.tipe, c.id)} ${v2ST(c.adt)})"
       case c: State.Claim.Let.SeqInBound =>
         return st"(${typeOpId(c.seq.tipe, "inBound")} ${v2ST(c.seq)} ${v2ST(c.index)})"
+      case c: State.Claim.Let.TupleLit =>
+        return st"(${typeOpId(c.sym.tipe, "new")} ${(for (arg <- c.args) yield v2ST(arg), " ")})"
       case c: State.Claim.Let.And =>
-        return if (c.args.size == 0) st"false"
+        return if (c.args.size == 0) Smt2.stFalse
         else if (c.args.size == 1) v2ST(c.args(0))
         else st"(and ${(c.args.map(v2ST _), " ")})"
       case c: State.Claim.Let.Or =>
-        return if (c.args.size == 0) st"true"
+        return if (c.args.size == 0) Smt2.stTrue
         else if (c.args.size == 1) v2ST(c.args(0))
         else st"(or ${(c.args.map(v2ST _), " ")})"
       case c: State.Claim.Let.Imply =>
@@ -781,7 +804,9 @@ object Smt2 {
       case c: State.Claim.Prop =>
         return if (c.isPos) v2ST(c.value) else st"(not ${v2ST(c.value)})"
       case _: State.Claim.Label =>
-        return st"true"
+        return Smt2.stTrue
+      case _: State.Claim.Def.Random =>
+        return Smt2.stTrue
       case c: State.Claim.If =>
         val r =
           st"""(ite ${v2ST(c.cond)}
@@ -797,7 +822,7 @@ object Smt2 {
 
   def andST(cs: ISZ[State.Claim]): ST = {
     val r: ST =
-      if (cs.size == 0) st"true"
+      if (cs.size == 0) Smt2.stTrue
       else if (cs.size == 1) c2ST(cs(0))
       else
         st"""(and
@@ -807,7 +832,7 @@ object Smt2 {
 
   def orST(cs: ISZ[State.Claim]): ST = {
     val r: ST =
-      if (cs.size == 0) st"false"
+      if (cs.size == 0) Smt2.stFalse
       else if (cs.size == 1) c2ST(cs(0))
       else
         st"""(or
@@ -830,7 +855,7 @@ object Smt2 {
       return ISZ[(String, ST)](symST.render ~> st"(declare-const $symST ${typeId(cDef.sym.tipe)})")
     }
     c match {
-      case c: State.Claim.Label => return ISZ()
+      case _: State.Claim.Label => return ISZ()
       case c: State.Claim.Prop =>
         val vST = v2ST(c.value)
         return ISZ[(String, ST)](vST.render ~> st"(declare-const $vST ${typeId(c.value.tipe)})")
@@ -885,6 +910,7 @@ object Smt2 {
         }
       case t: AST.Typed.TypeVar => return st"$$${t.id}"
       case t: AST.Typed.Enum => return st"${(shorten(t.name), ".")}"
+      case t: AST.Typed.Tuple => return st"(${(for (arg <- t.args) yield typeIdRaw(arg), ", ")})"
       case _ => halt("TODO") // TODO
     }
   }
