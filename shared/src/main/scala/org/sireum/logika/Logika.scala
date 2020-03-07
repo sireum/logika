@@ -1259,7 +1259,7 @@ object Logika {
           if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
             val it = t.args(0).asInstanceOf[AST.Typed.Name]
             val et = t.args(1)
-            val hasWildcard = ops.ISZOps(pattern.patterns).forall(
+            val hasWildcard = ops.ISZOps(pattern.patterns).exists(
               (p: AST.Pattern) => p.isInstanceOf[AST.Pattern.SeqWildcard])
             val (s1, sizeSym) = s0.freshSym(AST.Typed.z, pos)
             val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sizeSym, v, "size"))
@@ -1267,7 +1267,7 @@ object Logika {
             val (op, size): (String, Z) =
               if (hasWildcard) (">=", pattern.patterns.size - 1) else ("==", pattern.patterns.size)
             var s4 = s3.addClaim(State.Claim.Let.Binary(cond, sizeSym, op, State.Value.Z(size, pos), AST.Typed.z))
-            var conds = ISZ[State.Value]()
+            var conds = ISZ[State.Value](cond)
             val offset: Z = if (it == AST.Typed.z) 0 else th.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast.index
             for (i <- 0 until size) {
               val sub = pattern.patterns(i)
@@ -1344,18 +1344,19 @@ object Logika {
 
   def evalMatch(state: State, stmt: AST.Stmt.Match, reporter: Reporter): State = {
     def addPatternVars(s0: State, lcontext: ISZ[String],
-                       m: Map[String, (State.Value, AST.Typed, Position)]): (State, ISZ[State.Claim]) = {
+                       m: Map[String, (State.Value, AST.Typed, Position)]): (State, ISZ[State.Claim], ISZ[State.Value]) = {
       val ids = m.keys
-      var s1 = s0
-      val (s2, oldIds) = Logika.rewriteLocals(s1, lcontext, ids)
-      s1 = s2
+      val (s1, oldIds) = Logika.rewriteLocals(s0, lcontext, ids)
+      var s2 = s1
+      var bindings = ISZ[State.Value]()
       for (p <- m.entries) {
         val (id, (v, t, pos)) = p
-        val (s3, x) = Logika.idIntro(pos, s1, lcontext, id, t, Some(pos))
+        val (s3, x) = Logika.idIntro(pos, s2, lcontext, id, t, Some(pos))
         val (s4, sym) = s3.freshSym(AST.Typed.b, pos)
-        s1 = s4.addClaim(State.Claim.Let.Binary(sym, x, "==", v, t))
+        s2 = s4.addClaim(State.Claim.Let.Binary(sym, x, "==", v, t))
+        bindings = bindings :+ sym
       }
-      return (s1, oldIds)
+      return (s2, oldIds, bindings)
     }
     val (s0, v) = evalExp(T, state, stmt.exp, reporter)
     if (!s0.status) {
@@ -1369,23 +1370,29 @@ object Logika {
     var s1 = s0
     for (c <- stmt.cases) {
       val (s2, pcond, m) = evalPattern(s1, v, c.pattern, reporter)
-      val (s3, oldIds) = addPatternVars(s2, lcontext, m)
+      val (s3, oldIds, bindings) = addPatternVars(s2, lcontext, m)
       var conds = ISZ(pcond)
-      val s5: State = c.condOpt match {
+      val s6: State = c.condOpt match {
         case Some(cond) =>
           val (s4, ccond) = evalExp(T, s3, cond, reporter)
-          conds = conds :+ ccond
-          s4
+          if (bindings.nonEmpty) {
+            val (s5, icond) = s4.freshSym(AST.Typed.b, c.pattern.posOpt.get)
+            conds = conds :+ icond
+            s5.addClaim(State.Claim.Let.Imply(icond, bindings :+ ccond))
+          } else {
+            conds = conds :+ ccond
+            s4
+          }
         case _ =>
           s3
       }
       val pos = c.pattern.posOpt.get
-      val (s6, sym) = s5.freshSym(AST.Typed.b, pos)
-      val s7 = s6.addClaim(State.Claim.Let.And(sym, conds))
-      val s8 = Logika.rewriteLocals(s7, lcontext, m.keys)._1
-      val s9 = s8.addClaims(oldIds)
-      s1 = s1(nextFresh = s9.nextFresh).
-        addClaim(State.Claim.And(for (i <- s1.claims.size until s9.claims.size) yield s9.claims(i)))
+      val (s7, sym) = s6.freshSym(AST.Typed.b, pos)
+      val s8 = s7.addClaim(State.Claim.Let.And(sym, conds))
+      val s9 = Logika.rewriteLocals(s8, lcontext, m.keys)._1
+      val s10 = s9.addClaims(oldIds)
+      s1 = s1(nextFresh = s10.nextFresh).
+        addClaim(State.Claim.And(for (i <- s1.claims.size until s10.claims.size) yield s10.claims(i)))
       caseSyms = caseSyms :+ ((c, sym, m))
     }
     ;{
@@ -1409,8 +1416,9 @@ object Logika {
       if (smt2.sat(config.logVc, s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]", s10.claims,
         reporter)) {
         possibleCases = T
-        val s11 = addPatternVars(s10, lcontext, m)._1
-        val s12 = evalBody(s11, c.body, reporter)
+        val (s11, _, bindings) = addPatternVars(s10, lcontext, m)
+        val s12 = evalBody(s11.addClaim(State.Claim.And(for (b <- bindings) yield
+          State.Claim.Prop(T, b.asInstanceOf[State.Value.Sym]))), c.body, reporter)
         s1 = s1(nextFresh = s12.nextFresh)
         if (s12.status) {
           leafClaims = leafClaims :+ State.Claim.Imply(ISZ(cond, State.Claim.And(
