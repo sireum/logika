@@ -59,7 +59,65 @@ class LogikaTest extends TestSuite {
 
   val tests = Tests {
 
+    * - passingWorksheet(
+      """import org.sireum._
+        |(Z.random, Z.random) match {
+        |  case (0, x) =>
+        |  case (_, _) =>
+        |}
+        |(Z.random, Z.random) match {
+        |  case (x, y) =>
+        |}""".stripMargin)
+
     "Passing" - {
+
+      * - passingWorksheet(
+        """import org.sireum._
+          |var zOpt: Option[Z] = None[Z]()
+          |if (B.random) {
+          |  zOpt = Some(Z.random)
+          |}
+          |zOpt match {
+          |  case Some(x) =>
+          |  case _ =>
+          |}
+          |zOpt = Some(Z.random)
+          |zOpt match {
+          |  case Some(_) =>
+          |}""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
+          |@enum object Bool {
+          |  'True
+          |  'False
+          |}
+          |
+          |var b = Bool.True
+          |if (B.random) {
+          |  b = Bool.False
+          |}
+          |
+          |b match {
+          |  case Bool.True =>
+          |  case Bool.False =>
+          |}
+          |
+          |b match {
+          |  case Bool.True =>
+          |  case _ =>
+          |}
+          |
+          |b match {
+          |  case _ =>
+          |}
+          |
+          |b match {
+          |  case Bool.False => b = Bool.True
+          |  case _ =>
+          |}
+          |
+          |assert(b == Bool.True)""".stripMargin)
 
       * - passingWorksheet(
         """import org.sireum._
@@ -87,6 +145,15 @@ class LogikaTest extends TestSuite {
 
       * - passingWorksheet(
         """import org.sireum._
+          |val x = Z.random
+          |val y = Z.random
+          |val z = (x, y)
+          |assert(z._1 == x)
+          |assert(z._2 == y)
+          |assert(z == ((x, y)))""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
           |var x = Z.random
           |x = x * x
           |assert(x >= 0)""".stripMargin)
@@ -102,6 +169,12 @@ class LogikaTest extends TestSuite {
     }
 
     "Failing" - {
+
+      * - failingWorksheet(
+        """import org.sireum._
+          |(Z.random, Z.random) match {
+          |  case (0, x) =>
+          |}""".stripMargin, "Inexhaustive")
 
       * - failingWorksheet(
         """import org.sireum._
@@ -134,8 +207,8 @@ class LogikaTest extends TestSuite {
            |  i = i + 1
            |}
            |assert(r == m * n)""".stripMargin, "loop unrolling capped")
-
     }
+
   }
 
   def passingWorksheet(worksheet: String): Unit = {
