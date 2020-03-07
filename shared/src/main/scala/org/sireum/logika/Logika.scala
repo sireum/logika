@@ -53,10 +53,11 @@ object Logika {
     }
   }
 
-  @datatype class CurrentIdRewriter(map: HashMap[(ISZ[String], String), (ISZ[Position], Z)]) extends PrePost[B] {
-    override def preStateClaimLetCurrentId(ctx: B, o: State.Claim.Let.CurrentId): PreResult[B, State.Claim.Let] = {
+  @datatype class CurrentIdRewriter(map: HashMap[(ISZ[String], String), (ISZ[Position], Z)]) extends PrePost[ISZ[State.Claim]] {
+    override def preStateClaimLetCurrentId(ctx: ISZ[State.Claim],
+                                           o: State.Claim.Let.CurrentId): PreResult[ISZ[State.Claim], State.Claim.Let] = {
       map.get((o.context, o.id)) match {
-        case Some((poss, num)) => return PreResult(ctx, T, Some(State.Claim.Let.Id(o.sym, o.context, o.id, num, poss)))
+        case Some((poss, num)) => return PreResult(ctx :+ o, T, Some(State.Claim.Let.Id(o.sym, o.context, o.id, num, poss)))
         case _ => return PreResult(ctx, T, None())
       }
     }
@@ -291,14 +292,34 @@ object Logika {
     return idIntro(pos, state, context, "Res", t, posOpt)
   }
 
+  def collectLocalPoss(s0: State, lcontext: ISZ[String], id: String): ISZ[Position] = {
+    return StateTransformer(Logika.CurrentIdPossCollector(lcontext, id)).transformState(ISZ(), s0).ctx
+  }
+
   def rewriteLocal(s0: State, lcontext: ISZ[String], id: String): State = {
-    val poss = StateTransformer(Logika.CurrentIdPossCollector(lcontext, id)).transformState(ISZ(), s0).ctx
-    if (poss.isEmpty) {
-      return s0
-    }
+    val poss = collectLocalPoss(s0, lcontext, id)
+    assert(poss.nonEmpty)
     val (s1, num) = s0.fresh
     val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
-    return StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, s1).resultOpt.get
+    return StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(ISZ(), s1).resultOpt.get
+  }
+
+  def rewriteLocals(s0: State, lcontext: ISZ[String], ids: ISZ[String]): (State, ISZ[State.Claim]) = {
+    if (ids.isEmpty) {
+      return (s0, ISZ())
+    }
+    var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)]
+    var s1 = s0
+    for (id <- ids) {
+      val poss = collectLocalPoss(s0, lcontext, id)
+      if (poss.nonEmpty) {
+        val (s2, num) = s1.fresh
+        locals = locals + (lcontext, id) ~> ((poss, num))
+        s1 = s2
+      }
+    }
+    val r = StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(ISZ(), s1)
+    return (r.resultOpt.getOrElse(s1), r.ctx)
   }
 
   def rewriteLocalVars(state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar]): State = {
@@ -315,7 +336,7 @@ object Logika {
       current = s1
       locals = locals + (l.context, l.id) ~> ((poss, num))
     }
-    return StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(T, current).resultOpt.get
+    return StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(ISZ(), current).resultOpt.get
   }
 
   def rewriteObjectVars(state: State, objectVars: HashSMap[AST.ResolvedInfo.Var, (AST.Typed, Position)],
@@ -343,12 +364,12 @@ object Logika {
   }
 
   def conjunctClaimSuffix(s0: State, s1: State): State = {
-    val size1 = s0.claims.size
-    val size2 = s1.claims.size
-    assert (size1 < size2)
-    if (size1 + 1 == size2) {
+    if (s1.claims.size - s0.claims.size <= 1) {
+      assert(s1.claims.size - s0.claims.size >= 0)
       return s1
     }
+    val size1 = s0.claims.size
+    val size2 = s1.claims.size
     val claimsOps = ops.ISZOps(s1.claims)
     return s1(claims = claimsOps.slice(0, size1) :+ State.Claim.And(claimsOps.slice(size1, size2)))
   }
@@ -382,6 +403,7 @@ object Logika {
         }
       case _: AST.Typed.Enum => return T
       case _: AST.Typed.TypeVar => return T
+      case _: AST.Typed.Tuple => return T
       case _ => return F
     }
     return T
@@ -564,45 +586,51 @@ object Logika {
     def evalSelectH(res: AST.ResolvedInfo, receiverOpt: Option[AST.Exp], id: String, tipe: AST.Typed,
                     pos: Position): (State, State.Value) = {
       def evalField(t: AST.Typed): (State, State.Value) = {
-        receiverOpt match {
-          case Some(receiver) =>
-            val (s0, o) = evalExp(rtCheck, state, receiver, reporter)
-            if (!s0.status) {
-              return (s0, State.errorValue)
-            }
-            val (s1, sym) = s0.freshSym(t, pos)
-            return (s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id)), sym)
-          case _ => halt(s"TODO: $e") // TODO
+        val (s0, o) = evalExp(rtCheck, state, receiverOpt.get, reporter)
+        if (!s0.status) {
+          return (s0, State.errorValue)
         }
+        val (s1, sym) = s0.freshSym(t, pos)
+        return (s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id)), sym)
       }
 
       def evalEnumElement(eres: AST.ResolvedInfo.EnumElement): (State, State.Value) = {
         return (state, State.Value.Enum(tipe.asInstanceOf[AST.Typed.Name], eres.owner, eres.name, eres.ordinal, pos))
       }
 
+      def evalTupleLit(tres: AST.ResolvedInfo.Tuple): (State, State.Value) = {
+        val (s0, sym) = state.freshSym(tipe, pos)
+        val (s1, v) = evalExp(rtCheck, s0, receiverOpt.get, reporter)
+        if (!s1.status) {
+          return (s1, State.errorValue)
+        }
+        return (s1.addClaim(State.Claim.Let.FieldLookup(sym, v, s"_${tres.index}")), sym)
+      }
+
       res match {
         case res: AST.ResolvedInfo.Var =>
-          if (res.isInObject) {
-            halt(s"TODO: $e") // TODO
-          } else {
-            return evalField(tipe)
-          }
+          assert(!res.isInObject && receiverOpt.nonEmpty)
+          return evalField(tipe)
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName =>
           return evalField(res.tpeOpt.get.ret)
         case res: AST.ResolvedInfo.LocalVar => return evalIdentH(res, tipe, pos)
         case res: AST.ResolvedInfo.EnumElement => return evalEnumElement(res)
+        case res: AST.ResolvedInfo.Tuple =>
+          assert(receiverOpt.nonEmpty)
+          return evalTupleLit(res)
         case _ => halt(s"TODO: $e") // TODO
       }
     }
 
     def evalSelect(exp: AST.Exp.Select): (State, State.Value) = {
+      val pos = exp.id.attr.posOpt.get
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext && res.owner.size == 3
           && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id == "random" =>
           val s0 = state
-          val (s1, num) = s0.fresh
-          return (s1, State.Value.Sym(num, res.tpeOpt.get.ret, exp.posOpt.get))
-        case res => return evalSelectH(res, exp.receiverOpt, exp.id.value, exp.typedOpt.get, exp.posOpt.get)
+          val (s1, sym) = s0.freshSym(res.tpeOpt.get.ret, pos)
+          return (s1.addClaim(State.Claim.Def.Random(sym, pos)), sym)
+        case res => return evalSelectH(res, exp.receiverOpt, exp.id.value, exp.typedOpt.get, pos)
       }
     }
 
@@ -1031,6 +1059,24 @@ object Logika {
       }
     }
 
+    def evalTupleExp(tuple: AST.Exp.Tuple): (State, State.Value) = {
+      if (tuple.args.size == 1) {
+        return evalExp(rtCheck, state, tuple.args(0), reporter)
+      }
+      var s0 = state
+      var args = ISZ[State.Value]()
+      for (arg <- tuple.args) {
+        val (s1, v) = evalExp(rtCheck, s0, arg, reporter)
+        s0 = s1
+        if (!s0.status) {
+          return (s0, State.errorValue)
+        }
+        args = args :+ v
+      }
+      val (s2, sym) = s0.freshSym(tuple.typedOpt.get, tuple.posOpt.get)
+      return (s2.addClaim(State.Claim.Let.TupleLit(sym, args)), sym)
+    }
+
     val s0 = state
     e match {
       case lit: AST.Lit => return (s0, evalLit(lit))
@@ -1038,6 +1084,7 @@ object Logika {
       case e: AST.Exp.Select => return evalSelect(e)
       case e: AST.Exp.Unary => return evalUnaryExp(e)
       case e: AST.Exp.Binary => return evalBinaryExp(e)
+      case e: AST.Exp.Tuple => return evalTupleExp(e)
       case e: AST.Exp.Invoke =>
         e.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method =>
@@ -1175,63 +1222,212 @@ object Logika {
 
   }
 
-  def evalMatch(s0: State, stmt: AST.Stmt.Match, reporter: Reporter): State = {
-    val (s1, v) = evalExp(T, s0, stmt.exp, reporter)
-    if (!s1.status) {
-      return s1
+  def evalPattern(s0: State, v: State.Value, pattern: AST.Pattern, reporter: Reporter): (State, State.Value, Map[String, (State.Value, AST.Typed, Position)]) = {
+    val posOpt = pattern.posOpt
+    val pos = posOpt.get
+    pattern match {
+      case pattern: AST.Pattern.Literal =>
+        val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
+        return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==", evalLit(pattern.lit), v.tipe)), cond, Map.empty)
+      case pattern: AST.Pattern.VarBinding =>
+        pattern.tipeOpt match {
+          case Some(tipe) =>
+            val t = tipe.typedOpt.get
+            val (s1, cond) = evalTypeTestH(s0, v, t, tipe.posOpt.get)
+            return (s1, cond, Map.empty[String, (State.Value, AST.Typed, Position)] + pattern.id.value ~> ((v, t, pos)))
+          case _ =>
+            val t = pattern.attr.typedOpt.get
+            return (s0, State.Value.B(T, pos),
+              Map.empty[String, (State.Value, AST.Typed, Position)] + pattern.id.value ~> ((v, t, pos)))
+        }
+      case pattern: AST.Pattern.Wildcard =>
+        pattern.typeOpt match {
+          case Some(tipe) =>
+            val (s1, cond) = evalTypeTestH(s0, v, tipe.typedOpt.get, tipe.posOpt.get)
+            return (s1, cond, Map.empty)
+          case _ =>
+            return (s0, State.Value.B(T, pos), Map.empty)
+        }
+      case pattern: AST.Pattern.Structure =>
+        var m = Map.empty[String, (State.Value, AST.Typed, Position)]
+        pattern.idOpt match {
+          case Some(id) => m = m + id.value ~> ((v, pattern.attr.typedOpt.get, id.attr.posOpt.get))
+          case _ =>
+        }
+        if (pattern.nameOpt.nonEmpty) {
+          val t = pattern.attr.typedOpt.get.asInstanceOf[AST.Typed.Name]
+          if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
+            val it = t.args(0).asInstanceOf[AST.Typed.Name]
+            val et = t.args(1)
+            val hasWildcard = ops.ISZOps(pattern.patterns).forall(
+              (p: AST.Pattern) => p.isInstanceOf[AST.Pattern.SeqWildcard])
+            val (s1, sizeSym) = s0.freshSym(AST.Typed.z, pos)
+            val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sizeSym, v, "size"))
+            val (s3, cond) = s2.freshSym(AST.Typed.b, pos)
+            val (op, size): (String, Z) =
+              if (hasWildcard) (">=", pattern.patterns.size - 1) else ("==", pattern.patterns.size)
+            var s4 = s3.addClaim(State.Claim.Let.Binary(cond, sizeSym, op, State.Value.Z(size, pos), AST.Typed.z))
+            var conds = ISZ[State.Value]()
+            val offset: Z = if (it == AST.Typed.z) 0 else th.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast.index
+            for (i <- 0 until size) {
+              val sub = pattern.patterns(i)
+              val subPos = sub.posOpt.get
+              val (s5, sym) = s4.freshSym(et, subPos)
+              val (s6, cond, subM) = evalPattern(s5.addClaim(
+                State.Claim.Let.SeqLookup(sym, v, State.Value.Z(offset + i, subPos))), sym, sub, reporter)
+              conds = conds :+ cond
+              s4 = s6
+              m = m ++ subM.entries
+            }
+            val (s7, aconds) = s4.freshSym(AST.Typed.b, pos)
+            return (s7.addClaim(State.Claim.Let.And(aconds, conds)), aconds, m)
+          } else {
+            val (s1, tcond) = evalTypeTestH(s0, v, t, pos)
+            val ti = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
+            val sm = TypeChecker.buildTypeSubstMap(t.ids, posOpt, ti.ast.typeParams, t.args, reporter).get
+            val (s2, o) = s1.freshSym(t, pos)
+            var s3 = s2.addClaim(State.Claim.Let.Eq(o, v))
+            var conds = ISZ[State.Value](tcond)
+            for (p <- ops.ISZOps(ti.extractorTypeMap.entries).zip(pattern.patterns)) {
+              val f = p._1._1
+              val ft = p._1._2.subst(sm)
+              val sub = p._2
+              val (s4, sym) = s3.freshSym(ft, sub.posOpt.get)
+              s3 = s4.addClaim(State.Claim.Let.FieldLookup(sym, o, f))
+              val (s5, cond, subM) = evalPattern(s3, sym, sub, reporter)
+              s3 = s5
+              conds = conds :+ cond
+              m = m ++ subM.entries
+            }
+            val (s6, aconds) = s3.freshSym(AST.Typed.b, pos)
+            return (s6.addClaim(State.Claim.Let.And(aconds, conds)), aconds, m)
+          }
+        } else {
+          val t = pattern.attr.typedOpt.get.asInstanceOf[AST.Typed.Tuple]
+          var s1 = s0
+          var conds = ISZ[State.Value]()
+          for (i <- 1 to pattern.patterns.size) {
+            val sub = pattern.patterns(i - 1)
+            val (s2, sym) = s1.freshSym(t.args(i - 1), sub.posOpt.get)
+            val s3 = s2.addClaim(State.Claim.Let.FieldLookup(sym, v, s"_$i"))
+            val (s4, cond, subM) = evalPattern(s3, sym, sub, reporter)
+            s1 = s4
+            conds = conds :+ cond
+            m = m ++ subM.entries
+          }
+          val (s5, aconds) = s1.freshSym(AST.Typed.b, pos)
+          return (s5.addClaim(State.Claim.Let.And(aconds, conds)), aconds, m)
+        }
+      case pattern: AST.Pattern.Ref =>
+        val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
+        pattern.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.Var =>
+            if (res.owner == AST.Typed.sireumName && res.id == "T" || res.id == "F") {
+              return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==",
+                State.Value.B(res.id == "T", pos), AST.Typed.b)), cond, Map.empty)
+            }
+            val t = pattern.attr.typedOpt.get
+            val (s2, sym): (State, State.Value.Sym) =
+              if (res.isInObject) Logika.nameIntro(pos, s1, res.owner :+ res.id, t, None())
+              else evalThisIdH(s1, res.id, t, pos)
+            return (s2.addClaim(State.Claim.Let.Binary(cond, v, "==", sym, t)), cond, Map.empty)
+          case res: AST.ResolvedInfo.EnumElement =>
+            val t = pattern.attr.typedOpt.get.asInstanceOf[AST.Typed.Name]
+            return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==",
+              State.Value.Enum(t, res.owner, res.name, res.ordinal, pos), t)), cond, Map.empty)
+          case _ => halt(s"Infeasible: $pattern")
+        }
+      case pattern: AST.Pattern.LitInterpolate => halt(s"TODO: $pattern") // TODO
+      case _: AST.Pattern.SeqWildcard => halt(s"Infeasible")
     }
-    val root = s1
-    var s2 = root
-    var caseSyms = ISZ[(AST.Case, State.Value.Sym)]()
+  }
+
+  def evalMatch(state: State, stmt: AST.Stmt.Match, reporter: Reporter): State = {
+    def addPatternVars(s0: State, lcontext: ISZ[String],
+                       m: Map[String, (State.Value, AST.Typed, Position)]): (State, ISZ[State.Claim]) = {
+      val ids = m.keys
+      var s1 = s0
+      val (s2, oldIds) = Logika.rewriteLocals(s1, lcontext, ids)
+      s1 = s2
+      for (p <- m.entries) {
+        val (id, (v, t, pos)) = p
+        val (s3, x) = Logika.idIntro(pos, s1, lcontext, id, t, Some(pos))
+        val (s4, sym) = s3.freshSym(AST.Typed.b, pos)
+        s1 = s4.addClaim(State.Claim.Let.Binary(sym, x, "==", v, t))
+      }
+      return (s1, oldIds)
+    }
+    val (s0, v) = evalExp(T, state, stmt.exp, reporter)
+    if (!s0.status) {
+      return s0
+    }
+    var caseSyms = ISZ[(AST.Case, State.Value.Sym, Map[String, (State.Value, AST.Typed, Position)])]()
+    val lcontext: ISZ[String] = context.methodOpt match {
+      case Some(mctx) => mctx.name
+      case _ => ISZ()
+    }
+    var s1 = s0
     for (c <- stmt.cases) {
-      val (s3, pcond) = evalPattern(s2, v, c.pattern, reporter)
-      val acond: State.Value = c.condOpt match {
+      val (s2, pcond, m) = evalPattern(s1, v, c.pattern, reporter)
+      val (s3, oldIds) = addPatternVars(s2, lcontext, m)
+      var conds = ISZ(pcond)
+      val s5: State = c.condOpt match {
         case Some(cond) =>
           val (s4, ccond) = evalExp(T, s3, cond, reporter)
-          val (s5, ac) = s4.freshSym(AST.Typed.b, cond.posOpt.get)
-          s2 = s5.addClaim(State.Claim.Let.And(ac, ISZ(pcond, ccond)))
-          ac
+          conds = conds :+ ccond
+          s4
         case _ =>
-          s2 = s3
-          pcond
+          s3
       }
       val pos = c.pattern.posOpt.get
-      val (s6, sym) = value2Sym(s2, acond, pos)
-      s2 = s6
-      caseSyms = caseSyms :+ ((c, sym))
+      val (s6, sym) = s5.freshSym(AST.Typed.b, pos)
+      val s7 = s6.addClaim(State.Claim.Let.And(sym, conds))
+      val s8 = Logika.rewriteLocals(s7, lcontext, m.keys)._1
+      val s9 = s8.addClaims(oldIds)
+      s1 = s1(nextFresh = s9.nextFresh).
+        addClaim(State.Claim.And(for (i <- s1.claims.size until s9.claims.size) yield s9.claims(i)))
+      caseSyms = caseSyms :+ ((c, sym, m))
     }
-    s2 = s2(claims = root.claims ++ ops.ISZOps(s2.claims).slice(root.claims.size, s2.claims.size))
     ;{
       val pos = stmt.posOpt.get
-      if (smt2.sat(config.logVc, s"Match inexhaustiveness at [${pos.beginLine}, ${pos.beginColumn}]",
-        s2.claims :+ State.Claim.And(for (p <- caseSyms) yield State.Claim.Prop(F, p._2)), reporter)) {
-        error(stmt.posOpt, "Inexhaustive match pattern", reporter)
-        return s2(status = F)
+      if (smt2.sat(config.logVc, s"pattern match inexhaustiveness at [${pos.beginLine}, ${pos.beginColumn}]",
+        s1.claims :+ State.Claim.And(for (p <- caseSyms) yield State.Claim.Prop(F, p._2)), reporter)) {
+        error(stmt.posOpt, "Inexhaustive pattern match", reporter)
+        return s1(status = F)
       }
     }
     var leafClaims = ISZ[State.Claim]()
+    var possibleCases = F
     for (i <- 0 until caseSyms.size) {
-      val (c, sym) = caseSyms(i)
+      val (c, sym, m) = caseSyms(i)
       val cond = State.Claim.And(
         (for (j <- 0 until i) yield State.Claim.Prop(F, caseSyms(j)._2).asInstanceOf[State.Claim]) :+
         State.Claim.Prop(T, sym))
-      val pos = c.pattern.posOpt.get
-      val s7 = s2.addClaim(cond)
-      if (smt2.sat(config.logVc, s"Match case pattern at [${pos.beginLine}, ${pos.beginColumn}]", s7.claims,
+      val posOpt = c.pattern.posOpt
+      val pos = posOpt.get
+      val s10 = s1.addClaim(cond)
+      if (smt2.sat(config.logVc, s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]", s10.claims,
         reporter)) {
-        val s8 = evalBody(s7, c.body, reporter)
-        s2 = s2(nextFresh = s8.nextFresh)
-        if (s8.status) {
+        possibleCases = T
+        val s11 = addPatternVars(s10, lcontext, m)._1
+        val s12 = evalBody(s11, c.body, reporter)
+        s1 = s1(nextFresh = s12.nextFresh)
+        if (s12.status) {
           leafClaims = leafClaims :+ State.Claim.Imply(ISZ(cond, State.Claim.And(
-            ops.ISZOps(s8.claims).slice(s2.claims.size + 1, s8.claims.size)
+            ops.ISZOps(s12.claims).slice(s1.claims.size + 1, s12.claims.size)
           )))
         }
+      } else {
+        error(posOpt, "Impossible pattern matching case", reporter)
       }
     }
     if (leafClaims.isEmpty) {
-      return s2(status = F)
+      if (!possibleCases) {
+        error(stmt.posOpt, "Impossible pattern matching cases", reporter)
+      }
+      return s1(status = F)
     }
-    return s2.addClaims(leafClaims)
+    return s1.addClaim(State.Claim.And(leafClaims))
   }
 
   def evalStmt(state: State, stmt: AST.Stmt, reporter: Reporter): State = {
@@ -1514,112 +1710,6 @@ object Logika {
     }
     assert(v.tipe == t)
     return (s0, State.Value.B(T, pos))
-  }
-
-  def evalPattern(s0: State, v: State.Value, pattern: AST.Pattern, reporter: Reporter): (State, State.Value) = {
-    val posOpt = pattern.posOpt
-    val pos = posOpt.get
-    pattern match {
-      case pattern: AST.Pattern.Literal =>
-        val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
-        return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==", evalLit(pattern.lit), AST.Typed.b)), cond)
-      case pattern: AST.Pattern.VarBinding =>
-        val lcontext = context.methodOpt.get.name
-        val s1 = Logika.rewriteLocal(s0, lcontext, pattern.id.value)
-        pattern.tipeOpt match {
-          case Some(tipe) =>
-            val (s2, cond) = evalTypeTestH(s1, v, tipe.typedOpt.get, tipe.posOpt.get)
-            val (s3, r) = Logika.idIntro(pos, s2, lcontext, pattern.id.value, tipe.typedOpt.get, posOpt)
-            return (s3.addClaim(State.Claim.Let.Eq(r, v)), cond)
-          case _ =>
-            val (s2, r) = Logika.idIntro(pos, s1, lcontext, pattern.id.value, v.tipe, posOpt)
-            return (s2.addClaim(State.Claim.Let.Eq(r, v)), State.Value.B(T, pos))
-        }
-      case pattern: AST.Pattern.Wildcard =>
-        pattern.typeOpt match {
-          case Some(tipe) =>
-            val (s1, cond) = evalTypeTestH(s0, v, tipe.typedOpt.get, tipe.posOpt.get)
-            return (s1, cond)
-          case _ =>
-            return (s0, State.Value.B(T, pos))
-        }
-      case pattern: AST.Pattern.Structure =>
-        val lcontext = context.methodOpt.get.name
-        val s1: State = pattern.idOpt match {
-          case Some(id) =>
-            Logika.idIntro(pos, Logika.rewriteLocal(s0, lcontext, id.value), lcontext, id.value,
-              pattern.attr.typedOpt.get, Some(pos))._1
-          case _ => s0
-        }
-        if (pattern.nameOpt.nonEmpty) {
-          val t = pattern.attr.typedOpt.get.asInstanceOf[AST.Typed.Name]
-          if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
-            val it = t.args(0).asInstanceOf[AST.Typed.Name]
-            val et = t.args(1)
-            val hasWildcard = ops.ISZOps(pattern.patterns).forall(
-              (p: AST.Pattern) => p.isInstanceOf[AST.Pattern.SeqWildcard])
-            val (s2, sizeSym) = s1.freshSym(AST.Typed.z, pos)
-            val s3 = s2.addClaim(State.Claim.Let.FieldLookup(sizeSym, v, "size"))
-            val (s4, cond) = s3.freshSym(AST.Typed.b, pos)
-            val (op, size): (String, Z) =
-              if (hasWildcard) (">=", pattern.patterns.size - 1) else ("==", pattern.patterns.size)
-            var s5 = s4.addClaim(State.Claim.Let.Binary(cond, sizeSym, op, State.Value.Z(size, pos), AST.Typed.b))
-            var conds = ISZ[State.Value]()
-            val offset: Z = if (it == AST.Typed.z) 0 else th.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast.index
-            for (i <- 0 until size) {
-              val sub = pattern.patterns(i)
-              val subPos = sub.posOpt.get
-              val (s6, sym) = s5.freshSym(et, subPos)
-              val (s7, cond) = evalPattern(s6.addClaim(
-                State.Claim.Let.SeqLookup(sym, v, State.Value.Z(offset + i, subPos))), sym, sub, reporter)
-              conds = conds :+ cond
-              s5 = s7
-            }
-            val (s8, aconds) = s5.freshSym(AST.Typed.b, pos)
-            return (s8.addClaim(State.Claim.Let.And(aconds, conds)), aconds)
-          } else {
-            val ti = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
-            val sm = TypeChecker.buildTypeSubstMap(t.ids, posOpt, ti.ast.typeParams, t.args, reporter).get
-            var s2 = s1
-            var conds = ISZ[State.Value]()
-            for (p <- ops.ISZOps(ti.extractorTypeMap.entries).zip(pattern.patterns)) {
-              val f = p._1._1
-              val ft = p._1._2.subst(sm)
-              val sub = p._2
-              val (s3, sym) = s2.freshSym(ft, sub.posOpt.get)
-              s2 = s3.addClaim(State.Claim.Let.FieldLookup(sym, v, f))
-              val (s4, cond) = evalPattern(s2, sym, sub, reporter)
-              s2 = s4
-              conds = conds :+ cond
-            }
-            val (s5, aconds) = s2.freshSym(AST.Typed.b, pos)
-            return (s5.addClaim(State.Claim.Let.And(aconds, conds)), aconds)
-          }
-        } else {
-          halt(s"TODO: tuple $pattern") // TODO
-        }
-      case pattern: AST.Pattern.Ref =>
-        val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
-        pattern.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Var =>
-            if (res.owner == AST.Typed.sireumName && res.id == "T" || res.id == "F") {
-              return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==",
-                State.Value.B(res.id == "T", pos), AST.Typed.b)), cond)
-            }
-            val t = pattern.attr.typedOpt.get
-            val (s2, sym): (State, State.Value.Sym) =
-              if (res.isInObject) Logika.nameIntro(pos, s1, res.owner :+ res.id, t, None())
-              else evalThisIdH(s1, res.id, t, pos)
-            return (s2.addClaim(State.Claim.Let.Binary(cond, v, "==", sym, AST.Typed.b)), cond)
-          case res: AST.ResolvedInfo.EnumElement =>
-            return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==",
-              State.Value.Enum(v.tipe.asInstanceOf[AST.Typed.Name], res.owner, res.name, res.ordinal,
-                pos), AST.Typed.b)), cond)
-          case _ => halt(s"Infeasible: $pattern")
-        }
-      case pattern: AST.Pattern.LitInterpolate => halt(s"TODO: $pattern") // TODO
-      case _: AST.Pattern.SeqWildcard => halt(s"Infeasible")
-    }
   }
 
   def checkExp(rtCheck: B, title: String, titleSuffix: String, s0: State, exp: AST.Exp, reporter: Reporter): State = {
