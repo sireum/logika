@@ -770,7 +770,7 @@ object Smt2 {
         else if (c.args.size == 1) v2ST(c.args(0))
         else st"(or ${(c.args.map(v2ST _), " ")})"
       case c: State.Claim.Let.Imply =>
-        return st"(or ${(c.args.map(v2ST _), " ")})"
+        return st"(=> ${(c.args.map(v2ST _), " ")})"
       case c: State.Claim.Let.Apply =>
         halt("TODO") // TODO
       case c: State.Claim.Let.IApply =>
