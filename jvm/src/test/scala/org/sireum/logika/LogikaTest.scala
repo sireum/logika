@@ -59,16 +59,6 @@ class LogikaTest extends TestSuite {
 
   val tests = Tests {
 
-    * - passingWorksheet(
-      """import org.sireum._
-        |(Z.random, Z.random) match {
-        |  case (0, x) =>
-        |  case (_, _) =>
-        |}
-        |(Z.random, Z.random) match {
-        |  case (x, y) =>
-        |}""".stripMargin)
-
     "Passing" - {
 
       * - passingWorksheet(
@@ -84,6 +74,23 @@ class LogikaTest extends TestSuite {
           |zOpt = Some(Z.random)
           |zOpt match {
           |  case Some(_) =>
+          |}""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
+          |ISZ(1, 2, 3) match {
+          |  case ISZ(x, y, _*) => assert(x < y)
+          |}
+          |""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
+          |(Z.random, Z.random) match {
+          |  case (0, x) =>
+          |  case (_, _) =>
+          |}
+          |(Z.random, Z.random) match {
+          |  case (x, y) =>
           |}""".stripMargin)
 
       * - passingWorksheet(
@@ -169,6 +176,14 @@ class LogikaTest extends TestSuite {
     }
 
     "Failing" - {
+
+      * - failingWorksheet(
+        """import org.sireum._
+          |ISZ(1, 2, 3) match {
+          |  case ISZ(x, y, _*) if x < y =>
+          |  case _ =>
+          |}
+          |""".stripMargin, "Impossible")
 
       * - failingWorksheet(
         """import org.sireum._
