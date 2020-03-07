@@ -434,7 +434,7 @@ object State {
           c.toSTs(claimSTs, defs)
         }
         val r: ST =
-          if (claimSTs.value.size == 0) st"F"
+          if (claimSTs.value.size == 0) if (claims.nonEmpty) st"T" else st"F"
           else if (claimSTs.value.size == 1) claimSTs.value(0)
           else
             st"""∨(
@@ -684,10 +684,6 @@ object State {
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
           return st"${value.toST(defs)}"
         }
-
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          claimSTs.add(st"${sym.toST(defs)} == ${value.toST(defs)}")
-        }
       }
 
       @datatype class TypeTest(val sym: Value.Sym, isEq: B, value: Value, tipe: AST.Typed) extends Let {
@@ -699,11 +695,7 @@ object State {
           return st"typeOf(${value.toST(defs)}) $testRel $tipe"
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          claimSTs.add(st"${sym.toST(defs)} == typeOf(${value.toST(defs)}) $testRel $tipe")
-        }
-
-        @strictpure def testRel: String = if (isEq) "=:" else "<:"
+        @strictpure def testRel: String = if (isEq) "=:=" else "<:<"
       }
 
       object Quant {
@@ -839,14 +831,14 @@ object State {
 
       @datatype class And(val sym: Value.Sym, args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
-          return if (args.size == 0) st"F"
+          return if (args.size == 0) st"T"
           else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
           else if (args.size == 2) st"${sym.toRawST} ≜ ${args(0).toRawST} ∧ ${args(1).toRawST}"
           else st"${sym.toRawST} ≜ ∧(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
-          return if (args.size == 0) st"F"
+          return if (args.size == 0) st"T"
           else if (args.size == 1) st"${args(0).toST(defs)}"
           else if (args.size == 2) st"${args(0).toST(defs)} ∧ ${args(1).toST(defs)}"
           else st"∧(${(for (arg <- args) yield arg.toST(defs), ", ")})"
@@ -859,14 +851,14 @@ object State {
 
       @datatype class Or(val sym: Value.Sym, args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
-          return if (args.size == 0) st"T"
+          return if (args.size == 0) st"F"
           else if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
           else if (args.size == 2) st"${sym.toRawST} ≜ ${args(0).toRawST} ∨ ${args(1).toRawST}"
           else st"${sym.toRawST} ≜ ∨(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): ST = {
-          return if (args.size == 0) st"T"
+          return if (args.size == 0) st"F"
           else if (args.size == 1) st"${args(0).toST(defs)}"
           else if (args.size == 2) st"${args(0).toST(defs)} ∨ ${args(1).toST(defs)}"
           else st"∨(${(for (arg <- args) yield arg.toST(defs), ", ")})"
