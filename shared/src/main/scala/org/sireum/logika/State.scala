@@ -78,8 +78,12 @@ object State {
 
     @pure def pos: Position
 
-    @pure def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+    @pure def toSTOpt(defs: HashMap[Z, Claim.Def]): Option[ST] = {
       return Some(toRawST)
+    }
+
+    @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
+      return toRawST
     }
   }
 
@@ -112,7 +116,7 @@ object State {
         return if (value) State.stTrue else State.stFalse
       }
 
-      @pure override def toST(defs: HashMap[org.sireum.Z, Claim.Def]): Option[ST] = {
+      @pure override def toSTOpt(defs: HashMap[org.sireum.Z, Claim.Def]): Option[ST] = {
         return if (value) None() else Some(State.stFalse)
       }
     }
@@ -253,7 +257,7 @@ object State {
         return st"$symPrefix$num@[${pos.beginLine},${pos.beginColumn}]"
       }
 
-      @pure override def toST(defs: HashMap[org.sireum.Z, Claim.Def]): Option[ST] = {
+      @pure override def toSTOpt(defs: HashMap[org.sireum.Z, Claim.Def]): Option[ST] = {
         defs.get(num) match {
           case Some(d) => return d.toST(defs)
           case _ => halt("Infeasible")
@@ -365,7 +369,7 @@ object State {
       }
 
       override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-        value.toST(defs) match {
+        value.toSTOpt(defs) match {
           case Some(r) =>
             if (isPos) {
               claimSTs.add(st"$r")
@@ -749,9 +753,22 @@ object State {
       }
 
       object Quant {
-        @datatype class Var(id: String, tipe: AST.Typed) {
-          @pure def toST: ST = {
-            return st"$id: $tipe"
+        @datatype trait Var {
+          @pure def toST: ST
+        }
+
+        object Var {
+
+          @datatype class Id(id: String, tipe: AST.Typed) extends Var {
+            @pure def toST: ST = {
+              return st"$id: $tipe"
+            }
+          }
+
+          @datatype class Sym(sym: Value.Sym) extends Var {
+            @pure def toST: ST = {
+              return st"α${sym.num}"
+            }
           }
         }
       }
@@ -784,7 +801,7 @@ object State {
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
-          return Some(st"${left.toST(defs).getOrElse(State.stTrue)} $op ${right.toST(defs).getOrElse(State.stTrue)}")
+          return Some(st"${left.toST(defs)} $op ${right.toST(defs)}")
         }
       }
 
@@ -794,7 +811,7 @@ object State {
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
-          return Some(st"$opString${value.toST(defs).getOrElse(State.stTrue)}")
+          return Some(st"$opString${value.toST(defs)}")
         }
 
         @strictpure def opString: String = op match {
@@ -891,7 +908,7 @@ object State {
         @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
           var claims = ISZ[ST]()
           for (arg <- args) {
-            arg.toST(defs) match {
+            arg.toSTOpt(defs) match {
               case Some(claim) => claims = claims :+ claim
               case _ =>
             }
@@ -917,7 +934,7 @@ object State {
         @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
           var claims = ISZ[ST]()
           for (arg <- args) {
-            arg.toST(defs) match {
+            arg.toSTOpt(defs) match {
               case Some(claim) => claims = claims :+ claim
               case _ =>
             }
@@ -940,11 +957,11 @@ object State {
         }
 
         @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
-          args(args.size - 1).toST(defs) match {
+          args(args.size - 1).toSTOpt(defs) match {
             case Some(conclusion) =>
               var premises = ISZ[ST]()
               for (arg <- args) {
-                arg.toST(defs) match {
+                arg.toSTOpt(defs) match {
                   case Some(premise) => premises = premises :+ premise
                   case _ =>
                 }

@@ -664,7 +664,10 @@ object Smt2 {
   }
 
   def qvar2ST(x: State.Claim.Let.Quant.Var): ST = {
-    return st"(|l:${x.id}| ${typeId(x.tipe)})"
+    x match {
+      case x: State.Claim.Let.Quant.Var.Id => return st"(|l:${x.id}| ${typeId(x.tipe)})"
+      case x: State.Claim.Let.Quant.Var.Sym => return st"(${v2ST(x.sym)} ${typeId(x.sym.tipe)})"
+    }
   }
 
   def enumId(owner: ISZ[String], id: String): ST = {

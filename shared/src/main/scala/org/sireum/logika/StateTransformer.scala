@@ -654,6 +654,17 @@ object StateTransformer {
     }
 
     @pure def preStateClaimLetQuantVar(ctx: Context, o: State.Claim.Let.Quant.Var): PreResult[Context, State.Claim.Let.Quant.Var] = {
+      o match {
+        case o: State.Claim.Let.Quant.Var.Id => return preStateClaimLetQuantVarId(ctx, o)
+        case o: State.Claim.Let.Quant.Var.Sym => return preStateClaimLetQuantVarSym(ctx, o)
+      }
+    }
+
+    @pure def preStateClaimLetQuantVarId(ctx: Context, o: State.Claim.Let.Quant.Var.Id): PreResult[Context, State.Claim.Let.Quant.Var] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimLetQuantVarSym(ctx: Context, o: State.Claim.Let.Quant.Var.Sym): PreResult[Context, State.Claim.Let.Quant.Var] = {
       return PreResult(ctx, T, None())
     }
 
@@ -1316,6 +1327,17 @@ object StateTransformer {
     }
 
     @pure def postStateClaimLetQuantVar(ctx: Context, o: State.Claim.Let.Quant.Var): TPostResult[Context, State.Claim.Let.Quant.Var] = {
+      o match {
+        case o: State.Claim.Let.Quant.Var.Id => return postStateClaimLetQuantVarId(ctx, o)
+        case o: State.Claim.Let.Quant.Var.Sym => return postStateClaimLetQuantVarSym(ctx, o)
+      }
+    }
+
+    @pure def postStateClaimLetQuantVarId(ctx: Context, o: State.Claim.Let.Quant.Var.Id): TPostResult[Context, State.Claim.Let.Quant.Var] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateClaimLetQuantVarSym(ctx: Context, o: State.Claim.Let.Quant.Var.Sym): TPostResult[Context, State.Claim.Let.Quant.Var] = {
       return TPostResult(ctx, None())
     }
 
@@ -2216,10 +2238,20 @@ import StateTransformer._
     val r: TPostResult[Context, State.Claim.Let.Quant.Var] = if (preR.continu) {
       val o2: State.Claim.Let.Quant.Var = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      if (hasChanged)
-        TPostResult(preR.ctx, Some(o2))
-      else
-        TPostResult(preR.ctx, None())
+      val rOpt: TPostResult[Context, State.Claim.Let.Quant.Var] = o2 match {
+        case o2: State.Claim.Let.Quant.Var.Id =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: State.Claim.Let.Quant.Var.Sym =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
+          else
+            TPostResult(r0.ctx, None())
+      }
+      rOpt
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {

@@ -760,7 +760,7 @@ object Logika {
       val quantClaims = s1.claims :+ State.Claim.Prop(T, expSym)
       val (s3, sym) = s2(claims = state.claims).freshSym(AST.Typed.b, pos)
       val vars: ISZ[State.Claim.Let.Quant.Var] =
-        for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var(p.idOpt.get.value, p.typedOpt.get)
+        for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var.Id(p.idOpt.get.value, p.typedOpt.get)
       return (s3.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
     }
 
