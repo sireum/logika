@@ -1146,6 +1146,43 @@ object Logika {
       return (s2.addClaim(State.Claim.Let.TupleLit(sym, args)), sym)
     }
 
+    def evalIfExp(ifExp: AST.Exp.If): (State, State.Value) = {
+      val t = ifExp.typedOpt.get
+      val pos = ifExp.posOpt.get
+      val (s0, cond) = evalExp(rtCheck, state, ifExp.cond, reporter)
+      if (!s0.status) {
+        return (s0, State.errorValue)
+      }
+      val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
+      val prop = State.Claim.Prop(T, sym)
+      val negProp = State.Claim.Prop(F, sym)
+      val thenBranch = smt2.sat(config.logVc, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+        s1.claims :+ prop, reporter)
+      val elseBranch = smt2.sat(config.logVc, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+        s1.claims :+ prop, reporter)
+      (thenBranch, elseBranch) match {
+        case (T, T) =>
+          val (s2, r) = s1.freshSym(t, pos)
+          val (s3, tv) = evalExp(rtCheck, s2.addClaim(prop), ifExp.thenExp, reporter)
+          val (s4, ev) = evalExp(rtCheck, s2(nextFresh = s3.nextFresh).addClaim(negProp), ifExp.elseExp, reporter)
+          if (!s3.status) {
+            return (s4, ev)
+          }
+          if (!s4.status) {
+            return (s3(nextFresh = s4.nextFresh), tv)
+          }
+          val s5 = mergeStates(s1, sym, s3, s4, s4.nextFresh)
+          return (s5.addClaim(State.Claim.If(sym,
+            ISZ(State.Claim.Let.Eq(r, tv)),
+            ISZ(State.Claim.Let.Eq(r, ev)))), r)
+        case (T, F) => return evalExp(rtCheck, s1, ifExp.thenExp, reporter)
+        case (F, T) => return evalExp(rtCheck, s1, ifExp.elseExp, reporter)
+        case (_, _) => return (s0(status = F), State.errorValue)
+      }
+
+      halt("TODO") // TODO
+    }
+
     val s0 = state
     e match {
       case lit: AST.Lit => return (s0, evalLit(lit))
@@ -1153,6 +1190,7 @@ object Logika {
       case e: AST.Exp.Select => return evalSelect(e)
       case e: AST.Exp.Unary => return evalUnaryExp(e)
       case e: AST.Exp.Binary => return evalBinaryExp(e)
+      case e: AST.Exp.If => return evalIfExp(e)
       case e: AST.Exp.Tuple => return evalTupleExp(e)
       case e: AST.Exp.Invoke =>
         e.attr.resOpt.get match {
