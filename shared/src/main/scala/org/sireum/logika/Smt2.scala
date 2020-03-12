@@ -100,6 +100,15 @@ object Smt2 {
         ))
       )
 
+  val imsOps: HashSet[String] =
+    HashSet.empty[String] ++
+      ISZ(
+        AST.Exp.BinaryOp.Append,
+        AST.Exp.BinaryOp.AppendAll,
+        AST.Exp.BinaryOp.Prepend,
+        AST.Exp.BinaryOp.RemoveAll,
+      )
+
   val stTrue: ST = st"true"
   val stFalse: ST = st"false"
 
@@ -784,6 +793,15 @@ object Smt2 {
   def c2ST(c: State.Claim): ST = {
     c match {
       case c: State.Claim.Let =>
+        c match {
+          case c: State.Claim.Let.Binary if Smt2.imsOps.contains(c.op) =>
+            c.tipe match {
+              case t: AST.Typed.Name if t.ids == AST.Typed.isName || t.ids == AST.Typed.msName =>
+                return st"(${typeOpId(t, c.op)} ${v2ST(c.left)} ${v2ST(c.right)} ${v2ST(c.sym)})"
+              case _ =>
+            }
+          case _ =>
+        }
         val rhs: ST = c match {
           case c: State.Claim.Let.CurrentName =>
             return st"(= ${currentNameId(c)} ${v2ST(c.sym)})"

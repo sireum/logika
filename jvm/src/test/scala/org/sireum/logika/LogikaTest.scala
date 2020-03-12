@@ -75,6 +75,19 @@ class LogikaTest extends TestSuite {
 
       * - passingWorksheet(
         """import org.sireum._
+          |@datatype class V(x: Z) {
+          |  def +(y: Z): V = {
+          |    Contract(Ensures(Res[V].x == x + y))
+          |    return V(x + y)
+          |  }
+          |}
+          |
+          |val n = Z.random
+          |val m = Z.random
+          |assert((V(n) + m).x == n + m)""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
           |@datatype class Foo(x: Z, y: Z)
           |val foo = Foo(1, 2)
           |assert(foo == Foo(x = 1, y = 2))
@@ -196,6 +209,12 @@ class LogikaTest extends TestSuite {
           |val x = Z.random
           |assert(if (x * x >= 0) T else F)
           |assert((if (x >= 0) if (x <= 0) x * x else x - x else -x + x) == 0)""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
+          |assert(ISZ(1, 2) :+ 3 == ISZ(1, 2, 3))
+          |assert(ISZ(1, 2) ++ ISZ(3) == ISZ(1, 2, 3))
+          |assert(1 +: ISZ(2, 3) == ISZ(1, 2, 3))""".stripMargin)
 
       * - passingWorksheet(
         """import org.sireum._

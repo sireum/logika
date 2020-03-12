@@ -511,15 +511,15 @@ object Logika {
         return T
       }
 
-      @pure def isSeq(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
-        kind match {
-          case AST.ResolvedInfo.BuiltIn.Kind.BinaryAppend =>
-          case AST.ResolvedInfo.BuiltIn.Kind.BinaryAppendAll =>
-          case AST.ResolvedInfo.BuiltIn.Kind.BinaryPrepend =>
-          case AST.ResolvedInfo.BuiltIn.Kind.BinaryRemoveAll =>
+      @pure def isSeq(m: AST.ResolvedInfo.Method): B = {
+        m.id match {
+          case AST.Exp.BinaryOp.Append =>
+          case AST.Exp.BinaryOp.AppendAll =>
+          case AST.Exp.BinaryOp.Prepend =>
+          case AST.Exp.BinaryOp.RemoveAll => halt(s"TODO: $m")
           case _ => return F
         }
-        return T
+        return m.owner == AST.Typed.isName || m.owner == AST.Typed.msName
       }
 
       @pure def reqNonZeroCheck(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
@@ -546,8 +546,7 @@ object Logika {
         }
       }
 
-      def evalBasic(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type,
-                    v1: State.Value, tipe: AST.Typed): (State, State.Value) = {
+      def evalBasic(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value): (State, State.Value) = {
         val (s1, v2) = evalExp(rtCheck, s0, exp.right, reporter)
         val s2: State = if (reqNonZeroCheck(kind)) {
           checkNonZero(s1, exp.op, v2, exp.right.posOpt.get)
@@ -559,7 +558,7 @@ object Logika {
         }
         val rTipe = e.typedOpt.get
         val (s3, rExp) = s2.freshSym(rTipe, e.posOpt.get)
-        val s4 = s3.addClaim(State.Claim.Let.Binary(rExp, v1, exp.op, v2, tipe))
+        val s4 = s3.addClaim(State.Claim.Let.Binary(rExp, v1, exp.op, v2, v1.tipe))
         return (s4, rExp)
       }
 
@@ -573,7 +572,8 @@ object Logika {
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
             (thenSat, elseSat) match {
-              case (F, T) => return (s1.addClaim(negProp), State.Value.B(F, pos))
+              case (F, T) =>
+                return (s1.addClaim(negProp), State.Value.B(F, pos))
               case (_, _) =>
                 val (s2, r) = s1.freshSym(AST.Typed.b, exp.posOpt.get)
                 val (s3, sym2) = evalExp(rtCheck, s2.addClaim(prop), exp.right, reporter)
@@ -625,6 +625,22 @@ object Logika {
         }
       }
 
+      def evalSeq(s0: State, m: AST.ResolvedInfo.Method): (State, State.Value) = {
+        val (s1, v1) = evalExp(rtCheck, s0, exp.left, reporter)
+        if (!s1.status) {
+          return (s1, State.errorValue)
+        }
+        val (s2, v2) = evalExp(rtCheck, s1, exp.right, reporter)
+        if (!s2.status) {
+          return (s2, State.errorValue)
+        }
+        val rTipe = e.typedOpt.get
+        val (s3, rExp) = s2.freshSym(rTipe, e.posOpt.get)
+        val s4 = s3.addClaim(State.Claim.Let.Binary(rExp, v1, exp.op, v2,
+          if (ops.StringOps(m.id).endsWith(":")) v2.tipe else v1.tipe))
+        return (s4, rExp)
+      }
+
       val s0 = state
 
       exp.attr.resOpt.get match {
@@ -633,16 +649,20 @@ object Logika {
           if (!s1.status) {
             return (s1, State.errorValue)
           }
-          val tipe = v1.tipe
           if (isCond(kind)) {
             return evalCond(s1, kind, v1)
-          } else if (isSeq(kind)) {
-            halt(s"TODO: $e") // TODO
-          } else if (isBasic(tipe) || exp.op == "==" || exp.op == "!=") {
-            return evalBasic(s1, kind, v1, tipe)
+          } else if (exp.op == "==" || exp.op == "!=" || isBasic(v1.tipe)) {
+            return evalBasic(s1, kind, v1)
           } else {
             halt(s"TODO: $e") // TODO
           }
+        case m: AST.ResolvedInfo.Method =>
+          if (isSeq(m)) {
+            return evalSeq(s0, m)
+          }
+          val posOpt = exp.posOpt
+          return evalInvoke(s0, Some(exp.left), AST.Exp.Ident(AST.Id(exp.op, AST.Attr(posOpt)), exp.attr),
+            Either.Left(ISZ(exp.right)), exp.attr)
         case _ => halt(s"TODO: $e") // TODO
       }
     }
