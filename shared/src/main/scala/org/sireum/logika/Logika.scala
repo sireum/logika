@@ -444,6 +444,17 @@ object Logika {
     }
   }
 
+  def evalInterpolate(lit: AST.Exp.StringInterpolate): State.Value = {
+    lit.prefix match {
+      case string"z" => return State.Value.Z(org.sireum.Z(lit.lits(0).value).get, lit.posOpt.get)
+      case string"r" => return State.Value.R(org.sireum.R(lit.lits(0).value).get, lit.posOpt.get)
+      case string"c" => return State.Value.C(conversions.String.toCis(lit.lits(0).value)(0), lit.posOpt.get)
+      case string"f32" => return State.Value.F32(org.sireum.F32(lit.lits(0).value).get, lit.posOpt.get)
+      case string"f64" => return State.Value.F64(org.sireum.F64(lit.lits(0).value).get, lit.posOpt.get)
+      case _ => halt(s"TODO: $lit")
+    }
+  }
+
   def evalThisIdH(state: State, id: String, t: AST.Typed, pos: Position): (State, State.Value.Sym) = {
     val mc = context.methodOpt.get
     val (s0, receiver) = Logika.idIntro(pos, state, mc.name, "this", mc.receiverTypeOpt.get, None())
@@ -1273,6 +1284,7 @@ object Logika {
     val s0 = state
     e match {
       case lit: AST.Lit => return (s0, evalLit(lit))
+      case lit: AST.Exp.StringInterpolate => return (s0, evalInterpolate(lit))
       case e: AST.Exp.Ident => return evalIdent(e)
       case e: AST.Exp.Select => return evalSelect(e)
       case e: AST.Exp.Unary => return evalUnaryExp(e)
@@ -1435,6 +1447,11 @@ object Logika {
       case pattern: AST.Pattern.Literal =>
         val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
         return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==", evalLit(pattern.lit), v.tipe)), cond, Map.empty)
+      case pattern: AST.Pattern.LitInterpolate =>
+        val lit = evalInterpolate(AST.Exp.StringInterpolate(pattern.prefix,
+          ISZ(AST.Exp.LitString(pattern.value, AST.Attr(pattern.posOpt))), ISZ(), pattern.attr))
+        val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
+        return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==", lit, v.tipe)), cond, Map.empty)
       case pattern: AST.Pattern.VarBinding =>
         pattern.tipeOpt match {
           case Some(tipe) =>
@@ -1543,7 +1560,6 @@ object Logika {
               State.Value.Enum(t, res.owner, res.name, res.ordinal, pos), t)), cond, Map.empty)
           case _ => halt(s"Infeasible: $pattern")
         }
-      case pattern: AST.Pattern.LitInterpolate => halt(s"TODO: $pattern") // TODO
       case _: AST.Pattern.SeqWildcard => halt(s"Infeasible")
     }
   }
