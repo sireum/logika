@@ -681,7 +681,7 @@ object State {
         }
 
         override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
-          if (defs.get(sym.num).get != ISZ(this)) {
+          if (defs.get(sym.num).get != ISZ[Claim.Def](this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -697,7 +697,7 @@ object State {
         }
 
         override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
-          if (defs.get(sym.num).get != ISZ(this)) {
+          if (defs.get(sym.num).get != ISZ[Claim.Def](this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -714,7 +714,7 @@ object State {
         }
 
         override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
-          if (defs.get(sym.num).get != ISZ(this)) {
+          if (defs.get(sym.num).get != ISZ[Claim.Def](this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -735,7 +735,7 @@ object State {
         }
 
         override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
-          if (defs.get(sym.num).get != ISZ(this)) {
+          if (defs.get(sym.num).get != ISZ[Claim.Def](this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
