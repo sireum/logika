@@ -78,11 +78,11 @@ object State {
 
     @pure def pos: Position
 
-    @pure def toSTOpt(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+    @pure def toSTOpt(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
       return Some(toRawST)
     }
 
-    @pure def toST(defs: HashMap[Z, Claim.Def]): ST = {
+    @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): ST = {
       return toRawST
     }
   }
@@ -116,7 +116,7 @@ object State {
         return if (value) State.stTrue else State.stFalse
       }
 
-      @pure override def toSTOpt(defs: HashMap[org.sireum.Z, Claim.Def]): Option[ST] = {
+      @pure override def toSTOpt(defs: HashMap[org.sireum.Z, ISZ[Claim.Def]]): Option[ST] = {
         return if (value) None() else Some(State.stFalse)
       }
     }
@@ -257,9 +257,15 @@ object State {
         return st"$symPrefix$num@[${pos.beginLine},${pos.beginColumn}]"
       }
 
-      @pure override def toSTOpt(defs: HashMap[org.sireum.Z, Claim.Def]): Option[ST] = {
+      @pure override def toST(defs: HashMap[org.sireum.Z, ISZ[Claim.Def]]): ST = {
+        return toSTOpt(defs).getOrElse(stTrue)
+      }
+
+      @pure override def toSTOpt(defs: HashMap[org.sireum.Z, ISZ[Claim.Def]]): Option[ST] = {
         defs.get(num) match {
-          case Some(d) => return d.toST(defs)
+          case Some(d) =>
+            return if (d.size == 1) d(0).toST(defs)
+            else Some(toRawST)
           case _ => halt("Infeasible")
         }
       }
@@ -277,7 +283,7 @@ object State {
 
     @pure def toRawST: ST
 
-    def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit
+    def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit
 
     @pure def funs: ISZ[Fun] = {
       return ISZ()
@@ -354,7 +360,7 @@ object State {
         }
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         claimSTs.add(toRawST)
       }
 
@@ -368,7 +374,7 @@ object State {
         return if (isPos) value.toRawST else st"¬(${value.toRawST})"
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         value.toSTOpt(defs) match {
           case Some(r) =>
             if (isPos) {
@@ -400,7 +406,7 @@ object State {
         return r
       }
 
-      @pure def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+      @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
         val claimSTs = ClaimSTs(ISZ())
         for (c <- claims) {
           c.toSTs(claimSTs, defs)
@@ -422,7 +428,7 @@ object State {
         return for (c <- claims; t <- c.types) yield t
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         toST(defs) match {
           case Some(r) => claimSTs.add(r)
           case _ =>
@@ -440,7 +446,7 @@ object State {
         return r
       }
 
-      @pure def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+      @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
         val claimSTs = ClaimSTs(ISZ())
         for (c <- claims) {
           c.toSTs(claimSTs, defs)
@@ -468,7 +474,7 @@ object State {
         return for (c <- claims; t <- c.types) yield t
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         toST(defs) match {
           case Some(r) => claimSTs.add(r)
           case _ =>
@@ -488,7 +494,7 @@ object State {
         return r
       }
 
-      @pure def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+      @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
         var claimSTs = ClaimSTs(ISZ())
         claims(claims.size - 1).toSTs(claimSTs, defs)
         if (claimSTs.value.isEmpty) {
@@ -520,7 +526,7 @@ object State {
         return for (c <- claims; t <- c.types) yield t
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         toST(defs) match {
           case Some(r) => claimSTs.add(r)
           case _ =>
@@ -543,9 +549,11 @@ object State {
         return r
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         val condST = cond.toST(defs)
-        (And(tClaims).toST(defs), And(fClaims).toST(defs)) match {
+        val tSTOpt = And(tClaims).toST(defs)
+        val fSTOpt = And(fClaims).toST(defs)
+        (tSTOpt, fSTOpt) match {
           case (Some(tST), Some(fST)) =>
             claimSTs.add(
               st"""$condST ?
@@ -576,14 +584,17 @@ object State {
         return ISZ(sym.tipe)
       }
 
-      @pure def toST(defs: HashMap[Z, Claim.Def]): Option[ST]
+      @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST]
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {}
+      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {}
     }
 
-    @record class Defs(var value: HashMap[Z, Def]) {
+    @record class Defs(var value: HashMap[Z, ISZ[Def]]) {
       def addDef(d: Claim.Def): Unit = {
-        value = value + d.sym.num ~> d
+        value.get(d.sym.num) match {
+          case Some(s) => value = value + d.sym.num ~> (s :+ d)
+          case _ => value = value + d.sym.num ~> ISZ(d)
+        }
       }
       def hasDef(d: Claim.Def): B = {
         return value.contains(d.sym.num)
@@ -605,7 +616,7 @@ object State {
           return st"${sym.toRawST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg._2.toRawST, ", ")})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${sym.tipe.string}(${(for (arg <- args) yield arg._2.toST(defs), ", ")})")
         }
       }
@@ -615,7 +626,7 @@ object State {
           return st"${sym.toRawST} ≜ ${seq.toRawST}(${index.toRawST} ~> ${element.toRawST})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${seq.toST(defs)}(${index.toST(defs)} ~> ${element.toST(defs)})")
         }
       }
@@ -625,7 +636,7 @@ object State {
           return st"${sym.toRawST} ≜ ${adt.toRawST}($id = ${value.toRawST})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${adt.toST(defs)}($id = ${value.toST(defs)})")
         }
       }
@@ -639,7 +650,7 @@ object State {
           return st"${sym.toRawST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${sym.tipe.string}(${(for (arg <- args) yield arg.toST(defs), ", ")})")
         }
       }
@@ -649,7 +660,7 @@ object State {
           return st"${sym.toRawST} ≜ ${sym.tipe}.random@[${pos.beginLine},${pos.beginColumn}]#${sym.num}"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${sym.tipe}.random@[${pos.beginLine},${pos.beginColumn}]#${sym.num}")
         }
       }
@@ -665,12 +676,12 @@ object State {
           return st"${(ids, ".")} == ${sym.toRawST}"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${(ids, ".")}")
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          if (defs.get(sym.num).get != this) {
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+          if (defs.get(sym.num).get != ISZ(this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -681,12 +692,12 @@ object State {
           return st"${(ids, ".")}@${possLines(poss)}#$num == ${sym.toRawST}"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${(ids, ".")}@${possLines(poss)}#$num")
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          if (defs.get(sym.num).get != this) {
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+          if (defs.get(sym.num).get != ISZ(this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -698,12 +709,12 @@ object State {
           return st"$id == ${sym.toRawST}"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"$id")
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          if (defs.get(sym.num).get != this) {
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+          if (defs.get(sym.num).get != ISZ(this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -716,15 +727,15 @@ object State {
           else st"$id:${(context, ".")}@${possLines(poss)}#$num == ${sym.toRawST}"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(
             if (context.isEmpty) st"$id@${possLines(poss)}#$num"
             else st"$id:${(context, ".")}@${possLines(poss)}#$num"
           )
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, Claim.Def]): Unit = {
-          if (defs.get(sym.num).get != this) {
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+          if (defs.get(sym.num).get != ISZ(this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
         }
@@ -735,8 +746,14 @@ object State {
           return st"${sym.toRawST} ≜ ${value.toRawST}"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${value.toST(defs)}")
+        }
+
+        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+          if (defs.get(sym.num).get.size > 1) {
+            claimSTs.add(st"${sym.toRawST} ≜ ${value.toST(defs)}")
+          }
         }
       }
 
@@ -745,7 +762,7 @@ object State {
           return st"${sym.toRawST} ≜ typeOf(${value.toRawST}) $testRel $tipe"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"typeOf(${value.toST(defs)}) $testRel $tipe")
         }
 
@@ -783,7 +800,7 @@ object State {
           return r
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(
             st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
                 |  ${if (isAll) Claim.Imply(claims).toST(defs).getOrElse(State.stTrue) else Claim.And(claims).toST(defs).getOrElse(State.stTrue)}"""
@@ -800,7 +817,7 @@ object State {
           return st"${sym.toRawST} ≜ ${left.toRawST} $op ${right.toRawST}"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${left.toST(defs)} $op ${right.toST(defs)}")
         }
       }
@@ -810,7 +827,7 @@ object State {
           return st"${sym.toRawST} ≜ $opString${value.toRawST}"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"$opString${value.toST(defs)}")
         }
 
@@ -827,7 +844,7 @@ object State {
           return st"${sym.toRawST} ≜ ${seq.toRawST}(${index.toRawST})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${seq.toST(defs)}(${index.toST(defs)})")
         }
       }
@@ -837,7 +854,7 @@ object State {
           return st"${sym.toRawST} ≜ inBound(${seq.toRawST}, ${index.toRawST})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"inBound(${seq.toST(defs)}, ${index.toST(defs)})")
         }
       }
@@ -847,7 +864,7 @@ object State {
           return st"${sym.toRawST} ≜ ${adt.toRawST}.$id"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${adt.toST(defs)}.$id")
         }
       }
@@ -857,7 +874,7 @@ object State {
           return st"${sym.toRawST} ≜ ${(name, ".")}(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${(name, ".")}(${(for (arg <- args) yield arg.toST(defs), ", ")})")
         }
 
@@ -871,7 +888,7 @@ object State {
           return st"${sym.toRawST} ≜ ${o.toRawST}.$id(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(st"${o.toST(defs)}.$id(${(for (arg <- args) yield arg.toST(defs), ", ")})")
         }
 
@@ -886,7 +903,7 @@ object State {
           else st"${sym.toRawST} ≜ (${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(
             if (args.size == 1) st"${args(0).toST(defs)}"
             else st"(${(for (arg <- args) yield arg.toST(defs), ", ")})"
@@ -905,7 +922,7 @@ object State {
           else st"${sym.toRawST} ≜ ∧(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           var claims = ISZ[ST]()
           for (arg <- args) {
             arg.toSTOpt(defs) match {
@@ -931,7 +948,7 @@ object State {
           else st"${sym.toRawST} ≜ ∨(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           var claims = ISZ[ST]()
           for (arg <- args) {
             arg.toSTOpt(defs) match {
@@ -956,7 +973,7 @@ object State {
           else st"${sym.toRawST} ≜ →(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
-        @pure override def toST(defs: HashMap[Z, Claim.Def]): Option[ST] = {
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           args(args.size - 1).toSTOpt(defs) match {
             case Some(conclusion) =>
               var premises = ISZ[ST]()

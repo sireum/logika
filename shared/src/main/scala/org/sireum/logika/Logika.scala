@@ -578,8 +578,8 @@ object Logika {
         val (s1, sym1) = value2Sym(s0, v1, pos)
         val prop = State.Claim.Prop(T, sym1)
         val negProp = State.Claim.Prop(F, sym1)
-        val thenSat = smt2.sat(config.logPc, s"Conditional ${exp.op}-expression then-branch", s1.claims :+ prop, reporter)
-        val elseSat = smt2.sat(config.logPc, s"Conditional ${exp.op}-expression else-branch", s1.claims :+ negProp, reporter)
+        val thenSat = smt2.sat(config.logVc, s"Conditional ${exp.op}-expression true-branch", s1.claims :+ prop, reporter)
+        val elseSat = smt2.sat(config.logVc, s"Conditional ${exp.op}-expression false-branch", s1.claims :+ negProp, reporter)
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
             (thenSat, elseSat) match {
