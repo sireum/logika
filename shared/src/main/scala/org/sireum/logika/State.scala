@@ -354,9 +354,9 @@ object State {
             val sops = ops.StringOps(uri)
             val i = sops.lastIndexOf('/')
             val filename: String = if (i < 0) uri else sops.substring(i + 1, uri.size)
-            return st"$filename@[${pos.beginLine},${pos.beginLine}]: $label"
+            return st"$filename@[${pos.beginLine},${pos.beginColumn}]: $label"
           case _ =>
-            return st"[${pos.beginLine},${pos.beginLine}]: $label"
+            return st"[${pos.beginLine},${pos.beginColumn}]: $label"
         }
       }
 
