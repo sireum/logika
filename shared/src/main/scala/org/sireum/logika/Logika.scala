@@ -76,6 +76,8 @@ object Logika {
   @datatype class Config(defaultLoopBound: Z,
                          loopBounds: HashMap[ISZ[String], Z],
                          smt2TimeoutInSeconds: Z,
+                         charBitWidth: Z,
+                         intBitWidth: Z,
                          logPc: B,
                          logRawPc: B,
                          logVc: B)
@@ -1668,12 +1670,12 @@ object Logika {
           )))
         }
       } else {
-        error(posOpt, "Impossible pattern matching case", reporter)
+        error(posOpt, "Infeasible pattern matching case", reporter)
       }
     }
     if (leafClaims.isEmpty) {
       if (!possibleCases) {
-        error(stmt.posOpt, "Impossible pattern matching cases", reporter)
+        error(stmt.posOpt, "Infeasible pattern matching cases", reporter)
       }
       return s1(status = F)
     }

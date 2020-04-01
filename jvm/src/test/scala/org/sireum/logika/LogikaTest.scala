@@ -48,6 +48,8 @@ object LogikaTest {
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,
       smt2TimeoutInSeconds = 5,
+      charBitWidth = 32,
+      intBitWidth = 0,
       logPc = F,
       logRawPc = F,
       logVc = F)
@@ -81,11 +83,15 @@ class LogikaTest extends TestSuite {
 
       * - failingWorksheet(
         """import org.sireum._
+          |val a = 0 +: ISZ(1, 2, 3)
+          |assert(a(0) == 1)""".stripMargin, "Cannot deduce")
+
+      * - failingWorksheet(
+        """import org.sireum._
           |ISZ(1, 2, 3) match {
           |  case ISZ(x, y, _*) if x < y =>
           |  case _ =>
-          |}
-          |""".stripMargin, "Impossible")
+          |}""".stripMargin, "Infeasible")
 
       * - failingWorksheet(
         """import org.sireum._
@@ -142,7 +148,7 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Reporter, msgOpt: Option[String]): B = {
     Logika.checkWorksheet(None(), input, config,
-      th => Z3(LogikaTest.z3Exe, th), reporter)
+      th => Z3(LogikaTest.z3Exe, th, config.charBitWidth, config.intBitWidth), reporter)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

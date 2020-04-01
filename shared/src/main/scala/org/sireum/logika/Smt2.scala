@@ -117,6 +117,10 @@ object Smt2 {
 
 @msig trait Smt2 {
 
+  def charBitWidth: Z
+
+  def intBitWidth: Z
+
   def types: HashSet[AST.Typed]
 
   def typesUp(newTypes: HashSet[AST.Typed]): Unit
@@ -218,6 +222,10 @@ object Smt2 {
     return r
   }
 
+  def toVal(t: AST.Typed.Name, n: Z): ST = {
+    return st"$n"
+  }
+
   def addType(tipe: AST.Typed, reporter: Reporter): Unit = {
     def addS(t: AST.Typed.Name): Unit = {
       val it = t.args(0).asInstanceOf[AST.Typed.Name]
@@ -235,42 +243,67 @@ object Smt2 {
       val upId = typeOpId(t, "up")
       val eqId = typeOpId(t, "==")
       val inBoundId = typeOpId(t, "inBound")
+      val itLeId = typeOpId(it, "<=")
+      val itGeId = typeOpId(it, ">=")
+      val itEqId = typeOpId(it, "==")
+      val itAddId = typeOpId(it, "+")
+      val itSubId = typeOpId(it, "-")
+      val it2zId = typeOpId(it, "toZ")
+      val firstIndexId = typeOpId(t, "firstIndex")
+      val lastIndexId = typeOpId(t, "lastIndex")
+      val zZero = toVal(AST.Typed.z, 0)
+      val zOne = toVal(AST.Typed.z, 1)
+      val itOne = toVal(it, 1)
+      val itMin: ST = toVal(it, 0)
       addTypeDecl(st"(define-sort $tId () (Array $itId $etId))")
       addTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
-      addTypeDecl(st"(define-fun $inBoundId ((x $tId) (y $itId)) B (and (<= 0 y) (< y ($sizeId x))))")
-      addTypeDecl(st"(assert (forall ((x $tId)) (>= ($sizeId x) 0)))")
+      addTypeDecl(st"(assert (forall ((x $tId)) ($itGeId ($sizeId x) $zZero)))")
+      addTypeDecl(st"(define-fun $firstIndexId ((s $tId)) $itId $itMin)")
+      addTypeDecl(st"(declare-fun $lastIndexId ($tId) $itId)")
+      val zSubId = typeOpId(AST.Typed.z, "-")
+      if (it == AST.Typed.z) {
+        addTypeDecl(st"(assert (forall ((x $tId)) (=> (not (|Z.==| ($sizeId x) $zZero)) (= ($lastIndexId x) ($zSubId ($sizeId x) $zOne)))))")
+      } else {
+        addTypeDecl(st"(assert (forall ((x $tId)) (=> (not (|Z.==| ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
+      }
+      addTypeDecl(st"(define-fun $inBoundId ((x $tId) (y $itId)) B (and ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
       addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       addTypeDecl(
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
             |  (and
-            |    (= ($sizeId z) (+ ($sizeId x) 1))
-            |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
+            |    ($itEqId ($sizeId z) ($itAddId ($sizeId x) $zOne))
+            |    ($itEqId ($lastIndexId z) ($itAddId ($lastIndexId x) $itOne))
+            |    (forall ((i $itId)) (=> ($inBoundId x i)
             |                        (= ($atId z i) ($atId x i))))
-            |    (= ($atId z ($sizeId x)) y)))""")
+            |    (= ($atId z ($lastIndexId z)) y)))""")
       addTypeDecl(
         st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
             |  (and
             |    (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
-            |      (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x)))
-            |                          (= ($atId z i) ($atId x i))))
-            |      (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-            |                          (= ($atId z (+ ($sizeId x) i)) ($atId y i))))))""")
+            |    ($itEqId ($lastIndexId z) ($itAddId ($lastIndexId x) ($itSubId ($lastIndexId y) ($firstIndexId y))))
+            |    (forall ((i $itId)) (=> ($inBoundId x i)
+            |                            (= ($atId z i) ($atId x i))))
+            |    (forall ((i $itId)) (=> ($inBoundId y i)
+            |                            (= ($atId z ($itAddId ($itAddId ($lastIndexId x) ($itSubId i ($firstIndexId y))) $itOne)) ($atId y i))))))""")
       addTypeDecl(
         st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
             |  (and
             |    (= ($sizeId z) (+ ($sizeId y) 1))
-            |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId y)))
-            |                        (= ($atId z (+ i 1)) ($atId y i))))
-            |    (= ($atId z 0) x)))""")
+            |    ($itEqId ($lastIndexId z) ($itAddId ($lastIndexId y) $itOne))
+            |    (forall ((i $itId)) (=> ($inBoundId y i)
+            |                            (= ($atId z ($itAddId i $itOne)) ($atId y i))))
+            |    (= ($atId z ($firstIndexId z)) x)))""")
       addTypeDecl(
         st"""(define-fun $upId ((x $tId) (y $itId) (z $etId) (x2 $tId)) B
             |  (and
             |    (= ($sizeId x2) ($sizeId x))
+            |    ($itEqId ($lastIndexId x2) ($lastIndexId x))
             |    (= x2 (store x y z))))""")
       addTypeDecl(
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
             |    (= ($sizeId x) ($sizeId y))
+            |    ($itEqId ($lastIndexId x) ($lastIndexId y))
             |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x))) (= (select x i) (select y i))))))""")
       if (isAdtType(et)) {
         addTypeDecl(
@@ -499,10 +532,14 @@ object Smt2 {
     val seqLitId = typeOpId(t, s"new.$size")
     val atId = typeOpId(t, "at")
     val sizeId = typeOpId(t, "size")
+    val itEqId = typeOpId(it, "==")
+    val lastIndexOpt: Option[ST] =
+      if (size != 0) Some(st"($itEqId (${typeOpId(t, "lastIndex")} x) ${toVal(it, size - 1)})") else None()
     val r =
       st"""(define-fun $seqLitId (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId)) B
           |  (and
           |    (= ($sizeId x) $size)
+          |    $lastIndexOpt
           |    ${(for (i <- 0 until size) yield st"(= ($atId x i$i) v$i)", "\n")}))"""
     return r.render
   }
