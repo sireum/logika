@@ -31,7 +31,9 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 
 @record class Z3(val z3Exe: String,
-                 val typeHierarchy: TypeHierarchy)
+                 val typeHierarchy: TypeHierarchy,
+                 val charBitWidth: Z,
+                 val intBitWidth: Z)
   extends Smt2 {
 
   var types: HashSet[AST.Typed] = Smt2.basicTypes
