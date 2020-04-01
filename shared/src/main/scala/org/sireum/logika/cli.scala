@@ -46,6 +46,14 @@ object cli {
         description = "Timeout (seconds) for SMT2 solver"),
     ),
     groups = ISZ(
+      OptGroup(name = "Bit-width", opts = ISZ(
+        Opt(name = "charBitWidth", longKey = "c-bitwidth", shortKey = None(),
+          tpe = Type.Num(sep = None(), default = 32, min = None(), max = None()),
+          description = "Bit-width representation for C (character) values (expected 8, 16, or 32)"),
+        Opt(name = "intBitWidth", longKey = "z-bitwidth", shortKey = None(),
+          tpe = Type.Num(sep = None(), default = 0, min = None(), max = None()),
+          description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)"))
+      ),
       OptGroup(name = "Logging", opts = ISZ(
         Opt(name = "logPc", longKey = "log-pc", shortKey = None(),
           tpe = Type.Flag(F),
@@ -55,8 +63,7 @@ object cli {
           description = "Display raw path conditions before each statement"),
         Opt(name = "logVc", longKey = "log-vc", shortKey = None(),
           tpe = Type.Flag(F),
-          description = "Display all verification conditions"),
-        )
+          description = "Display all verification conditions"))
       )
     )
   )
