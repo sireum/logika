@@ -692,6 +692,24 @@ object Smt2 {
           |(define-fun |B.│^| ((x B) (y B)) B (xor x y))
           |(define-fun |B.imply_:| ((x B) (y B)) B (=> x y))
           |
+          |(define-sort C () (_ BitVec ${charBitWidth}))
+          |(define-fun |C.unary_-| ((x C)) C (bvneg x))
+          |(define-fun |C.unary_~| ((x C)) C (bvnot x))
+          |(define-fun |C.<=| ((x C) (y C)) B (bvule x y))
+          |(define-fun |C.<| ((x C) (y C)) B (bvult x y))
+          |(define-fun |C.>| ((x C) (y C)) B (bvugt x y))
+          |(define-fun |C.>=| ((x C) (y C)) B (bvuge x y))
+          |(define-fun |C.==| ((x C) (y C)) B (= x y))
+          |(define-fun |C.!=| ((x C) (y C)) B (not (= x y)))
+          |(define-fun |C.+| ((x C) (y C)) C (bvadd x y))
+          |(define-fun |C.-| ((x C) (y C)) C (bvsub x y))
+          |(define-fun |C.*| ((x C) (y C)) C (bvmul x y))
+          |(define-fun |C./| ((x C) (y C)) C (bvudiv x y))
+          |(define-fun |C.%| ((x C) (y C)) C (bvurem x y))
+          |(define-fun |C.<<| ((x C) (y C)) C (bvshl x y))
+          |(define-fun |C.>>| ((x C) (y C)) C (bvlshr x y))
+          |(define-fun |C.>>>| ((x C) (y C)) C (bvlshr x y))
+          |
           |$zST
           |
           |(define-sort F32 () Float32)
@@ -775,7 +793,6 @@ object Smt2 {
     v match {
       case v: State.Value.B => return if (v.value) Smt2.stTrue else Smt2.stFalse
       case v: State.Value.Z => return st"${v.value}"
-      case v: State.Value.R => return st"${v.value}"
       case v: State.Value.Sym => return st"cx!${v.num}"
       case v: State.Value.Range => return st"${v.value}"
       case v: State.Value.Enum => return enumId(v.owner, v.id)
@@ -789,6 +806,14 @@ object Smt2 {
       case v: State.Value.U64 => return toVal(v.tipe, conversions.U64.toZ(v.value))
       case v: State.Value.F32 => return formatF32(v.value)
       case v: State.Value.F64 => return formatF64(v.value)
+      case v: State.Value.C =>
+        val t: AST.Typed.Name = charBitWidth match {
+          case 8 => AST.Typed.u8
+          case 16 => AST.Typed.u16
+          case 32 => AST.Typed.u32
+        }
+        return toVal(t, conversions.U32.toZ(conversions.C.toU32(v.value)))
+      case v: State.Value.R => return st"${v.value}"
       case _ =>
         halt("TODO") // TODO
     }
