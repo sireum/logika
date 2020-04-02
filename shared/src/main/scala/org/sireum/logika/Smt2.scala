@@ -66,40 +66,6 @@ object Smt2 {
     AST.Typed.string,
   )
 
-  val binop2Smt2Map: HashMap[AST.Typed.Name, HashMap[String, String]] =
-    HashMap.empty[AST.Typed.Name, HashMap[String, String]] ++
-      ISZ[(AST.Typed.Name, HashMap[String, String])](
-        AST.Typed.b ~> (HashMap.empty[String, String] ++ ISZ(
-          AST.Exp.BinaryOp.And ~> "and",
-          AST.Exp.BinaryOp.Or ~> "or",
-          AST.Exp.BinaryOp.Imply ~> "=>"
-        )),
-        AST.Typed.z ~> (HashMap.empty[String, String] ++ ISZ(
-          AST.Exp.BinaryOp.Add ~> "+",
-          AST.Exp.BinaryOp.Sub ~> "-",
-          AST.Exp.BinaryOp.Mul ~> "*",
-          AST.Exp.BinaryOp.Div ~> "div",
-          AST.Exp.BinaryOp.Rem ~> "rem",
-          AST.Exp.BinaryOp.Eq ~> "=",
-          AST.Exp.BinaryOp.Lt ~> "<",
-          AST.Exp.BinaryOp.Le ~> "<=",
-          AST.Exp.BinaryOp.Gt ~> ">",
-          AST.Exp.BinaryOp.Ge ~> ">="
-        )),
-      )
-
-  val unop2Smt2Map: HashMap[AST.Typed, HashMap[AST.Exp.UnaryOp.Type, String]] =
-    HashMap.empty[AST.Typed, HashMap[AST.Exp.UnaryOp.Type, String]] ++
-      ISZ[(AST.Typed, HashMap[AST.Exp.UnaryOp.Type, String])](
-        AST.Typed.b ~> (HashMap.empty[AST.Exp.UnaryOp.Type, String] ++ ISZ(
-          AST.Exp.UnaryOp.Not ~> "not",
-          AST.Exp.UnaryOp.Complement ~> "not",
-        )),
-        AST.Typed.z ~> (HashMap.empty[AST.Exp.UnaryOp.Type, String] ++ ISZ(
-          AST.Exp.UnaryOp.Minus ~> "-"
-        ))
-      )
-
   val imsOps: HashSet[String] =
     HashSet.empty[String] ++
       ISZ(
@@ -111,6 +77,13 @@ object Smt2 {
 
   val stTrue: ST = st"true"
   val stFalse: ST = st"false"
+
+  val bvFormats: Map[Z, String] = Map.empty[Z, String] ++ ISZ[(Z, String)](
+    8 ~> "#x%02X",
+    16 ~> "#x%04X",
+    32 ~> "#x%08X",
+    64 ~> "#x%016X",
+  )
 
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 }
@@ -179,6 +152,12 @@ object Smt2 {
 
   def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2.Result)
 
+  def formatVal(format: String, n: Z): ST
+
+  def formatF32(value: F32): ST
+
+  def formatF64(value: F64): ST
+
   @memoize def adtId(tipe: AST.Typed): ST = {
     @pure def isAdt(t: AST.Typed.Name): B = {
       typeHierarchy.typeMap.get(t.ids).get match {
@@ -223,7 +202,13 @@ object Smt2 {
   }
 
   def toVal(t: AST.Typed.Name, n: Z): ST = {
-    return st"$n"
+    val bw: Z = if (t == AST.Typed.z) {
+      intBitWidth
+    } else {
+      val ast = typeHierarchy.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.SubZ].ast
+      if (!ast.isBitVector) intBitWidth else ast.bitWidth
+    }
+    return if (bw == 0) st"$n" else formatVal(Smt2.bvFormats.get(bw).get, n)
   }
 
   def addType(tipe: AST.Typed, reporter: Reporter): Unit = {
@@ -445,7 +430,78 @@ object Smt2 {
     }
 
     def addSubZ(t: AST.Typed.Name, ti: TypeInfo.SubZ): Unit = {
-      halt("TODO") // TODO
+      val tId = typeId(t)
+      val tNegId = typeOpId(t, "unary_-")
+      val tCompId = typeOpId(t, "unary_~")
+      val tLeId = typeOpId(t, "<=")
+      val tLtId = typeOpId(t, "<")
+      val tGeId = typeOpId(t, ">=")
+      val tGtId = typeOpId(t, ">")
+      val tEqId = typeOpId(t, "==")
+      val tNeId = typeOpId(t, "!=")
+      val tAddId = typeOpId(t, "+")
+      val tSubId = typeOpId(t, "-")
+      val tMulId = typeOpId(t, "*")
+      val tDivId = typeOpId(t, "/")
+      val tRemId = typeOpId(t, "%")
+      val tShlId = typeOpId(t, "<<")
+      val tShrId = typeOpId(t, ">>")
+      val tUshrId = typeOpId(t, ">>>")
+      (ti.ast.isSigned, ti.ast.isBitVector) match {
+        case (T, T) =>
+          addTypeDecl(
+            st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
+                 |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
+                 |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
+                 |(define-fun $tLeId ((x $tId) (y $tId)) B (bvsle x y))
+                 |(define-fun $tLtId ((x $tId) (y $tId)) B (bvslt x y))
+                 |(define-fun $tGtId ((x $tId) (y $tId)) B (bvsgt x y))
+                 |(define-fun $tGeId ((x $tId) (y $tId)) B (bvsge x y))
+                 |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
+                 |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
+                 |(define-fun $tAddId ((x $tId) (y $tId)) $tId (bvadd x y))
+                 |(define-fun $tSubId ((x $tId) (y $tId)) $tId (bvsub x y))
+                 |(define-fun $tMulId ((x $tId) (y $tId)) $tId (bvmul x y))
+                 |(define-fun $tDivId ((x $tId) (y $tId)) $tId (bvsdiv x y))
+                 |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvsrem x y))
+                 |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
+                 |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvashr x y))
+                 |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))""")
+        case (F, T) =>
+          addTypeDecl(
+            st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
+                |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
+                |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
+                |(define-fun $tLeId ((x $tId) (y $tId)) B (bvule x y))
+                |(define-fun $tLtId ((x $tId) (y $tId)) B (bvult x y))
+                |(define-fun $tGtId ((x $tId) (y $tId)) B (bvugt x y))
+                |(define-fun $tGeId ((x $tId) (y $tId)) B (bvuge x y))
+                |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
+                |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
+                |(define-fun $tAddId ((x $tId) (y $tId)) $tId (bvadd x y))
+                |(define-fun $tSubId ((x $tId) (y $tId)) $tId (bvsub x y))
+                |(define-fun $tMulId ((x $tId) (y $tId)) $tId (bvmul x y))
+                |(define-fun $tDivId ((x $tId) (y $tId)) $tId (bvudiv x y))
+                |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvurem x y))
+                |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
+                |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvlshr x y))
+                |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))""")
+        case (_, _) =>
+          addTypeDecl(
+            st"""(define-sort $tId () Int)
+                |(define-fun $tNegId ((x $tId)) $tId (- x))
+                |(define-fun $tLeId ((x $tId) (y $tId)) B (<= x y))
+                |(define-fun $tLtId ((x $tId) (y $tId)) B (< x y))
+                |(define-fun $tGtId ((x $tId) (y $tId)) B (> x y))
+                |(define-fun $tGeId ((x $tId) (y $tId)) B (>= x y))
+                |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
+                |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
+                |(define-fun $tAddId ((x $tId) (y $tId)) Z (+ x y))
+                |(define-fun $tSubId ((x $tId) (y $tId)) Z (- x y))
+                |(define-fun $tMulId ((x $tId) (y $tId)) Z (* x y))
+                |(define-fun $tDivId ((x $tId) (y $tId)) Z (div x y))
+                |(define-fun $tRemId ((x $tId) (y $tId)) Z (rem x y))""")
+      }
     }
 
     def addEnum(t: AST.Typed.Name, ti: TypeInfo.Enum): Unit = {
@@ -593,12 +649,42 @@ object Smt2 {
         case _ =>
       }
     }
+    val zST: ST =
+      if (intBitWidth == 0)
+        st"""(define-sort Z () Int)
+            |(define-fun |Z.unary_-| ((x Z)) Z (- x))
+            |(define-fun |Z.<=| ((x Z) (y Z)) B (<= x y))
+            |(define-fun |Z.<| ((x Z) (y Z)) B (< x y))
+            |(define-fun |Z.>| ((x Z) (y Z)) B (> x y))
+            |(define-fun |Z.>=| ((x Z) (y Z)) B (>= x y))
+            |(define-fun |Z.==| ((x Z) (y Z)) B (= x y))
+            |(define-fun |Z.!=| ((x Z) (y Z)) B (not (= x y)))
+            |(define-fun |Z.+| ((x Z) (y Z)) Z (+ x y))
+            |(define-fun |Z.-| ((x Z) (y Z)) Z (- x y))
+            |(define-fun |Z.*| ((x Z) (y Z)) Z (* x y))
+            |(define-fun |Z./| ((x Z) (y Z)) Z (div x y))
+            |(define-fun |Z.%| ((x Z) (y Z)) Z (rem x y))"""
+      else
+        st"""(define-sort Z () (_ BitVec $intBitWidth))
+            |(define-fun |Z.unary_-| ((x Z)) Z (bvneg x))
+            |(define-fun |Z.<=| ((x Z) (y Z)) B (bvsle x y))
+            |(define-fun |Z.<| ((x Z) (y Z)) B (bvslt x y))
+            |(define-fun |Z.>| ((x Z) (y Z)) B (bvsgt x y))
+            |(define-fun |Z.>=| ((x Z) (y Z)) B (bvsge x y))
+            |(define-fun |Z.==| ((x Z) (y Z)) B (= x y))
+            |(define-fun |Z.!=| ((x Z) (y Z)) B (not (= x y)))
+            |(define-fun |Z.+| ((x Z) (y Z)) Z (bvadd x y))
+            |(define-fun |Z.-| ((x Z) (y Z)) Z (bvsub x y))
+            |(define-fun |Z.*| ((x Z) (y Z)) Z (bvmul x y))
+            |(define-fun |Z./| ((x Z) (y Z)) Z (bvsdiv x y))
+            |(define-fun |Z.%| ((x Z) (y Z)) Z (bvsrem x y))"""
     val r =
       st"""${(for (header <- headers; line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
           |(set-logic ALL)
           |
           |(define-sort B () Bool)
-          |(define-fun |B.!| ((x B)) B (not x))
+          |(define-fun |B.unary_!| ((x B)) B (not x))
+          |(define-fun |B.unary_~| ((x B)) B (not x))
           |(define-fun |B.==| ((x B) (y B)) B (= x y))
           |(define-fun |B.!=| ((x B) (y B)) B (not (= x y)))
           |(define-fun |B.&| ((x B) (y B)) B (and x y))
@@ -606,23 +692,13 @@ object Smt2 {
           |(define-fun |B.│^| ((x B) (y B)) B (xor x y))
           |(define-fun |B.imply_:| ((x B) (y B)) B (=> x y))
           |
-          |(define-sort Z () Int)
-          |(define-fun |Z.<=| ((x Z) (y Z)) B (<= x y))
-          |(define-fun |Z.<| ((x Z) (y Z)) B (< x y))
-          |(define-fun |Z.>| ((x Z) (y Z)) B (> x y))
-          |(define-fun |Z.>=| ((x Z) (y Z)) B (>= x y))
-          |(define-fun |Z.==| ((x Z) (y Z)) B (= x y))
-          |(define-fun |Z.!=| ((x Z) (y Z)) B (not (= x y)))
-          |(define-fun |Z.+| ((x Z) (y Z)) Z (+ x y))
-          |(define-fun |Z.-| ((x Z) (y Z)) Z (- x y))
-          |(define-fun |Z.*| ((x Z) (y Z)) Z (* x y))
-          |(define-fun |Z./| ((x Z) (y Z)) Z (div x y))
-          |(define-fun |Z.%| ((x Z) (y Z)) Z (rem x y))
+          |$zST
           |
           |(define-sort F32 () Float32)
           |(define-const |F32.PInf| (F32) (_ +oo 8 24))
           |(define-const |F32.NInf| (F32) (_ -oo 8 24))
           |(define-const |F32.NaN| (F32) (_ NaN 8 24))
+          |(define-fun |F32.unary_-| ((x F32)) F32 (fp.neg x))
           |(define-fun |F32.<=| ((x F32) (y F32)) B (fp.leq x y))
           |(define-fun |F32.<| ((x F32) (y F32)) B (fp.lt x y))
           |(define-fun |F32.>| ((x F32) (y F32)) B (fp.gt x y))
@@ -639,6 +715,7 @@ object Smt2 {
           |(define-const |F64.PInf| (F64) (_ +oo 11 53))
           |(define-const |F64.NInf| (F64) (_ -oo 11 53))
           |(define-const |F64.NaN| (F64) (_ NaN 11 53))
+          |(define-fun |F64.unary_-| ((x F64)) F64 (fp.neg x))
           |(define-fun |F64.<=| ((x F64) (y F64)) B (fp.leq x y))
           |(define-fun |F64.<| ((x F64) (y F64)) B (fp.lt x y))
           |(define-fun |F64.>| ((x F64) (y F64)) B (fp.gt x y))
@@ -698,9 +775,20 @@ object Smt2 {
     v match {
       case v: State.Value.B => return if (v.value) Smt2.stTrue else Smt2.stFalse
       case v: State.Value.Z => return st"${v.value}"
+      case v: State.Value.R => return st"${v.value}"
       case v: State.Value.Sym => return st"cx!${v.num}"
       case v: State.Value.Range => return st"${v.value}"
       case v: State.Value.Enum => return enumId(v.owner, v.id)
+      case v: State.Value.S8 => return toVal(v.tipe, conversions.S8.toZ(v.value))
+      case v: State.Value.S16 => return toVal(v.tipe, conversions.S16.toZ(v.value))
+      case v: State.Value.S32 => return toVal(v.tipe, conversions.S32.toZ(v.value))
+      case v: State.Value.S64 => return toVal(v.tipe, conversions.S64.toZ(v.value))
+      case v: State.Value.U8 => return toVal(v.tipe, conversions.U8.toZ(v.value))
+      case v: State.Value.U16 => return toVal(v.tipe, conversions.U16.toZ(v.value))
+      case v: State.Value.U32 => return toVal(v.tipe, conversions.U32.toZ(v.value))
+      case v: State.Value.U64 => return toVal(v.tipe, conversions.U64.toZ(v.value))
+      case v: State.Value.F32 => return formatF32(v.value)
+      case v: State.Value.F64 => return formatF64(v.value)
       case _ =>
         halt("TODO") // TODO
     }
@@ -818,34 +906,15 @@ object Smt2 {
           st"""(exists (${(for (x <- c.vars) yield qvar2ST(x), " ")})
               |  $body
               |)"""
-      case c: State.Claim.Let.Binary =>
-        var neg: B = F
-        val binop: String = if (c.op == "!=") {
-          neg = T
-          "=="
-        } else {
-          c.op
-        }
-        c.op match {
-          case string"==" => return st"(${typeOpId(c.tipe, "==")} ${v2ST(c.left)} ${v2ST(c.right)})"
-          case string"!=" => return st"(${typeOpId(c.tipe, "!=")} ${v2ST(c.left)} ${v2ST(c.right)})"
-          case _ =>
-        }
-        c.tipe match {
-          case tipe: AST.Typed.Name =>
-            Smt2.binop2Smt2Map.get(tipe) match {
-              case Some(m) => return st"(${m.get(binop).get} ${v2ST(c.left)} ${v2ST(c.right)})"
-              case _ =>
-            }
-          case _ =>
-        }
-        halt("TODO") // TODO
+      case c: State.Claim.Let.Binary => return st"(${typeOpId(c.tipe, c.op)} ${v2ST(c.left)} ${v2ST(c.right)})"
       case c: State.Claim.Let.Unary =>
-        Smt2.unop2Smt2Map.get(c.sym.tipe) match {
-          case Some(m) => return st"(${m.get(c.op).get} ${v2ST(c.value)})"
-          case _ =>
-            halt("TODO") // TODO
+        val op: String = c.op match {
+          case AST.Exp.UnaryOp.Complement => "~"
+          case AST.Exp.UnaryOp.Not => "!"
+          case AST.Exp.UnaryOp.Minus => "-"
+          case _ => halt("Infeasible")
         }
+        return st"(${typeOpId(c.sym.tipe, s"unary_$op")} ${v2ST(c.value)})"
       case c: State.Claim.Let.SeqLookup =>
         return st"(${typeOpId(c.seq.tipe, "at")} ${v2ST(c.seq)} ${v2ST(c.index)})"
       case c: State.Claim.Let.FieldLookup =>

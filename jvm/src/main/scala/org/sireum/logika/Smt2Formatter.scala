@@ -1,5 +1,6 @@
+// #Sireum
 /*
- Copyright (c) 2019, Robby, Kansas State University
+ Copyright (c) 2020, Robby, Kansas State University
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -22,26 +23,12 @@
  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.message.Reporter
-import org.sireum.test._
-import LogikaTest._
 
-class LogikaRcTest extends SireumRcSpec {
-
-  def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = $internal.RC.text(Vector("example")) { (p, f) =>
-    p.last.endsWith(".sc")
-  }
-
-  def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
-    val reporter = Reporter.create
-    Logika.checkWorksheet(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, config,
-      th => Smt2Impl(z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
-    reporter.printMessages()
-    !reporter.hasIssue
-  }
-
+@ext object Smt2Formatter {
+  def formatVal(format: String, n: Z): ST = $
+  def formatF32(value: F32): ST = $
+  def formatF64(value: F64): ST = $
 }

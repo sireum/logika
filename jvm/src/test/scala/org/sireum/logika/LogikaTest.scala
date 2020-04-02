@@ -63,6 +63,16 @@ class LogikaTest extends TestSuite {
 
     "Passing" - {
 
+      * - failingWorksheet(
+        """import org.sireum._
+          |import org.sireum.Z8._
+          |val a = z8"127" + z8"1"""".stripMargin, "Max range check")
+
+      * - failingWorksheet(
+        """import org.sireum._
+          |import org.sireum.Z8._
+          |val a = z8"-128" - z8"1"""".stripMargin, "Min range check")
+
       * - passingWorksheet(
         """import org.sireum._
           |var x = Z.random
@@ -148,7 +158,7 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Reporter, msgOpt: Option[String]): B = {
     Logika.checkWorksheet(None(), input, config,
-      th => Z3(LogikaTest.z3Exe, th, config.charBitWidth, config.intBitWidth), reporter)
+      th => Smt2Impl(LogikaTest.z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

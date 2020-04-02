@@ -446,6 +446,36 @@ object Logika {
     }
   }
 
+  def text2SubZVal(ti: TypeInfo.SubZ, text: String, pos: Position): State.Value = {
+    val t = ti.typedOpt.get.asInstanceOf[AST.Typed.Name]
+    (ti.ast.isBitVector, ti.ast.bitWidth) match {
+      case (T, 8) => return State.Value.S8(S8(text).get, t, pos)
+      case (T, 16) => return State.Value.S16(S16(text).get, t, pos)
+      case (T, 32) => return State.Value.S32(S32(text).get, t, pos)
+      case (T, 64) => return State.Value.S64(S64(text).get, t, pos)
+      case (F, 8) => return State.Value.U8(U8(text).get, t, pos)
+      case (F, 16) => return State.Value.U16(U16(text).get, t, pos)
+      case (F, 32) => return State.Value.U32(U32(text).get, t, pos)
+      case (F, 64) => return State.Value.U64(U64(text).get, t, pos)
+      case (_, _) => return State.Value.Range(org.sireum.Z(text).get, t, pos)
+    }
+  }
+
+  def z2SubZVal(ti: TypeInfo.SubZ, n: Z, pos: Position): State.Value = {
+    val t = ti.typedOpt.get.asInstanceOf[AST.Typed.Name]
+    (ti.ast.isBitVector, ti.ast.bitWidth) match {
+      case (T, 8) => return State.Value.S8(conversions.Z.toS8(n), t, pos)
+      case (T, 16) =>return State.Value.S16(conversions.Z.toS16(n), t, pos)
+      case (T, 32) =>return State.Value.S32(conversions.Z.toS32(n), t, pos)
+      case (T, 64) =>return State.Value.S64(conversions.Z.toS64(n), t, pos)
+      case (F, 8) =>return State.Value.U8(conversions.Z.toU8(n), t, pos)
+      case (F, 16) =>return State.Value.U16(conversions.Z.toU16(n), t, pos)
+      case (F, 32) =>return State.Value.U32(conversions.Z.toU32(n), t, pos)
+      case (F, 64) =>return State.Value.U64(conversions.Z.toU64(n), t, pos)
+      case (_, _) => return State.Value.Range(n, t, pos)
+    }
+  }
+
   def evalInterpolate(lit: AST.Exp.StringInterpolate): State.Value = {
     lit.prefix match {
       case string"z" => return State.Value.Z(org.sireum.Z(lit.lits(0).value).get, lit.posOpt.get)
@@ -453,7 +483,13 @@ object Logika {
       case string"c" => return State.Value.C(conversions.String.toCis(lit.lits(0).value)(0), lit.posOpt.get)
       case string"f32" => return State.Value.F32(org.sireum.F32(lit.lits(0).value).get, lit.posOpt.get)
       case string"f64" => return State.Value.F64(org.sireum.F64(lit.lits(0).value).get, lit.posOpt.get)
-      case _ => halt(s"TODO: $lit")
+      case _ =>
+        val t = lit.typedOpt.get.asInstanceOf[AST.Typed.Name].ids
+        th.typeMap.get(t).get match {
+          case ti: TypeInfo.SubZ => return text2SubZVal(ti, lit.lits(0).value, lit.posOpt.get)
+          case _ =>
+        }
+        halt(s"TODO: $lit")
     }
   }
 
@@ -467,6 +503,31 @@ object Logika {
   def evalExp(rtCheck: B, state: State, e: AST.Exp, reporter: Reporter): (State, State.Value) = {
     if (!state.status) {
       return (state, State.errorValue)
+    }
+
+    def checkRange(s0: State, value: State.Value, pos: Position): State = {
+      val t = value.tipe
+      t match {
+        case t: AST.Typed.Name =>
+          th.typeMap.get(t.ids).get match {
+            case ti: TypeInfo.SubZ if !ti.ast.isBitVector =>
+              var s1 = s0
+              if (ti.ast.hasMin) {
+                val (s2, sym) = s1.freshSym(AST.Typed.b, pos)
+                val s3 = s2.addClaim(State.Claim.Let.Binary(sym, z2SubZVal(ti, ti.ast.min, pos), AST.Exp.BinaryOp.Le, value, t))
+                s1 = evalAssertH(s"Min range check for $t", s3, sym, e.posOpt, reporter)
+              }
+              if (s1.status && ti.ast.hasMax) {
+                val (s4, sym) = s1.freshSym(AST.Typed.b, pos)
+                val s5 = s4.addClaim(State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Le, z2SubZVal(ti, ti.ast.max, pos), t))
+                s1 = evalAssertH(s"Max range check for $t", s5, sym, e.posOpt, reporter)
+              }
+              return s1
+            case _ =>
+          }
+        case _ =>
+      }
+      return s0
     }
 
     def evalIdentH(res: AST.ResolvedInfo, t: AST.Typed, pos: Position): (State, State.Value) = {
@@ -505,8 +566,10 @@ object Logika {
           kind match {
             case AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus => return (s1, v)
             case _ =>
-              val (s2, sym) = s1.freshSym(v.tipe, exp.posOpt.get)
-              return (s2(claims = s2.claims :+ State.Claim.Let.Unary(sym, exp.op, v)), sym)
+              val pos = exp.posOpt.get
+              val (s2, sym) = s1.freshSym(v.tipe, pos)
+              val s3 = s2(claims = s2.claims :+ State.Claim.Let.Unary(sym, exp.op, v))
+              return (checkRange(s3, sym, pos), sym)
           }
         case _ =>
           halt(s"TODO: $exp") // TODO
@@ -570,9 +633,10 @@ object Logika {
           return (s2, State.errorValue)
         }
         val rTipe = e.typedOpt.get
-        val (s3, rExp) = s2.freshSym(rTipe, e.posOpt.get)
+        val pos = e.posOpt.get
+        val (s3, rExp) = s2.freshSym(rTipe, pos)
         val s4 = s3.addClaim(State.Claim.Let.Binary(rExp, v1, exp.op, v2, v1.tipe))
-        return (s4, rExp)
+        return (checkRange(s4, rExp, pos), rExp)
       }
 
       def evalCond(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value): (State, State.Value) = {

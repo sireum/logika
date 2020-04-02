@@ -1,6 +1,6 @@
 // #Sireum
 /*
- Copyright (c) 2019, Robby, Kansas State University
+ Copyright (c) 2020, Robby, Kansas State University
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -30,10 +30,17 @@ import org.sireum._
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 
-@record class Z3(val z3Exe: String,
-                 val typeHierarchy: TypeHierarchy,
-                 val charBitWidth: Z,
-                 val intBitWidth: Z)
+object Smt2Impl {
+  @pure def z3ArgF(timeoutInMs: Z): ISZ[String] = {
+    return ISZ("-smt2", s"-t:$timeoutInMs", "-in")
+  }
+}
+
+@record class Smt2Impl(val exe: String,
+                       argsF: Z => ISZ[String] @pure,
+                       val typeHierarchy: TypeHierarchy,
+                       val charBitWidth: Z,
+                       val intBitWidth: Z)
   extends Smt2 {
 
   var types: HashSet[AST.Typed] = Smt2.basicTypes
@@ -91,15 +98,15 @@ import org.sireum.lang.tipe.TypeHierarchy
   def checkQuery(query: String, timeoutInMs: Z): Smt2.Result = {
     def err(out: String): Unit = {
       halt(
-        st"""Error encountered when running $z3Exe query:
+        st"""Error encountered when running $exe query:
             |$query
             |
-            |Z3 output:
+            |$exe output:
             |$out""".render)
     }
-    //println(s"Z3 Query:")
+    //println(s"$exe Query:")
     //println(query)
-    val pr = Os.proc(ISZ(z3Exe, "-smt2", s"-t:$timeoutInMs", "-in")).input(query).redirectErr.run()
+    val pr = Os.proc(exe +: argsF(timeoutInMs)).input(query).redirectErr.run()
     val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
     if (out.size == 0) {
       err(pr.out)
@@ -112,7 +119,7 @@ import org.sireum.lang.tipe.TypeHierarchy
       case string"unknown" => Smt2.Result(Smt2.Result.Kind.Unknown, query, pr.out)
       case _ => Smt2.Result(Smt2.Result.Kind.Error, query, pr.out)
     }
-    //println(s"Z3 Result (${r.kind}):")
+    //println(s"$exe Result (${r.kind}):")
     //println(r.output)
     if (r.kind == Smt2.Result.Kind.Error) {
       err(pr.out)
@@ -120,4 +127,17 @@ import org.sireum.lang.tipe.TypeHierarchy
 
     return r
   }
+
+  def formatVal(format: String, n: Z): ST = {
+    return Smt2Formatter.formatVal(format, n)
+  }
+
+  def formatF32(value: F32): ST = {
+    return Smt2Formatter.formatF32(value)
+  }
+
+  def formatF64(value: F64): ST = {
+    return Smt2Formatter.formatF64(value)
+  }
 }
+
