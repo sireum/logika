@@ -17,7 +17,7 @@ import org.sireum._
         z == In(z) + 3
       )
     )
-    Contract {
+    Spec {
       y = y + 2
     }
     z = z + 3
@@ -45,7 +45,7 @@ def test(x: Z): Unit = {
   val preZ = foo.z
   val r = foo.inc(x)
   assert(r == x + 1 & foo.z == preZ + 3)
-  Contract {
+  Spec {
     assert(foo.y == preY + 2)
   }
   assert(foo.iteEq(0, 1, 2) == 1)

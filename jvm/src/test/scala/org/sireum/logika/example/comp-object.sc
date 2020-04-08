@@ -15,7 +15,7 @@ def inc(n: Z): Z = {
       z == In(z) + 3
     )
   )
-  Contract {
+  Spec {
     y = y + 2
   }
   z = z + 3
@@ -45,7 +45,7 @@ def test(x: Z): Unit = {
   @spec val preY = y
   val r = inc(x)
   assert(r == x + 1 & z == preZ + 3)
-  Contract {
+  Spec {
     assert(y == preY + 2)
   }
   assert(ite(r > x, 3, 1) == 3)
