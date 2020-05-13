@@ -813,7 +813,9 @@ object Smt2 {
           case 32 => AST.Typed.u32
         }
         return toVal(t, conversions.U32.toZ(conversions.C.toU32(v.value)))
-      case v: State.Value.R => return st"${v.value}"
+      case v: State.Value.R =>
+        val text = s"${v.value}"
+        return if (ops.StringOps(text).contains(".")) st"$text" else st"$text.0"
       case _ =>
         halt("TODO") // TODO
     }
