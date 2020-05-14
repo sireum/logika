@@ -63,16 +63,6 @@ class LogikaTest extends TestSuite {
 
     "Passing" - {
 
-      * - failingWorksheet(
-        """import org.sireum._
-          |import org.sireum.Z8._
-          |val a = z8"127" + z8"1"""".stripMargin, "Max range check")
-
-      * - failingWorksheet(
-        """import org.sireum._
-          |import org.sireum.Z8._
-          |val a = z8"-128" - z8"1"""".stripMargin, "Min range check")
-
       * - passingWorksheet(
         """import org.sireum._
           |var x = Z.random
@@ -90,6 +80,16 @@ class LogikaTest extends TestSuite {
     }
 
     "Failing" - {
+
+      * - failingWorksheet(
+        """import org.sireum._
+          |import org.sireum.Z8._
+          |val a = z8"127" + z8"1"""".stripMargin, "Max range check")
+
+      * - failingWorksheet(
+        """import org.sireum._
+          |import org.sireum.Z8._
+          |val a = z8"-128" - z8"1"""".stripMargin, "Min range check")
 
       * - failingWorksheet(
         """import org.sireum._
