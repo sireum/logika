@@ -227,7 +227,7 @@ object Smt2 {
       val prependId = typeOpId(t, "+:")
       val upId = typeOpId(t, "up")
       val eqId = typeOpId(t, "==")
-      val inBoundId = typeOpId(t, "inBound")
+      val isInBoundId = typeOpId(t, "isInBound")
       val itLeId = typeOpId(it, "<=")
       val itGeId = typeOpId(it, ">=")
       val itEqId = typeOpId(it, "==")
@@ -251,14 +251,14 @@ object Smt2 {
       } else {
         addTypeDecl(st"(assert (forall ((x $tId)) (=> (not (|Z.==| ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
       }
-      addTypeDecl(st"(define-fun $inBoundId ((x $tId) (y $itId)) B (and ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
+      addTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and ($itGeId ($sizeId x) $zOne) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
       addTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       addTypeDecl(
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
             |  (and
             |    ($itEqId ($sizeId z) ($itAddId ($sizeId x) $zOne))
             |    ($itEqId ($lastIndexId z) ($itAddId ($lastIndexId x) $itOne))
-            |    (forall ((i $itId)) (=> ($inBoundId x i)
+            |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                        (= ($atId z i) ($atId x i))))
             |    (= ($atId z ($lastIndexId z)) y)))""")
       addTypeDecl(
@@ -266,16 +266,16 @@ object Smt2 {
             |  (and
             |    (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
             |    ($itEqId ($lastIndexId z) ($itAddId ($lastIndexId x) ($itSubId ($lastIndexId y) ($firstIndexId y))))
-            |    (forall ((i $itId)) (=> ($inBoundId x i)
+            |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                            (= ($atId z i) ($atId x i))))
-            |    (forall ((i $itId)) (=> ($inBoundId y i)
+            |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId ($itAddId ($lastIndexId x) ($itSubId i ($firstIndexId y))) $itOne)) ($atId y i))))))""")
       addTypeDecl(
         st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
             |  (and
             |    (= ($sizeId z) (+ ($sizeId y) 1))
             |    ($itEqId ($lastIndexId z) ($itAddId ($lastIndexId y) $itOne))
-            |    (forall ((i $itId)) (=> ($inBoundId y i)
+            |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId i $itOne)) ($atId y i))))
             |    (= ($atId z ($firstIndexId z)) x)))""")
       addTypeDecl(
@@ -947,7 +947,7 @@ object Smt2 {
       case c: State.Claim.Let.FieldLookup =>
         return st"(${typeOpId(c.adt.tipe, c.id)} ${v2ST(c.adt)})"
       case c: State.Claim.Let.SeqInBound =>
-        return st"(${typeOpId(c.seq.tipe, "inBound")} ${v2ST(c.seq)} ${v2ST(c.index)})"
+        return st"(${typeOpId(c.seq.tipe, "isInBound")} ${v2ST(c.seq)} ${v2ST(c.index)})"
       case c: State.Claim.Let.TupleLit =>
         return st"(${typeOpId(c.sym.tipe, "new")} ${(for (arg <- c.args) yield v2ST(arg), " ")})"
       case c: State.Claim.Let.And =>

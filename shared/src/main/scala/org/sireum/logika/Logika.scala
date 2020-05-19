@@ -377,6 +377,18 @@ object Logika {
     return s1(claims = claimsOps.slice(0, size1) :+ State.Claim.And(claimsOps.slice(size1, size2)))
   }
 
+  def constructAssume(cond: AST.Exp, posOpt: Option[Position]): AST.Stmt = {
+    val assumeResAttr = AST.ResolvedAttr(
+      posOpt = posOpt,
+      resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Assume)),
+      typedOpt = Some(AST.Typed.Fun(F, F, ISZ(AST.Typed.b), AST.Typed.unit))
+    )
+    AST.Stmt.Expr(AST.Exp.Invoke(
+      None(), AST.Exp.Ident(AST.Id("assume", AST.Attr(posOpt)), assumeResAttr), ISZ(), ISZ(cond),
+      AST.ResolvedAttr(assumeResAttr.posOpt, assumeResAttr.resOpt, AST.Typed.unitOpt)
+    ), AST.TypedAttr(posOpt, AST.Typed.unitOpt))
+  }
+
   @strictpure def afterPos(pos: Position): Position = message.FlatPos(pos.uriOpt,
     conversions.Z.toU32(pos.endLine + 1),
     conversions.Z.toU32(1),
@@ -530,27 +542,27 @@ object Logika {
       return s0
     }
 
-    def evalIdentH(res: AST.ResolvedInfo, t: AST.Typed, pos: Position): (State, State.Value) = {
+    def evalIdentH(s0: State, res: AST.ResolvedInfo, t: AST.Typed, pos: Position): (State, State.Value) = {
       res match {
         case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
-          return (state, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
+          return (s0, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
         case res: AST.ResolvedInfo.LocalVar =>
-          val (s0, r) = Logika.idIntro(pos, state, res.context, res.id, t, None())
-          return (s0, r)
+          val (s1, r) = Logika.idIntro(pos, s0, res.context, res.id, t, None())
+          return (s1, r)
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
-            val (s0, r) = Logika.nameIntro(pos, state, res.owner :+ res.id, t, None())
-            return (s0, r)
+            val (s1, r) = Logika.nameIntro(pos, s0, res.owner :+ res.id, t, None())
+            return (s1, r)
           } else {
-            val (s0, r) = evalThisIdH(state, res.id, t, pos)
-            return (s0, r)
+            val (s1, r) = evalThisIdH(s0, res.id, t, pos)
+            return (s1, r)
           }
         case _ => halt(s"TODO: $e") // TODO
       }
     }
 
     def evalIdent(exp: AST.Exp.Ident): (State, State.Value) = {
-      return evalIdentH(exp.attr.resOpt.get, exp.attr.typedOpt.get, exp.posOpt.get)
+      return evalIdentH(state, exp.attr.resOpt.get, exp.attr.typedOpt.get, exp.posOpt.get)
     }
 
     def evalUnaryExp(exp: AST.Exp.Unary): (State, State.Value) = {
@@ -774,7 +786,7 @@ object Logika {
           return evalField(tipe)
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName =>
           return evalField(res.tpeOpt.get.ret)
-        case res: AST.ResolvedInfo.LocalVar => return evalIdentH(res, tipe, pos)
+        case res: AST.ResolvedInfo.LocalVar => return evalIdentH(state, res, tipe, pos)
         case res: AST.ResolvedInfo.EnumElement => return evalEnumElement(res)
         case res: AST.ResolvedInfo.Tuple =>
           assert(receiverOpt.nonEmpty)
@@ -963,13 +975,97 @@ object Logika {
     def evalQuantType(quant: AST.Exp.QuantType): (State, State.Value) = {
       val s0 = state(claims = ISZ())
       val (s1, v): (State, State.Value) = evalAssignExpValue(AST.Typed.b, rtCheck, s0, quant.fun.exp, reporter)
-      val pos = quant.fun.exp.asStmt.posOpt.get
-      val (s2, expSym) = value2Sym(s1, v, pos)
-      val quantClaims = s1.claims :+ State.Claim.Prop(T, expSym)
-      val (s3, sym) = s2(claims = state.claims).freshSym(AST.Typed.b, pos)
+      val (s2, expSym) = value2Sym(s1, v, quant.fun.exp.asStmt.posOpt.get)
+      val quantClaims = s2.claims :+ State.Claim.Prop(T, expSym)
+      val (s3, sym) = s2(claims = state.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
       val vars: ISZ[State.Claim.Let.Quant.Var] =
         for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var.Id(p.idOpt.get.value, p.typedOpt.get)
       return (s3.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
+    }
+
+    def evalQuantRange(quant: AST.Exp.QuantRange): (State, State.Value) = {
+      val qVarType = quant.attr.typedOpt.get
+      val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
+      val s0 = state(claims = ISZ())
+      val (s1, lo) = evalExp(rtCheck, s0, quant.lo, reporter)
+      val (s2, hi) = evalExp(rtCheck, s1, quant.hi, reporter)
+      val (s3, ident) = evalIdentH(s2, quant.attr.resOpt.get, qVarType, quant.fun.params(0).idOpt.get.attr.posOpt.get)
+      val (s4, loSym) = s3.freshSym(AST.Typed.b, quant.lo.posOpt.get)
+      val s5 = s4.addClaim(State.Claim.Let.Binary(loSym, lo, AST.Exp.BinaryOp.Le, ident, qVarType))
+      val (s6, hiSym) = s5.freshSym(AST.Typed.b, quant.hi.posOpt.get)
+      val s7 = s6.addClaim(State.Claim.Let.Binary(hiSym, ident,
+        if (quant.hiExact) AST.Exp.BinaryOp.Le else AST.Exp.BinaryOp.Lt, hi, qVarType))
+      val (s8, v) = evalAssignExpValue(AST.Typed.b, rtCheck, s7, quant.fun.exp, reporter)
+      val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
+      val (s10, sym) = s9(claims = state.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
+      val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
+      val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, loSym), State.Claim.Prop(T, hiSym), State.Claim.Prop(T, expSym))
+      val quantClaims = s9.claims :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+      return (s10.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
+    }
+
+    def evalQuantEachIndex(quant: AST.Exp.QuantEach, seqExp: AST.Exp): (State, State.Value) = {
+      val qVarType = quant.attr.typedOpt.get
+      val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
+      val sType: AST.Typed.Name = seqExp.typedOpt.get match {
+        case t: AST.Typed.Name => t
+        case t: AST.Typed.Method => t.tpe.ret.asInstanceOf[AST.Typed.Name]
+        case _ => halt("Infeasible")
+      }
+      val s0 = state(claims = ISZ())
+      val posOpt = seqExp.posOpt
+      val firstIndexResAttr = AST.ResolvedAttr(posOpt, Some(AST.ResolvedInfo.Method(F, AST.MethodMode.Method, ISZ(),
+        sType.ids, "firstIndex", ISZ(), Some(AST.Typed.Fun(T, T, ISZ(), qVarType)))), Some(qVarType))
+      val lastIndexResAttr = AST.ResolvedAttr(posOpt, Some(AST.ResolvedInfo.Method(F, AST.MethodMode.Method, ISZ(),
+        sType.ids, "lastIndex", ISZ(), Some(AST.Typed.Fun(T, T, ISZ(), qVarType)))), Some(qVarType))
+      val firstIndexExp = AST.Exp.Select(Some(seqExp), AST.Id("firstIndex", AST.Attr(posOpt)), ISZ(), firstIndexResAttr)
+      val lastIndexExp = AST.Exp.Select(Some(seqExp), AST.Id("lastIndex", AST.Attr(posOpt)), ISZ(), lastIndexResAttr)
+      val (s1, lo) = evalExp(rtCheck, s0, firstIndexExp, reporter)
+      val (s2, hi) = evalExp(rtCheck, s1, lastIndexExp, reporter)
+      val (s3, ident) = evalIdentH(s2, quant.attr.resOpt.get, qVarType, quant.fun.params(0).idOpt.get.attr.posOpt.get)
+      val (s4, loSym) = s3.freshSym(AST.Typed.b, seqExp.posOpt.get)
+      val s5 = s4.addClaim(State.Claim.Let.Binary(loSym, lo, AST.Exp.BinaryOp.Le, ident, qVarType))
+      val (s6, hiSym) = s5.freshSym(AST.Typed.b, seqExp.posOpt.get)
+      val s7 = s6.addClaim(State.Claim.Let.Binary(hiSym, ident, AST.Exp.BinaryOp.Le, hi, qVarType))
+      val (s8, v) = evalAssignExpValue(AST.Typed.b, rtCheck, s7, quant.fun.exp, reporter)
+      val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
+      val (s10, sym) = s9(claims = state.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
+      val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
+      val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, loSym), State.Claim.Prop(T, hiSym), State.Claim.Prop(T, expSym))
+      val quantClaims = s9.claims :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+      return (s10.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
+    }
+
+    def evalQuantEach(quant: AST.Exp.QuantEach): (State, State.Value) = {
+      val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
+      val sType: AST.Typed.Name = quant.seq.typedOpt.get match {
+        case t: AST.Typed.Name => t
+        case t: AST.Typed.Method => t.tpe.ret.asInstanceOf[AST.Typed.Name]
+        case _ => halt("Infeasible")
+      }
+      val iType = sType.args(0)
+      val eType = sType.args(1)
+      val pos = quant.fun.params(0).idOpt.get.attr.posOpt.get
+      val (s0, qvar) = state.freshSym(iType, pos)
+      val s1 = s0(claims = ISZ())
+      val (s2, seq) = evalExp(rtCheck, s1, quant.seq, reporter)
+      val (s3, inBound) = s2.freshSym(AST.Typed.b, pos)
+      val s4 = s3.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvar))
+      val (s5, select) = s4.freshSym(eType, pos)
+      val s6 = s5.addClaim(State.Claim.Let.SeqLookup(select, seq, qvar))
+      val (s7, e) = Logika.idIntro(pos, s6, qVarRes.context, qVarRes.id, eType, Some(pos))
+      val (s8, eq) = s7.freshSym(AST.Typed.b, pos)
+      val s9 = s8.addClaim(State.Claim.Let.Binary(eq, e, AST.Exp.BinaryOp.Eq, select, eType))
+      val (s10, v) = evalAssignExpValue(AST.Typed.b, rtCheck, s9, quant.fun.exp, reporter)
+      val (s11, expSym) = value2Sym(s10, v, quant.fun.exp.asStmt.posOpt.get)
+      val (s12, sym) = s11(claims = s0.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
+      val vars = ISZ[State.Claim.Let.Quant.Var](
+        State.Claim.Let.Quant.Var.Id(qVarRes.id, eType),
+        State.Claim.Let.Quant.Var.Sym(qvar)
+      )
+      val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, inBound), State.Claim.Prop(T, eq), State.Claim.Prop(T, expSym))
+      val quantClaims = s11.claims :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+      return (s12.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
     }
 
     def methodInfo(isInObject: B, owner: QName, id: String): InvokeMethodInfo = {
@@ -1384,6 +1480,20 @@ object Logika {
       case e: AST.Exp.Result => return evalResult(e)
       case e: AST.Exp.Input => return evalInput(e)
       case e: AST.Exp.QuantType => return evalQuantType(e)
+      case e: AST.Exp.QuantRange => return evalQuantRange(e)
+      case e: AST.Exp.QuantEach =>
+        e.seq match {
+          case seq: AST.Exp.Select =>
+            seq.attr.resOpt.get match {
+              case res: AST.ResolvedInfo.Method if
+              (res.owner == AST.Typed.isName || res.owner == AST.Typed.msName) &&
+              res.id == "indices" =>
+                return evalQuantEachIndex(e, seq.receiverOpt.get)
+              case _ =>
+            }
+          case _ =>
+        }
+        return evalQuantEach(e)
       case _ => halt(s"TODO: $e") // TODO
     }
 

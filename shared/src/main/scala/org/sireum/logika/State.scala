@@ -266,7 +266,7 @@ object State {
           case Some(d) =>
             return if (d.size == 1) d(0).toST(defs)
             else Some(toRawST)
-          case _ => halt("Infeasible")
+          case _ => Some(toRawST)
         }
       }
     }
@@ -771,20 +771,28 @@ object State {
 
       object Quant {
         @datatype trait Var {
-          @pure def toST: ST
+          @pure def toRawST: ST
+          @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST]
         }
 
         object Var {
 
           @datatype class Id(id: String, tipe: AST.Typed) extends Var {
-            @pure def toST: ST = {
+            @pure def toRawST: ST = {
               return st"$id: $tipe"
+            }
+
+            @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
+              return Some(toRawST)
             }
           }
 
           @datatype class Sym(sym: Value.Sym) extends Var {
-            @pure def toST: ST = {
-              return st"α${sym.num}"
+            @pure def toRawST: ST = {
+              return sym.toRawST
+            }
+            @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
+              return sym.toSTOpt(defs)
             }
           }
         }
@@ -795,14 +803,14 @@ object State {
                             val claims: ISZ[Claim]) extends Let with Composite {
         @pure override def toRawST: ST = {
           val r =
-            st"""${sym.toRawST} ≜ ${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
+            st"""${sym.toRawST} ≜ ${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toRawST, ", ")}
                 |  ${if (isAll) Claim.Imply(claims).toRawST else Claim.And(claims).toRawST}"""
           return r
         }
 
         @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(
-            st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST, ", ")}
+            st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST(defs), ", ")}
                 |  ${if (isAll) Claim.Imply(claims).toST(defs).getOrElse(State.stTrue) else Claim.And(claims).toST(defs).getOrElse(State.stTrue)}"""
           )
         }
