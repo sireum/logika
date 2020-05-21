@@ -76,6 +76,7 @@ object Logika {
   @datatype class Config(defaultLoopBound: Z,
                          loopBounds: HashMap[ISZ[String], Z],
                          smt2TimeoutInSeconds: Z,
+                         unroll: B,
                          charBitWidth: Z,
                          intBitWidth: Z,
                          logPc: B,
@@ -2085,7 +2086,15 @@ object Logika {
         return evalIf(None(), rtCheck, state, stmt, reporter)
       case stmt: AST.Stmt.While =>
         logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-        return if (stmt.modifies.nonEmpty) evalWhile(state, stmt) else evalWhileUnroll(state, stmt)
+        if (stmt.modifies.nonEmpty) {
+          return evalWhile(state, stmt)
+        } else {
+          if (!config.unroll) {
+            error(stmt.posOpt, "Modifies clause is required when loop unrolling is disabled", reporter)
+            return state(status = F)
+          }
+          return evalWhileUnroll(state, stmt)
+        }
       case stmt: AST.Stmt.Return =>
         logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
         return evalReturn(state, stmt)

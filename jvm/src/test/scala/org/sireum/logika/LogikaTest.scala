@@ -48,6 +48,7 @@ object LogikaTest {
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,
       smt2TimeoutInSeconds = 5,
+      unroll = T,
       charBitWidth = 32,
       intBitWidth = 0,
       logPc = F,

@@ -44,6 +44,9 @@ object cli {
       Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
         tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
         description = "Timeout (seconds) for SMT2 solver"),
+      Opt(name = "unroll", longKey = "unroll", shortKey = None(),
+        tpe = Type.Flag(F),
+        description = "Enable loop unrolling when loop modifies clause is unspecified"),
     ),
     groups = ISZ(
       OptGroup(name = "Bit-width", opts = ISZ(
