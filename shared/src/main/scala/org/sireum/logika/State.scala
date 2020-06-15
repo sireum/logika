@@ -273,12 +273,6 @@ object State {
 
   }
 
-  @record class ClaimSTs(var value: ISZ[ST]) {
-    def add(st: ST): Unit = {
-      value = value :+ st
-    }
-  }
-
   @datatype trait Claim {
 
     @pure def toRawST: ST
@@ -304,39 +298,6 @@ object State {
         }
       }
       return r.elements
-    }
-
-    def collectDefs(defs: Claim.Defs): Unit = {
-      def rec(c: Claim): Unit = {
-        c match {
-          case c: Claim.Let.CurrentId =>
-            if (!defs.hasDef(c)) {
-              defs.addDef(c)
-            }
-          case c: Claim.Let.CurrentName =>
-            if (!defs.hasDef(c)) {
-              defs.addDef(c)
-            }
-          case c: Claim.Let.Id =>
-            if (!defs.hasDef(c)) {
-              defs.addDef(c)
-            }
-          case c: Claim.Let.Name =>
-            if (!defs.hasDef(c)) {
-              defs.addDef(c)
-            }
-          case c: Claim.Def => defs.addDef(c)
-          case _ =>
-        }
-        c match {
-          case c: Claim.Composite =>
-            for (cc <- c.claims) {
-              rec(cc)
-            }
-          case _ =>
-        }
-      }
-      rec(this)
     }
 
   }
@@ -589,36 +550,24 @@ object State {
       override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {}
     }
 
-    @record class Defs(var value: HashMap[Z, ISZ[Def]]) {
-      def addDef(d: Claim.Def): Unit = {
-        value.get(d.sym.num) match {
-          case Some(s) => value = value + d.sym.num ~> (s :+ d)
-          case _ => value = value + d.sym.num ~> ISZ(d)
-        }
-      }
-      def hasDef(d: Claim.Def): B = {
-        return value.contains(d.sym.num)
-      }
-    }
-
-    object Defs {
-      @strictpure def empty: Defs = Defs(HashMap.empty)
-    }
-
     object Def {
 
-      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[(Value, Value)]) extends Def {
+      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[SeqLit.Arg]) extends Def {
         @pure def tipe: AST.Typed.Name = {
           return sym.tipe.asInstanceOf[AST.Typed.Name]
         }
 
         @pure override def toRawST: ST = {
-          return st"${sym.toRawST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg._2.toRawST, ", ")})"
+          return st"${sym.toRawST} ≜ ${sym.tipe.string}(${(for (arg <- args) yield arg.value.toRawST, ", ")})"
         }
 
         @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
-          return Some(st"${sym.tipe.string}(${(for (arg <- args) yield arg._2.toST(defs), ", ")})")
+          return Some(st"${sym.tipe.string}(${(for (arg <- args) yield arg.value.toST(defs), ", ")})")
         }
+      }
+
+      object SeqLit {
+        @datatype class Arg(index: Value, value: Value)
       }
 
       @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value) extends Def {
@@ -830,20 +779,13 @@ object State {
         }
       }
 
-      @datatype class Unary(val sym: Value.Sym, op: AST.Exp.UnaryOp.Type, value: Value) extends Let {
+      @datatype class Unary(val sym: Value.Sym, op: String, value: Value) extends Let {
         @pure override def toRawST: ST = {
-          return st"${sym.toRawST} ≜ $opString${value.toRawST}"
+          return st"${sym.toRawST} ≜ $op${value.toRawST}"
         }
 
         @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
-          return Some(st"$opString${value.toST(defs)}")
-        }
-
-        @strictpure def opString: String = op match {
-          case AST.Exp.UnaryOp.Complement => "~"
-          case AST.Exp.UnaryOp.Minus => "-"
-          case AST.Exp.UnaryOp.Not => "!"
-          case AST.Exp.UnaryOp.Plus => "+"
+          return Some(st"$op${value.toST(defs)}")
         }
       }
 
@@ -1004,9 +946,9 @@ object State {
       }
     }
 
-    @pure def claimsSTs(claims: ISZ[Claim], defs: Claim.Defs): ISZ[ST] = {
+    @pure def claimsSTs(claims: ISZ[Claim], defs: ClaimDefs): ISZ[ST] = {
       for (c <- claims) {
-        c.collectDefs(defs)
+        ClaimDefs.collectDefs(c, defs)
       }
       val claimSTs = ClaimSTs(ISZ())
       val m = defs.value

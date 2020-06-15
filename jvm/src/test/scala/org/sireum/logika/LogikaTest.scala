@@ -43,8 +43,8 @@ object LogikaTest {
     case _ => "z3"
   }
 
-  val config: Logika.Config =
-    Logika.Config(
+  val config: Config =
+    Config(
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,
       smt2TimeoutInSeconds = 5,

@@ -34,18 +34,6 @@ import org.sireum.message.Reporter
 
 object Smt2 {
 
-  object Result {
-    @enum object Kind {
-      'Sat
-      'Unsat
-      'Unknown
-      'Timeout
-      'Error
-    }
-  }
-
-  @datatype class Result(kind: Result.Kind.Type, query: String, output: String)
-
   @datatype class SeqLit(t: AST.Typed.Name, size: Z)
 
   @datatype class AdtFieldInfo(isParam: B,
@@ -148,9 +136,9 @@ object Smt2 {
 
   def typeHierarchy: TypeHierarchy
 
-  def checkSat(query: String, timeoutInMs: Z): (B, Smt2.Result)
+  def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result)
 
-  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2.Result)
+  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2Query.Result)
 
   def formatVal(format: String, n: Z): ST
 
@@ -191,7 +179,7 @@ object Smt2 {
   }
 
   def sat(log: B, title: String, claims: ISZ[State.Claim], reporter: Reporter): B = {
-    val headers = st"Satisfiability Check for $title:" +: State.Claim.claimsSTs(claims, State.Claim.Defs.empty)
+    val headers = st"Satisfiability Check for $title:" +: State.Claim.claimsSTs(claims, ClaimDefs.empty)
     val (r, res) = checkSat(satQuery(headers, claims, None(), reporter).render, 500)
     if (log) {
       reporter.info(None(), Logika.kind,
@@ -618,7 +606,7 @@ object Smt2 {
   }
 
   def valid(log: B, title: String, premises: ISZ[State.Claim], conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): B = {
-    val defs = State.Claim.Defs.empty
+    val defs = ClaimDefs.empty
     val ps = State.Claim.claimsSTs(premises, defs)
     val headers = (st"Validity Check for $title:" +: ps :+ st"⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs)
     val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
@@ -935,13 +923,7 @@ object Smt2 {
               |)"""
       case c: State.Claim.Let.Binary => return st"(${typeOpId(c.tipe, c.op)} ${v2ST(c.left)} ${v2ST(c.right)})"
       case c: State.Claim.Let.Unary =>
-        val op: String = c.op match {
-          case AST.Exp.UnaryOp.Complement => "~"
-          case AST.Exp.UnaryOp.Not => "!"
-          case AST.Exp.UnaryOp.Minus => "-"
-          case _ => halt("Infeasible")
-        }
-        return st"(${typeOpId(c.sym.tipe, s"unary_$op")} ${v2ST(c.value)})"
+        return st"(${typeOpId(c.sym.tipe, s"unary_${c.op}")} ${v2ST(c.value)})"
       case c: State.Claim.Let.SeqLookup =>
         return st"(${typeOpId(c.seq.tipe, "at")} ${v2ST(c.seq)} ${v2ST(c.index)})"
       case c: State.Claim.Let.FieldLookup =>
@@ -992,7 +974,7 @@ object Smt2 {
         }
         return st"(= ${v2ST(c.sym)} $rhs)"
       case c: State.Claim.Def.SeqLit =>
-        return st"(${typeOpId(c.sym.tipe, s"new.${c.args.size}")} ${(for (arg <- c.args) yield st"${v2ST(arg._1)} ${v2ST(arg._2)}", " ")} ${v2ST(c.sym)})"
+        return st"(${typeOpId(c.sym.tipe, s"new.${c.args.size}")} ${(for (arg <- c.args) yield st"${v2ST(arg.index)} ${v2ST(arg.value)}", " ")} ${v2ST(c.sym)})"
       case c: State.Claim.Def.SeqStore =>
         return st"(${typeOpId(c.seq.tipe, "up")} ${v2ST(c.seq)} ${v2ST(c.index)} ${v2ST(c.element)} ${v2ST(c.sym)})"
       case c: State.Claim.Def.FieldStore =>

@@ -85,17 +85,17 @@ object Smt2Impl {
     seqLits = newSeqLits
   }
 
-  def checkSat(query: String, timeoutInMs: Z): (B, Smt2.Result) = {
+  def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
     val r = checkQuery(query, timeoutInMs)
-    return (r.kind != Smt2.Result.Kind.Unsat, r)
+    return (r.kind != Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2.Result) = {
+  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
     val r = checkQuery(query, timeoutInMs)
-    return (r.kind == Smt2.Result.Kind.Unsat, r)
+    return (r.kind == Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkQuery(query: String, timeoutInMs: Z): Smt2.Result = {
+  def checkQuery(query: String, timeoutInMs: Z): Smt2Query.Result = {
     def err(out: String): Unit = {
       halt(
         st"""Error encountered when running $exe query:
@@ -112,16 +112,16 @@ object Smt2Impl {
       err(pr.out)
     }
     val firstLine = out(0)
-    val r: Smt2.Result = firstLine match {
-      case string"sat" => Smt2.Result(Smt2.Result.Kind.Sat, query, pr.out)
-      case string"unsat" => Smt2.Result(Smt2.Result.Kind.Unsat, query, pr.out)
-      case string"timeout" => Smt2.Result(Smt2.Result.Kind.Timeout, query, pr.out)
-      case string"unknown" => Smt2.Result(Smt2.Result.Kind.Unknown, query, pr.out)
-      case _ => Smt2.Result(Smt2.Result.Kind.Error, query, pr.out)
+    val r: Smt2Query.Result = firstLine match {
+      case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, query, pr.out)
+      case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, query, pr.out)
+      case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, query, pr.out)
+      case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, query, pr.out)
+      case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, query, pr.out)
     }
     //println(s"$exe Result (${r.kind}):")
     //println(r.output)
-    if (r.kind == Smt2.Result.Kind.Error) {
+    if (r.kind == Smt2Query.Result.Kind.Error) {
       err(pr.out)
     }
 

@@ -590,6 +590,10 @@ object StateTransformer {
       return PreResult(ctx, T, None())
     }
 
+    @pure def preStateClaimDefSeqLitArg(ctx: Context, o: State.Claim.Def.SeqLit.Arg): PreResult[Context, State.Claim.Def.SeqLit.Arg] = {
+      return PreResult(ctx, T, None())
+    }
+
     @pure def preStateClaimDefSeqStore(ctx: Context, o: State.Claim.Def.SeqStore): PreResult[Context, State.Claim.Def] = {
       return PreResult(ctx, T, None())
     }
@@ -1263,6 +1267,10 @@ object StateTransformer {
       return TPostResult(ctx, None())
     }
 
+    @pure def postStateClaimDefSeqLitArg(ctx: Context, o: State.Claim.Def.SeqLit.Arg): TPostResult[Context, State.Claim.Def.SeqLit.Arg] = {
+      return TPostResult(ctx, None())
+    }
+
     @pure def postStateClaimDefSeqStore(ctx: Context, o: State.Claim.Def.SeqStore): TPostResult[Context, State.Claim.Def] = {
       return TPostResult(ctx, None())
     }
@@ -1712,10 +1720,11 @@ import StateTransformer._
             TPostResult(r2.ctx, None())
         case o2: State.Claim.Def.SeqLit =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
+          val r1: TPostResult[Context, IS[Z, State.Claim.Def.SeqLit.Arg]] = transformISZ(r0.ctx, o2.args, transformStateClaimDefSeqLitArg _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: State.Claim.Def.SeqStore =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.seq)
@@ -1901,10 +1910,11 @@ import StateTransformer._
       val rOpt: TPostResult[Context, State.Claim.Def] = o2 match {
         case o2: State.Claim.Def.SeqLit =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
+          val r1: TPostResult[Context, IS[Z, State.Claim.Def.SeqLit.Arg]] = transformISZ(r0.ctx, o2.args, transformStateClaimDefSeqLitArg _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: State.Claim.Def.SeqStore =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.seq)
@@ -2072,6 +2082,34 @@ import StateTransformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: State.Claim.Def = r.resultOpt.getOrElse(o)
     val postR: TPostResult[Context, State.Claim.Def] = pp.postStateClaimDef(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformStateClaimDefSeqLitArg(ctx: Context, o: State.Claim.Def.SeqLit.Arg): TPostResult[Context, State.Claim.Def.SeqLit.Arg] = {
+    val preR: PreResult[Context, State.Claim.Def.SeqLit.Arg] = pp.preStateClaimDefSeqLitArg(ctx, o)
+    val r: TPostResult[Context, State.Claim.Def.SeqLit.Arg] = if (preR.continu) {
+      val o2: State.Claim.Def.SeqLit.Arg = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: TPostResult[Context, State.Value] = transformStateValue(preR.ctx, o2.index)
+      val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.value)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(index = r0.resultOpt.getOrElse(o2.index), value = r1.resultOpt.getOrElse(o2.value))))
+      else
+        TPostResult(r1.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: State.Claim.Def.SeqLit.Arg = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, State.Claim.Def.SeqLit.Arg] = pp.postStateClaimDefSeqLitArg(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {

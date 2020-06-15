@@ -73,16 +73,6 @@ object Logika {
     }
   }
 
-  @datatype class Config(defaultLoopBound: Z,
-                         loopBounds: HashMap[ISZ[String], Z],
-                         smt2TimeoutInSeconds: Z,
-                         unroll: B,
-                         charBitWidth: Z,
-                         intBitWidth: Z,
-                         logPc: B,
-                         logRawPc: B,
-                         logVc: B)
-
   object Context {
     @strictpure def empty: Context = Context(ISZ(), None(), ISZ())
   }
@@ -400,7 +390,7 @@ object Logika {
 }
 
 @record class Logika(th: lang.tipe.TypeHierarchy,
-                     config: Logika.Config,
+                     config: Config,
                      context: Logika.Context,
                      smt2: Smt2) {
 
@@ -581,7 +571,7 @@ object Logika {
             case _ =>
               val pos = exp.posOpt.get
               val (s2, sym) = s1.freshSym(v.tipe, pos)
-              val s3 = s2(claims = s2.claims :+ State.Claim.Let.Unary(sym, exp.op, v))
+              val s3 = s2(claims = s2.claims :+ State.Claim.Let.Unary(sym, exp.opString, v))
               return (checkRange(s3, sym, pos), sym)
           }
         case _ =>
@@ -872,7 +862,9 @@ object Logika {
           }
         }
         smt2.addSeqLit(t, indices.size)
-        return (current.addClaim(State.Claim.Def.SeqLit(sym, ops.ISZOps(indices).zip(args))), sym)
+        val as: ISZ[State.Claim.Def.SeqLit.Arg] =
+          for (p <- ops.ISZOps(indices).zip(args)) yield State.Claim.Def.SeqLit.Arg(p._1, p._2)
+        return (current.addClaim(State.Claim.Def.SeqLit(sym, as)), sym)
       } else {
         val ti = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
         val params = ti.ast.params
@@ -1975,7 +1967,7 @@ object Logika {
     }
 
     @pure def loopBound(ids: ISZ[String]): Z = {
-      return config.loopBounds.get(ids).getOrElse(config.defaultLoopBound)
+      return config.loopBounds.get(LoopId(ids)).getOrElse(config.defaultLoopBound)
     }
 
     def evalWhileUnroll(s0: State, whileStmt: AST.Stmt.While): State = {
@@ -2120,7 +2112,7 @@ object Logika {
     if (enabled || raw) {
       val sts: ISZ[ST] =
         if (raw) State.Claim.claimsRawSTs(state.claims)
-        else State.Claim.claimsSTs(state.claims, State.Claim.Defs.empty)
+        else State.Claim.claimsSTs(state.claims, ClaimDefs.empty)
       if (sts.isEmpty) {
         reporter.info(posOpt, Logika.kind, "Path conditions = {}")
       } else {
