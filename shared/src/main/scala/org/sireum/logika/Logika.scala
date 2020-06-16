@@ -2043,69 +2043,72 @@ object Logika {
       return evalBlock(None(), rtCheck, s0, block.block, reporter)
     }
 
-    stmt match {
-      case AST.Stmt.Expr(e: AST.Exp.Invoke) =>
-        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-        e.attr.resOpt.get match {
-          case AST.ResolvedInfo.BuiltIn(kind) =>
-            kind match {
-              case AST.ResolvedInfo.BuiltIn.Kind.Assert =>
-                return Logika.conjunctClaimSuffix(state, evalAssert(T, "Assertion", state, e.args(0), reporter)._1)
-              case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg =>
-                return Logika.conjunctClaimSuffix(state, evalAssert(T, "Assertion", state, e.args(0), reporter)._1)
-              case AST.ResolvedInfo.BuiltIn.Kind.Assume =>
-                return Logika.conjunctClaimSuffix(state, evalAssume(T, "Assumption", state, e.args(0), reporter)._1)
-              case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg =>
-                return Logika.conjunctClaimSuffix(state, evalAssume(T, "Assumption", state, e.args(0), reporter)._1)
-              case _ =>
-                halt(s"TODO: $stmt") // TODO
-            }
-          case _ => return Logika.conjunctClaimSuffix(state, evalExp(rtCheck, state, e, reporter)._1)
-        }
-      case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
-        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-        stmt.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.LocalVar =>
-            return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.attr.typedOpt.get,
-              stmt.id.attr.posOpt.get)
-          case _ => halt(s"TODO: $stmt") // TODO
-        }
-      case stmt: AST.Stmt.Assign =>
-        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-        return evalAssign(state, stmt)
-      case stmt: AST.Stmt.If =>
-        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-        return evalIf(None(), rtCheck, state, stmt, reporter)
-      case stmt: AST.Stmt.While =>
-        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-        if (stmt.modifies.nonEmpty) {
-          return evalWhile(state, stmt)
-        } else {
-          if (!config.unroll) {
-            error(stmt.posOpt, "Modifies clause is required when loop unrolling is disabled", reporter)
-            return state(status = F)
+    def evalStmtH(): State = {
+      stmt match {
+        case AST.Stmt.Expr(e: AST.Exp.Invoke) =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          e.attr.resOpt.get match {
+            case AST.ResolvedInfo.BuiltIn(kind) =>
+              kind match {
+                case AST.ResolvedInfo.BuiltIn.Kind.Assert =>
+                  return Logika.conjunctClaimSuffix(state, evalAssert(T, "Assertion", state, e.args(0), reporter)._1)
+                case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg =>
+                  return Logika.conjunctClaimSuffix(state, evalAssert(T, "Assertion", state, e.args(0), reporter)._1)
+                case AST.ResolvedInfo.BuiltIn.Kind.Assume =>
+                  return Logika.conjunctClaimSuffix(state, evalAssume(T, "Assumption", state, e.args(0), reporter)._1)
+                case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg =>
+                  return Logika.conjunctClaimSuffix(state, evalAssume(T, "Assumption", state, e.args(0), reporter)._1)
+                case _ =>
+                  halt(s"TODO: $stmt") // TODO
+              }
+            case _ => return Logika.conjunctClaimSuffix(state, evalExp(rtCheck, state, e, reporter)._1)
           }
-          return evalWhileUnroll(state, stmt)
-        }
-      case stmt: AST.Stmt.Return =>
-        logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-        return evalReturn(state, stmt)
-      case stmt: AST.Stmt.Block => return evalBlock(None(), rtCheck, state, stmt, reporter)
-      case stmt: AST.Stmt.SpecBlock => return evalSpecBlock(state, stmt)
-      case stmt: AST.Stmt.Match => return evalMatch(None(), rtCheck, state, stmt, reporter)
-      case _: AST.Stmt.Object => return state
-      case _: AST.Stmt.Import => return state
-      case _: AST.Stmt.Method => return state
-      case _: AST.Stmt.SpecMethod => return state
-      case stmt: AST.Stmt.Var if stmt.isSpec => return state
-      case _: AST.Stmt.SpecVar => return state
-      case _: AST.Stmt.Enum => return state
-      case _: AST.Stmt.Adt => return state
-      case _: AST.Stmt.Sig => return state
-      case _ =>
-        halt(s"TODO: $stmt") // TODO
+        case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          stmt.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.LocalVar =>
+              return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.attr.typedOpt.get,
+                stmt.id.attr.posOpt.get)
+            case _ => halt(s"TODO: $stmt") // TODO
+          }
+        case stmt: AST.Stmt.Assign =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          return evalAssign(state, stmt)
+        case stmt: AST.Stmt.If =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          return evalIf(None(), rtCheck, state, stmt, reporter)
+        case stmt: AST.Stmt.While =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          if (stmt.modifies.nonEmpty) {
+            return evalWhile(state, stmt)
+          } else {
+            if (!config.unroll) {
+              error(stmt.posOpt, "Modifies clause is required when loop unrolling is disabled", reporter)
+              return state(status = F)
+            }
+            return evalWhileUnroll(state, stmt)
+          }
+        case stmt: AST.Stmt.Return =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          return evalReturn(state, stmt)
+        case stmt: AST.Stmt.Block => return evalBlock(None(), rtCheck, state, stmt, reporter)
+        case stmt: AST.Stmt.SpecBlock => return evalSpecBlock(state, stmt)
+        case stmt: AST.Stmt.Match => return evalMatch(None(), rtCheck, state, stmt, reporter)
+        case _: AST.Stmt.Object => return state
+        case _: AST.Stmt.Import => return state
+        case _: AST.Stmt.Method => return state
+        case _: AST.Stmt.SpecMethod => return state
+        case stmt: AST.Stmt.Var if stmt.isSpec => return state
+        case _: AST.Stmt.SpecVar => return state
+        case _: AST.Stmt.Enum => return state
+        case _: AST.Stmt.Adt => return state
+        case _: AST.Stmt.Sig => return state
+        case _ =>
+          halt(s"TODO: $stmt") // TODO
+      }
     }
 
+    return extension.Cancel.cancellable(evalStmtH _)
   }
 
   def logPc(enabled: B, raw: B, state: State, reporter: Reporter, posOpt: Option[Position]): Unit = {
