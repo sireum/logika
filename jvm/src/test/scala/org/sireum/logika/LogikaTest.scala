@@ -146,24 +146,24 @@ class LogikaTest extends TestSuite {
   }
 
   def passingWorksheet(worksheet: String): Unit = {
-    val reporter = Reporter.create
+    val reporter = Logika.Reporter.create
     val r = testWorksheet(worksheet, reporter, None())
     assert(r)
   }
 
   def failingWorksheet(worksheet: String, msg: String): Unit = {
-    val reporter = Reporter.create
+    val reporter = Logika.Reporter.create
     val r = testWorksheet(worksheet, reporter, Some(msg))
     assert(!r)
   }
 
-  def testWorksheet(input: String, reporter: Reporter, msgOpt: Option[String]): B = {
+  def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkWorksheet(None(), input, config,
       th => Smt2Impl(LogikaTest.z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>
-          val r = Reporter.create
+          val r = Logika.Reporter.create
           r.reports(ops.ISZOps(reporter.messages).filter((m: message.Message) => m.isInfo))
           r.printMessages()
           return reporter.messages.elements.exists(_.text.value.contains(msg))

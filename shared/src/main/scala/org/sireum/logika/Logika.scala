@@ -30,12 +30,49 @@ import org.sireum._
 import org.sireum.lang.symbol.TypeInfo
 import org.sireum.lang.symbol.Resolver.QName
 import org.sireum.lang.{ast => AST}
-import org.sireum.message.{Position, Reporter}
+import org.sireum.message.{Message, Position}
 import StateTransformer.{PrePost, PreResult}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{ContractCaseResult, InvokeMethodInfo}
 
 object Logika {
+
+  @msig trait Reporter extends message.Reporter {
+    def state(posOpt: Option[Position], s: State): Unit
+    def query(pos: Position, r: Smt2Query.Result): Unit
+  }
+
+  @record class ReporterImpl(var _messages: ISZ[Message]) extends Reporter {
+    var _ignore: B = F
+
+    override def state(posOpt: Option[Position], s: State): Unit = {
+    }
+
+    override def query(pos: Position, r: Smt2Query.Result): Unit = {
+    }
+
+    override def messages: ISZ[Message] = {
+      return _messages
+    }
+
+    override def ignore: B = {
+      return _ignore
+    }
+
+    override def setIgnore(newIgnore: B): Unit = {
+      _ignore = newIgnore
+    }
+
+    override def setMessages(newMessages: ISZ[Message]): Unit = {
+      _messages = newMessages
+    }
+  }
+
+  object Reporter {
+    def create: Reporter = {
+      return ReporterImpl(ISZ())
+    }
+  }
 
   @datatype class CurrentIdPossCollector(context: ISZ[String], id: String) extends PrePost[ISZ[Position]] {
     override def preStateClaimLetCurrentId(ctx: ISZ[Position],
@@ -159,7 +196,7 @@ object Logika {
           val smt2 = smt2f(th)
           val logika = Logika(th, config, Context.empty, smt2)
           val state = logika.evalStmts(None(), T, State.create, p.body.stmts, reporter)
-          if (config.logPc && p.body.stmts.nonEmpty) {
+          if (p.body.stmts.nonEmpty) {
             val lastPos = p.body.stmts(p.body.stmts.size - 1).posOpt.get
             logika.logPc(config.logPc, config.logRawPc, state, reporter, Some(Logika.afterPos(lastPos)))
           }
@@ -389,6 +426,8 @@ object Logika {
     conversions.Z.toU32(1))
 }
 
+import Logika.Reporter
+
 @record class Logika(th: lang.tipe.TypeHierarchy,
                      config: Config,
                      context: Logika.Context,
@@ -428,7 +467,7 @@ object Logika {
     val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
     val claim = State.Claim.Prop(T, v)
     val valid = smt2.valid(config.logVc, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]",
-      s2.claims, claim, timeoutInMs, reporter)
+      pos, s2.claims, claim, timeoutInMs, reporter)
     if (valid) {
       return s2.addClaim(claim)
     } else {
@@ -616,7 +655,7 @@ object Logika {
         val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
         val valid = smt2.valid(config.logVc,
           s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
-          s0.claims :+ claim, State.Claim.Prop(T, sym), timeoutInMs, reporter)
+          pos, s0.claims :+ claim, State.Claim.Prop(T, sym), timeoutInMs, reporter)
         if (valid) {
           return s1.addClaim(claim)
         } else {
@@ -647,8 +686,8 @@ object Logika {
         val (s1, sym1) = value2Sym(s0, v1, pos)
         val prop = State.Claim.Prop(T, sym1)
         val negProp = State.Claim.Prop(F, sym1)
-        val thenSat = smt2.sat(config.logVc, s"Conditional ${exp.op}-expression true-branch", s1.claims :+ prop, reporter)
-        val elseSat = smt2.sat(config.logVc, s"Conditional ${exp.op}-expression false-branch", s1.claims :+ negProp, reporter)
+        val thenSat = smt2.sat(config.logVc, s"Conditional ${exp.op}-expression true-branch", pos, s1.claims :+ prop, reporter)
+        val elseSat = smt2.sat(config.logVc, s"Conditional ${exp.op}-expression false-branch", pos, s1.claims :+ negProp, reporter)
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
             (thenSat, elseSat) match {
@@ -1410,9 +1449,9 @@ object Logika {
       val prop = State.Claim.Prop(T, sym)
       val negProp = State.Claim.Prop(F, sym)
       val thenBranch = smt2.sat(config.logVc, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
-        s1.claims :+ prop, reporter)
+        pos, s1.claims :+ prop, reporter)
       val elseBranch = smt2.sat(config.logVc, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
-        s1.claims :+ prop, reporter)
+        pos, s1.claims :+ prop, reporter)
       (thenBranch, elseBranch) match {
         case (T, T) =>
           val (s2, r) = s1.freshSym(t, pos)
@@ -1505,7 +1544,7 @@ object Logika {
                   reporter: Reporter): State = {
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
     val pos = posOpt.get
-    val sat = smt2.sat(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s1.claims, reporter)
+    val sat = smt2.sat(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
     return s1(status = sat)
   }
 
@@ -1522,8 +1561,8 @@ object Logika {
                   reporter: Reporter): State = {
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
-    val valid = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s0.claims,
-      conclusion, timeoutInMs, reporter)
+    val valid = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos,
+      s0.claims, conclusion, timeoutInMs, reporter)
     if (!valid) {
       error(posOpt, s"Cannot deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
     }
@@ -1809,7 +1848,7 @@ object Logika {
     {
       val pos = stmt.posOpt.get
       if (smt2.sat(config.logVc, s"pattern match inexhaustiveness at [${pos.beginLine}, ${pos.beginColumn}]",
-        s1.claims :+ State.Claim.And(for (p <- caseSyms) yield State.Claim.Prop(F, p._2)), reporter)) {
+        pos, s1.claims :+ State.Claim.And(for (p <- caseSyms) yield State.Claim.Prop(F, p._2)), reporter)) {
         error(stmt.posOpt, "Inexhaustive pattern match", reporter)
         return s1(status = F)
       }
@@ -1824,8 +1863,8 @@ object Logika {
       val posOpt = c.pattern.posOpt
       val pos = posOpt.get
       val s10 = s1.addClaim(cond)
-      if (smt2.sat(config.logVc, s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]", s10.claims,
-        reporter)) {
+      if (smt2.sat(config.logVc, s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]",
+        pos, s10.claims, reporter)) {
         possibleCases = T
         val (s11, _, bindings) = addPatternVars(s10, lcontext, m)
         val s12 = evalBody(rOpt, rtCheck, s11.addClaim(State.Claim.And(for (b <- bindings) yield
@@ -1865,7 +1904,7 @@ object Logika {
     val prop = State.Claim.Prop(T, cond)
     val thenClaims = s2.claims :+ prop
     var thenSat = smt2.sat(config.logVc, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
-      thenClaims, reporter)
+      pos, thenClaims, reporter)
     val s4: State = if (thenSat) {
       val s3 = evalBody(rOpt, rtCheck, s2(claims = thenClaims), ifStmt.thenBody, reporter)
       thenSat = s3.status
@@ -1876,7 +1915,7 @@ object Logika {
     val negProp = State.Claim.Prop(F, cond)
     val elseClaims = s2.claims :+ negProp
     var elseSat = smt2.sat(config.logVc, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
-      elseClaims, reporter)
+      pos, elseClaims, reporter)
     val s6: State = if (elseSat) {
       val s5 = evalBody(rOpt, rtCheck, s2(claims = elseClaims, nextFresh = s4.nextFresh), ifStmt.elseBody, reporter)
       elseSat = s5.status
@@ -1945,7 +1984,7 @@ object Logika {
       val prop = State.Claim.Prop(T, cond)
       val thenClaims = s4.claims :+ prop
       var thenSat = smt2.sat(config.logVc, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
-        thenClaims, reporter)
+        pos, thenClaims, reporter)
       val nextFresh: Z = if (thenSat) {
         val s5 = evalStmts(None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)
         thenSat = s5.status
@@ -1962,7 +2001,7 @@ object Logika {
       val negProp = State.Claim.Prop(F, cond)
       val elseClaims = s4.claims :+ negProp
       val elseSat = smt2.sat(config.logVc, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
-        elseClaims, reporter)
+        pos, elseClaims, reporter)
       return State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
     }
 
@@ -1986,7 +2025,7 @@ object Logika {
         val prop = State.Claim.Prop(T, cond)
         val thenClaims = s3.claims :+ prop
         var thenSat = smt2.sat(config.logVc, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
-          thenClaims, reporter)
+          pos, thenClaims, reporter)
         val s6: State = if (thenSat) {
           val s4 = evalStmts(None(), rtCheck, s3(claims = thenClaims), whileStmt.body.stmts, reporter)
           thenSat = s4.status
@@ -2013,7 +2052,7 @@ object Logika {
         val negProp = State.Claim.Prop(F, cond)
         val elseClaims = s3.claims :+ negProp
         val elseSat = smt2.sat(config.logVc, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
-          elseClaims, reporter)
+          pos, elseClaims, reporter)
         (thenSat, elseSat) match {
           case (T, T) => return mergeStates(s3, cond, s6, s3, s6.nextFresh)
           case (T, F) => return s6(status = s6.status && !reporter.hasError)
@@ -2112,6 +2151,7 @@ object Logika {
   }
 
   def logPc(enabled: B, raw: B, state: State, reporter: Reporter, posOpt: Option[Position]): Unit = {
+    reporter.state(posOpt, state)
     if (enabled || raw) {
       val sts: ISZ[ST] =
         if (raw) State.Claim.claimsRawSTs(state.claims)
@@ -2150,8 +2190,8 @@ object Logika {
     val (s2, sym) = value2Sym(s1, v, pos)
     val prop = State.Claim.Prop(T, sym)
     val valid: B = {
-      val vld = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", s2.claims, prop,
-        timeoutInMs, reporter)
+      val vld = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]",
+        pos, s2.claims, prop, timeoutInMs, reporter)
       if (!vld) {
         error(exp.posOpt, s"Cannot deduce the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
       }

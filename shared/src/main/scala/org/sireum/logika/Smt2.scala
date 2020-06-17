@@ -30,7 +30,7 @@ import org.sireum._
 import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
-import org.sireum.message.Reporter
+import org.sireum.logika.Logika.Reporter
 
 object Smt2 {
 
@@ -178,9 +178,10 @@ object Smt2 {
     return st"|g:${(shorten(owner), ".")}.$id|"
   }
 
-  def sat(log: B, title: String, claims: ISZ[State.Claim], reporter: Reporter): B = {
+  def sat(log: B, title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): B = {
     val headers = st"Satisfiability Check for $title:" +: State.Claim.claimsSTs(claims, ClaimDefs.empty)
     val (r, res) = checkSat(satQuery(headers, claims, None(), reporter).render, 500)
+    reporter.query(pos, res)
     if (log) {
       reporter.info(None(), Logika.kind,
         st"""Satisfiability: ${res.kind}
@@ -605,11 +606,13 @@ object Smt2 {
     return query(headers, seqLitDecls ++ (for (d <- decls.values) yield d.render), claimSmts)
   }
 
-  def valid(log: B, title: String, premises: ISZ[State.Claim], conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): B = {
+  def valid(log: B, title: String, pos: message.Position, premises: ISZ[State.Claim],
+            conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): B = {
     val defs = ClaimDefs.empty
     val ps = State.Claim.claimsSTs(premises, defs)
     val headers = (st"Validity Check for $title:" +: ps :+ st"⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs)
     val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
+    reporter.query(pos, res)
     if (log) {
       reporter.info(None(), Logika.kind,
         st"""Verification Condition: ${if (r) "Discharged" else "Undischarged"}

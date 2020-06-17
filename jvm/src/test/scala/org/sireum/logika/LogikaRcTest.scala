@@ -37,7 +37,7 @@ class LogikaRcTest extends SireumRcSpec {
   }
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
-    val reporter = Reporter.create
+    val reporter = Logika.Reporter.create
     Logika.checkWorksheet(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, config,
       th => Smt2Impl(z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
     reporter.printMessages()
