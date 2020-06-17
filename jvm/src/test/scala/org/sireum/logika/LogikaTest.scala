@@ -163,7 +163,9 @@ class LogikaTest extends TestSuite {
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>
-          reporter(messages = ops.ISZOps(reporter.messages).filter((m: message.Message) => m.isInfo)).printMessages()
+          val r = Reporter.create
+          r.reports(ops.ISZOps(reporter.messages).filter((m: message.Message) => m.isInfo))
+          r.printMessages()
           return reporter.messages.elements.exists(_.text.value.contains(msg))
         case _ =>
           reporter.printMessages()
