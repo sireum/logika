@@ -681,22 +681,36 @@ import Logika.Reporter
         return (checkRange(s4, rExp, pos), rExp)
       }
 
-      def evalCond(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value): (State, State.Value) = {
+      def evalCond(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value.Sym): (State, State.Value) = {
         val pos = exp.left.posOpt.get
-        val (s1, v2) = evalExp(rtCheck, s0, exp.right, reporter)
-        if (!s1.status) {
-          return (s1, State.errorValue)
-        }
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
-            val (s2, r) = s1.freshSym(AST.Typed.b, exp.right.posOpt.get)
-            return (s2.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(F, pos))), r)
+            val s1 = s0.addClaim(State.Claim.Prop(T, v1))
+            val (s2, v2) = evalExp(rtCheck, s1, exp.right, reporter)
+            if (!s2.status) {
+              return (s2, State.errorValue)
+            }
+            val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
+            val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(F, pos)))
+            return (s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r)
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr =>
-            val (s2, r) = s1.freshSym(AST.Typed.b, exp.right.posOpt.get)
-            return (s2.addClaim(State.Claim.Let.Ite(r, v1, State.Value.B(T, pos), v2)), r)
+            val s1 = s0.addClaim(State.Claim.Prop(F, v1))
+            val (s2, v2) = evalExp(rtCheck, s1, exp.right, reporter)
+            if (!s2.status) {
+              return (s2, State.errorValue)
+            }
+            val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
+            val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, State.Value.B(T, pos), v2))
+            return (s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r)
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply =>
-            val (s2, r) = s1.freshSym(AST.Typed.b, exp.right.posOpt.get)
-            return (s2.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(T, pos))), r)
+            val s1 = s0.addClaim(State.Claim.Prop(T, v1))
+            val (s2, v2) = evalExp(rtCheck, s1, exp.right, reporter)
+            if (!s2.status) {
+              return (s2, State.errorValue)
+            }
+            val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
+            val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(T, pos)))
+            return (s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r)
           case _ => halt("Infeasible")
         }
       }
@@ -726,7 +740,8 @@ import Logika.Reporter
             return (s1, State.errorValue)
           }
           if (isCond(kind)) {
-            return evalCond(s1, kind, v1)
+            val (s2, left) = value2Sym(s1, v1, exp.left.posOpt.get)
+            return evalCond(s2, kind, left)
           } else if (exp.op == "==" || exp.op == "!=" || isBasic(v1.tipe)) {
             return evalBasic(s1, kind, v1)
           } else {
