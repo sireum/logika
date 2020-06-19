@@ -619,6 +619,11 @@ object State {
 
     object Let {
 
+      @datatype class DeclSym(val sym: Value.Sym) extends Let {
+        @strictpure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = return None()
+        @strictpure override def toRawST: ST = stTrue
+      }
+
       @datatype class CurrentName(val sym: Value.Sym, ids: ISZ[String],
                                   @hidden defPosOpt: Option[Position]) extends Let {
         @pure override def toRawST: ST = {

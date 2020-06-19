@@ -1018,7 +1018,8 @@ import Logika.Reporter
     def evalQuantRange(quant: AST.Exp.QuantRange): (State, State.Value) = {
       val qVarType = quant.attr.typedOpt.get
       val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
-      val s0 = state(claims = ISZ())
+      val s0 = state
+      val i = s0.claims.size
       val (s1, lo) = evalExp(rtCheck, s0, quant.lo, reporter)
       val (s2, hi) = evalExp(rtCheck, s1, quant.hi, reporter)
       val (s3, ident) = evalIdentH(s2, quant.attr.resOpt.get, qVarType, quant.fun.params(0).idOpt.get.attr.posOpt.get)
@@ -1029,10 +1030,10 @@ import Logika.Reporter
         if (quant.hiExact) AST.Exp.BinaryOp.Le else AST.Exp.BinaryOp.Lt, hi, qVarType))
       val (s8, v) = evalAssignExpValue(AST.Typed.b, rtCheck, s7, quant.fun.exp, reporter)
       val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
-      val (s10, sym) = s9(claims = state.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
+      val (s10, sym) = s9(claims = s0.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
       val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
       val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, loSym), State.Claim.Prop(T, hiSym), State.Claim.Prop(T, expSym))
-      val quantClaims = s9.claims :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+      val quantClaims = ops.ISZOps(s9.claims).slice(i, s9.claims.size) :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
       return (s10.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
     }
 
@@ -1044,7 +1045,8 @@ import Logika.Reporter
         case t: AST.Typed.Method => t.tpe.ret.asInstanceOf[AST.Typed.Name]
         case _ => halt("Infeasible")
       }
-      val s0 = state(claims = ISZ())
+      val s0 = state
+      val i = s0.claims.size
       val posOpt = seqExp.posOpt
       val firstIndexResAttr = AST.ResolvedAttr(posOpt, Some(AST.ResolvedInfo.Method(F, AST.MethodMode.Method, ISZ(),
         sType.ids, "firstIndex", ISZ(), Some(AST.Typed.Fun(T, T, ISZ(), qVarType)))), Some(qVarType))
@@ -1061,10 +1063,10 @@ import Logika.Reporter
       val s7 = s6.addClaim(State.Claim.Let.Binary(hiSym, ident, AST.Exp.BinaryOp.Le, hi, qVarType))
       val (s8, v) = evalAssignExpValue(AST.Typed.b, rtCheck, s7, quant.fun.exp, reporter)
       val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
-      val (s10, sym) = s9(claims = state.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
+      val (s10, sym) = s9(claims = s0.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
       val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
       val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, loSym), State.Claim.Prop(T, hiSym), State.Claim.Prop(T, expSym))
-      val quantClaims = s9.claims :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+      val quantClaims = ops.ISZOps(s9.claims).slice(i, s9.claims.size) :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
       return (s10.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
     }
 
@@ -1079,7 +1081,8 @@ import Logika.Reporter
       val eType = sType.args(1)
       val pos = quant.fun.params(0).idOpt.get.attr.posOpt.get
       val (s0, qvar) = state.freshSym(iType, pos)
-      val s1 = s0(claims = ISZ())
+      val i = s0.claims.size
+      val s1 = s0.addClaim(State.Claim.Let.DeclSym(qvar))
       val (s2, seq) = evalExp(rtCheck, s1, quant.seq, reporter)
       val (s3, inBound) = s2.freshSym(AST.Typed.b, pos)
       val s4 = s3.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvar))
@@ -1096,7 +1099,7 @@ import Logika.Reporter
         State.Claim.Let.Quant.Var.Sym(qvar)
       )
       val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, inBound), State.Claim.Prop(T, eq), State.Claim.Prop(T, expSym))
-      val quantClaims = s11.claims :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+      val quantClaims = ops.ISZOps(s11.claims).slice(i + 1, s11.claims.size) :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
       return (s12.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
     }
 
