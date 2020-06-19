@@ -49,6 +49,10 @@ object Smt2Impl {
 
   var sorts: ISZ[ST] = ISZ()
 
+  var adtDecls: ISZ[ST] = ISZ()
+
+  var sTypeDecls: ISZ[ST] = ISZ()
+
   var typeDecls: ISZ[ST] = ISZ()
 
   var typeHierarchyIds: ISZ[ST] = ISZ()
@@ -63,6 +67,14 @@ object Smt2Impl {
 
   def sortsUp(newSorts: ISZ[ST]): Unit = {
     sorts = newSorts
+  }
+
+  def adtDeclsUp(newAdtDecls: ISZ[ST]): Unit = {
+    adtDecls = newAdtDecls
+  }
+
+  def sTypeDeclsUp(newSTypeDecls: ISZ[ST]): Unit = {
+    sTypeDecls = newSTypeDecls
   }
 
   def typeDeclsUp(newTypeDecls: ISZ[ST]): Unit = {
