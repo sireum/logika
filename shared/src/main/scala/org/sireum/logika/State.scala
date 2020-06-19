@@ -774,6 +774,16 @@ object State {
         }
       }
 
+      @datatype class Ite(val sym: Value.Sym, cond: Value, left: Value, right: Value) extends Let {
+        @pure override def toRawST: ST = {
+          return st"${sym.toRawST} ≜ ${cond.toRawST} ? ${left.toRawST} : ${right.toRawST}"
+        }
+
+        @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
+          return Some(st"${cond.toST(defs)} ? ${left.toST(defs)} : ${right.toST(defs)}")
+        }
+      }
+
       @datatype class Binary(val sym: Value.Sym, left: Value, op: String, right: Value, tipe: AST.Typed) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${left.toRawST} $op ${right.toRawST}"

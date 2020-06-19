@@ -973,6 +973,8 @@ object Smt2 {
         else st"(or ${(c.args.map(v2ST _), " ")})"
       case c: State.Claim.Let.Imply =>
         return st"(=> ${(c.args.map(v2ST _), " ")})"
+      case c: State.Claim.Let.Ite =>
+        return st"(ite ${v2ST(c.cond)} ${v2ST(c.left)} ${v2ST(c.right)})"
       case _: State.Claim.Let.DeclSym =>
         halt("Infeasible")
       case c: State.Claim.Let.Apply =>

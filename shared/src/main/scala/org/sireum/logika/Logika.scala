@@ -683,63 +683,20 @@ import Logika.Reporter
 
       def evalCond(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value): (State, State.Value) = {
         val pos = exp.left.posOpt.get
-        val (s1, sym1) = value2Sym(s0, v1, pos)
-        val prop = State.Claim.Prop(T, sym1)
-        val negProp = State.Claim.Prop(F, sym1)
-        val thenSat = smt2.sat(config.logVc, s"Conditional ${exp.op}-expression true-branch", pos, s1.claims :+ prop, reporter)
-        val elseSat = smt2.sat(config.logVc, s"Conditional ${exp.op}-expression false-branch", pos, s1.claims :+ negProp, reporter)
+        val (s1, v2) = evalExp(rtCheck, s0, exp.right, reporter)
+        if (!s1.status) {
+          return (s1, State.errorValue)
+        }
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
-            (thenSat, elseSat) match {
-              case (F, T) =>
-                return (s1.addClaim(negProp), State.Value.B(F, pos))
-              case (_, _) =>
-                val (s2, r) = s1.freshSym(AST.Typed.b, exp.posOpt.get)
-                val (s3, sym2) = evalExp(rtCheck, s2.addClaim(prop), exp.right, reporter)
-                if (!s3.status) {
-                  return (s3, State.errorValue)
-                }
-                return (
-                  s2(nextFresh = s3.nextFresh).addClaim(
-                    State.Claim.If(sym1,
-                     ops.ISZOps(s3.claims).slice(s2.claims.size + 1, s3.claims.size) :+ State.Claim.Let.Eq(r, sym2),
-                     ISZ(State.Claim.Let.Eq(r, State.Value.B(F, pos))))),
-                  r
-                )
-            }
+            val (s2, r) = s1.freshSym(AST.Typed.b, exp.right.posOpt.get)
+            return (s2.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(F, pos))), r)
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr =>
-            (thenSat, elseSat) match {
-              case (T, F) => return (s1.addClaim(prop), State.Value.B(T, pos))
-              case (_, _) =>
-                val (s2, r) = s1.freshSym(AST.Typed.b, exp.posOpt.get)
-                val (s3, sym2) = evalExp(rtCheck, s2.addClaim(negProp), exp.right, reporter)
-                if (!s3.status) {
-                  return (s3, State.errorValue)
-                }
-                return (
-                  s2(nextFresh = s3.nextFresh).addClaim(
-                    State.Claim.If(sym1,
-                     ISZ(State.Claim.Let.Eq(r, State.Value.B(T, pos))),
-                     ops.ISZOps(s3.claims).slice(s2.claims.size + 1, s3.claims.size) :+ State.Claim.Let.Eq(r, sym2))),
-                  r
-                )
-            }
+            val (s2, r) = s1.freshSym(AST.Typed.b, exp.right.posOpt.get)
+            return (s2.addClaim(State.Claim.Let.Ite(r, v1, State.Value.B(T, pos), v2)), r)
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply =>
-            (thenSat, elseSat) match {
-              case (F, T) => return (s1.addClaim(negProp), State.Value.B(T, pos))
-              case (_, _) =>
-                val (s2, r) = s1.freshSym(AST.Typed.b, exp.posOpt.get)
-                val (s3, sym2) = evalExp(rtCheck, s2.addClaim(prop), exp.right, reporter)
-                if (!s3.status) {
-                  return (s3, State.errorValue)
-                }
-                return (s2(nextFresh = s3.nextFresh).addClaim(
-                  State.Claim.If(sym1,
-                    ops.ISZOps(s3.claims).slice(s2.claims.size + 1, s3.claims.size) :+ State.Claim.Let.Eq(r, sym2),
-                    ISZ(State.Claim.Let.Eq(r, State.Value.B(T, pos))))),
-                  r
-                )
-            }
+            val (s2, r) = s1.freshSym(AST.Typed.b, exp.right.posOpt.get)
+            return (s2.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(T, pos))), r)
           case _ => halt("Infeasible")
         }
       }
