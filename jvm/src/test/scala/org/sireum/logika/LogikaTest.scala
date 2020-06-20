@@ -34,7 +34,7 @@ object LogikaTest {
     case Os.Kind.Win => "win"
     case Os.Kind.Linux => "linux"
     case Os.Kind.Mac => "mac"
-    case Os.Kind.Unsupported => "unsupported"
+    case _ => "unsupported"
   }
 
   val z3Exe: String = Os.env("SIREUM_HOME") match {
