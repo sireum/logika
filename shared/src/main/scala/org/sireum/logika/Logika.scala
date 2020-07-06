@@ -2170,7 +2170,7 @@ import Logika.Reporter
       pos, s2.claims, prop, timeoutInMs, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s2.addClaim(prop)
-      case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly invalid ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
+      case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
       case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Cannot deduce that the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
       case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
       case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
