@@ -309,7 +309,7 @@ object Logika {
   @pure def idIntro(pos: Position, state: State, idContext: ISZ[String],
                     id: String, t: AST.Typed, idPosOpt: Option[Position]): (State, State.Value.Sym) = {
     val (s0, sym) = state.freshSym(t, pos)
-    return (s0.addClaim(State.Claim.Let.CurrentId(sym, idContext, id, idPosOpt)), sym)
+    return (s0.addClaim(State.Claim.Let.CurrentId(F, sym, idContext, id, idPosOpt)), sym)
   }
 
   @pure def nameIntro(pos: Position, state: State, ids: ISZ[String], t: AST.Typed,
@@ -466,14 +466,16 @@ import Logika.Reporter
     val (s1, v) = s0.freshSym(AST.Typed.b, pos)
     val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
     val claim = State.Claim.Prop(T, v)
-    val valid = smt2.valid(config.logVc, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]",
+    val r = smt2.valid(config.logVc, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]",
       pos, s2.claims, claim, timeoutInMs, reporter)
-    if (valid) {
-      return s2.addClaim(claim)
-    } else {
-      error(Some(pos), s"Could not deduce sequence indexing is in bound", reporter)
-      return s2(status = F)
+    r.kind match {
+      case Smt2Query.Result.Kind.Unsat => return s2.addClaim(claim)
+      case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly out of bound sequence indexing", reporter)
+      case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Could not deduce that the sequence indexing is in bound", reporter)
+      case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the sequence indexing is in bound", reporter)
+      case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the sequence indexing is in bound", reporter)
     }
+    return s2(status = F)
   }
 
   def evalLit(lit: AST.Lit): State.Value = {
@@ -653,15 +655,17 @@ import Logika.Reporter
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
         val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
-        val valid = smt2.valid(config.logVc,
+        val r = smt2.valid(config.logVc,
           s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), timeoutInMs, reporter)
-        if (valid) {
-          return s1.addClaim(claim)
-        } else {
-          error(Some(pos), s"Could not deduce non-zero second operand for ${exp.op}", reporter)
-          return s1(status = F)
+        r.kind match {
+          case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
+          case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly non-zero second operand for ${exp.op}", reporter)
+          case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Could not deduce non-zero second operand for ${exp.op}", reporter)
+          case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing non-zero second operand for ${exp.op}", reporter)
+          case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing non-zero second operand for ${exp.op}", reporter)
         }
+        return s1(status = F)
       }
 
       def evalBasic(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value): (State, State.Value) = {
@@ -1054,25 +1058,19 @@ import Logika.Reporter
       val pos = quant.fun.params(0).idOpt.get.attr.posOpt.get
       val (s0, qvar) = state.freshSym(iType, pos)
       val i = s0.claims.size
-      val s1 = s0.addClaim(State.Claim.Let.DeclSym(qvar))
-      val (s2, seq) = evalExp(rtCheck, s1, quant.seq, reporter)
-      val (s3, inBound) = s2.freshSym(AST.Typed.b, pos)
-      val s4 = s3.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvar))
-      val (s5, select) = s4.freshSym(eType, pos)
-      val s6 = s5.addClaim(State.Claim.Let.SeqLookup(select, seq, qvar))
-      val (s7, e) = Logika.idIntro(pos, s6, qVarRes.context, qVarRes.id, eType, Some(pos))
-      val (s8, eq) = s7.freshSym(AST.Typed.b, pos)
-      val s9 = s8.addClaim(State.Claim.Let.Binary(eq, e, AST.Exp.BinaryOp.Eq, select, eType))
-      val (s10, v) = evalAssignExpValue(AST.Typed.b, rtCheck, s9, quant.fun.exp, reporter)
-      val (s11, expSym) = value2Sym(s10, v, quant.fun.exp.asStmt.posOpt.get)
-      val (s12, sym) = s11(claims = s0.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
-      val vars = ISZ[State.Claim.Let.Quant.Var](
-        State.Claim.Let.Quant.Var.Id(qVarRes.id, eType),
-        State.Claim.Let.Quant.Var.Sym(qvar)
-      )
-      val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, inBound), State.Claim.Prop(T, eq), State.Claim.Prop(T, expSym))
-      val quantClaims = ops.ISZOps(s11.claims).slice(i + 1, s11.claims.size) :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
-      return (s12.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
+      val (s1, seq) = evalExp(rtCheck, s0, quant.seq, reporter)
+      val (s2, inBound) = s1.freshSym(AST.Typed.b, pos)
+      val s3 = s2.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvar))
+      val (s4, select) = s3.freshSym(eType, pos)
+      val s5 = s4.addClaim(State.Claim.Let.SeqLookup(select, seq, qvar))
+      val s6 = s5.addClaim(State.Claim.Let.CurrentId(T, select, qVarRes.context, qVarRes.id, None()))
+      val (s7, v) = evalAssignExpValue(AST.Typed.b, rtCheck, s6, quant.fun.exp, reporter)
+      val (s8, expSym) = value2Sym(s7, v, quant.fun.exp.asStmt.posOpt.get)
+      val (s9, sym) = s8(claims = s0.claims).freshSym(AST.Typed.b, quant.attr.posOpt.get)
+      val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
+      val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, inBound), State.Claim.Prop(T, expSym))
+      val quantClaims = ops.ISZOps(s8.claims).slice(i, s8.claims.size) :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+      return (s9.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym)
     }
 
     def methodInfo(isInObject: B, owner: QName, id: String): InvokeMethodInfo = {
@@ -1161,7 +1159,7 @@ import Logika.Reporter
         ms1 = Logika.rewriteLocalVars(ms1, rwLocals)
         currentReceiverOpt match {
           case Some(receiver) =>
-            ms1 = ms1.addClaim(State.Claim.Let.CurrentId(receiver, context.methodOpt.get.name, "this",
+            ms1 = ms1.addClaim(State.Claim.Let.CurrentId(F, receiver, context.methodOpt.get.name, "this",
               context.methodOpt.get.posOpt))
           case _ =>
         }
@@ -1208,7 +1206,7 @@ import Logika.Reporter
       }
       receiverOpt match {
         case Some(receiver) =>
-          s1 = s1.addClaim(State.Claim.Let.CurrentId(receiver, res.owner :+ res.id, "this", receiverPosOpt))
+          s1 = s1.addClaim(State.Claim.Let.CurrentId(F, receiver, res.owner :+ res.id, "this", receiverPosOpt))
         case _ =>
       }
       val argTypes = MSZ.create[AST.Typed](info.sig.params.size, AST.Typed.nothing)
@@ -1225,7 +1223,7 @@ import Logika.Reporter
             argTypes(i) = argType
             paramArgs = paramArgs + AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id) ~>
               ((argType, arg))
-            s1 = s3.addClaim(State.Claim.Let.CurrentId(sym, ctx, id, Some(argPos)))
+            s1 = s3.addClaim(State.Claim.Let.CurrentId(F, sym, ctx, id, Some(argPos)))
             i = i + 1
           }
         case Either.Right(nargs) =>
@@ -1240,7 +1238,7 @@ import Logika.Reporter
             argTypes(narg.index) = argType
             paramArgs = paramArgs + AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id) ~>
               ((argType, arg))
-            s1 = s3.addClaim(State.Claim.Let.CurrentId(sym, ctx, id, Some(argPos)))
+            s1 = s3.addClaim(State.Claim.Let.CurrentId(F, sym, ctx, id, Some(argPos)))
           }
       }
       val mType = info.sig.funType
@@ -1536,12 +1534,16 @@ import Logika.Reporter
                   reporter: Reporter): State = {
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
-    val valid = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos,
+    val r = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos,
       s0.claims, conclusion, timeoutInMs, reporter)
-    if (!valid) {
-      error(posOpt, s"Cannot deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
+    r.kind match {
+      case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
+      case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly invalid ${ops.StringOps(title).firstToLower}", reporter)
+      case Smt2Query.Result.Kind.Unknown => error(posOpt, s"Cannot deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
+      case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower}", reporter)
+      case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}", reporter)
     }
-    return s0(status = valid, claims = s0.claims :+ conclusion)
+    return s0(status = F, claims = s0.claims :+ conclusion)
   }
 
   def evalAssert(rtCheck: B, title: String, s0: State, cond: AST.Exp, reporter: Reporter): (State, State.Value.Sym) = {
@@ -1581,7 +1583,7 @@ import Logika.Reporter
 
   def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym, idPos: Position): State = {
     val s1: State = if (decl) s0 else Logika.rewriteLocal(s0, lcontext, id)
-    return s1(claims = s1.claims :+ State.Claim.Let.CurrentId(rhs, lcontext, id, Some(idPos)))
+    return s1(claims = s1.claims :+ State.Claim.Let.CurrentId(F, rhs, lcontext, id, Some(idPos)))
   }
 
   def evalAssignObjectVarH(s0: State, ids: ISZ[String], rhs: State.Value.Sym, namePos: Position): State = {
@@ -1948,7 +1950,7 @@ import Logika.Reporter
         for (p <- modLocalVars.entries) {
           val (res, (tipe, pos)) = p
           val (srw1, sym) = srw.freshSym(tipe, pos)
-          srw = srw1(claims = srw1.claims :+ State.Claim.Let.CurrentId(sym, res.context, res.id, Some(pos)))
+          srw = srw1(claims = srw1.claims :+ State.Claim.Let.CurrentId(F, sym, res.context, res.id, Some(pos)))
         }
         srw
       }
@@ -2048,7 +2050,7 @@ import Logika.Reporter
           val pos = exp.posOpt.get
           val (s2, sym) = value2Sym(s1, v, pos)
           return Logika.conjunctClaimSuffix(s0,
-            s2.addClaim(State.Claim.Let.CurrentId(sym, context.methodOpt.get.name, "Res", Some(pos))))
+            s2.addClaim(State.Claim.Let.CurrentId(F, sym, context.methodOpt.get.name, "Res", Some(pos))))
         case _ => return state
       }
     }
@@ -2164,15 +2166,16 @@ import Logika.Reporter
     val pos = exp.posOpt.get
     val (s2, sym) = value2Sym(s1, v, pos)
     val prop = State.Claim.Prop(T, sym)
-    val valid: B = {
-      val vld = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]",
-        pos, s2.claims, prop, timeoutInMs, reporter)
-      if (!vld) {
-        error(exp.posOpt, s"Cannot deduce the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
-      }
-      vld
+    val r = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]",
+      pos, s2.claims, prop, timeoutInMs, reporter)
+    r.kind match {
+      case Smt2Query.Result.Kind.Unsat => return s2.addClaim(prop)
+      case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly invalid ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
+      case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Cannot deduce that the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
+      case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
+      case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
     }
-    return s2(status = valid, claims = s2.claims :+ prop)
+    return s2(status = F, claims = s2.claims :+ prop)
   }
 
   def checkExps(rtCheck: B, title: String, titleSuffix: String, s0: State, exps: ISZ[AST.Exp], reporter: Reporter): State = {
