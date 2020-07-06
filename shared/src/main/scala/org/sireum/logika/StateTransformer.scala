@@ -297,13 +297,6 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Let.DeclSym =>
-          val r: PreResult[Context, State.Claim] = preStateClaimLetDeclSym(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
-          }
-          return r
         case o: State.Claim.Let.CurrentName =>
           val r: PreResult[Context, State.Claim] = preStateClaimLetCurrentName(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
@@ -471,13 +464,6 @@ object StateTransformer {
         case o: State.Claim.Def.FieldStore => return preStateClaimDefFieldStore(ctx, o)
         case o: State.Claim.Def.AdtLit => return preStateClaimDefAdtLit(ctx, o)
         case o: State.Claim.Def.Random => return preStateClaimDefRandom(ctx, o)
-        case o: State.Claim.Let.DeclSym =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetDeclSym(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
         case o: State.Claim.Let.CurrentName =>
           val r: PreResult[Context, State.Claim.Def] = preStateClaimLetCurrentName(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
@@ -640,7 +626,6 @@ object StateTransformer {
 
     @pure def preStateClaimLet(ctx: Context, o: State.Claim.Let): PreResult[Context, State.Claim.Let] = {
       o match {
-        case o: State.Claim.Let.DeclSym => return preStateClaimLetDeclSym(ctx, o)
         case o: State.Claim.Let.CurrentName => return preStateClaimLetCurrentName(ctx, o)
         case o: State.Claim.Let.Name => return preStateClaimLetName(ctx, o)
         case o: State.Claim.Let.CurrentId => return preStateClaimLetCurrentId(ctx, o)
@@ -661,10 +646,6 @@ object StateTransformer {
         case o: State.Claim.Let.Or => return preStateClaimLetOr(ctx, o)
         case o: State.Claim.Let.Imply => return preStateClaimLetImply(ctx, o)
       }
-    }
-
-    @pure def preStateClaimLetDeclSym(ctx: Context, o: State.Claim.Let.DeclSym): PreResult[Context, State.Claim.Let] = {
-      return PreResult(ctx, T, None())
     }
 
     @pure def preStateClaimLetCurrentName(ctx: Context, o: State.Claim.Let.CurrentName): PreResult[Context, State.Claim.Let] = {
@@ -1012,13 +993,6 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Let.DeclSym =>
-          val r: TPostResult[Context, State.Claim] = postStateClaimLetDeclSym(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
-          }
-          return r
         case o: State.Claim.Let.CurrentName =>
           val r: TPostResult[Context, State.Claim] = postStateClaimLetCurrentName(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
@@ -1186,13 +1160,6 @@ object StateTransformer {
         case o: State.Claim.Def.FieldStore => return postStateClaimDefFieldStore(ctx, o)
         case o: State.Claim.Def.AdtLit => return postStateClaimDefAdtLit(ctx, o)
         case o: State.Claim.Def.Random => return postStateClaimDefRandom(ctx, o)
-        case o: State.Claim.Let.DeclSym =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetDeclSym(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
         case o: State.Claim.Let.CurrentName =>
           val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetCurrentName(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
@@ -1355,7 +1322,6 @@ object StateTransformer {
 
     @pure def postStateClaimLet(ctx: Context, o: State.Claim.Let): TPostResult[Context, State.Claim.Let] = {
       o match {
-        case o: State.Claim.Let.DeclSym => return postStateClaimLetDeclSym(ctx, o)
         case o: State.Claim.Let.CurrentName => return postStateClaimLetCurrentName(ctx, o)
         case o: State.Claim.Let.Name => return postStateClaimLetName(ctx, o)
         case o: State.Claim.Let.CurrentId => return postStateClaimLetCurrentId(ctx, o)
@@ -1376,10 +1342,6 @@ object StateTransformer {
         case o: State.Claim.Let.Or => return postStateClaimLetOr(ctx, o)
         case o: State.Claim.Let.Imply => return postStateClaimLetImply(ctx, o)
       }
-    }
-
-    @pure def postStateClaimLetDeclSym(ctx: Context, o: State.Claim.Let.DeclSym): TPostResult[Context, State.Claim.Let] = {
-      return TPostResult(ctx, None())
     }
 
     @pure def postStateClaimLetCurrentName(ctx: Context, o: State.Claim.Let.CurrentName): TPostResult[Context, State.Claim.Let] = {
@@ -1831,12 +1793,6 @@ import StateTransformer._
             TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
           else
             TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.DeclSym =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
         case o2: State.Claim.Let.CurrentName =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           if (hasChanged || r0.resultOpt.nonEmpty)
@@ -2036,12 +1992,6 @@ import StateTransformer._
             TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
           else
             TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.DeclSym =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
         case o2: State.Claim.Let.CurrentName =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           if (hasChanged || r0.resultOpt.nonEmpty)
@@ -2231,12 +2181,6 @@ import StateTransformer._
       val o2: State.Claim.Let = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val rOpt: TPostResult[Context, State.Claim.Let] = o2 match {
-        case o2: State.Claim.Let.DeclSym =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
         case o2: State.Claim.Let.CurrentName =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           if (hasChanged || r0.resultOpt.nonEmpty)

@@ -631,7 +631,7 @@ object Smt2 {
   }
 
   def valid(log: B, title: String, pos: message.Position, premises: ISZ[State.Claim],
-            conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): B = {
+            conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): Smt2Query.Result = {
     val defs = ClaimDefs.empty
     val ps = State.Claim.claimsSTs(premises, defs)
     val headers = (st"Validity Check for $title:" +: ps :+ st"⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs)
@@ -639,10 +639,10 @@ object Smt2 {
     reporter.query(pos, res)
     if (log) {
       reporter.info(None(), Logika.kind,
-        st"""Verification Condition: ${if (r) "Discharged" else "Undischarged"}
+        st"""Verification Condition: ${if (r) s"Discharged (${res.kind})" else "Undischarged"}
             |  ${res.query}""".render)
     }
-    return r
+    return res
   }
 
   def isAdtType(t: AST.Typed): B = {
@@ -899,7 +899,10 @@ object Smt2 {
   }
 
   def l2DeclST(c: State.Claim.Let): ST = {
-    return st"(${v2ST(c.sym)} ${l2RhsST(c)})"
+    c match {
+      case c: State.Claim.Let.CurrentId if c.declId => return st"(${l2RhsST(c)} ${v2ST(c.sym)})"
+      case _ => return st"(${v2ST(c.sym)} ${l2RhsST(c)})"
+    }
   }
 
   def l2RhsST(c: State.Claim.Let): ST = {
@@ -975,8 +978,6 @@ object Smt2 {
         return st"(=> ${(c.args.map(v2ST _), " ")})"
       case c: State.Claim.Let.Ite =>
         return st"(ite ${v2ST(c.cond)} ${v2ST(c.left)} ${v2ST(c.right)})"
-      case _: State.Claim.Let.DeclSym =>
-        halt("Infeasible")
       case c: State.Claim.Let.Apply =>
         halt("TODO") // TODO
       case c: State.Claim.Let.IApply =>
@@ -994,7 +995,6 @@ object Smt2 {
                 return st"(${typeOpId(t, c.op)} ${v2ST(c.left)} ${v2ST(c.right)} ${v2ST(c.sym)})"
               case _ =>
             }
-          case _: State.Claim.Let.DeclSym => return Smt2.stTrue
           case _ =>
         }
         val rhs: ST = c match {
