@@ -660,7 +660,7 @@ import Logika.Reporter
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), timeoutInMs, reporter)
         r.kind match {
           case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
-          case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly non-zero second operand for ${exp.op}", reporter)
+          case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly zero second operand for ${exp.op}", reporter)
           case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Could not deduce non-zero second operand for ${exp.op}", reporter)
           case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing non-zero second operand for ${exp.op}", reporter)
           case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing non-zero second operand for ${exp.op}", reporter)
@@ -1538,7 +1538,7 @@ import Logika.Reporter
       s0.claims, conclusion, timeoutInMs, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
-      case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly invalid ${ops.StringOps(title).firstToLower}", reporter)
+      case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
       case Smt2Query.Result.Kind.Unknown => error(posOpt, s"Cannot deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
       case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower}", reporter)
       case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}", reporter)
