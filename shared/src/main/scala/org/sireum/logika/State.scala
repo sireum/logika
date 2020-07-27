@@ -979,6 +979,16 @@ object State {
 
   }
 
+  @datatype class StrictPureMethod(header: StrictPureMethod.Header, claims: ISZ[State.Claim], value: State.Value)
+
+  object StrictPureMethod {
+    @datatype class Header(receiverTypeOpt: Option[AST.Typed],
+                           owner: ISZ[String],
+                           id: String,
+                           paramIds: ISZ[String],
+                           paramTypes: ISZ[AST.Typed],
+                           returnType: AST.Typed)
+  }
 
   val symPrefix: String = "α"
   val errorValue: Value.Sym = Value.Sym(0, AST.Typed.nothing, Position.none)
