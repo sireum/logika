@@ -227,31 +227,37 @@ object Logika {
     return Logika(th, config, ctx, smt2)
   }
 
-  def strictPureMethodHeader(th: TypeHierarchy, method: AST.Stmt.Method): State.StrictPureMethod.Header = {
+  def strictPureMethodHeader(th: TypeHierarchy, method: AST.Stmt.Method, substMap: HashMap[String, AST.Typed]): State.StrictPureMethod.Header = {
     val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
       None()
     } else {
       th.typeMap.get(res.owner).get match {
-        case ti: TypeInfo.Sig => Some(ti.tpe)
-        case ti: TypeInfo.Adt => Some(ti.tpe)
+        case ti: TypeInfo.Sig => Some(ti.tpe.subst(substMap))
+        case ti: TypeInfo.Adt => Some(ti.tpe.subst(substMap))
         case _ => halt("Infeasible")
       }
     }
-    val returnType = method.sig.returnType.typedOpt.get
-    return State.StrictPureMethod.Header(receiverTypeOpt, res.owner, res.id, res.paramNames,
-      method.sig.funType.args, returnType)
+    val funType = method.sig.funType.subst(substMap)
+    return State.StrictPureMethod.Header(receiverTypeOpt, res.owner, res.id, res.paramNames, funType.args, funType.ret)
   }
 
   def translateStrictPureMethod(header: State.StrictPureMethod.Header, th: TypeHierarchy, method: AST.Stmt.Method,
-                                config: Config, smt2: Smt2, reporter: Reporter): State.StrictPureMethod = {
+                                substMap: HashMap[String, AST.Typed], config: Config, smt2: Smt2,
+                                reporter: Reporter): State.StrictPureMethod = {
     val logika: Logika = logikaMethod(th, config, smt2, header.owner :+ header.id, header.receiverTypeOpt, method.sig,
       method.posOpt, ISZ(), ISZ(), ISZ())
     val stmts = method.bodyOpt.get.stmts
     stmts match {
       case ISZ(decl: AST.Stmt.Var, _: AST.Stmt.Return) if decl.id.value == "r" && decl.initOpt.nonEmpty =>
         val returnType = method.sig.returnType.typedOpt.get
-        val (state, value) = logika.evalAssignExpValue(returnType, T, State.create, decl.initOpt.get, reporter)
+        val body: AST.AssignExp = if (substMap.isEmpty) {
+          decl.initOpt.get
+        } else {
+          val b = decl.initOpt.get
+          AST.Util.TypeSubstitutor(substMap).transformAssignExp(b).getOrElse(b)
+        }
+        val (state, value) = logika.evalAssignExpValue(returnType, T, State.create, body, reporter)
         return State.StrictPureMethod(header, state.claims, value)
       case _ => halt(s"Infeasible: $stmts")
     }
