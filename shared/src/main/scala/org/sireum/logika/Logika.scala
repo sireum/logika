@@ -498,6 +498,7 @@ import Logika.Reporter
     if (smt2.strictPureMethods.contains(spm)) {
       return (state, spm)
     } else {
+      smt2.strictPureMethodsUp(smt2.strictPureMethods + spm ~> ((st"", st"")))
       val sv: (State, State.Value) = {
         val logika: Logika = Logika.logikaMethod(th, config, smt2, spm.owner :+ spm.id, spm.receiverTypeOpt, method.sig,
           method.posOpt, ISZ(), ISZ(), ISZ())
