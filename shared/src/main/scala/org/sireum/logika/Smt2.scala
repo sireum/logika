@@ -74,6 +74,9 @@ object Smt2 {
   )
 
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
+
+  @strictpure def strictPureMethodId(spm: State.StrictPureMethod): ST =
+    st"|${spm.owner}${if (spm.receiverTypeOpt.isEmpty) "." else "#"}${spm.id}|"
 }
 
 @msig trait Smt2 {
@@ -113,6 +116,33 @@ object Smt2 {
   def sTypeDecls: ISZ[ST]
 
   def sTypeDeclsUp(newTypeDecls: ISZ[ST]): Unit
+
+  def strictPureMethods: HashSMap[State.StrictPureMethod, (ST, ST)]
+
+  def strictPureMethodsUp(newStrictPureMethods: HashSMap[State.StrictPureMethod, (ST, ST)]): Unit
+
+  def addStrictPureMethods(spm: State.StrictPureMethod, sv: (State, State.Value)): Unit = {
+    val id = Smt2.strictPureMethodId(spm)
+    var paramTypes: ISZ[ST] = for (pt <- spm.paramTypes) yield adtId(pt)
+    var paramIds = spm.paramIds
+    var params: ISZ[ST] = for (p <- ops.ISZOps(spm.paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
+    spm.receiverTypeOpt match {
+      case Some(receiverType) =>
+        val thisType = adtId(receiverType)
+        paramTypes = thisType +: paramTypes
+        paramIds = "this" +: paramIds
+        params = st"(this $thisType)" +: params
+      case _ =>
+    }
+    val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${adtId(spm.returnType)})"
+    val (state, value) = sv
+    val claim =
+      st"""(assert (forall (${(params, " ")}) (=>
+          |  (= ($id ${(params, " ")}) ${v2ST(value)})
+          |  ${embeddedClaims(F, state.claims)}
+          |)))"""
+    strictPureMethodsUp(strictPureMethods + spm ~> ((decl, claim)))
+  }
 
   def addAdtDecl(adtDecl: ST): Unit = {
     adtDeclsUp(adtDecls :+ adtDecl)
@@ -649,7 +679,7 @@ object Smt2 {
     return adtId(t).render == "ADT"
   }
 
-  @pure def query(headers: ISZ[ST], decls: ISZ[String], claims: ISZ[String]): ST = {
+  def query(headers: ISZ[ST], decls: ISZ[String], claims: ISZ[String]): ST = {
     val distinctOpt: Option[ST] =
       if (typeHierarchyIds.isEmpty) None()
       else Some(
@@ -801,6 +831,10 @@ object Smt2 {
           |
           |${(decls, "\n")}
           |
+          |${(for (p <- strictPureMethods.values) yield p._1, "\n")}
+          |
+          |${(for (p <- strictPureMethods.values) yield p._2, "\n")}
+          |
           |${(for (a <- claims) yield st"(assert $a)", "\n")}
           |
           |(check-sat)
@@ -905,6 +939,37 @@ object Smt2 {
     }
   }
 
+  def embeddedClaims(isImply: B, claims: ISZ[State.Claim]): ST = {
+    var lets = ISZ[State.Claim.Let]()
+    var defs = ISZ[State.Claim.Def]()
+    var rest = ISZ[State.Claim]()
+    for (claim <- claims) {
+      claim match {
+        case claim: State.Claim.Let => lets = lets :+ claim
+        case claim: State.Claim.Def => defs = defs :+ claim; rest = rest :+ claim
+        case _ => rest = rest :+ claim
+      }
+    }
+    var body: ST = if (isImply) implyST(rest) else andST(rest)
+    if (lets.nonEmpty) {
+      body =
+        st"""(let (${l2DeclST(lets(lets.size - 1))})
+            |  $body)"""
+      for (i <- (lets.size - 2) to 0 by -1) {
+        val let = lets(i)
+        body =
+          st"""(let (${l2DeclST(let)})
+              |$body)"""
+      }
+    }
+    if (defs.nonEmpty) {
+      body =
+        st"""(forall (${(for (d <- defs) yield st"(${v2ST(d.sym)} ${typeId(d.sym.tipe)})", " ")})
+            |  $body)"""
+    }
+    return body
+  }
+
   def l2RhsST(c: State.Claim.Let): ST = {
     c match {
       case c: State.Claim.Let.CurrentName =>
@@ -920,33 +985,7 @@ object Smt2 {
       case c: State.Claim.Let.TypeTest =>
         return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2ST(c.value)}) ${typeHierarchyId(c.tipe)})"
       case c: State.Claim.Let.Quant =>
-        var lets = ISZ[State.Claim.Let]()
-        var defs = ISZ[State.Claim.Def]()
-        var rest = ISZ[State.Claim]()
-        for (claim <- c.claims) {
-          claim match {
-            case claim: State.Claim.Let => lets = lets :+ claim
-            case claim: State.Claim.Def => defs = defs :+ claim; rest = rest :+ claim
-            case _ => rest = rest :+ claim
-          }
-        }
-        var body: ST = if (c.isAll) implyST(rest) else andST(rest)
-        if (lets.nonEmpty) {
-          body =
-            st"""(let (${l2DeclST(lets(lets.size - 1))})
-                |  $body)"""
-          for (i <- (lets.size - 2) to 0 by -1) {
-            val let = lets(i)
-            body =
-              st"""(let (${l2DeclST(let)})
-                  |$body)"""
-          }
-        }
-        if (defs.nonEmpty) {
-          body =
-            st"""(forall (${(for (d <- defs) yield st"(${v2ST(d.sym)} ${typeId(d.sym.tipe)})", " ")})
-                |  $body)"""
-        }
+        val body = embeddedClaims(c.isAll, c.claims)
         return if (c.isAll)
           st"""(forall (${(for (x <- c.vars) yield qvar2ST(x), " ")})
               |  $body

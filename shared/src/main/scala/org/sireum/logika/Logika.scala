@@ -227,42 +227,6 @@ object Logika {
     return Logika(th, config, ctx, smt2)
   }
 
-  def strictPureMethodHeader(th: TypeHierarchy, method: AST.Stmt.Method, substMap: HashMap[String, AST.Typed]): State.StrictPureMethod.Header = {
-    val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-    val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
-      None()
-    } else {
-      th.typeMap.get(res.owner).get match {
-        case ti: TypeInfo.Sig => Some(ti.tpe.subst(substMap))
-        case ti: TypeInfo.Adt => Some(ti.tpe.subst(substMap))
-        case _ => halt("Infeasible")
-      }
-    }
-    val funType = method.sig.funType.subst(substMap)
-    return State.StrictPureMethod.Header(receiverTypeOpt, res.owner, res.id, res.paramNames, funType.args, funType.ret)
-  }
-
-  def translateStrictPureMethod(header: State.StrictPureMethod.Header, th: TypeHierarchy, method: AST.Stmt.Method,
-                                substMap: HashMap[String, AST.Typed], config: Config, smt2: Smt2,
-                                reporter: Reporter): State.StrictPureMethod = {
-    val logika: Logika = logikaMethod(th, config, smt2, header.owner :+ header.id, header.receiverTypeOpt, method.sig,
-      method.posOpt, ISZ(), ISZ(), ISZ())
-    val stmts = method.bodyOpt.get.stmts
-    stmts match {
-      case ISZ(decl: AST.Stmt.Var, _: AST.Stmt.Return) if decl.id.value == "r" && decl.initOpt.nonEmpty =>
-        val returnType = method.sig.returnType.typedOpt.get
-        val body: AST.AssignExp = if (substMap.isEmpty) {
-          decl.initOpt.get
-        } else {
-          val b = decl.initOpt.get
-          AST.Util.TypeSubstitutor(substMap).transformAssignExp(b).getOrElse(b)
-        }
-        val (state, value) = logika.evalAssignExpValue(returnType, T, State.create, body, reporter)
-        return State.StrictPureMethod(header, state.claims, value)
-      case _ => halt(s"Infeasible: $stmts")
-    }
-  }
-
   def checkMethod(th: TypeHierarchy, method: AST.Stmt.Method, config: Config, smt2: Smt2, reporter: Reporter): Unit = {
     def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
@@ -512,6 +476,51 @@ import Logika.Reporter
       case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the sequence indexing is in bound", reporter)
     }
     return s2(status = F)
+  }
+
+  def strictPureMethod(state: State, method: AST.Stmt.Method, substMap: HashMap[String, AST.Typed],
+                       reporter: Reporter): (State, State.StrictPureMethod) = {
+    val spm: State.StrictPureMethod = {
+      val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+      val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
+        None()
+      } else {
+        th.typeMap.get(res.owner).get match {
+          case ti: TypeInfo.Sig => Some(ti.tpe.subst(substMap))
+          case ti: TypeInfo.Adt => Some(ti.tpe.subst(substMap))
+          case _ => halt("Infeasible")
+        }
+      }
+      val funType = method.sig.funType.subst(substMap)
+      State.StrictPureMethod(receiverTypeOpt, res.owner, res.id, res.paramNames, funType.args, funType.ret)
+    }
+
+    if (smt2.strictPureMethods.contains(spm)) {
+      return (state, spm)
+    } else {
+      val sv: (State, State.Value) = {
+        val logika: Logika = Logika.logikaMethod(th, config, smt2, spm.owner :+ spm.id, spm.receiverTypeOpt, method.sig,
+          method.posOpt, ISZ(), ISZ(), ISZ())
+        val stmts = method.bodyOpt.get.stmts
+        stmts match {
+          case ISZ(decl: AST.Stmt.Var, _: AST.Stmt.Return) if decl.id.value == "r" && decl.initOpt.nonEmpty =>
+            val returnType = method.sig.returnType.typedOpt.get
+            val body: AST.AssignExp = if (substMap.isEmpty) {
+              decl.initOpt.get
+            } else {
+              val b = decl.initOpt.get
+              AST.Util.TypeSubstitutor(substMap).transformAssignExp(b).getOrElse(b)
+            }
+            val s0 = state(claims = ISZ())
+            logika.evalAssignExpValue(returnType, T, s0, body, reporter)
+          case _ => halt(s"Infeasible: $stmts")
+        }
+      }
+
+      smt2.addStrictPureMethods(spm, sv)
+
+      return (state(nextFresh =  sv._1.nextFresh), spm)
+    }
   }
 
   def evalLit(lit: AST.Lit): State.Value = {
