@@ -75,8 +75,8 @@ object Smt2 {
 
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 
-  @strictpure def strictPureMethodId(spm: State.StrictPureMethod): ST =
-    st"|${spm.owner}${if (spm.receiverTypeOpt.isEmpty) "." else "#"}${spm.id}|"
+  @strictpure def proofFunId(pf: State.ProofFun): ST =
+    st"|${pf.owner}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
 }
 
 @msig trait Smt2 {
@@ -117,12 +117,12 @@ object Smt2 {
 
   def sTypeDeclsUp(newTypeDecls: ISZ[ST]): Unit
 
-  def strictPureMethods: HashSMap[State.StrictPureMethod, (ST, ST)]
+  def strictPureMethods: HashSMap[State.ProofFun, (ST, ST)]
 
-  def strictPureMethodsUp(newStrictPureMethods: HashSMap[State.StrictPureMethod, (ST, ST)]): Unit
+  def strictPureMethodsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit
 
-  def addStrictPureMethods(spm: State.StrictPureMethod, sv: (State, State.Value)): Unit = {
-    val id = Smt2.strictPureMethodId(spm)
+  def addStrictPureMethod(spm: State.ProofFun, sv: (State, State.Value)): Unit = {
+    val id = Smt2.proofFunId(spm)
     var paramTypes: ISZ[ST] = for (pt <- spm.paramTypes) yield adtId(pt)
     var paramIds = spm.paramIds
     var params: ISZ[ST] = for (p <- ops.ISZOps(spm.paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
@@ -138,7 +138,7 @@ object Smt2 {
     val (state, value) = sv
     val claim =
       st"""(assert (forall (${(params, " ")}) (=>
-          |  (= ($id ${(params, " ")}) ${v2ST(value)})
+          |  (= ${v2ST(value)} ($id ${(params, " ")}))
           |  ${embeddedClaims(F, state.claims)}
           |)))"""
     strictPureMethodsUp(strictPureMethods + spm ~> ((decl, claim)))
@@ -1017,6 +1017,8 @@ object Smt2 {
         return st"(=> ${(c.args.map(v2ST _), " ")})"
       case c: State.Claim.Let.Ite =>
         return st"(ite ${v2ST(c.cond)} ${v2ST(c.left)} ${v2ST(c.right)})"
+      case c: State.Claim.Let.ProofFunApply =>
+        return st"(${Smt2.proofFunId(c.pf)} ${(for (arg <- c.args) yield v2ST(arg), " ")})"
       case c: State.Claim.Let.Apply =>
         halt("TODO") // TODO
       case c: State.Claim.Let.IApply =>

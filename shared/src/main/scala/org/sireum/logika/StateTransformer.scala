@@ -388,6 +388,13 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Let.ProofFunApply =>
+          val r: PreResult[Context, State.Claim] = preStateClaimLetProofFunApply(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
+          }
+          return r
         case o: State.Claim.Let.Apply =>
           val r: PreResult[Context, State.Claim] = preStateClaimLetApply(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
@@ -555,6 +562,13 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
           }
           return r
+        case o: State.Claim.Let.ProofFunApply =>
+          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetProofFunApply(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
+          }
+          return r
         case o: State.Claim.Let.Apply =>
           val r: PreResult[Context, State.Claim.Def] = preStateClaimLetApply(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
@@ -639,6 +653,7 @@ object StateTransformer {
         case o: State.Claim.Let.SeqLookup => return preStateClaimLetSeqLookup(ctx, o)
         case o: State.Claim.Let.SeqInBound => return preStateClaimLetSeqInBound(ctx, o)
         case o: State.Claim.Let.FieldLookup => return preStateClaimLetFieldLookup(ctx, o)
+        case o: State.Claim.Let.ProofFunApply => return preStateClaimLetProofFunApply(ctx, o)
         case o: State.Claim.Let.Apply => return preStateClaimLetApply(ctx, o)
         case o: State.Claim.Let.IApply => return preStateClaimLetIApply(ctx, o)
         case o: State.Claim.Let.TupleLit => return preStateClaimLetTupleLit(ctx, o)
@@ -715,6 +730,10 @@ object StateTransformer {
       return PreResult(ctx, T, None())
     }
 
+    @pure def preStateClaimLetProofFunApply(ctx: Context, o: State.Claim.Let.ProofFunApply): PreResult[Context, State.Claim.Let] = {
+      return PreResult(ctx, T, None())
+    }
+
     @pure def preStateClaimLetApply(ctx: Context, o: State.Claim.Let.Apply): PreResult[Context, State.Claim.Let] = {
       return PreResult(ctx, T, None())
     }
@@ -736,6 +755,10 @@ object StateTransformer {
     }
 
     @pure def preStateClaimLetImply(ctx: Context, o: State.Claim.Let.Imply): PreResult[Context, State.Claim.Let] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateProofFun(ctx: Context, o: State.ProofFun): PreResult[Context, State.ProofFun] = {
       return PreResult(ctx, T, None())
     }
 
@@ -1084,6 +1107,13 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Let.ProofFunApply =>
+          val r: TPostResult[Context, State.Claim] = postStateClaimLetProofFunApply(ctx, o) match {
+           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
+          }
+          return r
         case o: State.Claim.Let.Apply =>
           val r: TPostResult[Context, State.Claim] = postStateClaimLetApply(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
@@ -1251,6 +1281,13 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
           }
           return r
+        case o: State.Claim.Let.ProofFunApply =>
+          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetProofFunApply(ctx, o) match {
+           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
+          }
+          return r
         case o: State.Claim.Let.Apply =>
           val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetApply(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
@@ -1335,6 +1372,7 @@ object StateTransformer {
         case o: State.Claim.Let.SeqLookup => return postStateClaimLetSeqLookup(ctx, o)
         case o: State.Claim.Let.SeqInBound => return postStateClaimLetSeqInBound(ctx, o)
         case o: State.Claim.Let.FieldLookup => return postStateClaimLetFieldLookup(ctx, o)
+        case o: State.Claim.Let.ProofFunApply => return postStateClaimLetProofFunApply(ctx, o)
         case o: State.Claim.Let.Apply => return postStateClaimLetApply(ctx, o)
         case o: State.Claim.Let.IApply => return postStateClaimLetIApply(ctx, o)
         case o: State.Claim.Let.TupleLit => return postStateClaimLetTupleLit(ctx, o)
@@ -1411,6 +1449,10 @@ object StateTransformer {
       return TPostResult(ctx, None())
     }
 
+    @pure def postStateClaimLetProofFunApply(ctx: Context, o: State.Claim.Let.ProofFunApply): TPostResult[Context, State.Claim.Let] = {
+      return TPostResult(ctx, None())
+    }
+
     @pure def postStateClaimLetApply(ctx: Context, o: State.Claim.Let.Apply): TPostResult[Context, State.Claim.Let] = {
       return TPostResult(ctx, None())
     }
@@ -1432,6 +1474,10 @@ object StateTransformer {
     }
 
     @pure def postStateClaimLetImply(ctx: Context, o: State.Claim.Let.Imply): TPostResult[Context, State.Claim.Let] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateProofFun(ctx: Context, o: State.ProofFun): TPostResult[Context, State.ProofFun] = {
       return TPostResult(ctx, None())
     }
 
@@ -1886,6 +1932,14 @@ import StateTransformer._
             TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt))))
           else
             TPostResult(r1.ctx, None())
+        case o2: State.Claim.Let.ProofFunApply =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          val r1: TPostResult[Context, State.ProofFun] = transformStateProofFun(r0.ctx, o2.pf)
+          val r2: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r1.ctx, o2.args, transformStateValue _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
+            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), pf = r1.resultOpt.getOrElse(o2.pf), args = r2.resultOpt.getOrElse(o2.args))))
+          else
+            TPostResult(r2.ctx, None())
         case o2: State.Claim.Let.Apply =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
@@ -2085,6 +2139,14 @@ import StateTransformer._
             TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt))))
           else
             TPostResult(r1.ctx, None())
+        case o2: State.Claim.Let.ProofFunApply =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          val r1: TPostResult[Context, State.ProofFun] = transformStateProofFun(r0.ctx, o2.pf)
+          val r2: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r1.ctx, o2.args, transformStateValue _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
+            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), pf = r1.resultOpt.getOrElse(o2.pf), args = r2.resultOpt.getOrElse(o2.args))))
+          else
+            TPostResult(r2.ctx, None())
         case o2: State.Claim.Let.Apply =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
@@ -2274,6 +2336,14 @@ import StateTransformer._
             TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt))))
           else
             TPostResult(r1.ctx, None())
+        case o2: State.Claim.Let.ProofFunApply =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          val r1: TPostResult[Context, State.ProofFun] = transformStateProofFun(r0.ctx, o2.pf)
+          val r2: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r1.ctx, o2.args, transformStateValue _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
+            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), pf = r1.resultOpt.getOrElse(o2.pf), args = r2.resultOpt.getOrElse(o2.args))))
+          else
+            TPostResult(r2.ctx, None())
         case o2: State.Claim.Let.Apply =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
@@ -2363,6 +2433,32 @@ import StateTransformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: State.Claim.Let.Quant.Var = r.resultOpt.getOrElse(o)
     val postR: TPostResult[Context, State.Claim.Let.Quant.Var] = pp.postStateClaimLetQuantVar(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformStateProofFun(ctx: Context, o: State.ProofFun): TPostResult[Context, State.ProofFun] = {
+    val preR: PreResult[Context, State.ProofFun] = pp.preStateProofFun(ctx, o)
+    val r: TPostResult[Context, State.ProofFun] = if (preR.continu) {
+      val o2: State.ProofFun = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        TPostResult(preR.ctx, Some(o2))
+      else
+        TPostResult(preR.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: State.ProofFun = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, State.ProofFun] = pp.postStateProofFun(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {

@@ -169,7 +169,10 @@ object Logika {
     }
   }
 
-  @datatype class InvokeMethodInfo(sig: AST.MethodSig, contract: AST.MethodContract)
+  @datatype class InvokeMethodInfo(sig: AST.MethodSig,
+                                   contract: AST.MethodContract,
+                                   res: AST.ResolvedInfo.Method,
+                                   strictPureBodyOpt: Option[AST.AssignExp])
 
   @datatype class ContractCaseResult(isPreOK: B,
                                      state: State,
@@ -477,10 +480,11 @@ import Logika.Reporter
     return s2(status = F)
   }
 
-  def strictPureMethod(smt2: Smt2, state: State, method: AST.Stmt.Method, substMap: HashMap[String, AST.Typed],
-                       reporter: Reporter): (State, State.StrictPureMethod) = {
-    val spm: State.StrictPureMethod = {
-      val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+  def ProofFun(smt2: Smt2, state: State, imi: InvokeMethodInfo, substMap: HashMap[String, AST.Typed],
+                       reporter: Reporter): (State, State.ProofFun) = {
+    val funType = imi.res.tpeOpt.get.subst(substMap)
+    val pf: State.ProofFun = {
+      val res = imi.res
       val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
         None()
       } else {
@@ -490,36 +494,28 @@ import Logika.Reporter
           case _ => halt("Infeasible")
         }
       }
-      val funType = method.sig.funType.subst(substMap)
-      State.StrictPureMethod(receiverTypeOpt, res.owner, res.id, res.paramNames, funType.args, funType.ret)
+      State.ProofFun(receiverTypeOpt, res.owner, res.id, res.paramNames, funType.args, funType.ret)
     }
-
-    if (smt2.strictPureMethods.contains(spm)) {
-      return (state, spm)
+    if (smt2.strictPureMethods.contains(pf)) {
+      return (state, pf)
     } else {
-      smt2.strictPureMethodsUp(smt2.strictPureMethods + spm ~> ((st"", st"")))
+      smt2.strictPureMethodsUp(smt2.strictPureMethods + pf ~> ((st"", st"")))
       val sv: (State, State.Value) = {
-        val logika: Logika = Logika.logikaMethod(th, config, spm.owner :+ spm.id, spm.receiverTypeOpt, method.sig,
-          method.posOpt, ISZ(), ISZ(), ISZ())
-        val stmts = method.bodyOpt.get.stmts
-        stmts match {
-          case ISZ(decl: AST.Stmt.Var, _: AST.Stmt.Return) if decl.id.value == "r" && decl.initOpt.nonEmpty =>
-            val returnType = method.sig.returnType.typedOpt.get
-            val body: AST.AssignExp = if (substMap.isEmpty) {
-              decl.initOpt.get
-            } else {
-              val b = decl.initOpt.get
-              AST.Util.TypeSubstitutor(substMap).transformAssignExp(b).getOrElse(b)
-            }
-            val s0 = state(claims = ISZ())
-            logika.evalAssignExpValue(smt2, returnType, T, s0, body, reporter)
-          case _ => halt(s"Infeasible: $stmts")
+        val body: AST.AssignExp = if (substMap.isEmpty) {
+          imi.strictPureBodyOpt.get
+        } else {
+          val b = imi.strictPureBodyOpt.get
+          AST.Util.TypeSubstitutor(substMap).transformAssignExp(b).getOrElse(b)
         }
+        val logika: Logika = Logika.logikaMethod(th, config, pf.owner :+ pf.id, pf.receiverTypeOpt, imi.sig,
+          body.asStmt.posOpt, ISZ(), ISZ(), ISZ())
+        val s0 = state(claims = ISZ())
+        logika.evalAssignExpValue(smt2, funType.ret, T, s0, body, reporter)
       }
 
-      smt2.addStrictPureMethods(spm, sv)
+      smt2.addStrictPureMethod(pf, sv)
 
-      return (state(nextFresh =  sv._1.nextFresh), spm)
+      return (state(nextFresh =  sv._1.nextFresh), pf)
     }
   }
 
@@ -1119,28 +1115,52 @@ import Logika.Reporter
     }
 
     def methodInfo(isInObject: B, owner: QName, id: String): InvokeMethodInfo = {
+      def extractAssignExpOpt(mi: lang.symbol.Info.Method): Option[AST.AssignExp] = {
+        if (mi.ast.purity == AST.Purity.StrictPure) {
+          mi.ast.bodyOpt.get.stmts match {
+            case ISZ(stmt: AST.Stmt.Var, _: AST.Stmt.Return) => return stmt.initOpt
+            case stmts => halt(s"Infeasible: $stmts")
+          }
+        } else {
+          return None()
+        }
+      }
+      def extractResolvedInfo(attr: AST.ResolvedAttr): AST.ResolvedInfo.Method = {
+        return attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+      }
+
       if (isInObject) {
         th.nameMap.get(owner :+ id) match {
-          case Some(mi: lang.symbol.Info.Method) => return InvokeMethodInfo(mi.ast.sig, mi.ast.contract)
+          case Some(mi: lang.symbol.Info.Method) =>
+            return InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
+              extractAssignExpOpt(mi))
           case info => halt(s"Infeasible: $owner.$id => $info")
         }
       } else {
         th.typeMap.get(owner) match {
           case Some(info: lang.symbol.TypeInfo.Adt) =>
             info.methods.get(id) match {
-              case Some(mi) => return InvokeMethodInfo(mi.ast.sig, mi.ast.contract)
+              case Some(mi) =>
+                return InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
+                  extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
-                  case Some(mi) => return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple(ISZ(), ISZ(), ISZ(), ISZ()))
+                  case Some(mi) =>
+                    return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple(ISZ(), ISZ(), ISZ(), ISZ()),
+                      extractResolvedInfo(mi.ast.attr), None())
                   case _ => halt("Infeasible")
                 }
             }
           case Some(info: lang.symbol.TypeInfo.Sig) =>
             info.methods.get(id) match {
-              case Some(mi) => return InvokeMethodInfo(mi.ast.sig, mi.ast.contract)
+              case Some(mi) =>
+                return InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
+                  extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
-                  case Some(mi) => return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple(ISZ(), ISZ(), ISZ(), ISZ()))
+                  case Some(mi) =>
+                    return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple(ISZ(), ISZ(), ISZ(), ISZ()),
+                      extractResolvedInfo(mi.ast.attr), None())
                   case _ => halt("Infeasible")
                 }
             }
@@ -1162,12 +1182,11 @@ import Logika.Reporter
         if (invokeReceiverOpt.nonEmpty) invokeReceiverOpt.get.posOpt
         else ident.posOpt
       var typeSubstMap = TypeChecker.emptySubstMap
-      var paramArgs = HashSMap.empty[AST.ResolvedInfo.LocalVar, (AST.Typed, AST.Exp)]
+      var paramArgs = ISZ[(Z, AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]()
       val info = methodInfo(res.isInObject, res.owner, res.id)
       val contract = info.contract
       val isUnit = info.sig.returnType.typedOpt == AST.Typed.unitOpt
       val ctx = res.owner :+ res.id
-      val modLocals = contract.modifiedLocalVars
 
       var s1 = s0
       val receiverOpt: Option[State.Value.Sym] = if (res.isInObject) {
@@ -1202,14 +1221,12 @@ import Logika.Reporter
           for (pArg <- ops.ISZOps(info.sig.params).zip(args)) {
             val (p, arg) = pArg
             val (s2, v) = evalExp(smt2, rtCheck, s1, arg, reporter)
-            val argPos = arg.posOpt.get
-            val (s3, sym) = value2Sym(s2, v, argPos)
             val id = p.id.value
             val argType = arg.typedOpt.get
             argTypes(i) = argType
-            paramArgs = paramArgs + AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id) ~>
-              ((argType, arg))
-            s1 = s3.addClaim(State.Claim.Let.CurrentId(F, sym, ctx, id, Some(argPos)))
+            paramArgs = paramArgs :+
+              ((i, AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id), argType, arg, v))
+            s1 = s2
             i = i + 1
           }
         case Either.Right(nargs) =>
@@ -1217,14 +1234,12 @@ import Logika.Reporter
             val p = info.sig.params(narg.index)
             val arg = narg.arg
             val (s2, v) = evalExp(smt2, rtCheck, s1, arg, reporter)
-            val argPos = arg.posOpt.get
-            val (s3, sym) = value2Sym(s2, v, argPos)
             val id = p.id.value
             val argType = arg.typedOpt.get
             argTypes(narg.index) = argType
-            paramArgs = paramArgs + AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id) ~>
-              ((argType, arg))
-            s1 = s3.addClaim(State.Claim.Let.CurrentId(F, sym, ctx, id, Some(argPos)))
+            paramArgs = paramArgs :+
+              ((narg.index, AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id), argType, arg, v))
+            s1 = s2
           }
       }
       val mType = info.sig.funType
@@ -1233,13 +1248,26 @@ import Logika.Reporter
         case Some(sm) => typeSubstMap = typeSubstMap ++ sm.entries
         case _ => return (s1, State.errorValue)
       }
-      val retType = info.sig.returnType.typedOpt.get.subst(typeSubstMap)
+      val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
+
+      def strictPure(): (State, State.Value) = {
+        val (s3, pf) = ProofFun(smt2, s1, info, typeSubstMap, reporter)
+        val (s4, r) = s3.freshSym(retType, pos)
+        return (s4.addClaim(State.Claim.Let.ProofFunApply(r, pf, for (q <- paramArgs) yield q._5)), r)
+      }
 
       def compositional(): (State, State.Value) = {
+
+        for (q <- paramArgs) {
+          val (_, l, _, arg, v) = q
+          val (s3, sym) = value2Sym(s1, v, arg.posOpt.get)
+          s1 = s3.addClaim(State.Claim.Let.CurrentId(F, sym, l.context, l.id, arg.posOpt))
+        }
 
         def evalContractCase(logikaComp: Logika, currentReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
                              labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
                              ensures: ISZ[AST.Exp]): ContractCaseResult = {
+          val modLocals = contract.modifiedLocalVars
           def modVarsResult(ms0: State, mposOpt: Option[Position]): (State, State.Value) = {
             var ms1 = ms0
             val modObjectVars = contract.modifiedObjectVars
@@ -1249,22 +1277,22 @@ import Logika.Reporter
             if (isUnit) {
               return (ms1, State.Value.Unit(mpos))
             } else {
-              val (s5, v) = Logika.resIntro(mpos, ms1, ctx, retType, mposOpt)
-              ms1 = s5
+              val (ms2, v) = Logika.resIntro(mpos, ms1, ctx, retType, mposOpt)
+              ms1 = ms2
               return (ms1, v)
             }
           }
 
           def modVarsRewrite(ms0: State): State = {
             var ms1 = ms0
-            for (ptarg <- paramArgs.entries) {
-              val (p, (t, arg)) = ptarg
+            for (q <- paramArgs) {
+              val (_, p, t, arg, _) = q
               if (modLocals.contains(p)) {
-                val (s6, v) = Logika.idIntro(arg.posOpt.get, ms1, p.context, p.id, t, None())
-                ms1 = assignRec(smt2, s6, arg, v, reporter)
+                val (ms2, v) = Logika.idIntro(arg.posOpt.get, ms1, p.context, p.id, t, None())
+                ms1 = assignRec(smt2, ms2, arg, v, reporter)
               }
             }
-            var rwLocals = paramArgs.keys
+            var rwLocals: ISZ[AST.ResolvedInfo.LocalVar] = for (q <- paramArgs) yield q._2
             if (!isUnit) {
               rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "Res")
             }
@@ -1440,7 +1468,11 @@ import Logika.Reporter
         }
       }
 
-      return compositional()
+      if (info.strictPureBodyOpt.nonEmpty) {
+        return strictPure()
+      } else {
+        return compositional()
+      }
     }
 
     def evalTupleExp(tuple: AST.Exp.Tuple): (State, State.Value) = {

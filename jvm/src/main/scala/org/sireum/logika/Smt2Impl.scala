@@ -59,7 +59,7 @@ object Smt2Impl {
 
   var shortIds: HashMap[ISZ[String], ISZ[String]] = HashMap.empty
 
-  var strictPureMethods: HashSMap[State.StrictPureMethod, (ST, ST)] = HashSMap.empty
+  var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)] = HashSMap.empty
 
   def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
     shortIds = newShortIds
@@ -99,8 +99,8 @@ object Smt2Impl {
     seqLits = newSeqLits
   }
 
-  def strictPureMethodsUp(newStrictPureMethods: HashSMap[State.StrictPureMethod, (ST, ST)]): Unit = {
-    strictPureMethods = newStrictPureMethods
+  def strictPureMethodsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit = {
+    strictPureMethods = newProofFuns
   }
 
   def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
