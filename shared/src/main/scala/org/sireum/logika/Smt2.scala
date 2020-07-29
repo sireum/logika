@@ -953,14 +953,51 @@ object Smt2 {
   }
 
   def embeddedClaims(isImply: B, claims: ISZ[State.Claim], lastOpt: Option[ST]): ST = {
+    def collectSyms(c: State.Claim, acc: ISZ[State.Value.Sym]): ISZ[State.Value.Sym] = {
+      c match {
+        case c: State.Claim.Def => return acc :+ c.sym
+        case c: State.Claim.And =>
+          var r = acc
+          for (ca <- c.claims) {
+            r = collectSyms(ca, r)
+          }
+          return r
+        case c: State.Claim.Or =>
+          var r = acc
+          for (ca <- c.claims) {
+            r = collectSyms(ca, r)
+          }
+          return r
+        case c: State.Claim.Imply =>
+          var r = acc
+          for (ca <- c.claims) {
+            r = collectSyms(ca, r)
+          }
+          return r
+        case c: State.Claim.If =>
+          var r = acc
+          for (ca <- c.tClaims ++ c.fClaims) {
+            r = collectSyms(ca, r)
+          }
+          return r
+        case _: State.Claim.Label => return acc
+        case _: State.Claim.Prop => return acc
+      }
+    }
+
     var lets = ISZ[State.Claim.Let]()
-    var defs = ISZ[State.Claim.Def]()
+    var syms = ISZ[State.Value.Sym]()
     var rest = ISZ[State.Claim]()
     for (claim <- claims) {
       claim match {
         case claim: State.Claim.Let => lets = lets :+ claim
-        case claim: State.Claim.Def => defs = defs :+ claim; rest = rest :+ claim
-        case _ => rest = rest :+ claim
+        case claim: State.Claim.Def => syms = syms :+ claim.sym; rest = rest :+ claim
+        case claim: State.Claim.If => syms = collectSyms(claim, syms); rest = rest :+ claim
+        case claim: State.Claim.And => syms = collectSyms(claim, syms); rest = rest :+ claim
+        case claim: State.Claim.Or => syms = collectSyms(claim, syms); rest = rest :+ claim
+        case claim: State.Claim.Imply => syms = collectSyms(claim, syms); rest = rest :+ claim
+        case _: State.Claim.Label => rest = rest :+ claim
+        case _: State.Claim.Prop => rest = rest :+ claim
       }
     }
     var body: ST = if (isImply) implyST(rest, lastOpt) else andST(rest, lastOpt)
@@ -975,9 +1012,9 @@ object Smt2 {
               |$body)"""
       }
     }
-    if (defs.nonEmpty) {
+    if (syms.nonEmpty) {
       body =
-        st"""(forall (${(for (d <- defs) yield st"(${v2ST(d.sym)} ${typeId(d.sym.tipe)})", " ")})
+        st"""(exists (${(for (sym <- (HashSSet.empty ++ syms).elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})", " ")})
             |  $body)"""
     }
     return body

@@ -40,6 +40,7 @@ object Logika {
   @msig trait Reporter extends message.Reporter {
     def state(posOpt: Option[Position], s: State): Unit
     def query(pos: Position, r: Smt2Query.Result): Unit
+    def halted(posOpt: Option[Position], s: State): Unit
   }
 
   @record class ReporterImpl(var _messages: ISZ[Message]) extends Reporter {
@@ -49,6 +50,9 @@ object Logika {
     }
 
     override def query(pos: Position, r: Smt2Query.Result): Unit = {
+    }
+
+    override def halted(posOpt: Option[Position], s: State): Unit = {
     }
 
     override def messages: ISZ[Message] = {
@@ -480,7 +484,7 @@ import Logika.Reporter
     return s2(status = F)
   }
 
-  def ProofFun(smt2: Smt2, state: State, imi: InvokeMethodInfo, substMap: HashMap[String, AST.Typed],
+  def strictPureMethod(smt2: Smt2, state: State, imi: InvokeMethodInfo, substMap: HashMap[String, AST.Typed],
                        reporter: Reporter): (State, State.ProofFun) = {
     val funType = imi.res.tpeOpt.get.subst(substMap)
     val pf: State.ProofFun = {
@@ -500,11 +504,11 @@ import Logika.Reporter
       return (state, pf)
     } else {
       smt2.strictPureMethodsUp(smt2.strictPureMethods + pf ~> ((st"", st"")))
+      val b = imi.strictPureBodyOpt.get
       val sv: (State, State.Value) = {
         val body: AST.AssignExp = if (substMap.isEmpty) {
-          imi.strictPureBodyOpt.get
+          b
         } else {
-          val b = imi.strictPureBodyOpt.get
           AST.Util.TypeSubstitutor(substMap).transformAssignExp(b).getOrElse(b)
         }
         val logika: Logika = Logika.logikaMethod(th, config, pf.context :+ pf.id, pf.receiverTypeOpt, imi.sig,
@@ -515,7 +519,12 @@ import Logika.Reporter
 
       smt2.addStrictPureMethod(pf, sv)
 
-      return (state(nextFresh =  sv._1.nextFresh), pf)
+      val s1 = state(nextFresh =  sv._1.nextFresh)
+      val posOpt = b.asStmt.posOpt
+      if (!smt2.sat(config.logVc, "Satisfiability of proof function", posOpt.get, state.claims, reporter)) {
+        reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
+      }
+      return (s1, pf)
     }
   }
 
@@ -1256,7 +1265,7 @@ import Logika.Reporter
       val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
 
       def strictPure(): (State, State.Value) = {
-        val (s3, pf) = ProofFun(smt2, s1, info, typeSubstMap, reporter)
+        val (s3, pf) = strictPureMethod(smt2, s1, info, typeSubstMap, reporter)
         val (s4, r) = s3.freshSym(retType, pos)
         var args: ISZ[State.Value] = for (q <- paramArgs) yield q._5
         receiverOpt match {
@@ -1651,10 +1660,19 @@ import Logika.Reporter
   def evalAssignExp(smt2: Smt2, rOpt: Option[State.Value.Sym], rtCheck: B, s0: State, ae: AST.AssignExp, reporter: Reporter): State = {
     ae match {
       case ae: AST.Stmt.Expr =>
-        val (s1, v) = evalExp(smt2, rtCheck, s0, ae.exp, reporter)
-        rOpt match {
-          case Some(r) => return s1.addClaim(State.Claim.Let.Eq(r, v))
-          case _ => return s1
+        ae.exp match {
+          case e: AST.Exp.Invoke =>
+            val (s1, v) = evalExprInvoke(smt2, rtCheck, s0, ae, e, reporter)
+            rOpt match {
+              case Some(r) => return s1.addClaim(State.Claim.Let.Eq(r, v))
+              case _ => return s1
+            }
+          case _ =>
+            val (s1, v) = evalExp(smt2, rtCheck, s0, ae.exp, reporter)
+            rOpt match {
+              case Some(r) => return s1.addClaim(State.Claim.Let.Eq(r, v))
+              case _ => return s1
+            }
         }
       case ae: AST.Stmt.Block => return evalBlock(smt2, rOpt, rtCheck, s0, ae, reporter)
       case ae: AST.Stmt.If => return evalIf(smt2, rOpt, rtCheck, s0, ae, reporter)
@@ -2003,6 +2021,35 @@ import Logika.Reporter
     }
   }
 
+  def evalExprInvoke(smt2: Smt2, rtCheck: B, state: State, stmt: AST.Stmt, e: AST.Exp.Invoke, reporter: Reporter): (State, State.Value) = {
+    logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+    e.attr.resOpt.get match {
+      case AST.ResolvedInfo.BuiltIn(kind) =>
+        kind match {
+          case AST.ResolvedInfo.BuiltIn.Kind.Assert =>
+            val (s0, v) = evalAssert(smt2, T, "Assertion", state, e.args(0), reporter)
+            return (Logika.conjunctClaimSuffix(state, s0), v)
+          case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg =>
+            val (s0, v) = evalAssert(smt2, T, "Assertion", state, e.args(0), reporter)
+            return (Logika.conjunctClaimSuffix(state, s0), v)
+          case AST.ResolvedInfo.BuiltIn.Kind.Assume =>
+            val (s0, v) = evalAssume(smt2, T, "Assumption", state, e.args(0), reporter)
+            return (Logika.conjunctClaimSuffix(state, s0), v)
+          case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg =>
+            val (s0, v) = evalAssume(smt2, T, "Assumption", state, e.args(0), reporter)
+            return (Logika.conjunctClaimSuffix(state, s0), v)
+          case AST.ResolvedInfo.BuiltIn.Kind.Halt =>
+            val s0 = state(status = F)
+            reporter.halted(e.posOpt, s0)
+            return (s0, State.errorValue)
+          case _ => halt(s"TODO: $stmt") // TODO
+        }
+      case _ =>
+        val (s0, v) = evalExp(smt2, rtCheck, state, e, reporter)
+        return (Logika.conjunctClaimSuffix(state, s0), v)
+    }
+  }
+
   def evalStmt(smt2: Smt2, rtCheck: B, state: State, stmt: AST.Stmt, reporter: Reporter): State = {
     if (!state.status) {
       return state
@@ -2154,24 +2201,7 @@ import Logika.Reporter
 
     def evalStmtH(): State = {
       stmt match {
-        case AST.Stmt.Expr(e: AST.Exp.Invoke) =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-          e.attr.resOpt.get match {
-            case AST.ResolvedInfo.BuiltIn(kind) =>
-              kind match {
-                case AST.ResolvedInfo.BuiltIn.Kind.Assert =>
-                  return Logika.conjunctClaimSuffix(state, evalAssert(smt2, T, "Assertion", state, e.args(0), reporter)._1)
-                case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg =>
-                  return Logika.conjunctClaimSuffix(state, evalAssert(smt2, T, "Assertion", state, e.args(0), reporter)._1)
-                case AST.ResolvedInfo.BuiltIn.Kind.Assume =>
-                  return Logika.conjunctClaimSuffix(state, evalAssume(smt2, T, "Assumption", state, e.args(0), reporter)._1)
-                case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg =>
-                  return Logika.conjunctClaimSuffix(state, evalAssume(smt2, T, "Assumption", state, e.args(0), reporter)._1)
-                case _ =>
-                  halt(s"TODO: $stmt") // TODO
-              }
-            case _ => return Logika.conjunctClaimSuffix(state, evalExp(smt2, rtCheck, state, e, reporter)._1)
-          }
+        case stmt@AST.Stmt.Expr(e: AST.Exp.Invoke) => return evalExprInvoke(smt2, rtCheck, state, stmt, e, reporter)._1
         case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           stmt.attr.resOpt.get match {

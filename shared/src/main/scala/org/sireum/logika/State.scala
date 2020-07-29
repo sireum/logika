@@ -300,6 +300,7 @@ object State {
       return r.elements
     }
 
+    @strictpure override def string: String = toRawST.render
   }
 
   object Claim {
