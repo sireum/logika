@@ -1995,10 +1995,9 @@ import Logika.Reporter
       pos, thenClaims, reporter)
     val s4: State = if (thenSat) {
       val s3 = evalBody(smt2, rOpt, rtCheck, s2(claims = thenClaims), ifStmt.thenBody, reporter)
-      thenSat = s3.status
       s3
     } else {
-      s2(claims = thenClaims)
+      s2(status = F, claims = thenClaims)
     }
     val negProp = State.Claim.Prop(F, cond)
     val elseClaims = s2.claims :+ negProp
@@ -2006,15 +2005,30 @@ import Logika.Reporter
       pos, elseClaims, reporter)
     val s6: State = if (elseSat) {
       val s5 = evalBody(smt2, rOpt, rtCheck, s2(claims = elseClaims, nextFresh = s4.nextFresh), ifStmt.elseBody, reporter)
-      elseSat = s5.status
       s5
     } else {
-      s2(claims = elseClaims, nextFresh = s4.nextFresh)
+      s2(status = F, claims = elseClaims, nextFresh = s4.nextFresh)
     }
-    (thenSat, elseSat) match {
+    (thenSat && s4.status, elseSat && s6.status) match {
       case (T, T) => return mergeStates(s2, cond, s4, s6, s6.nextFresh)
-      case (T, F) => return s4(status = s4.status && !reporter.hasError, nextFresh = s6.nextFresh)
-      case (F, T) => return s6(status = s6.status && !reporter.hasError)
+      case (T, F) =>
+        if (elseSat) {
+          val claimOps = ops.ISZOps(s4.claims)
+          val claims = claimOps.slice(0, s2.claims.size) :+
+            State.Claim.Imply(ISZ(prop, State.Claim.And(claimOps.slice(s2.claims.size + 1, s4.claims.size))))
+          return s4(status = s4.status && !reporter.hasError, claims = claims, nextFresh = s6.nextFresh)
+        } else {
+          return s4(status = s4.status && !reporter.hasError, nextFresh = s6.nextFresh)
+        }
+      case (F, T) =>
+        if (thenSat) {
+          val claimOps = ops.ISZOps(s4.claims)
+          val claims = claimOps.slice(0, s2.claims.size) :+
+            State.Claim.Imply(ISZ(negProp, State.Claim.And(claimOps.slice(s2.claims.size + 1, s4.claims.size))))
+          return s6(status = s6.status && !reporter.hasError, claims = claims)
+        } else {
+          return s6(status = s6.status && !reporter.hasError)
+        }
       case _ =>
         val s7 = mergeStates(s2, cond, s4, s6, s6.nextFresh)
         return s7(status = F)
