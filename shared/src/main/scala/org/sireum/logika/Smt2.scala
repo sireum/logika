@@ -1014,7 +1014,7 @@ object Smt2 {
     }
     if (syms.nonEmpty) {
       body =
-        st"""(exists (${(for (sym <- (HashSSet.empty ++ syms).elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})", " ")})
+        st"""(exists (${(for (sym <- (HashSSet.empty[State.Value.Sym] ++ syms).elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})", " ")})
             |  $body)"""
     }
     return body
