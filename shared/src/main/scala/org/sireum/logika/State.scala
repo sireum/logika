@@ -832,14 +832,14 @@ object State {
       @datatype class ProofFunApply(val sym: Value.Sym, pf: ProofFun, args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
           return if (pf.receiverTypeOpt.isEmpty)
-            st"${sym.toRawST} ≜ ${(pf.owner, ".")}.${pf.id}(${(for (arg <- args) yield arg.toRawST, ", ")})"
+            st"${sym.toRawST} ≜ ${(pf.context, ".")}.${pf.id}(${(for (arg <- args) yield arg.toRawST, ", ")})"
           else st"${sym.toRawST} ≜ ${args(0).toRawST}.${pf.id}(${(for (i <- 1 until args.size) yield args(i).toRawST, ", ")})"
         }
 
         @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(
             if (pf.receiverTypeOpt.isEmpty)
-              st"${(pf.owner, ".")}.${pf.id}(${(for (arg <- args) yield arg.toST(defs), ", ")})"
+              st"${(pf.context, ".")}.${pf.id}(${(for (arg <- args) yield arg.toST(defs), ", ")})"
             else st"${args(0).toST(defs)}.${pf.id}(${(for (i <- 1 until args.size) yield args(i).toST(defs), ", ")})"
           )
         }
@@ -997,7 +997,7 @@ object State {
   }
 
   @datatype class ProofFun(receiverTypeOpt: Option[AST.Typed],
-                           owner: ISZ[String],
+                           context: ISZ[String],
                            id: String,
                            paramIds: ISZ[String],
                            paramTypes: ISZ[AST.Typed],

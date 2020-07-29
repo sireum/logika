@@ -507,7 +507,7 @@ import Logika.Reporter
           val b = imi.strictPureBodyOpt.get
           AST.Util.TypeSubstitutor(substMap).transformAssignExp(b).getOrElse(b)
         }
-        val logika: Logika = Logika.logikaMethod(th, config, pf.owner :+ pf.id, pf.receiverTypeOpt, imi.sig,
+        val logika: Logika = Logika.logikaMethod(th, config, pf.context :+ pf.id, pf.receiverTypeOpt, imi.sig,
           body.asStmt.posOpt, ISZ(), ISZ(), ISZ())
         val s0 = state(claims = ISZ())
         logika.evalAssignExpValue(smt2, funType.ret, T, s0, body, reporter)
@@ -986,6 +986,11 @@ import Logika.Reporter
       return (s, sym)
     }
 
+    def evalThis(exp: AST.Exp.This): (State, State.Value) = {
+      val (s, sym) = Logika.idIntro(exp.posOpt.get, state, context.methodOpt.get.name, "this", exp.typedOpt.get, None())
+      return (s, sym)
+    }
+
     def evalInput(input: AST.Exp.Input): (State, State.Value) = {
       input.exp match {
         case exp: AST.Exp.Ident =>
@@ -1253,7 +1258,12 @@ import Logika.Reporter
       def strictPure(): (State, State.Value) = {
         val (s3, pf) = ProofFun(smt2, s1, info, typeSubstMap, reporter)
         val (s4, r) = s3.freshSym(retType, pos)
-        return (s4.addClaim(State.Claim.Let.ProofFunApply(r, pf, for (q <- paramArgs) yield q._5)), r)
+        var args: ISZ[State.Value] = for (q <- paramArgs) yield q._5
+        receiverOpt match {
+          case Some(receiver) => args = receiver +: args
+          case _ =>
+        }
+        return (s4.addClaim(State.Claim.Let.ProofFunApply(r, pf, args)), r)
       }
 
       def compositional(): (State, State.Value) = {
@@ -1581,6 +1591,7 @@ import Logika.Reporter
           case _ =>
         }
         return evalQuantEach(e)
+      case e: AST.Exp.This => return evalThis(e)
       case _ => halt(s"TODO: $e") // TODO
     }
 
