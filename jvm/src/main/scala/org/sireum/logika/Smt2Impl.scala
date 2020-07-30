@@ -103,6 +103,17 @@ object Smt2Impl {
     strictPureMethods = newProofFuns
   }
 
+  def writeFile(dir: String, filename: String, content: String): Unit = {
+    val p = Os.path(dir)
+    if (!p.exists) {
+      p.mkdirAll()
+    }
+    val fname = ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(filename).
+      replaceAllLiterally(", ", "-")).replaceAllLiterally(" [", "-")).replaceAllChars(' ', '-')).
+      replaceAllChars('[', '-')).replaceAllLiterally("]", "")).toLower
+    (p / fname).writeOver(content)
+  }
+
   def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
     val r = checkQuery(query, timeoutInMs)
     return (r.kind != Smt2Query.Result.Kind.Unsat, r)

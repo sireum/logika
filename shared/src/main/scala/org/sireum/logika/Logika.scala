@@ -39,7 +39,9 @@ object Logika {
 
   @msig trait Reporter extends message.Reporter {
     def state(posOpt: Option[Position], s: State): Unit
+
     def query(pos: Position, r: Smt2Query.Result): Unit
+
     def halted(posOpt: Option[Position], s: State): Unit
   }
 
@@ -472,7 +474,7 @@ import Logika.Reporter
     val (s1, v) = s0.freshSym(AST.Typed.b, pos)
     val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
     val claim = State.Claim.Prop(T, v)
-    val r = smt2.valid(config.logVc, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]",
+    val r = smt2.valid(config.logVc, config.logVcDirOpt, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]",
       pos, s2.claims, claim, timeoutInMs, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s2.addClaim(claim)
@@ -519,9 +521,9 @@ import Logika.Reporter
 
       smt2.addStrictPureMethod(pf, sv)
 
-      val s1 = state(nextFresh =  sv._1.nextFresh)
+      val s1 = state(nextFresh = sv._1.nextFresh)
       val posOpt = b.asStmt.posOpt
-      if (!smt2.sat(config.logVc, "Satisfiability of proof function", posOpt.get, state.claims, reporter)) {
+      if (!smt2.sat(config.logVc, config.logVcDirOpt, "Satisfiability of proof function", posOpt.get, state.claims, reporter)) {
         reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
       }
       return (s1, pf)
@@ -559,13 +561,13 @@ import Logika.Reporter
     val t = ti.typedOpt.get.asInstanceOf[AST.Typed.Name]
     (ti.ast.isBitVector, ti.ast.bitWidth) match {
       case (T, 8) => return State.Value.S8(conversions.Z.toS8(n), t, pos)
-      case (T, 16) =>return State.Value.S16(conversions.Z.toS16(n), t, pos)
-      case (T, 32) =>return State.Value.S32(conversions.Z.toS32(n), t, pos)
-      case (T, 64) =>return State.Value.S64(conversions.Z.toS64(n), t, pos)
-      case (F, 8) =>return State.Value.U8(conversions.Z.toU8(n), t, pos)
-      case (F, 16) =>return State.Value.U16(conversions.Z.toU16(n), t, pos)
-      case (F, 32) =>return State.Value.U32(conversions.Z.toU32(n), t, pos)
-      case (F, 64) =>return State.Value.U64(conversions.Z.toU64(n), t, pos)
+      case (T, 16) => return State.Value.S16(conversions.Z.toS16(n), t, pos)
+      case (T, 32) => return State.Value.S32(conversions.Z.toS32(n), t, pos)
+      case (T, 64) => return State.Value.S64(conversions.Z.toS64(n), t, pos)
+      case (F, 8) => return State.Value.U8(conversions.Z.toU8(n), t, pos)
+      case (F, 16) => return State.Value.U16(conversions.Z.toU16(n), t, pos)
+      case (F, 32) => return State.Value.U32(conversions.Z.toU32(n), t, pos)
+      case (F, 64) => return State.Value.U64(conversions.Z.toU64(n), t, pos)
       case (_, _) => return State.Value.Range(n, t, pos)
     }
   }
@@ -705,7 +707,7 @@ import Logika.Reporter
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
         val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
-        val r = smt2.valid(config.logVc,
+        val r = smt2.valid(config.logVc, config.logVcDirOpt,
           s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), timeoutInMs, reporter)
         r.kind match {
@@ -1139,6 +1141,7 @@ import Logika.Reporter
           return None()
         }
       }
+
       def extractResolvedInfo(attr: AST.ResolvedAttr): AST.ResolvedInfo.Method = {
         return attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
       }
@@ -1287,6 +1290,7 @@ import Logika.Reporter
                              labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
                              ensures: ISZ[AST.Exp]): ContractCaseResult = {
           val modLocals = contract.modifiedLocalVars
+
           def modVarsResult(ms0: State, mposOpt: Option[Position]): (State, State.Value) = {
             var ms1 = ms0
             val modObjectVars = contract.modifiedObjectVars
@@ -1522,9 +1526,9 @@ import Logika.Reporter
       val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
       val prop = State.Claim.Prop(T, sym)
       val negProp = State.Claim.Prop(F, sym)
-      val thenBranch = smt2.sat(config.logVc, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+      val thenBranch = smt2.sat(config.logVc, config.logVcDirOpt, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
         pos, s1.claims :+ prop, reporter)
-      val elseBranch = smt2.sat(config.logVc, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+      val elseBranch = smt2.sat(config.logVc, config.logVcDirOpt, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
         pos, s1.claims :+ prop, reporter)
       (thenBranch, elseBranch) match {
         case (T, T) =>
@@ -1593,7 +1597,7 @@ import Logika.Reporter
             seq.attr.resOpt.get match {
               case res: AST.ResolvedInfo.Method if
               (res.owner == AST.Typed.isName || res.owner == AST.Typed.msName) &&
-              res.id == "indices" =>
+                res.id == "indices" =>
                 return evalQuantEachIndex(e, seq.receiverOpt.get)
               case _ =>
             }
@@ -1619,7 +1623,7 @@ import Logika.Reporter
                   reporter: Reporter): State = {
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
     val pos = posOpt.get
-    val sat = smt2.sat(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
+    val sat = smt2.sat(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
     return s1(status = sat)
   }
 
@@ -1636,7 +1640,7 @@ import Logika.Reporter
                   reporter: Reporter): State = {
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
-    val r = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos,
+    val r = smt2.valid(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos,
       s0.claims, conclusion, timeoutInMs, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
@@ -1935,7 +1939,7 @@ import Logika.Reporter
     };
     {
       val pos = stmt.posOpt.get
-      if (smt2.sat(config.logVc, s"pattern match inexhaustiveness at [${pos.beginLine}, ${pos.beginColumn}]",
+      if (smt2.sat(config.logVc, config.logVcDirOpt, s"pattern match inexhaustiveness at [${pos.beginLine}, ${pos.beginColumn}]",
         pos, s1.claims :+ State.Claim.And(for (p <- caseSyms) yield State.Claim.Prop(F, p._2)), reporter)) {
         error(stmt.posOpt, "Inexhaustive pattern match", reporter)
         return s1(status = F)
@@ -1951,7 +1955,7 @@ import Logika.Reporter
       val posOpt = c.pattern.posOpt
       val pos = posOpt.get
       val s10 = s1.addClaim(cond)
-      if (smt2.sat(config.logVc, s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]",
+      if (smt2.sat(config.logVc, config.logVcDirOpt, s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]",
         pos, s10.claims, reporter)) {
         possibleCases = T
         val (s11, _, bindings) = addPatternVars(s10, lcontext, m)
@@ -1991,7 +1995,7 @@ import Logika.Reporter
     val s2 = Logika.conjunctClaimSuffix(s0, s1c)
     val prop = State.Claim.Prop(T, cond)
     val thenClaims = s2.claims :+ prop
-    var thenSat = smt2.sat(config.logVc, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+    var thenSat = smt2.sat(config.logVc, config.logVcDirOpt, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
       pos, thenClaims, reporter)
     val s4: State = if (thenSat) {
       val s3 = evalBody(smt2, rOpt, rtCheck, s2(claims = thenClaims), ifStmt.thenBody, reporter)
@@ -2001,7 +2005,7 @@ import Logika.Reporter
     }
     val negProp = State.Claim.Prop(F, cond)
     val elseClaims = s2.claims :+ negProp
-    var elseSat = smt2.sat(config.logVc, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+    var elseSat = smt2.sat(config.logVc, config.logVcDirOpt, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
       pos, elseClaims, reporter)
     val s6: State = if (elseSat) {
       val s5 = evalBody(smt2, rOpt, rtCheck, s2(claims = elseClaims, nextFresh = s4.nextFresh), ifStmt.elseBody, reporter)
@@ -2114,7 +2118,7 @@ import Logika.Reporter
       val (s4, cond) = value2Sym(s3, v, pos)
       val prop = State.Claim.Prop(T, cond)
       val thenClaims = s4.claims :+ prop
-      var thenSat = smt2.sat(config.logVc, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+      var thenSat = smt2.sat(config.logVc, config.logVcDirOpt, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
         pos, thenClaims, reporter)
       val nextFresh: Z = if (thenSat) {
         val s5 = evalStmts(smt2, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)
@@ -2131,7 +2135,7 @@ import Logika.Reporter
       }
       val negProp = State.Claim.Prop(F, cond)
       val elseClaims = s4.claims :+ negProp
-      val elseSat = smt2.sat(config.logVc, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+      val elseSat = smt2.sat(config.logVc, config.logVcDirOpt, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
         pos, elseClaims, reporter)
       return State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
     }
@@ -2155,7 +2159,7 @@ import Logika.Reporter
         val s3 = Logika.conjunctClaimSuffix(current, s2w)
         val prop = State.Claim.Prop(T, cond)
         val thenClaims = s3.claims :+ prop
-        var thenSat = smt2.sat(config.logVc, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+        var thenSat = smt2.sat(config.logVc, config.logVcDirOpt, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
           pos, thenClaims, reporter)
         val s6: State = if (thenSat) {
           val s4 = evalStmts(smt2, None(), rtCheck, s3(claims = thenClaims), whileStmt.body.stmts, reporter)
@@ -2182,7 +2186,7 @@ import Logika.Reporter
         }
         val negProp = State.Claim.Prop(F, cond)
         val elseClaims = s3.claims :+ negProp
-        val elseSat = smt2.sat(config.logVc, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+        val elseSat = smt2.sat(config.logVc, config.logVcDirOpt, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
           pos, elseClaims, reporter)
         (thenSat, elseSat) match {
           case (T, T) => return mergeStates(s3, cond, s6, s3, s6.nextFresh)
@@ -2303,7 +2307,7 @@ import Logika.Reporter
     val pos = exp.posOpt.get
     val (s2, sym) = value2Sym(s1, v, pos)
     val prop = State.Claim.Prop(T, sym)
-    val r = smt2.valid(config.logVc, s"$title at [${pos.beginLine}, ${pos.beginColumn}]",
+    val r = smt2.valid(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]",
       pos, s2.claims, prop, timeoutInMs, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s2.addClaim(prop)

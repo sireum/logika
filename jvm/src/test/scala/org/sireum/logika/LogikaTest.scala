@@ -53,7 +53,8 @@ object LogikaTest {
       intBitWidth = 0,
       logPc = F,
       logRawPc = F,
-      logVc = F)
+      logVc = F,
+      logVcDirOpt = None())
 }
 
 import LogikaTest._

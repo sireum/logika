@@ -35,6 +35,7 @@ import org.sireum._
                        intBitWidth: Z,
                        logPc: B,
                        logRawPc: B,
-                       logVc: B)
+                       logVc: B,
+                       logVcDirOpt: Option[String])
 
 @datatype class LoopId(ids: ISZ[String])

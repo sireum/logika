@@ -121,6 +121,8 @@ object Smt2 {
 
   def strictPureMethodsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit
 
+  def writeFile(dir: String, filename: String, content: String): Unit
+
   def addStrictPureMethod(sf: State.ProofFun, sv: (State, State.Value)): Unit = {
     val id = Smt2.proofFunId(sf)
     var paramTypes: ISZ[ST] = for (pt <- sf.paramTypes) yield adtId(pt)
@@ -238,7 +240,8 @@ object Smt2 {
     return st"|g:${(shorten(owner), ".")}.$id|"
   }
 
-  def sat(log: B, title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): B = {
+  def sat(log: B, logDirOpt: Option[String], title: String, pos: message.Position, claims: ISZ[State.Claim],
+          reporter: Reporter): B = {
     val headers = st"Satisfiability Check for $title:" +: State.Claim.claimsSTs(claims, ClaimDefs.empty)
     val (r, res) = checkSat(satQuery(headers, claims, None(), reporter).render, 500)
     reporter.query(pos, res)
@@ -246,6 +249,14 @@ object Smt2 {
       reporter.info(None(), Logika.kind,
         st"""Satisfiability: ${res.kind}
             |  ${res.query}""".render)
+    }
+    logDirOpt match {
+      case Some(logDir) =>
+        val filename: String =
+          if (ops.StringOps(title).contains("[")) s"sat-$title.smt2"
+          else s"sat-$title-at-${pos.beginLine}-${pos.beginColumn}.smt2"
+        writeFile(logDir, filename, res.query)
+      case _ =>
     }
     return r
   }
@@ -669,7 +680,7 @@ object Smt2 {
     return query(headers, seqLitDecls ++ (for (d <- decls.values) yield d.render), claimSmts)
   }
 
-  def valid(log: B, title: String, pos: message.Position, premises: ISZ[State.Claim],
+  def valid(log: B, logDirOpt: Option[String], title: String, pos: message.Position, premises: ISZ[State.Claim],
             conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): Smt2Query.Result = {
     val defs = ClaimDefs.empty
     val ps = State.Claim.claimsSTs(premises, defs)
@@ -680,6 +691,14 @@ object Smt2 {
       reporter.info(None(), Logika.kind,
         st"""Verification Condition: ${if (r) s"Discharged (${res.kind})" else "Undischarged"}
             |  ${res.query}""".render)
+    }
+    logDirOpt match {
+      case Some(logDir) =>
+        val filename: String =
+          if (ops.StringOps(title).contains("[")) s"vc-$title.smt2"
+          else s"vc-$title-at-${pos.beginLine}-${pos.beginColumn}.smt2"
+        writeFile(logDir, filename, res.query)
+      case _ =>
     }
     return res
   }

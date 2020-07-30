@@ -66,7 +66,10 @@ object cli {
           description = "Display raw path conditions before each statement"),
         Opt(name = "logVc", longKey = "log-vc", shortKey = None(),
           tpe = Type.Flag(F),
-          description = "Display all verification conditions"))
+          description = "Display all verification conditions"),
+        Opt(name = "logVcDir", longKey = "log-vc-dir", shortKey = None(),
+          tpe = Type.Path(F, None()),
+          description = "Write all verification conditions in a directory"))
       )
     )
   )
