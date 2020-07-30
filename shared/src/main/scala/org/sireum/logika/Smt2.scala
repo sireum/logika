@@ -75,8 +75,10 @@ object Smt2 {
 
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 
-  @strictpure def proofFunId(pf: State.ProofFun): ST =
-    st"|${pf.context}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
+  @strictpure def proofFunId(pf: State.ProofFun): ST = {
+    if (pf.context.isEmpty) st"|${pf.id}|"
+    else st"|${pf.context}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
+  }
 }
 
 @msig trait Smt2 {
