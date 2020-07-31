@@ -76,8 +76,7 @@ object Smt2 {
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 
   @strictpure def proofFunId(pf: State.ProofFun): ST = {
-    if (pf.context.isEmpty) st"|top${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
-    else st"|${pf.context}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
+    st"|${pf.context}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
   }
 }
 
