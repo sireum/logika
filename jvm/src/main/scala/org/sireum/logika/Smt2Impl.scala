@@ -34,9 +34,14 @@ object Smt2Impl {
   @pure def z3ArgF(timeoutInMs: Z): ISZ[String] = {
     return ISZ("-smt2", s"-t:$timeoutInMs", "-in")
   }
+
+  @pure def cvc4ArgF(timeoutInMs: Z): ISZ[String] = {
+    return ISZ(s"--tlimit=$timeoutInMs", "--lang=smt2.6")
+  }
 }
 
-@record class Smt2Impl(val exe: String,
+@record class Smt2Impl(val dotFunId: B,
+                       val exe: String,
                        argsF: Z => ISZ[String] @pure,
                        val typeHierarchy: TypeHierarchy,
                        val charBitWidth: Z,
@@ -111,7 +116,9 @@ object Smt2Impl {
     val fname = ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(filename).
       replaceAllLiterally(", ", "-")).replaceAllLiterally(" [", "-")).replaceAllChars(' ', '-')).
       replaceAllChars('[', '-')).replaceAllLiterally("]", "")).toLower
-    (p / fname).writeOver(content)
+    val f = p / fname
+    f.writeOver(content)
+    println(s"Wrote $f")
   }
 
   def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {

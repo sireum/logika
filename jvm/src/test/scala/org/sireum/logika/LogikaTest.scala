@@ -43,6 +43,12 @@ object LogikaTest {
     case _ => "z3"
   }
 
+  val cvc4Exe: String = Os.env("SIREUM_HOME") match {
+    case Some(p) if Os.kind != Os.Kind.Unsupported =>
+      (Os.path(p) / "bin" / platform / (if (Os.isWin) "cvc4.exe" else "cvc4")).string
+    case _ => "cvc4"
+  }
+
   val config: Config =
     Config(
       defaultLoopBound = 10,
@@ -160,7 +166,7 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkWorksheet(None(), input, config,
-      th => Smt2Impl(LogikaTest.z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
+      th => Smt2Impl(T, LogikaTest.z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

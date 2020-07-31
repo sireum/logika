@@ -47,6 +47,10 @@ object cli {
       Opt(name = "unroll", longKey = "unroll", shortKey = None(),
         tpe = Type.Flag(F),
         description = "Enable loop unrolling when loop modifies clause is unspecified"),
+      Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
+        tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("z3", "cvc4")),
+        description = "Smt2 solver"
+      ),
     ),
     groups = ISZ(
       OptGroup(name = "Bit-width", opts = ISZ(

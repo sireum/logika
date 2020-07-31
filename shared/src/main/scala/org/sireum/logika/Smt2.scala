@@ -75,12 +75,11 @@ object Smt2 {
 
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 
-  @strictpure def proofFunId(pf: State.ProofFun): ST = {
-    st"|${pf.context}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
-  }
 }
 
 @msig trait Smt2 {
+
+  def dotFunId: B
 
   def charBitWidth: Z
 
@@ -124,8 +123,16 @@ object Smt2 {
 
   def writeFile(dir: String, filename: String, content: String): Unit
 
+  @strictpure def proofFunId(pf: State.ProofFun): ST =
+    if (dotFunId) {
+      st"|${(pf.context, ".")}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
+    } else {
+      if (pf.context.isEmpty) st"|${pf.id}|"
+      else st"|${(pf.context, ".")}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
+    }
+
   def addStrictPureMethod(sf: State.ProofFun, sv: (State, State.Value)): Unit = {
-    val id = Smt2.proofFunId(sf)
+    val id = proofFunId(sf)
     var paramTypes: ISZ[ST] = for (pt <- sf.paramTypes) yield adtId(pt)
     var paramIds: ISZ[ST] = for (id <- sf.paramIds) yield currentLocalIdString(id)
     var params: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
@@ -269,7 +276,8 @@ object Smt2 {
       val ast = typeHierarchy.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.SubZ].ast
       if (!ast.isBitVector) intBitWidth else ast.bitWidth
     }
-    return if (bw == 0) st"$n" else formatVal(Smt2.bvFormats.get(bw).get, n)
+    return if (bw == 0) if (n < 0) st"(- ${n * -1})" else st"$n"
+    else formatVal(Smt2.bvFormats.get(bw).get, n)
   }
 
   def addType(tipe: AST.Typed, reporter: Reporter): Unit = {
@@ -564,7 +572,7 @@ object Smt2 {
                 |(define-fun $tSubId ((x $tId) (y $tId)) Z (- x y))
                 |(define-fun $tMulId ((x $tId) (y $tId)) Z (* x y))
                 |(define-fun $tDivId ((x $tId) (y $tId)) Z (div x y))
-                |(define-fun $tRemId ((x $tId) (y $tId)) Z (rem x y))""")
+                |(define-fun $tRemId ((x $tId) (y $tId)) Z (mod x y))""")
       }
     }
 
@@ -575,8 +583,8 @@ object Smt2 {
       val neOp = typeOpId(t, "!=")
       val ordinalOp = typeOpId(t, "ordinal")
       addTypeDecl(
-        st"""(declare-datatypes () (($tid
-            |  ${(for (element <- ti.elements.keys) yield typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ())), " ")})))
+        st"""(declare-datatypes (($tid 0)) ((
+            |  ${(for (element <- ti.elements.keys) yield st"(${typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})", " ")})))
             |(declare-fun $ordinalOp ($tid) Int)
             |(define-fun $eqOp ((x $tid) (y $tid)) B (= x y))
             |(define-fun $neOp ((x $tid) (y $tid)) B (not (= x y)))""")
@@ -587,12 +595,14 @@ object Smt2 {
         addTypeDecl(st"(assert (= ($ordinalOp $element) $ordinal))")
         ordinal = ordinal + 1
       }
-      addTypeDecl(st"(assert (distinct ${(elements, " ")}))")
+      if (elements.size > 1) {
+        addTypeDecl(st"(assert (distinct ${(elements, " ")}))")
+      }
     }
 
     def addTypeVar(t: AST.Typed.TypeVar): Unit = {
       val tid = typeId(t)
-      addTypeDecl(st"(declare-sort $tid)")
+      addTypeDecl(st"(declare-sort $tid 0)")
       val eqId = typeOpId(t, "==")
       val neId = typeOpId(t, "!=")
       addTypeDecl(
@@ -609,7 +619,7 @@ object Smt2 {
       val eqOp = typeOpId(t, "==")
       val neOp = typeOpId(t, "!=")
       addTypeDecl(
-        st"""(declare-datatypes () (($tId (${typeOpId(t, "new")} ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t, s"_$i")} ${adtId(t.args(i - 1))})", " ")}))))
+        st"""(declare-datatypes (($tId 0)) (((${typeOpId(t, "new")} ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t, s"_$i")} ${adtId(t.args(i - 1))})", " ")}))))
             |(define-fun $eqOp ((x $tId) (y $tId)) B
             |  (and
             |    ${(for (i <- 1 to t.args.size) yield st"(${adtTypeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
@@ -710,7 +720,7 @@ object Smt2 {
 
   def query(headers: ISZ[ST], decls: ISZ[String], claims: ISZ[String]): ST = {
     val distinctOpt: Option[ST] =
-      if (typeHierarchyIds.isEmpty) None()
+      if (typeHierarchyIds.size <= 1) None()
       else Some(
         st"""(assert (distinct
             |  ${(typeHierarchyIds, "\n")}))""")
@@ -737,7 +747,7 @@ object Smt2 {
             |(define-fun |Z.-| ((x Z) (y Z)) Z (- x y))
             |(define-fun |Z.*| ((x Z) (y Z)) Z (* x y))
             |(define-fun |Z./| ((x Z) (y Z)) Z (div x y))
-            |(define-fun |Z.%| ((x Z) (y Z)) Z (rem x y))"""
+            |(define-fun |Z.%| ((x Z) (y Z)) Z (mod x y))"""
       else
         st"""(define-sort Z () (_ BitVec $intBitWidth))
             |(define-fun |Z.unary_-| ((x Z)) Z (bvneg x))
@@ -787,9 +797,9 @@ object Smt2 {
           |$zST
           |
           |(define-sort F32 () Float32)
-          |(define-const |F32.PInf| (F32) (_ +oo 8 24))
-          |(define-const |F32.NInf| (F32) (_ -oo 8 24))
-          |(define-const |F32.NaN| (F32) (_ NaN 8 24))
+          |(define-const |F32.PInf| F32 (_ +oo 8 24))
+          |(define-const |F32.NInf| F32 (_ -oo 8 24))
+          |(define-const |F32.NaN| F32 (_ NaN 8 24))
           |(define-fun |F32.unary_-| ((x F32)) F32 (fp.neg x))
           |(define-fun |F32.<=| ((x F32) (y F32)) B (fp.leq x y))
           |(define-fun |F32.<| ((x F32) (y F32)) B (fp.lt x y))
@@ -804,9 +814,9 @@ object Smt2 {
           |(define-fun |F32.%| ((x F32) (y F32)) F32 (fp.rem x y))
           |
           |(define-sort F64 () Float64)
-          |(define-const |F64.PInf| (F64) (_ +oo 11 53))
-          |(define-const |F64.NInf| (F64) (_ -oo 11 53))
-          |(define-const |F64.NaN| (F64) (_ NaN 11 53))
+          |(define-const |F64.PInf| F64 (_ +oo 11 53))
+          |(define-const |F64.NInf| F64 (_ -oo 11 53))
+          |(define-const |F64.NaN| F64 (_ NaN 11 53))
           |(define-fun |F64.unary_-| ((x F64)) F64 (fp.neg x))
           |(define-fun |F64.<=| ((x F64) (y F64)) B (fp.leq x y))
           |(define-fun |F64.<| ((x F64) (y F64)) B (fp.lt x y))
@@ -874,9 +884,9 @@ object Smt2 {
   @pure def v2ST(v: State.Value): ST = {
     v match {
       case v: State.Value.B => return if (v.value) Smt2.stTrue else Smt2.stFalse
-      case v: State.Value.Z => return st"${v.value}"
+      case v: State.Value.Z => return if (v.value < 0) st"(- ${v.value * -1})" else st"${v.value}"
       case v: State.Value.Sym => return st"cx!${v.num}"
-      case v: State.Value.Range => return st"${v.value}"
+      case v: State.Value.Range => return if (v.value < 0) st"(- ${v.value * -1})" else st"${v.value}"
       case v: State.Value.Enum => return enumId(v.owner, v.id)
       case v: State.Value.S8 => return toVal(v.tipe, conversions.S8.toZ(v.value))
       case v: State.Value.S16 => return toVal(v.tipe, conversions.S16.toZ(v.value))
@@ -1088,7 +1098,7 @@ object Smt2 {
       case c: State.Claim.Let.Ite =>
         return st"(ite ${v2ST(c.cond)} ${v2ST(c.left)} ${v2ST(c.right)})"
       case c: State.Claim.Let.ProofFunApply =>
-        return st"(${Smt2.proofFunId(c.pf)} ${(for (arg <- c.args) yield v2ST(arg), " ")})"
+        return st"(${proofFunId(c.pf)} ${(for (arg <- c.args) yield v2ST(arg), " ")})"
       case c: State.Claim.Let.Apply =>
         halt("TODO") // TODO
       case c: State.Claim.Let.IApply =>
