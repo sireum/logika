@@ -33,13 +33,13 @@ import LogikaTest._
 class LogikaRcTest extends SireumRcSpec {
 
   def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = $internal.RC.text(Vector("example")) { (p, f) =>
-    p.last.endsWith(".sc") && (p.last != "strictpure.sc" || !Os.isLinux)
+    p.last.endsWith(".sc")
   }
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
     val reporter = Logika.Reporter.create
     Logika.checkWorksheet(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, config,
-      th => Smt2Impl(T, z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
+      th => Smt2Impl(cvc4Exe, Smt2Impl.cvc4ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
     reporter.printMessages()
     !reporter.hasIssue
   }

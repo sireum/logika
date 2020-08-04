@@ -79,8 +79,6 @@ object Smt2 {
 
 @msig trait Smt2 {
 
-  def dotFunId: B
-
   def charBitWidth: Z
 
   def intBitWidth: Z
@@ -124,14 +122,10 @@ object Smt2 {
   def writeFile(dir: String, filename: String, content: String): Unit
 
   @strictpure def proofFunId(pf: State.ProofFun): ST =
-    if (dotFunId) {
-      st"|${(pf.context, ".")}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
-    } else {
-      if (pf.context.isEmpty) st"|${pf.id}|"
-      else st"|${(pf.context, ".")}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
-    }
+    if (pf.context.isEmpty) st"|${pf.id}|"
+    else st"|${(pf.context, ".")}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
 
-  def addStrictPureMethod(sf: State.ProofFun, sv: (State, State.Value)): Unit = {
+  def addStrictPureMethod(pos: message.Position, sf: State.ProofFun, ss: ISZ[State]): Unit = {
     val id = proofFunId(sf)
     var paramTypes: ISZ[ST] = for (pt <- sf.paramTypes) yield adtId(pt)
     var paramIds: ISZ[ST] = for (id <- sf.paramIds) yield currentLocalIdString(id)
@@ -145,18 +139,36 @@ object Smt2 {
       case _ =>
     }
     val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${adtId(sf.returnType)})"
-    val (state, value) = sv
-    val subTypes: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(
-      (if (sf.receiverTypeOpt.isEmpty) ISZ[AST.Typed]() else ISZ(sf.receiverTypeOpt.get)) ++ sf.paramTypes)
-                                 if isAdtType(p._2)) yield st"(sub-type (type-of ${p._1}) ${typeHierarchyId(p._2)})"
-    val last =
-      st"""(and
-          |  ${(subTypes :+ st"(= Res ${v2ST(value)})", "\n")})"""
-    val claim =
-      st"""(assert (forall (${(params, " ")} (Res ${adtId(sf.returnType)})) (=>
-          |  (= Res ($id ${(paramIds, " ")}))
-          |  ${embeddedClaims(F, state.claims, Some(last))}
+
+    var ecs = ISZ[ST]()
+    for (state <- ss) {
+      val lastClaim = state.claims(state.claims.size - 1)
+      var s0 = state(claims = ops.ISZOps(state.claims).slice(0, state.claims.size - 1))
+      var cs = ISZ[State.Claim]()
+      for (p <- ops.ISZOps((if (sf.receiverTypeOpt.isEmpty) ISZ[String]() else ISZ[String]("this")) ++ sf.paramIds).zip(
+        (if (sf.receiverTypeOpt.isEmpty) ISZ[AST.Typed]() else ISZ(sf.receiverTypeOpt.get)) ++ sf.paramTypes)
+           if isAdtType(p._2)) {
+        val (id, t) = p
+        val (s1, l) = Logika.idIntro(pos, s0, sf.context, id, t, None())
+        val (s2, sym) = s1.freshSym(AST.Typed.b, pos)
+        s0 = s2
+        cs = cs ++ ISZ[State.Claim](State.Claim.Let.TypeTest(sym, F, l, t), State.Claim.Prop(T, sym))
+      }
+      ecs = ecs :+ embeddedClaims(F, s0.claims :+ State.Claim.And(cs :+ lastClaim))
+    }
+    val claim: ST = {
+      if (ecs.size == 1)
+        st"""(assert (forall (${(params, " ")} (|l:Res| ${adtId(sf.returnType)})) (=>
+            |  (= |l:Res| ($id ${(paramIds, " ")}))
+            |  ${ecs(0)}
+            |)))"""
+      else
+      st"""(assert (forall (${(params, " ")} (|l:Res| ${adtId(sf.returnType)})) (=>
+          |  (= |l:Res| ($id ${(paramIds, " ")}))
+          |  (and
+          |    ${(ecs, "\n")})
           |)))"""
+    }
     strictPureMethodsUp(strictPureMethods + sf ~> ((decl, claim)))
   }
 
@@ -982,7 +994,7 @@ object Smt2 {
     }
   }
 
-  def embeddedClaims(isImply: B, claims: ISZ[State.Claim], lastOpt: Option[ST]): ST = {
+  def embeddedClaims(isImply: B, claims: ISZ[State.Claim]): ST = {
     def collectSyms(c: State.Claim, acc: ISZ[State.Value.Sym]): ISZ[State.Value.Sym] = {
       c match {
         case c: State.Claim.Def => return acc :+ c.sym
@@ -1016,21 +1028,22 @@ object Smt2 {
     }
 
     var lets = ISZ[State.Claim.Let]()
+    var lsyms = ISZ[State.Value.Sym]()
     var syms = ISZ[State.Value.Sym]()
     var rest = ISZ[State.Claim]()
-    for (claim <- claims) {
-      claim match {
-        case claim: State.Claim.Let => lets = lets :+ claim
+    for (i <- 0 until claims.size) {
+      claims(i) match {
+        case claim: State.Claim.Let if i != claims.size - 1 => lsyms = lsyms :+ claim.sym; lets = lets :+ claim
         case claim: State.Claim.Def => syms = syms :+ claim.sym; rest = rest :+ claim
         case claim: State.Claim.If => syms = collectSyms(claim, syms); rest = rest :+ claim
         case claim: State.Claim.And => syms = collectSyms(claim, syms); rest = rest :+ claim
         case claim: State.Claim.Or => syms = collectSyms(claim, syms); rest = rest :+ claim
         case claim: State.Claim.Imply => syms = collectSyms(claim, syms); rest = rest :+ claim
-        case _: State.Claim.Label => rest = rest :+ claim
-        case _: State.Claim.Prop => rest = rest :+ claim
+        case claim: State.Claim.Label => rest = rest :+ claim
+        case claim: State.Claim.Prop => rest = rest :+ claim
       }
     }
-    var body: ST = if (isImply) implyST(rest, lastOpt) else andST(rest, lastOpt)
+    var body: ST = if (isImply) implyST(rest) else andST(rest)
     if (lets.nonEmpty) {
       body =
         st"""(let (${l2DeclST(lets(lets.size - 1))})
@@ -1042,9 +1055,10 @@ object Smt2 {
               |$body)"""
       }
     }
-    if (syms.nonEmpty) {
+    val s = HashSSet.empty[State.Value.Sym] ++ syms -- lsyms
+    if (s.nonEmpty) {
       body =
-        st"""(exists (${(for (sym <- (HashSSet.empty[State.Value.Sym] ++ syms).elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})", " ")})
+        st"""(exists (${(for (sym <- s.elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})", " ")})
             |  $body)"""
     }
     return body
@@ -1065,7 +1079,7 @@ object Smt2 {
       case c: State.Claim.Let.TypeTest =>
         return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2ST(c.value)}) ${typeHierarchyId(c.tipe)})"
       case c: State.Claim.Let.Quant =>
-        val body = embeddedClaims(c.isAll, c.claims, None())
+        val body = embeddedClaims(c.isAll, c.claims)
         return if (c.isAll)
           st"""(forall (${(for (x <- c.vars) yield qvar2ST(x), " ")})
               |  $body
@@ -1147,68 +1161,42 @@ object Smt2 {
       case c: State.Claim.If =>
         val r =
           st"""(ite ${v2ST(c.cond)}
-              |  ${andST(c.tClaims, None())}
-              |  ${andST(c.fClaims, None())}
+              |  ${andST(c.tClaims)}
+              |  ${andST(c.fClaims)}
               |)"""
         return r
-      case c: State.Claim.And => return andST(c.claims, None())
-      case c: State.Claim.Or => return orST(c.claims, None())
-      case c: State.Claim.Imply => return implyST(c.claims, None())
+      case c: State.Claim.And => return andST(c.claims)
+      case c: State.Claim.Or => return orST(c.claims)
+      case c: State.Claim.Imply => return implyST(c.claims)
     }
   }
 
-  def andST(cs: ISZ[State.Claim], lastOpt: Option[ST]): ST = {
-    val r: ST = lastOpt match {
-      case Some(last) =>
-        if (cs.size == 0) last
-        else if (cs.size == 1) st"(and ${c2ST(cs(0))} $last)"
-        else
-          st"""(and
-              |  ${(for (c <- cs) yield c2ST(c), "\n")}
-              |  $last)"""
-      case _ =>
-        if (cs.size == 0) Smt2.stTrue
-        else if (cs.size == 1) c2ST(cs(0))
-        else
-          st"""(and
-              |  ${(for (c <- cs) yield c2ST(c), "\n")})"""
-    }
+  def andST(cs: ISZ[State.Claim]): ST = {
+    val r: ST =
+      if (cs.size == 0) Smt2.stTrue
+      else if (cs.size == 1) c2ST(cs(0))
+      else
+        st"""(and
+            |  ${(for (c <- cs) yield c2ST(c), "\n")})"""
     return r
   }
 
-  def orST(cs: ISZ[State.Claim], lastOpt: Option[ST]): ST = {
-    val r: ST = lastOpt match {
-      case Some(last) =>
-        if (cs.size == 0) last
-        else if (cs.size == 1) st"(or ${c2ST(cs(0))} $last)"
-        else
-          st"""(or
-              |  ${(for (c <- cs) yield c2ST(c), "\n")}
-              |  $last)"""
-      case _ =>
-        if (cs.size == 0) Smt2.stFalse
-        else if (cs.size == 1) c2ST(cs(0))
-        else
-          st"""(or
-              |  ${(for (c <- cs) yield c2ST(c), "\n")})"""
-    }
+  def orST(cs: ISZ[State.Claim]): ST = {
+    val r: ST =
+      if (cs.size == 0) Smt2.stFalse
+      else if (cs.size == 1) c2ST(cs(0))
+      else
+        st"""(or
+            |  ${(for (c <- cs) yield c2ST(c), "\n")})"""
     return r
   }
 
-  def implyST(cs: ISZ[State.Claim], lastOpt: Option[ST]): ST = {
-    val r: ST = lastOpt match {
-      case Some(last) =>
-        if (cs.size == 1) st"(=> ${c2ST(cs(0))} $last)"
-        else
-          st"""(=>
-              |  ${(for (c <- cs) yield c2ST(c), "\n")}
-              |  $last)"""
-      case _ =>
-        if (cs.size == 1) c2ST(cs(0))
-        else
-          st"""(=>
-              |  ${(for (c <- cs) yield c2ST(c), "\n")})"""
-    }
+  def implyST(cs: ISZ[State.Claim]): ST = {
+    val r: ST =
+      if (cs.size == 1) c2ST(cs(0))
+      else
+        st"""(=>
+            |  ${(for (c <- cs) yield c2ST(c), "\n")})"""
     return r
   }
 

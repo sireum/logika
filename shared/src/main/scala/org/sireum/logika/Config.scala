@@ -36,6 +36,11 @@ import org.sireum._
                        logPc: B,
                        logRawPc: B,
                        logVc: B,
-                       logVcDirOpt: Option[String])
+                       logVcDirOpt: Option[String],
+                       splitAll: B,
+                       splitBinary: B,
+                       splitIf: B,
+                       splitMatch: B,
+                       splitContract: B)
 
 @datatype class LoopId(ids: ISZ[String])

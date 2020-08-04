@@ -40,8 +40,7 @@ object Smt2Impl {
   }
 }
 
-@record class Smt2Impl(val dotFunId: B,
-                       val exe: String,
+@record class Smt2Impl(val exe: String,
                        argsF: Z => ISZ[String] @pure,
                        val typeHierarchy: TypeHierarchy,
                        val charBitWidth: Z,

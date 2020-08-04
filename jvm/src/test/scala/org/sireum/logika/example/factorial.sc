@@ -1,7 +1,14 @@
 // #Sireum
 import org.sireum._
 
-@strictpure def f(n: Z): Z = if (n == 0) 1 else n * f(n - 1)
+@strictpure def f(n: Z): Z =
+  if (n < 0) {
+    halt("Undefined")
+  } else if (n == 0) {
+    1
+  } else {
+    n * f(n - 1)
+  }
 
 def factorial(n: Z): Z = {
   Contract(

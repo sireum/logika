@@ -60,7 +60,12 @@ object LogikaTest {
       logPc = F,
       logRawPc = F,
       logVc = F,
-      logVcDirOpt = None())
+      logVcDirOpt = None(),
+      splitAll = F,
+      splitBinary = F,
+      splitContract = F,
+      splitIf = F,
+      splitMatch = F)
 }
 
 import LogikaTest._
@@ -166,7 +171,7 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkWorksheet(None(), input, config,
-      th => Smt2Impl(T, LogikaTest.z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
+      th => Smt2Impl(LogikaTest.z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

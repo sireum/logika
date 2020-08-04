@@ -833,7 +833,8 @@ object State {
       @datatype class ProofFunApply(val sym: Value.Sym, pf: ProofFun, args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
           return if (pf.receiverTypeOpt.isEmpty)
-            st"${sym.toRawST} ≜ ${(pf.context, ".")}.${pf.id}(${(for (arg <- args) yield arg.toRawST, ", ")})"
+            if (pf.context.isEmpty) st"${sym.toRawST} ≜ ${pf.id}(${(for (arg <- args) yield arg.toRawST, ", ")})"
+            else st"${sym.toRawST} ≜ ${(pf.context, ".")}.${pf.id}(${(for (arg <- args) yield arg.toRawST, ", ")})"
           else st"${sym.toRawST} ≜ ${args(0).toRawST}.${pf.id}(${(for (i <- 1 until args.size) yield args(i).toRawST, ", ")})"
         }
 

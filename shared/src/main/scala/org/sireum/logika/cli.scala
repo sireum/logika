@@ -59,8 +59,22 @@ object cli {
           description = "Bit-width representation for C (character) values (expected 8, 16, or 32)"),
         Opt(name = "intBitWidth", longKey = "z-bitwidth", shortKey = None(),
           tpe = Type.Num(sep = None(), default = 0, min = None(), max = None()),
-          description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)"))
-      ),
+          description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)")
+      )),
+      OptGroup(name = "Path Splitting", opts = ISZ(
+        Opt(name = "splitAll", longKey = "split-all", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Split all"),
+        Opt(name = "splitBinary", longKey = "split-bin", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Split conditional binary expression"),
+        Opt(name = "splitIf", longKey = "split-if", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Split if-conditional expression and statement"),
+        Opt(name = "splitMatch", longKey = "split-match", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Split match expression and statement"),
+      )),
       OptGroup(name = "Logging", opts = ISZ(
         Opt(name = "logPc", longKey = "log-pc", shortKey = None(),
           tpe = Type.Flag(F),
@@ -73,8 +87,8 @@ object cli {
           description = "Display all verification conditions"),
         Opt(name = "logVcDir", longKey = "log-vc-dir", shortKey = None(),
           tpe = Type.Path(F, None()),
-          description = "Write all verification conditions in a directory"))
-      )
+          description = "Write all verification conditions in a directory"),
+      ))
     )
   )
 
