@@ -609,6 +609,52 @@ import Logika.Split
     return (s1.addClaim(State.Claim.Let.FieldLookup(r, receiver, id)), r)
   }
 
+  def evalExps(split: Split.Type, smt2: Smt2, rtCheck: B, state: State, numOfExps: Z, fe: Z => Option[AST.Exp] @pure,
+               reporter: Reporter): ISZ[(State, ISZ[Option[State.Value]])] = {
+    var done = ISZ[(State, ISZ[Option[State.Value]])]()
+    var currents = ISZ((state, ISZ[Option[State.Value]]()))
+    for (i <- 0 until numOfExps) {
+      val eOpt = fe(i)
+      val cs = currents
+      currents = ISZ()
+      var nextFresh: Z = state.nextFresh
+      for (current <- cs) {
+        val (s0, vs) = current
+        eOpt match {
+          case Some(e) =>
+            for (p <- evalExp(split, smt2, rtCheck, s0, e, reporter)) {
+              val (s1, v) = p
+              if (s1.status) {
+                currents = currents :+ ((s1, vs :+ Some(v)))
+                if (nextFresh < s1.nextFresh) {
+                  nextFresh = s1.nextFresh
+                }
+              } else {
+                done = done :+ ((s1, vs :+ Some(v)))
+              }
+            }
+          case _ =>
+            currents = currents :+ ((s0, vs :+ None()))
+        }
+      }
+      currents = for (p <- currents) yield (p._1(nextFresh = nextFresh), p._2)
+    }
+    return currents ++ done
+  }
+
+  def evalArgs(split: Split.Type, smt2: Smt2, rtCheck: B, state: State, numOfArgs: Z,
+               eargs: Either[ISZ[AST.Exp], ISZ[AST.NamedArg]], reporter: Reporter): ISZ[(State, ISZ[Option[State.Value]])] = {
+    eargs match {
+      case Either.Left(es) =>
+        @strictpure def fe(i: Z): Option[AST.Exp] = Some(es(i))
+        return evalExps(split, smt2, rtCheck, state, es.size, fe _, reporter)
+      case Either.Right(nargs) =>
+        val m = HashMap.empty[Z, AST.Exp] ++ (for (narg <- nargs) yield (narg.index, narg.arg))
+        @strictpure def feM(i: Z): Option[AST.Exp] = m.get(i)
+        return evalExps(split, smt2, rtCheck, state, numOfArgs, feM _, reporter)
+    }
+  }
+
   def evalExp(split: Split.Type, smt2: Smt2, rtCheck: B, state: State, e: AST.Exp, reporter: Reporter): ISZ[(State, State.Value)] = {
     if (!state.status) {
       return ISZ((state, State.errorValue))
@@ -939,111 +985,109 @@ import Logika.Split
       }
     }
 
-    def evalConstructor(isCopy: B,
+    def evalConstructor(sp: Split.Type,
+                        isCopy: B,
                         invokeReceiverOpt: Option[AST.Exp],
                         ident: AST.Exp.Ident,
                         eargs: Either[ISZ[AST.Exp], ISZ[AST.NamedArg]],
-                        attr: AST.ResolvedAttr,
-                        res: AST.ResolvedInfo.Method): (State, State.Value) = {
+                        attr: AST.ResolvedAttr): ISZ[(State, State.Value)] = {
       val t = attr.typedOpt.get.asInstanceOf[AST.Typed.Name]
-      val (s0, receiverOpt): (State, Option[State.Value]) =
-        if (isCopy) {
-          val p = singleStateValue(evalReceiver(Split.Disabled, invokeReceiverOpt, ident))
-          (p._1, Some(p._2))
-        } else {
-          (state, None())
-        }
-      val (s1, sym) = s0.freshSym(t, attr.posOpt.get)
-      var current = s1
-      if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
-        var args = ISZ[State.Value]()
-        for (arg <- eargs.left) {
-          val (s2, v) = singleStateValue(evalExp(Split.Disabled, smt2, rtCheck, current, arg, reporter))
-          if (!s2.status) {
-            return (s2, State.errorValue)
-          }
-          current = s2
-          args = args :+ v
-        }
-        val it = t.args(0).asInstanceOf[AST.Typed.Name]
-        var indices = ISZ[State.Value]()
-        if (it == AST.Typed.z) {
-          indices = for (i <- 0 until args.size) yield State.Value.Z(i, args(i).pos)
-        } else {
-          val subz = smt2.typeHierarchy.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast
+      var r = ISZ[(State, State.Value)]()
 
-          @pure def z2subz(n: Z, pos: Position): State.Value = {
-            if (subz.isBitVector) {
-              if (subz.bitWidth == 8) {
-                return if (subz.isSigned) State.Value.S8(conversions.Z.toS8(n), it, pos)
-                else State.Value.U8(conversions.Z.toU8(n), it, pos)
-              } else if (subz.bitWidth == 16) {
-                return if (subz.isSigned) State.Value.S16(conversions.Z.toS16(n), it, pos)
-                else State.Value.U16(conversions.Z.toU16(n), it, pos)
-              } else if (subz.bitWidth == 32) {
-                return if (subz.isSigned) State.Value.S32(conversions.Z.toS32(n), it, pos)
-                else State.Value.U32(conversions.Z.toU32(n), it, pos)
-              } else if (subz.bitWidth == 64) {
-                return if (subz.isSigned) State.Value.S64(conversions.Z.toS64(n), it, pos)
-                else State.Value.U64(conversions.Z.toU64(n), it, pos)
-              } else {
-                halt(s"Infeasible bit-width: ${subz.bitWidth}")
-              }
+      def evalSConstructor(): Unit = {
+        val (s0, sym) = state.freshSym(t, attr.posOpt.get)
+        for (p <- evalArgs(sp, smt2, rtCheck, s0, -1, eargs, reporter)) {
+          val (s1, args) = p
+          if (s1.status) {
+            val it = t.args(0).asInstanceOf[AST.Typed.Name]
+            var indices = ISZ[State.Value]()
+            if (it == AST.Typed.z) {
+              indices = for (i <- 0 until args.size) yield State.Value.Z(i, args(i).get.pos)
             } else {
-              return State.Value.Range(n, it, pos)
-            }
-          }
+              val subz = smt2.typeHierarchy.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast
 
-          var i = 0
-          var index = subz.index
-          while (i < args.size) {
-            indices = indices :+ z2subz(index, args(i).pos)
-            index = index + 1
-            i = i + 1
+              @pure def z2subz(n: Z, pos: Position): State.Value = {
+                if (subz.isBitVector) {
+                  if (subz.bitWidth == 8) {
+                    return if (subz.isSigned) State.Value.S8(conversions.Z.toS8(n), it, pos)
+                    else State.Value.U8(conversions.Z.toU8(n), it, pos)
+                  } else if (subz.bitWidth == 16) {
+                    return if (subz.isSigned) State.Value.S16(conversions.Z.toS16(n), it, pos)
+                    else State.Value.U16(conversions.Z.toU16(n), it, pos)
+                  } else if (subz.bitWidth == 32) {
+                    return if (subz.isSigned) State.Value.S32(conversions.Z.toS32(n), it, pos)
+                    else State.Value.U32(conversions.Z.toU32(n), it, pos)
+                  } else if (subz.bitWidth == 64) {
+                    return if (subz.isSigned) State.Value.S64(conversions.Z.toS64(n), it, pos)
+                    else State.Value.U64(conversions.Z.toU64(n), it, pos)
+                  } else {
+                    halt(s"Infeasible bit-width: ${subz.bitWidth}")
+                  }
+                } else {
+                  return State.Value.Range(n, it, pos)
+                }
+              }
+
+              var i = 0
+              var index = subz.index
+              while (i < args.size) {
+                indices = indices :+ z2subz(index, args(i).get.pos)
+                index = index + 1
+                i = i + 1
+              }
+            }
+            smt2.addSeqLit(t, indices.size)
+            val as: ISZ[State.Claim.Def.SeqLit.Arg] =
+              for (p <- ops.ISZOps(indices).zip(args)) yield State.Claim.Def.SeqLit.Arg(p._1, p._2.get)
+            r = r :+ ((s1.addClaim(State.Claim.Def.SeqLit(sym, as)), sym))
+          } else {
+            r = r :+ ((s1, State.errorValue))
           }
         }
-        smt2.addSeqLit(t, indices.size)
-        val as: ISZ[State.Claim.Def.SeqLit.Arg] =
-          for (p <- ops.ISZOps(indices).zip(args)) yield State.Claim.Def.SeqLit.Arg(p._1, p._2)
-        return (current.addClaim(State.Claim.Def.SeqLit(sym, as)), sym)
-      } else {
+      }
+
+      def evalAdtConstructor(s0: State, receiverOpt: Option[State.Value]): Unit = {
+        val (s1, sym) = s0.freshSym(t, attr.posOpt.get)
         val ti = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
         val params = ti.ast.params
-        val args = MSZ.create[Option[State.Value]](params.size, None[State.Value]())
-        eargs match {
-          case Either.Left(cargs) =>
-            var i = 0
-            for (arg <- cargs) {
-              val (s3, v) = singleStateValue(evalExp(Split.Disabled, smt2, rtCheck, current, arg, reporter))
-              if (!s3.status) {
-                return (s3, State.errorValue)
-              }
-              current = s3
-              args(i) = Some(v)
-              i = i + 1
+        for (p <- evalArgs(sp, smt2, rtCheck, s1, params.size, eargs, reporter)) {
+          val s2 = p._1
+          val args = p._2.toMS
+          if (s2.status) {
+            var s3 = s2
+            eargs match {
+              case Either.Right(_) =>
+                for (i <- 0 until args.size) {
+                  if (args(i).isEmpty) {
+                    val receiver = receiverOpt.get
+                    val param = params(i)
+                    val pt = param.tipe.typedOpt.get
+                    val (s4, sym) = s3.freshSym(pt, param.id.attr.posOpt.get)
+                    s3 = s4.addClaim(State.Claim.Let.FieldLookup(sym, receiver, param.id.value))
+                    args(i) = Some(sym)
+                  }
+                }
+              case _ =>
             }
-          case Either.Right(cargs) =>
-            for (arg <- cargs) {
-              val (s3, v) = singleStateValue(evalExp(split, smt2, rtCheck, current, arg.arg, reporter))
-              if (!s3.status) {
-                return (s3, State.errorValue)
-              }
-              current = s3
-              args(arg.index) = Some(v)
-            }
-            for (i <- 0 until args.size) {
-              if (args(i).isEmpty) {
-                val receiver = receiverOpt.get
-                val param = params(i)
-                val pt = param.tipe.typedOpt.get
-                val (s4, sym) = current.freshSym(pt, param.id.attr.posOpt.get)
-                current = s4.addClaim(State.Claim.Let.FieldLookup(sym, receiver, param.id.value))
-                args(i) = Some(sym)
-              }
-            }
+            r = r :+ ((s3.addClaim(State.Claim.Def.AdtLit(sym, args.toIS.map((vOpt: Option[State.Value]) => vOpt.get))), sym))
+          } else {
+            r = r :+ ((s2, State.errorValue))
+          }
         }
-        return (current.addClaim(State.Claim.Def.AdtLit(sym, args.toIS.map((vOpt: Option[State.Value]) => vOpt.get))), sym)
       }
+
+      if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
+        evalSConstructor()
+      } else {
+        val stateReceiverOpts: ISZ[(State, Option[State.Value])] =
+          if (isCopy) for (p <- evalReceiver(Split.Disabled, invokeReceiverOpt, ident)) yield (p._1, Some(p._2))
+          else ISZ((state, None()))
+        for (p <- stateReceiverOpts) {
+          val (s0, receiverOpt) = p
+          evalAdtConstructor(s0, receiverOpt)
+        }
+      }
+      return r
     }
 
     def evalReceiver(sp: Split.Type, receiverOpt: Option[AST.Exp], ident: AST.Exp.Ident): ISZ[(State, State.Value)] = {
@@ -1714,7 +1758,7 @@ import Logika.Split
               res.mode match {
                 case AST.MethodMode.Select => return evalSeqSelect(e)
                 case AST.MethodMode.Constructor =>
-                  return ISZ(evalConstructor(F, e.receiverOpt, e.ident, Either.Left(e.args), e.attr, res))
+                  return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
                 case AST.MethodMode.Method =>
                   return ISZ(evalInvoke(state, e.receiverOpt, e.ident, Either.Left(e.args), e.attr))
                 case _ =>
@@ -1727,9 +1771,9 @@ import Logika.Split
             case res: AST.ResolvedInfo.Method =>
               res.mode match {
                 case AST.MethodMode.Constructor =>
-                  return ISZ(evalConstructor(F, e.receiverOpt, e.ident, Either.Right(e.args), e.attr, res))
+                  return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
                 case AST.MethodMode.Copy =>
-                  return ISZ(evalConstructor(T, e.receiverOpt, e.ident, Either.Right(e.args), e.attr, res))
+                  return evalConstructor(split, T, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
                 case AST.MethodMode.Method =>
                   return ISZ(evalInvoke(state, e.receiverOpt, e.ident, Either.Right(e.args), e.attr))
                 case _ =>
