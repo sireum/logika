@@ -609,32 +609,27 @@ import Logika.Split
     return (s1.addClaim(State.Claim.Let.FieldLookup(r, receiver, id)), r)
   }
 
-  def evalExps(split: Split.Type, smt2: Smt2, rtCheck: B, state: State, numOfExps: Z, fe: Z => Option[AST.Exp] @pure,
-               reporter: Reporter): ISZ[(State, ISZ[Option[State.Value]])] = {
-    var done = ISZ[(State, ISZ[Option[State.Value]])]()
-    var currents = ISZ((state, ISZ[Option[State.Value]]()))
+  def evalExps(split: Split.Type, smt2: Smt2, rtCheck: B, state: State, numOfExps: Z, fe: Z => AST.Exp @pure,
+               reporter: Reporter): ISZ[(State, ISZ[State.Value])] = {
+    var done = ISZ[(State, ISZ[State.Value])]()
+    var currents = ISZ((state, ISZ[State.Value]()))
     for (i <- 0 until numOfExps) {
-      val eOpt = fe(i)
+      val e = fe(i)
       val cs = currents
       currents = ISZ()
       var nextFresh: Z = state.nextFresh
       for (current <- cs) {
         val (s0, vs) = current
-        eOpt match {
-          case Some(e) =>
-            for (p <- evalExp(split, smt2, rtCheck, s0, e, reporter)) {
-              val (s1, v) = p
-              if (s1.status) {
-                currents = currents :+ ((s1, vs :+ Some(v)))
-                if (nextFresh < s1.nextFresh) {
-                  nextFresh = s1.nextFresh
-                }
-              } else {
-                done = done :+ ((s1, vs :+ Some(v)))
-              }
+        for (p <- evalExp(split, smt2, rtCheck, s0, e, reporter)) {
+          val (s1, v) = p
+          if (s1.status) {
+            currents = currents :+ ((s1, vs :+ v))
+            if (nextFresh < s1.nextFresh) {
+              nextFresh = s1.nextFresh
             }
-          case _ =>
-            currents = currents :+ ((s0, vs :+ None()))
+          } else {
+            done = done :+ ((s1, vs :+ v))
+          }
         }
       }
       currents = for (p <- currents) yield (p._1(nextFresh = nextFresh), p._2)
@@ -646,12 +641,21 @@ import Logika.Split
                eargs: Either[ISZ[AST.Exp], ISZ[AST.NamedArg]], reporter: Reporter): ISZ[(State, ISZ[Option[State.Value]])] = {
     eargs match {
       case Either.Left(es) =>
-        @strictpure def fe(i: Z): Option[AST.Exp] = Some(es(i))
-        return evalExps(split, smt2, rtCheck, state, es.size, fe _, reporter)
+        @strictpure def fe(i: Z): AST.Exp = es(i)
+        return for (p <- evalExps(split, smt2, rtCheck, state, es.size, fe _, reporter)) yield
+          ((p._1, for (v <- p._2) yield Some(v)))
       case Either.Right(nargs) =>
-        val m = HashMap.empty[Z, AST.Exp] ++ (for (narg <- nargs) yield (narg.index, narg.arg))
-        @strictpure def feM(i: Z): Option[AST.Exp] = m.get(i)
-        return evalExps(split, smt2, rtCheck, state, numOfArgs, feM _, reporter)
+        @strictpure def feM(i: Z): AST.Exp = nargs(i).arg
+        var r = ISZ[(State, ISZ[Option[State.Value]])]()
+        for (p <- evalExps(split, smt2, rtCheck, state, nargs.size, feM _, reporter)) {
+          val (s0, args) = p
+          var m = HashMap.empty[Z, Option[State.Value]]
+          for (i <- 0 until args.size) {
+            m = m + nargs(i).index ~> Some(args(i))
+          }
+          r = r :+ ((s0, for (i <- 0 until numOfArgs) yield m.get(i).getOrElse(None())))
+        }
+        return r
     }
   }
 
