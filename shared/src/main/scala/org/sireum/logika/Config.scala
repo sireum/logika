@@ -38,7 +38,6 @@ import org.sireum._
                        logVc: B,
                        logVcDirOpt: Option[String],
                        splitAll: B,
-                       splitBinary: B,
                        splitIf: B,
                        splitMatch: B,
                        splitContract: B)

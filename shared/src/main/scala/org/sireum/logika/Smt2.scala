@@ -125,7 +125,61 @@ object Smt2 {
     if (pf.context.isEmpty) st"|${pf.id}|"
     else st"|${(pf.context, ".")}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
 
-  def addStrictPureMethod(pos: message.Position, sf: State.ProofFun, ss: ISZ[State]): Unit = {
+  def injectAdditionalClaims(v: State.Value.Sym, claims: ISZ[State.Claim],
+                             additionalClaims: ISZ[State.Claim]): Option[ISZ[State.Claim]] = {
+    if (claims.size == 0) {
+      return None()
+    }
+    var newClaims = ISZ[State.Claim]()
+    var changed = F
+    for (c <- claims) {
+      c match {
+        case c: State.Claim.And =>
+          injectAdditionalClaims(v, c.claims, additionalClaims) match {
+            case Some(cs) =>
+              newClaims = newClaims :+ State.Claim.And(cs)
+              changed = T
+            case _ => newClaims = newClaims :+ c
+          }
+        case c: State.Claim.Imply =>
+          injectAdditionalClaims(v, c.claims, additionalClaims) match {
+            case Some(cs) =>
+              newClaims = newClaims :+ State.Claim.Imply(cs)
+              changed = T
+            case _ => newClaims = newClaims :+ c
+          }
+        case c: State.Claim.Or =>
+          injectAdditionalClaims(v, c.claims, additionalClaims) match {
+            case Some(cs) =>
+              newClaims = newClaims :+ State.Claim.Or(cs)
+              changed = T
+            case _ => newClaims = newClaims :+ c
+          }
+        case c: State.Claim.If =>
+          val newTClaimsOpt = injectAdditionalClaims(v, c.tClaims, additionalClaims)
+          val newFClaimsOpt = injectAdditionalClaims(v, c.fClaims, additionalClaims)
+          if (newTClaimsOpt.isEmpty && newFClaimsOpt.isEmpty) {
+            newClaims = newClaims :+ c
+          } else {
+            newClaims = newClaims :+ c(tClaims = newTClaimsOpt.getOrElse(c.tClaims), fClaims = newFClaimsOpt.getOrElse(c.fClaims))
+            changed = T
+          }
+        case c: State.Claim.Prop => newClaims = newClaims :+ c
+        case c: State.Claim.Def =>
+          if (c.sym.num == v.num) {
+            newClaims = newClaims :+ State.Claim.And(c +: additionalClaims)
+            changed = T
+          } else {
+            newClaims = newClaims :+ c
+          }
+        case c: State.Claim.Label => newClaims = newClaims :+ c
+      }
+    }
+    return if (changed) Some(newClaims) else None()
+  }
+
+  def addStrictPureMethod(pos: message.Position, sf: State.ProofFun, svs: ISZ[(State, State.Value)],
+                          res: State.Value.Sym): Unit = {
     val id = proofFunId(sf)
     var paramTypes: ISZ[ST] = for (pt <- sf.paramTypes) yield adtId(pt)
     var paramIds: ISZ[ST] = for (id <- sf.paramIds) yield currentLocalIdString(id)
@@ -140,10 +194,9 @@ object Smt2 {
     }
     val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${adtId(sf.returnType)})"
 
-    var ecs = ISZ[ST]()
-    for (state <- ss) {
-      val lastClaim = state.claims(state.claims.size - 1)
-      var s0 = state(claims = ops.ISZOps(state.claims).slice(0, state.claims.size - 1))
+    var claimss = ISZ[ISZ[State.Claim]]()
+    for (sv <- svs) {
+      var (s0, v) = sv
       var cs = ISZ[State.Claim]()
       for (p <- ops.ISZOps((if (sf.receiverTypeOpt.isEmpty) ISZ[String]() else ISZ[String]("this")) ++ sf.paramIds).zip(
         (if (sf.receiverTypeOpt.isEmpty) ISZ[AST.Typed]() else ISZ(sf.receiverTypeOpt.get)) ++ sf.paramTypes)
@@ -154,21 +207,44 @@ object Smt2 {
         s0 = s2
         cs = cs ++ ISZ[State.Claim](State.Claim.Let.TypeTest(sym, F, l, t), State.Claim.Prop(T, sym))
       }
-      ecs = ecs :+ embeddedClaims(F, s0.claims :+ State.Claim.And(cs :+ lastClaim))
+      val acs = cs :+ State.Claim.Let.Eq(res, v)
+      v match {
+        case v: State.Value.Sym =>
+          if (s0.status) {
+            claimss = claimss :+ injectAdditionalClaims(v, s0.claims, acs).get
+          } else {
+            claimss = claimss :+ s0.claims
+          }
+        case _ =>
+          claimss = claimss :+ (s0.claims ++ acs)
+      }
     }
-    val claim: ST = {
-      if (ecs.size == 1)
-        st"""(assert (forall (${(params, " ")} (|l:Res| ${adtId(sf.returnType)})) (=>
-            |  (= |l:Res| ($id ${(paramIds, " ")}))
-            |  ${ecs(0)}
-            |)))"""
-      else
+    val ecs: ST = {
+      var i: Z = 0
+      var prefix: Z = -1
+      var stop = F
+      while(!stop && All(claimss)(cs => i < cs.size)) {
+        if (!All(claimss)(cs => claimss(0)(i) == cs(i))) {
+          prefix = i
+          stop = T
+        }
+        i = i + 1
+      }
+      if (prefix > 0) {
+        embeddedClaims(F, ops.ISZOps(claimss(0)).slice(0, prefix) :+ State.Claim.And(
+          for (cs <- claimss) yield State.Claim.And(ops.ISZOps(cs).slice(prefix, cs.size))
+        ))
+      } else {
+        embeddedClaims(F, for (cs <- claimss) yield State.Claim.And(cs))
+      }
+    }
+
+    val claim =
       st"""(assert (forall (${(params, " ")} (|l:Res| ${adtId(sf.returnType)})) (=>
           |  (= |l:Res| ($id ${(paramIds, " ")}))
-          |  (and
-          |    ${(ecs, "\n")})
+          |  $ecs
           |)))"""
-    }
+
     strictPureMethodsUp(strictPureMethods + sf ~> ((decl, claim)))
   }
 

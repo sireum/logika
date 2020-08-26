@@ -62,7 +62,6 @@ object LogikaTest {
       logVc = F,
       logVcDirOpt = None(),
       splitAll = F,
-      splitBinary = F,
       splitContract = F,
       splitIf = F,
       splitMatch = F)

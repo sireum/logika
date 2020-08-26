@@ -523,7 +523,7 @@ import Logika.Split
     } else {
       smt2.strictPureMethodsUp(smt2.strictPureMethods + pf ~> ((st"", st"")))
       val b = imi.strictPureBodyOpt.get
-      val ss: ISZ[State] = {
+      val (res, svs): (State.Value.Sym, ISZ[(State, State.Value)]) = {
         val body: AST.AssignExp = if (substMap.isEmpty) {
           b
         } else {
@@ -533,13 +533,13 @@ import Logika.Split
         val logika: Logika = Logika.logikaMethod(th, config, pf.context :+ pf.id, pf.receiverTypeOpt, imi.sig,
           posOpt, ISZ(), ISZ(), ISZ())
         val s0 = state(claims = ISZ())
-        val (s1, res) = Logika.idIntro(posOpt.get, s0, pf.context, "Res", funType.ret, posOpt)
-        logika.evalAssignExp(Split.Enabled, smt2, Some(res), T, s1, body, reporter)
+        val (s1, r) = Logika.idIntro(posOpt.get, s0, pf.context, "Res", funType.ret, posOpt)
+        (r, logika.evalAssignExpValue(Split.Enabled, smt2, funType.ret, T, s1, body, reporter))
       }
 
-      smt2.addStrictPureMethod(b.asStmt.posOpt.get, pf, ss)
+      smt2.addStrictPureMethod(b.asStmt.posOpt.get, pf, svs, res)
 
-      val s1 = state(nextFresh = maxStatesNextFresh(ss))
+      val s1 = state(nextFresh = maxStateValuesNextFresh(svs))
       val posOpt = b.asStmt.posOpt
       if (!smt2.sat(config.logVc, config.logVcDirOpt, "Satisfiability of proof function", posOpt.get, s1.claims, reporter)) {
         reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
@@ -812,11 +812,6 @@ import Logika.Split
       }
 
       def evalCond(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value.Sym): ISZ[(State, State.Value)] = {
-        val shouldSplit: B = split match {
-          case Split.Default => config.splitAll || config.splitBinary
-          case Split.Enabled => T
-          case Split.Disabled => F
-        }
         val pos = exp.left.posOpt.get
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
@@ -826,17 +821,9 @@ import Logika.Split
               if (!s2.status) {
                 return ISZ((s2, State.errorValue))
               }
-              if (shouldSplit) {
-                return ISZ(
-                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(T, v1),
-                    State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), v2),
-                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(F, v1),
-                    State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), State.Value.B(F, pos)))
-              } else {
-                val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
-                val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(F, pos)))
-                return ISZ((s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r))
-              }
+              val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
+              val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(F, pos)))
+              return ISZ((s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r))
             }
             return for (p <- evalExp(split, smt2, rtCheck, s1, exp.right, reporter); r <- evalCondAndH(p)) yield r
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr =>
@@ -846,17 +833,9 @@ import Logika.Split
               if (!s2.status) {
                 return ISZ((s2, State.errorValue))
               }
-              if (shouldSplit) {
-                return ISZ(
-                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(T, v1),
-                    State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), State.Value.B(T, pos)),
-                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(F, v1),
-                    State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), v2))
-              } else {
-                val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
-                val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, State.Value.B(T, pos), v2))
-                return ISZ((s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r))
-              }
+              val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
+              val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, State.Value.B(T, pos), v2))
+              return ISZ((s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r))
             }
             return for (p <- evalExp(split, smt2, rtCheck, s1, exp.right, reporter); r <- evalCondOrH(p)) yield r
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply =>
@@ -866,17 +845,9 @@ import Logika.Split
               if (!s2.status) {
                 return ISZ((s2, State.errorValue))
               }
-              if (shouldSplit) {
-                return ISZ(
-                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(T, v1),
-                     State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), v2),
-                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(F, v1),
-                     State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), State.Value.B(T, pos)))
-              } else {
-                val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
-                val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(T, pos)))
-                return ISZ((s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r))
-              }
+              val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
+              val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(T, pos)))
+              return ISZ((s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r))
             }
             return for (p <- evalExp(split, smt2, rtCheck, s1, exp.right, reporter); r <- evalCondImplyH(p)) yield r
           case _ => halt("Infeasible")
