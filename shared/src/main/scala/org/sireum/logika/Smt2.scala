@@ -178,74 +178,55 @@ object Smt2 {
     return if (changed) Some(newClaims) else None()
   }
 
-  def addStrictPureMethod(pos: message.Position, sf: State.ProofFun, svs: ISZ[(State, State.Value)],
-                          res: State.Value.Sym): Unit = {
-    val id = proofFunId(sf)
-    var paramTypes: ISZ[ST] = for (pt <- sf.paramTypes) yield adtId(pt)
-    var paramIds: ISZ[ST] = for (id <- sf.paramIds) yield currentLocalIdString(id)
+  def addStrictPureMethod(pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value)],
+                          res: State.Value.Sym, statePrefix: Z): Unit = {
+    val id = proofFunId(pf)
+    var paramTypes: ISZ[ST] = for (pt <- pf.paramTypes) yield typeId(pt)
+    var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(id)
     var params: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
-    sf.receiverTypeOpt match {
+    pf.receiverTypeOpt match {
       case Some(receiverType) =>
-        val thisType = adtId(receiverType)
+        val thisType = typeId(receiverType)
         paramTypes = thisType +: paramTypes
         paramIds = st"|l:this|" +: paramIds
         params = st"(|l:this| $thisType)" +: params
       case _ =>
     }
-    val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${adtId(sf.returnType)})"
+    val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${typeId(pf.returnType)})"
 
     var claimss = ISZ[ISZ[State.Claim]]()
     for (sv <- svs) {
-      var (s0, v) = sv
-      var cs = ISZ[State.Claim]()
-      for (p <- ops.ISZOps((if (sf.receiverTypeOpt.isEmpty) ISZ[String]() else ISZ[String]("this")) ++ sf.paramIds).zip(
-        (if (sf.receiverTypeOpt.isEmpty) ISZ[AST.Typed]() else ISZ(sf.receiverTypeOpt.get)) ++ sf.paramTypes)
-           if isAdtType(p._2)) {
-        val (id, t) = p
-        val (s1, l) = Logika.idIntro(pos, s0, sf.context, id, t, None())
-        val (s2, sym) = s1.freshSym(AST.Typed.b, pos)
-        s0 = s2
-        cs = cs ++ ISZ[State.Claim](State.Claim.Let.TypeTest(sym, F, l, t), State.Claim.Prop(T, sym))
-      }
-      val acs = cs :+ State.Claim.Let.Eq(res, v)
+      val (s0, v) = sv
+      val s0Claims = ops.ISZOps(s0.claims).slice(statePrefix, s0.claims.size)
+      val acs = ISZ[State.Claim](State.Claim.Let.Eq(res, v))
       v match {
         case v: State.Value.Sym =>
           if (s0.status) {
-            claimss = claimss :+ injectAdditionalClaims(v, s0.claims, acs).get
+            claimss = claimss :+ injectAdditionalClaims(v, s0Claims, acs).get
           } else {
-            claimss = claimss :+ s0.claims
+            claimss = claimss :+ s0Claims
           }
         case _ =>
-          claimss = claimss :+ (s0.claims ++ acs)
+          claimss = claimss :+ (s0Claims ++ acs)
       }
     }
     val ecs: ST = {
-      var i: Z = 0
-      var prefix: Z = -1
-      var stop = F
-      while(!stop && All(claimss)(cs => i < cs.size)) {
-        if (!All(claimss)(cs => claimss(0)(i) == cs(i))) {
-          prefix = i
-          stop = T
-        }
-        i = i + 1
-      }
-      if (prefix > 0) {
-        embeddedClaims(F, ops.ISZOps(claimss(0)).slice(0, prefix) :+ State.Claim.And(
-          for (cs <- claimss) yield State.Claim.And(ops.ISZOps(cs).slice(prefix, cs.size))
-        ))
+      val prefixClaims = State.Claim.And(ops.ISZOps(svs(0)._1.claims).slice(0, statePrefix))
+      if (prefixClaims.claims.size > 0) {
+        embeddedClaims(F, ISZ(State.Claim.Imply(ISZ(prefixClaims,
+          State.Claim.And(for (cs <- claimss) yield State.Claim.And(cs))))))
       } else {
-        embeddedClaims(F, for (cs <- claimss) yield State.Claim.And(cs))
+        embeddedClaims(F, ISZ(State.Claim.And(for (cs <- claimss) yield State.Claim.And(cs))))
       }
     }
 
     val claim =
-      st"""(assert (forall (${(params, " ")} (|l:Res| ${adtId(sf.returnType)})) (=>
+      st"""(assert (forall (${(params, " ")} (|l:Res| ${adtId(pf.returnType)})) (=>
           |  (= |l:Res| ($id ${(paramIds, " ")}))
           |  $ecs
           |)))"""
 
-    strictPureMethodsUp(strictPureMethods + sf ~> ((decl, claim)))
+    strictPureMethodsUp(strictPureMethods + pf ~> ((decl, claim)))
   }
 
   def addAdtDecl(adtDecl: ST): Unit = {
@@ -503,7 +484,7 @@ object Smt2 {
       addTypeHiearchyId(thId)
       addAdtDecl(st"(declare-const $thId Type)")
       if (!ti.ast.isRoot) {
-        addAdtDecl(st"(assert (forall ((x ADT)) (=> (sub-type (type-of x) $thId) (= (type-of x) $thId))))")
+        addAdtDecl(st"(assert (forall ((x ${typeId(t)})) (= (sub-type (type-of x) $thId) (= (type-of x) $thId))))")
       }
       val sm = addSub(ti.ast.isRoot, t, ti.ast.typeParams, thId, ti.parents)
 
@@ -956,11 +937,11 @@ object Smt2 {
           |
           |$distinctOpt
           |
-          |${(decls, "\n")}
-          |
           |${(for (p <- strictPureMethods.values) yield p._1, "\n")}
           |
           |${(for (p <- strictPureMethods.values) yield p._2, "\n")}
+          |
+          |${(decls, "\n")}
           |
           |${(for (a <- claims) yield st"(assert $a)", "\n")}
           |
@@ -1277,6 +1258,15 @@ object Smt2 {
   }
 
   def c2DeclST(c: State.Claim): ISZ[(String, ST)] = {
+    @pure def declareConst(n: ST, tipe: AST.Typed): ST = {
+      val r: ST = if (isAdtType(tipe)) {
+        st"""(declare-const $n ${typeId(tipe)})
+            |(assert (sub-type (type-of $n) ${typeHierarchyId(tipe)}))"""
+      } else {
+        st"(declare-const $n ${typeId(tipe)})"
+      }
+      return r
+    }
     def def2DeclST(cDef: State.Claim.Def): ISZ[(String, ST)] = {
       val symST = v2ST(cDef.sym)
       return ISZ[(String, ST)](symST.render ~> st"(declare-const $symST ${typeId(cDef.sym.tipe)})")
@@ -1285,10 +1275,10 @@ object Smt2 {
       case _: State.Claim.Label => return ISZ()
       case c: State.Claim.Prop =>
         val vST = v2ST(c.value)
-        return ISZ[(String, ST)](vST.render ~> st"(declare-const $vST ${typeId(c.value.tipe)})")
+        return ISZ[(String, ST)](vST.render ~> st"(declare-const $vST B)")
       case c: State.Claim.If =>
         val condST = v2ST(c.cond)
-        var r = ISZ[(String, ST)](condST.render ~> st"(declare-const $condST ${typeId(c.cond.tipe)})")
+        var r = ISZ[(String, ST)](condST.render ~> st"(declare-const $condST B)")
         for (tClaim <- c.tClaims) {
           r = r ++ c2DeclST(tClaim)
         }
@@ -1303,25 +1293,25 @@ object Smt2 {
         var r = def2DeclST(c)
         val n = currentNameId(c)
         val ns = n.render
-        r = r :+ ns ~> st"(declare-const $n ${typeId(c.sym.tipe)})"
+        r = r :+ ns ~> declareConst(n, c.sym.tipe)
         return r
       case c: State.Claim.Let.Name =>
         var r = def2DeclST(c)
         val n = nameId(c)
         val ns = n.render
-        r = r :+ ns ~> st"(declare-const $n ${typeId(c.sym.tipe)})"
+        r = r :+ ns ~> declareConst(n, c.sym.tipe)
         return r
       case c: State.Claim.Let.CurrentId =>
         var r = def2DeclST(c)
         val n = currentLocalId(c)
         val ns = n.render
-        r = r :+ ns ~> st"(declare-const $n ${typeId(c.sym.tipe)})"
+        r = r :+ ns ~> declareConst(n, c.sym.tipe)
         return r
       case c: State.Claim.Let.Id =>
         var r = def2DeclST(c)
         val n = localId(c)
         val ns = n.render
-        r = r :+ ns ~> st"(declare-const $n ${typeId(c.sym.tipe)})"
+        r = r :+ ns ~> declareConst(n, c.sym.tipe)
         return r
       case c: State.Claim.Def => return def2DeclST(c)
     }

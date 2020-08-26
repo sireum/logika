@@ -523,7 +523,7 @@ import Logika.Split
     } else {
       smt2.strictPureMethodsUp(smt2.strictPureMethods + pf ~> ((st"", st"")))
       val b = imi.strictPureBodyOpt.get
-      val (res, svs): (State.Value.Sym, ISZ[(State, State.Value)]) = {
+      val (res, prefix, svs): (State.Value.Sym, Z, ISZ[(State, State.Value)]) = {
         val body: AST.AssignExp = if (substMap.isEmpty) {
           b
         } else {
@@ -534,10 +534,10 @@ import Logika.Split
           posOpt, ISZ(), ISZ(), ISZ())
         val s0 = state(claims = ISZ())
         val (s1, r) = Logika.idIntro(posOpt.get, s0, pf.context, "Res", funType.ret, posOpt)
-        (r, logika.evalAssignExpValue(Split.Enabled, smt2, funType.ret, T, s1, body, reporter))
+        (r, s0.claims.size, logika.evalAssignExpValue(Split.Enabled, smt2, funType.ret, T, s1, body, reporter))
       }
 
-      smt2.addStrictPureMethod(b.asStmt.posOpt.get, pf, svs, res)
+      smt2.addStrictPureMethod(b.asStmt.posOpt.get, pf, svs, res, prefix)
 
       val s1 = state(nextFresh = maxStateValuesNextFresh(svs))
       val posOpt = b.asStmt.posOpt
