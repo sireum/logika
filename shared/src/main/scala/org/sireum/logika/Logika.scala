@@ -1185,12 +1185,12 @@ import Logika.Split
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
-          for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck,
-            s8(claims = ops.ISZOps(s8.claims).slice(s2.claims.size, s8.claims.size)), quant.fun.exp, reporter)) {
+          for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck, s8, quant.fun.exp, reporter)) {
             val (s9, v) = p
             val (s10, expSym) = value2Sym(s9, v, quant.fun.exp.asStmt.posOpt.get)
             val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, loSym), State.Claim.Prop(T, hiSym), State.Claim.Prop(T, expSym))
-            val quantClaim = s10.claims :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+            val quantClaim = ops.ISZOps(s10.claims).slice(s2.claims.size, s10.claims.size) :+
+              (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
             quantClaims = quantClaims :+ State.Claim.And(quantClaim)
             if (nextFresh < s10.nextFresh) {
               nextFresh = s10.nextFresh
@@ -1238,12 +1238,12 @@ import Logika.Split
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
-          for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck,
-            s8(claims = ops.ISZOps(s8.claims).slice(s2.claims.size, s8.claims.size)), quant.fun.exp, reporter)) {
+          for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck, s8, quant.fun.exp, reporter)) {
             val (s9, v) = p
             val (s10, expSym) = value2Sym(s9, v, quant.fun.exp.asStmt.posOpt.get)
             val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, loSym), State.Claim.Prop(T, hiSym), State.Claim.Prop(T, expSym))
-            val quantClaim = s10.claims :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+            val quantClaim = ops.ISZOps(s10.claims).slice(s2.claims.size, s10.claims.size) :+
+              (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
             quantClaims = quantClaims :+ State.Claim.And(quantClaim)
             if (nextFresh < s10.nextFresh) {
               nextFresh = s10.nextFresh
@@ -1274,7 +1274,7 @@ import Logika.Split
       for (p <- evalExp(split, smt2, rtCheck, state, quant.seq, reporter)) {
         val (s0, seq) = p
         if (s0.status) {
-          val (s1, qvar) = s0.freshSym(iType, pos)
+          val (s1, qvar) = Logika.idIntro(pos, s0, qVarRes.context, s"${qVarRes.id}$$Idx", iType, Some(pos))
           val (s2, inBound) = s1.freshSym(AST.Typed.b, pos)
           val s3 = s2.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvar))
           val (s4, select) = s3.freshSym(eType, pos)
@@ -1284,12 +1284,12 @@ import Logika.Split
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s7.nextFresh
-          for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck,
-            s7(claims = ops.ISZOps(s7.claims).slice(s0.claims.size, s7.claims.size)), quant.fun.exp, reporter)) {
+          for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck, s7, quant.fun.exp, reporter)) {
             val (s8, v) = p
             val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
             val props: ISZ[State.Claim] = ISZ(State.Claim.Prop(T, inBound), State.Claim.Prop(T, expSym))
-            val quantClaim = s9.claims :+ (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
+            val quantClaim = ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+
+              (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
             quantClaims = quantClaims :+ State.Claim.And(quantClaim)
             if (nextFresh < s9.nextFresh) {
               nextFresh = s9.nextFresh
