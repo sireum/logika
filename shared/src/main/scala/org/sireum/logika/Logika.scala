@@ -128,8 +128,14 @@ object Logika {
 
   @datatype class Context(typeParams: ISZ[AST.TypeParam],
                           methodOpt: Option[MethodContext],
-                          caseLabels: ISZ[AST.Exp.LitString],
-                         )
+                          caseLabels: ISZ[AST.Exp.LitString]) {
+    @pure def methodName: ISZ[String] = {
+      methodOpt match {
+        case Some(m) => return m.name
+        case _ => return ISZ()
+      }
+    }
+  }
 
   @datatype class MethodContext(name: ISZ[String],
                                 receiverTypeOpt: Option[AST.Typed],
@@ -822,8 +828,10 @@ import Logika.Split
               }
               if (shouldSplit) {
                 return ISZ(
-                  (s2(claims = (s0.claims :+ State.Claim.Prop(T, v1)) ++ ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size)), v2),
-                  (s2(claims = (s0.claims :+ State.Claim.Prop(F, v1)) ++ ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size)), State.Value.B(F, pos)))
+                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(T, v1),
+                    State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), v2),
+                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(F, v1),
+                    State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), State.Value.B(F, pos)))
               } else {
                 val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
                 val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(F, pos)))
@@ -840,8 +848,10 @@ import Logika.Split
               }
               if (shouldSplit) {
                 return ISZ(
-                  (s2(claims = (s0.claims :+ State.Claim.Prop(T, v1)) ++ ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size)), State.Value.B(T, pos)),
-                  (s2(claims = (s0.claims :+ State.Claim.Prop(F, v1)) ++ ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size)), v2))
+                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(T, v1),
+                    State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), State.Value.B(T, pos)),
+                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(F, v1),
+                    State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), v2))
               } else {
                 val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
                 val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, State.Value.B(T, pos), v2))
@@ -858,8 +868,10 @@ import Logika.Split
               }
               if (shouldSplit) {
                 return ISZ(
-                  (s2(claims = (s0.claims :+ State.Claim.Prop(T, v1)) ++ ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size)), v2),
-                  (s2(claims = (s0.claims :+ State.Claim.Prop(F, v1)) ++ ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size)), State.Value.B(T, pos)))
+                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(T, v1),
+                     State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), v2),
+                  (s2(claims = s0.claims :+ State.Claim.Imply(ISZ(State.Claim.Prop(F, v1),
+                     State.Claim.And(ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))))), State.Value.B(T, pos)))
               } else {
                 val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
                 val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(T, pos)))
@@ -2453,6 +2465,76 @@ import Logika.Split
       return r
     }
 
+    def evalFor(s0: State, forStmt: AST.Stmt.For): ISZ[State] = {
+      var r = ISZ[State]()
+
+      def evalStep(s1: State, idSym: State.Value.Sym, step: AST.EnumGen.Range.Step): (ISZ[State], ISZ[State]) = {
+        var done = ISZ[State]()
+        var loop = ISZ[State]()
+        for (p1 <- evalExp(split, smt2, rtCheck, s1, step.start, reporter);
+             p2 <- evalExp(split, smt2, rtCheck, p1._1, step.end, reporter)) {
+          val (_, start) = p1
+          val (s3, end) = p2
+          val s4vs: ISZ[(State, Option[State.Value])] = step.byOpt match {
+            case Some(e) => for (p3 <- evalExp(split, smt2, rtCheck, s3, e, reporter)) yield (p3._1, Some(p3._2))
+            case _ => ISZ((s3, None()))
+          }
+          for (p3 <- s4vs) {
+            val (s4, _) = p3
+            val (s5, lb) = s4.freshSym(AST.Typed.b, step.start.posOpt.get)
+            val (s6, ub) = s5.freshSym(AST.Typed.b, step.end.posOpt.get)
+            val (s7, lub) = s6.freshSym(AST.Typed.b, step.attr.posOpt.get)
+            val s8 = s7.addClaim(State.Claim.Let.Binary(lb, start, AST.Exp.BinaryOp.Le, idSym, start.tipe))
+            val s9 = s8.addClaim(State.Claim.Let.Binary(lb, idSym,
+              if (step.isInclusive) AST.Exp.BinaryOp.Le else AST.Exp.BinaryOp.Lt, end, start.tipe))
+            val s10 = s9.addClaim(State.Claim.Let.Binary(lub, lb, AST.Exp.BinaryOp.And, ub, AST.Typed.b))
+            done = done :+ s10.addClaim(State.Claim.Prop(F, lub))
+            loop = loop :+ s10.addClaim(State.Claim.Prop(T, lub))
+          }
+        }
+        return (loop, done)
+      }
+
+      def evalEach(s1: State, enumGen: AST.EnumGen.Range.Expr): (ISZ[State], ISZ[State]) = {
+        halt("TODO") // TODO
+      }
+
+      def evalEnumGen(s1: State, enumGen: AST.EnumGen.For): (ISZ[State], ISZ[State]) = {
+        var done = ISZ[State]()
+        var loop = ISZ[State]()
+        enumGen.range match {
+          case range: AST.EnumGen.Range.Step =>
+            val pos: Position = enumGen.idOpt match {
+              case Some(id) => id.attr.posOpt.get
+              case _ => range.attr.posOpt.get
+            }
+            val (s2, idSym) = s1.freshSym(range.start.typedOpt.get, pos)
+            val (s3, num) = s2.fresh
+            val (ds, ls) = evalStep(s3, idSym, range)
+            val ctx = context.methodOpt.get.name
+            enumGen.idOpt match {
+              case Some(id) =>
+                for (d <- ds) {
+                  done = done :+ d.addClaim(State.Claim.Let.Id(idSym, ctx, id.value, num, ISZ(pos)))
+                }
+                for (l <- ls) {
+                  loop = loop :+ l.addClaim(State.Claim.Let.CurrentId(F, idSym, ctx, id.value, Some(pos)))
+                }
+              case _ =>
+                done = done ++ ds
+                loop = loop ++ ls
+            }
+          case range: AST.EnumGen.Range.Expr =>
+            halt("TODO") // TODO
+        }
+        return (loop, done)
+      }
+
+      halt("TODO") // TODO
+
+      //return r
+    }
+
     def evalWhile(s0: State, whileStmt: AST.Stmt.While): ISZ[State] = {
       var r = ISZ[State]()
       for (s0w <- checkExps(split, smt2, F, "Loop invariant", " at the beginning of while-loop", s0,
@@ -2635,6 +2717,13 @@ import Logika.Split
               return ISZ(state(status = F))
             }
             return evalWhileUnroll(split, state, stmt)
+          }
+        case stmt: AST.Stmt.For =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          if (stmt.modifies.nonEmpty) {
+            return evalFor(state, stmt)
+          } else {
+            halt("TODO") // TODO
           }
         case stmt: AST.Stmt.Return =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
