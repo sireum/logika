@@ -38,12 +38,14 @@ class LogikaRcTest extends SireumRcSpec {
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
     val reporter = Logika.Reporter.create
+    val c = config
+    //val c = config(logVcDirOpt = Some((Os.home / "Temp" / path.last).string))
     if (path.last.startsWith("z3-")) {
-      Logika.checkWorksheet(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, config,
-        th => Smt2Impl(z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
+      Logika.checkWorksheet(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, c,
+        th => Smt2Impl(z3Exe, Smt2Impl.z3ArgF _, th, c.charBitWidth, c.intBitWidth, c.simplifiedQuery), reporter)
     } else {
-      Logika.checkWorksheet(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, config,
-        th => Smt2Impl(cvc4Exe, Smt2Impl.cvc4ArgF _, th, config.charBitWidth, config.intBitWidth), reporter)
+      Logika.checkWorksheet(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, c,
+        th => Smt2Impl(cvc4Exe, Smt2Impl.cvc4ArgF _, th, c.charBitWidth, c.intBitWidth, c.simplifiedQuery), reporter)
     }
     reporter.printMessages()
     !reporter.hasIssue

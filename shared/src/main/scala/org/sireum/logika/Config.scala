@@ -40,6 +40,7 @@ import org.sireum._
                        splitAll: B,
                        splitIf: B,
                        splitMatch: B,
-                       splitContract: B)
+                       splitContract: B,
+                       simplifiedQuery: B)
 
 @datatype class LoopId(ids: ISZ[String])

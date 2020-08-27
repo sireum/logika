@@ -44,7 +44,8 @@ object Smt2Impl {
                        argsF: Z => ISZ[String] @pure,
                        val typeHierarchy: TypeHierarchy,
                        val charBitWidth: Z,
-                       val intBitWidth: Z)
+                       val intBitWidth: Z,
+                       val simplifiedQuery: B)
   extends Smt2 {
 
   var types: HashSet[AST.Typed] = Smt2.basicTypes

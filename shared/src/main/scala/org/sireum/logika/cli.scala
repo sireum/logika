@@ -41,16 +41,9 @@ object cli {
       Opt(name = "sourcepath", longKey = "sourcepath", shortKey = Some('s'),
         tpe = Type.Path(T, None()),
         description = "Sourcepath of Slang .scala files"),
-      Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
-        tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
-        description = "Timeout (seconds) for SMT2 solver"),
       Opt(name = "unroll", longKey = "unroll", shortKey = None(),
         tpe = Type.Flag(F),
         description = "Enable loop unrolling when loop modifies clause is unspecified"),
-      Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
-        tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("z3", "cvc4")),
-        description = "Smt2 solver"
-      ),
     ),
     groups = ISZ(
       OptGroup(name = "Bit-width", opts = ISZ(
@@ -74,6 +67,19 @@ object cli {
         Opt(name = "splitContract", longKey = "split-contract", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Split on contract cases"),
+      )),
+      OptGroup(name = "SMT2", opts = ISZ(
+        Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
+          tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
+          description = "Timeout (seconds) for SMT2 solver"),
+        Opt(name = "simplify", longKey = "simplify", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Simplify SMT2 query"
+        ),
+        Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
+          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("z3", "cvc4")),
+          description = "Smt2 solver"
+        ),
       )),
       OptGroup(name = "Logging", opts = ISZ(
         Opt(name = "logPc", longKey = "log-pc", shortKey = None(),
