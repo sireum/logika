@@ -83,6 +83,8 @@ object Smt2 {
 
 @msig trait Smt2 {
 
+  def configs: ISZ[Smt2Config]
+
   def simplifiedQuery: B
 
   def charBitWidth: Z
@@ -287,9 +289,9 @@ object Smt2 {
 
   def typeHierarchy: TypeHierarchy
 
-  def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result)
+  def checkSat(query: String, timeoutInMsOpt: Option[Z]): (B, Smt2Query.Result)
 
-  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2Query.Result)
+  def checkUnsat(query: String, timeoutInMsOpt: Option[Z]): (B, Smt2Query.Result)
 
   def formatVal(format: String, n: Z): ST
 
@@ -332,7 +334,7 @@ object Smt2 {
   def sat(log: B, logDirOpt: Option[String], title: String, pos: message.Position, claims: ISZ[State.Claim],
           reporter: Reporter): B = {
     val headers = st"Satisfiability Check for $title:" +: State.Claim.claimsSTs(claims, ClaimDefs.empty)
-    val (r, res) = checkSat(satQuery(headers, claims, None(), reporter).render, 500)
+    val (r, res) = checkSat(satQuery(headers, claims, None(), reporter).render, Some(500))
     reporter.query(pos, res)
     if (log) {
       reporter.info(None(), Logika.kind,
@@ -782,11 +784,11 @@ object Smt2 {
   }
 
   def valid(log: B, logDirOpt: Option[String], title: String, pos: message.Position, premises: ISZ[State.Claim],
-            conclusion: State.Claim, timeoutInMs: Z, reporter: Reporter): Smt2Query.Result = {
+            conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
     val defs = ClaimDefs.empty
     val ps = State.Claim.claimsSTs(premises, defs)
     val headers = (st"Validity Check for $title:" +: ps :+ st"⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs)
-    val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
+    val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, None())
     reporter.query(pos, res)
     if (log) {
       reporter.info(None(), Logika.kind,

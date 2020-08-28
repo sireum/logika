@@ -49,11 +49,13 @@ object LogikaTest {
     case _ => "cvc4"
   }
 
+  val timeoutInMs: Z = 5000
+
   val config: Config =
     Config(
+      ISZ(Z3Config(z3Exe, timeoutInMs), Cvc4Config(cvc4Exe, timeoutInMs)),
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,
-      smt2TimeoutInSeconds = 5,
       unroll = T,
       charBitWidth = 32,
       intBitWidth = 0,
@@ -171,7 +173,7 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkWorksheet(None(), input, config,
-      th => Smt2Impl(LogikaTest.z3Exe, Smt2Impl.z3ArgF _, th, config.charBitWidth, config.intBitWidth, config.simplifiedQuery), reporter)
+      th => Smt2Impl(config.smt2Configs, th, config.charBitWidth, config.intBitWidth, config.simplifiedQuery), reporter)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

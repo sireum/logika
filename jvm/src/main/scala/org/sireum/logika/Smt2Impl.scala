@@ -40,8 +40,7 @@ object Smt2Impl {
   }
 }
 
-@record class Smt2Impl(val exe: String,
-                       argsF: Z => ISZ[String] @pure,
+@record class Smt2Impl(val configs: ISZ[Smt2Config],
                        val typeHierarchy: TypeHierarchy,
                        val charBitWidth: Z,
                        val intBitWidth: Z,
@@ -121,47 +120,64 @@ object Smt2Impl {
     println(s"Wrote $f")
   }
 
-  def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
-    val r = checkQuery(query, timeoutInMs)
+  def checkSat(query: String, timeoutInMsOpt: Option[Z]): (B, Smt2Query.Result) = {
+    val r = checkQuery(query, timeoutInMsOpt)
     return (r.kind != Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
-    val r = checkQuery(query, timeoutInMs)
+  def checkUnsat(query: String, timeoutInMsOpt: Option[Z]): (B, Smt2Query.Result) = {
+    val r = checkQuery(query, timeoutInMsOpt)
     return (r.kind == Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkQuery(query: String, timeoutInMs: Z): Smt2Query.Result = {
-    def err(out: String): Unit = {
-      halt(
-        st"""Error encountered when running $exe query:
-            |$query
-            |
-            |$exe output:
-            |$out""".render)
-    }
-    //println(s"$exe Query:")
-    //println(query)
-    val pr = Os.proc(exe +: argsF(timeoutInMs)).input(query).redirectErr.run()
-    val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
-    if (out.size == 0) {
-      err(pr.out)
-    }
-    val firstLine = out(0)
-    val r: Smt2Query.Result = firstLine match {
-      case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, query, pr.out)
-      case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, query, pr.out)
-      case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, query, pr.out)
-      case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, query, pr.out)
-      case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, query, pr.out)
-    }
-    //println(s"$exe Result (${r.kind}):")
-    //println(r.output)
-    if (r.kind == Smt2Query.Result.Kind.Error) {
-      err(pr.out)
+  def checkQuery(query: String, timeoutInMsOpt: Option[Z]): Smt2Query.Result = {
+    def checkQueryH(config: Smt2Config): Smt2Query.Result = {
+      def err(out: String): Unit = {
+        halt(
+          st"""Error encountered when running ${config.exe} query:
+              |$query
+              |
+              |${config.exe} output:
+              |$out""".render)
+      }
+      //println(s"$exe Query:")
+      //println(query)
+      val pr = Os.proc(config.exe +: config.args(timeoutInMsOpt)).input(query).redirectErr.run()
+      val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
+      if (out.size == 0) {
+        err(pr.out)
+      }
+      val firstLine = out(0)
+      val r: Smt2Query.Result = firstLine match {
+        case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query, pr.out)
+        case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, query, pr.out)
+        case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, config.name, query, pr.out)
+        case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, config.name, query, pr.out)
+        case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, query, pr.out)
+      }
+      //println(s"$exe Result (${r.kind}):")
+      //println(r.output)
+      if (r.kind == Smt2Query.Result.Kind.Error) {
+        err(pr.out)
+      }
+
+      return r
     }
 
-    return r
+    for (i <- 0 until configs.size - 1) {
+      val r = checkQueryH(configs(i))
+      val stop: B = r.kind match {
+        case Smt2Query.Result.Kind.Sat => T
+        case Smt2Query.Result.Kind.Unsat => T
+        case Smt2Query.Result.Kind.Unknown => F
+        case Smt2Query.Result.Kind.Timeout => F
+        case Smt2Query.Result.Kind.Error => T
+      }
+      if (stop) {
+        return r
+      }
+    }
+    return checkQueryH(configs(configs.size - 1))
   }
 
   def formatVal(format: String, n: Z): ST = {

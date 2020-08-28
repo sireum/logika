@@ -457,8 +457,6 @@ import Logika.Split
                        config: Config,
                        context: Logika.Context) {
 
-  val timeoutInMs: Z = config.smt2TimeoutInSeconds * 1000
-
   @pure def isBasic(smt2: Smt2, t: AST.Typed): B = {
     if (Smt2.basicTypes.contains(t)) {
       return T
@@ -491,7 +489,7 @@ import Logika.Split
     val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
     val claim = State.Claim.Prop(T, v)
     val r = smt2.valid(config.logVc, config.logVcDirOpt, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]",
-      pos, s2.claims, claim, timeoutInMs, reporter)
+      pos, s2.claims, claim, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s2.addClaim(claim)
       case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly out of bound sequence indexing", reporter)
@@ -780,7 +778,7 @@ import Logika.Split
         val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
         val r = smt2.valid(config.logVc, config.logVcDirOpt,
           s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
-          pos, s0.claims :+ claim, State.Claim.Prop(T, sym), timeoutInMs, reporter)
+          pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
         r.kind match {
           case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
           case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly zero second operand for ${exp.op}", reporter)
@@ -1911,7 +1909,7 @@ import Logika.Split
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
     val r = smt2.valid(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos,
-      s0.claims, conclusion, timeoutInMs, reporter)
+      s0.claims, conclusion, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
       case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
@@ -2782,7 +2780,7 @@ import Logika.Split
       val (s2, sym) = value2Sym(s1, v, pos)
       val prop = State.Claim.Prop(T, sym)
       val rvalid = smt2.valid(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]",
-        pos, s2.claims, prop, timeoutInMs, reporter)
+        pos, s2.claims, prop, reporter)
       var ok = F
       rvalid.kind match {
         case Smt2Query.Result.Kind.Unsat => ok = T
