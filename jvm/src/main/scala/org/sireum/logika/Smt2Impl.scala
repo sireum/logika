@@ -121,16 +121,16 @@ object Smt2Impl {
   }
 
   def checkSat(query: String, timeoutInMsOpt: Option[Z]): (B, Smt2Query.Result) = {
-    val r = checkQuery(query, timeoutInMsOpt)
+    val r = checkQuery(T, query, timeoutInMsOpt)
     return (r.kind != Smt2Query.Result.Kind.Unsat, r)
   }
 
   def checkUnsat(query: String, timeoutInMsOpt: Option[Z]): (B, Smt2Query.Result) = {
-    val r = checkQuery(query, timeoutInMsOpt)
+    val r = checkQuery(F, query, timeoutInMsOpt)
     return (r.kind == Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkQuery(query: String, timeoutInMsOpt: Option[Z]): Smt2Query.Result = {
+  def checkQuery(firstOnly: B, query: String, timeoutInMsOpt: Option[Z]): Smt2Query.Result = {
     def checkQueryH(config: Smt2Config): Smt2Query.Result = {
       def err(out: String): Unit = {
         halt(
@@ -173,7 +173,7 @@ object Smt2Impl {
         case Smt2Query.Result.Kind.Timeout => F
         case Smt2Query.Result.Kind.Error => T
       }
-      if (stop) {
+      if (firstOnly || stop) {
         return r
       }
     }
