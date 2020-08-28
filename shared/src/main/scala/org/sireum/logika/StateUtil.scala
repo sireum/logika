@@ -103,6 +103,11 @@ object ClaimDefs {
 
 @record class UsedSymsCurrentDeclIdCollector(var syms: HashSet[State.Value.Sym],
                                              var currentDeclIds: ISZ[State.Claim.Let.CurrentId]) extends MStateTransformer {
+  override def preStateClaimLetQuant(o: State.Claim.Let.Quant): MStateTransformer.PreResult[State.Claim.Let] = {
+    syms = syms + o.sym
+    return MStateTransformer.PreResult(T, MNone())
+  }
+
   override def preStateValueSym(o: State.Value.Sym): MStateTransformer.PreResult[State.Value] = {
     syms = syms + o
     return super.preStateValueSym(o)
