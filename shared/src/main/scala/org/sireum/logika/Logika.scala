@@ -1458,7 +1458,7 @@ import Logika.Split
             }
           }
 
-          def modVarsRewrite(ms0: State, pos: Position): State = {
+          def modVarsRewrite(ms0: State, modPos: Position): State = {
             var ms1 = ms0
             for (q <- paramArgs) {
               val (p, t, arg, _) = q
@@ -1474,7 +1474,7 @@ import Logika.Split
             if (receiverOpt.nonEmpty) {
               rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "this")
             }
-            ms1 = Logika.rewriteLocalVars(ms1, rwLocals, pos)
+            ms1 = Logika.rewriteLocalVars(ms1, rwLocals, modPos)
             currentReceiverOpt match {
               case Some(receiver) =>
                 ms1 = ms1.addClaim(State.Claim.Let.CurrentId(F, receiver, context.methodOpt.get.name, "this",
@@ -1564,10 +1564,10 @@ import Logika.Split
           case Some(m) => m.receiverTypeOpt match {
             case Some(currentReceiverType) =>
               val lcontext = context.methodOpt.get.name
-              val pos = posOpt.get
-              val p = Logika.idIntro(pos, s1, lcontext, "this", currentReceiverType, None())
+              val thisPos = posOpt.get
+              val p = Logika.idIntro(thisPos, s1, lcontext, "this", currentReceiverType, None())
               s1 = p._1
-              s1 = Logika.rewriteLocal(s1, lcontext, "this", pos)
+              s1 = Logika.rewriteLocal(s1, lcontext, "this", thisPos)
               Some(p._2)
             case _ => None()
           }
