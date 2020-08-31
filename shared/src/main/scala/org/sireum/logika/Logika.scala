@@ -353,7 +353,7 @@ object Logika {
 
   def rewriteLocal(s0: State, lcontext: ISZ[String], id: String, pos: Position): State = {
     val poss = collectLocalPoss(s0, lcontext, id)
-    assert(poss.nonEmpty, s"[${pos.beginLine}, ${pos.beginColumn}] No starting definition for $id; missing Modifies clause?")
+    assert(poss.nonEmpty, s"[${pos.beginLine}, ${pos.beginColumn}] No starting definition for $id; missing Modifies clause for $id?")
     val (s1, num) = s0.fresh
     val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
     return StateTransformer(Logika.CurrentIdRewriter(locals)).transformState(ISZ(), s1).resultOpt.get
@@ -386,7 +386,7 @@ object Logika {
     for (l <- localVars) {
       val poss = StateTransformer(Logika.CurrentIdPossCollector(l.context, l.id)).
         transformState(ISZ(), current).ctx
-      assert(poss.nonEmpty, s"[${pos.beginLine}, ${pos.beginColumn}] No definition for $l; missing Modifies clause?")
+      assert(poss.nonEmpty, s"[${pos.beginLine}, ${pos.beginColumn}] No definition for ${l.id}; missing Modifies clause for ${l.id}?")
       val (s1, num) = current.fresh
       current = s1
       locals = locals + (l.context, l.id) ~> ((poss, num))
