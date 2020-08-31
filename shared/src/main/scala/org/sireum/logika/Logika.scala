@@ -412,7 +412,7 @@ object Logika {
       val poss = StateTransformer(Logika.CurrentNamePossCollector(ids)).
         transformState(ISZ(), current).ctx
       if (poss.isEmpty) {
-        reporter.error(Some(pos), kind, s"Missing modifies clause for ${(l.owner, ".")}.${l.id}")
+        reporter.error(Some(pos), kind, s"Missing Modifies clause for ${(l.owner, ".")}.${l.id}")
         return state(status = F)
       }
       val (s1, num) = current.fresh
@@ -1992,6 +1992,7 @@ import Logika.Split
       val poss = StateTransformer(Logika.CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
       if (poss.isEmpty) {
         reporter.error(namePosOpt, Logika.kind, s"Missing Modifies clause for ${(ids, ".")}.")
+        return s0(status = F)
       }
       val (s1, num) = s0.fresh
       val objectVars = HashMap.empty[ISZ[String], (ISZ[Position], Z)] + ids ~> ((poss, num))
