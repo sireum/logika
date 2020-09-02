@@ -65,6 +65,8 @@ object Smt2Impl {
 
   var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)] = HashSMap.empty
 
+  var filenameCount: HashMap[String, Z] = HashMap.empty
+
   def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
     shortIds = newShortIds
   }
@@ -115,7 +117,15 @@ object Smt2Impl {
     val fname = ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(filename).
       replaceAllLiterally(", ", "-")).replaceAllLiterally(" [", "-")).replaceAllChars(' ', '-')).
       replaceAllChars('[', '-')).replaceAllLiterally("]", "")).toLower
-    val f = p / fname
+    val countOpt: Option[ST] = filenameCount.get(fname) match {
+      case Some(n) =>
+        filenameCount = filenameCount + fname ~> (n + 1)
+        Some(st".$n")
+      case _ =>
+        filenameCount = filenameCount + fname ~> 1
+        None()
+    }
+    val f = p / st"$fname$countOpt.smt2".render
     f.writeOver(content)
     println(s"Wrote $f")
   }

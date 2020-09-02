@@ -215,7 +215,7 @@ object Logika {
         }
         if (!reporter.hasIssue) {
           val smt2 = smt2f(th)
-          val logika = Logika(th, config, Context.empty)
+          val logika = Logika(th, config, Context.empty, F)
           for (state <- logika.evalStmts(Split.Default, smt2, None(), T, State.create, p.body.stmts, reporter) if state.status) {
             if (p.body.stmts.nonEmpty) {
               val lastPos = p.body.stmts(p.body.stmts.size - 1).posOpt.get
@@ -241,12 +241,12 @@ object Logika {
     }
   }
 
-  def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], receiverTypeOpt: Option[AST.Typed],
+  def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], inPfc: B, receiverTypeOpt: Option[AST.Typed],
                    sig: AST.MethodSig, posOpt: Option[Position], reads: ISZ[AST.Exp.Ident], modifies: ISZ[AST.Exp.Ident],
                    caseLabels: ISZ[AST.Exp.LitString]): Logika = {
     val mctx = MethodContext(name, receiverTypeOpt, sig, reads, modifies, HashMap.empty, HashMap.empty, HashMap.empty, posOpt)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels)
-    return Logika(th, config, ctx)
+    return Logika(th, config, ctx, inPfc)
   }
 
   def checkMethod(th: TypeHierarchy, method: AST.Stmt.Method, config: Config, smt2: Smt2, reporter: Reporter): Unit = {
@@ -269,7 +269,7 @@ object Logika {
             case _ => halt("Infeasible")
           }
         }
-        val l = logikaMethod(th, config, mname, receiverTypeOpt, method.sig, method.posOpt, reads, modifies,
+        val l = logikaMethod(th, config, mname, F, receiverTypeOpt, method.sig, method.posOpt, reads, modifies,
           if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
@@ -464,7 +464,8 @@ import Logika.Split
 
 @datatype class Logika(th: lang.tipe.TypeHierarchy,
                        config: Config,
-                       context: Logika.Context) {
+                       context: Logika.Context,
+                       inPfc: B) {
 
   @pure def isBasic(smt2: Smt2, t: AST.Typed): B = {
     if (Smt2.basicTypes.contains(t)) {
@@ -537,7 +538,7 @@ import Logika.Split
           AST.Util.TypeSubstitutor(substMap).transformAssignExp(b).getOrElse(b)
         }
         val posOpt = body.asStmt.posOpt
-        val logika: Logika = Logika.logikaMethod(th, config, pf.context :+ pf.id, pf.receiverTypeOpt, imi.sig,
+        val logika: Logika = Logika.logikaMethod(th, config, pf.context :+ pf.id, T, pf.receiverTypeOpt, imi.sig,
           posOpt, ISZ(), ISZ(), ISZ())
         val s0 = state(claims = ISZ())
         val (s1, r) = Logika.idIntro(posOpt.get, s0, pf.context, "Res", funType.ret, posOpt)
@@ -1158,7 +1159,7 @@ import Logika.Split
       val (s0, sym) = state.freshSym(AST.Typed.b, quant.attr.posOpt.get)
       var nextFresh = s0.nextFresh
       val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
-      for (p <- evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s0, quant.fun.exp, reporter)) {
+      for (p <- this(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s0, quant.fun.exp, reporter)) {
         val (s1, v) = p
         val (s2, expSym) = value2Sym(s1, v, quant.fun.exp.asStmt.posOpt.get)
         quantClaims = quantClaims :+ State.Claim.And(ops.ISZOps(s2.claims).slice(s0.claims.size, s2.claims.size) :+ State.Claim.Prop(T, expSym))
@@ -1197,7 +1198,7 @@ import Logika.Split
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
-          for (p <- evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
+          for (p <- this(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
             val (s9, v) = p
             val (s10, expSym) = value2Sym(s9, v, quant.fun.exp.asStmt.posOpt.get)
             val props: ISZ[State.Claim] = ISZ(loProp, hiProp, State.Claim.Prop(T, expSym))
@@ -1254,7 +1255,7 @@ import Logika.Split
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
-          for (p <- evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
+          for (p <- this(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
             val (s9, v) = p
             val (s10, expSym) = value2Sym(s9, v, quant.fun.exp.asStmt.posOpt.get)
             val props: ISZ[State.Claim] = ISZ(loProp, hiProp, State.Claim.Prop(T, expSym))
@@ -1303,7 +1304,7 @@ import Logika.Split
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s7.nextFresh
-          for (p <- evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s7.addClaim(inBoundProp), quant.fun.exp, reporter)) {
+          for (p <- this(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s7.addClaim(inBoundProp), quant.fun.exp, reporter)) {
             val (s8, v) = p
             val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
             val props: ISZ[State.Claim] = ISZ(inBoundProp, State.Claim.Prop(T, expSym))
@@ -1541,7 +1542,7 @@ import Logika.Split
         }
 
         val logikaComp: Logika = {
-          val l = Logika.logikaMethod(th, config, ctx, receiverOpt.map(t => t.tipe), info.sig, receiverPosOpt,
+          val l = Logika.logikaMethod(th, config, ctx, F, receiverOpt.map(t => t.tipe), info.sig, receiverPosOpt,
             contract.reads, contract.modifies, ISZ())
           val mctx = l.context.methodOpt.get
           var objectVarInMap = mctx.objectVarInMap
@@ -1640,8 +1641,10 @@ import Logika.Split
               }
               if (shouldSplit) {
                 for (ccr <- okCcrs) {
-                  val claims = root.claims :+ State.Claim.Imply(ISZ(ccr.requiresClaim,
-                    State.Claim.And(ops.ISZOps(ccr.state.claims).slice(root.claims.size, ccr.state.claims.size))))
+                  val cs = ISZ[State.Claim](ccr.requiresClaim,
+                    State.Claim.And(ops.ISZOps(ccr.state.claims).slice(root.claims.size, ccr.state.claims.size)))
+                  val claims = ops.ISZOps(ccr.state.claims).slice(0, root.claims.size) :+
+                    (if (inPfc) State.Claim.Imply(cs) else State.Claim.And(cs))
                   r = r :+ ((ccr.state(nextFresh = nextFresh, claims = claims), ccr.retVal))
                 }
               } else {
@@ -1783,16 +1786,17 @@ import Logika.Split
               if (shouldSplit) {
                 for (s3v <- s3vs) {
                   val (s3t, tv) = s3v
-                  val s3 = s3t(nextFresh = s4NextFresh, claims = s2.claims :+ State.Claim.Imply(ISZ(
-                    prop, State.Claim.And(ops.ISZOps(s3t.claims).slice(s2.claims.size + 1, s3t.claims.size))
-                  )))
+                  val cs = ISZ[State.Claim](prop, State.Claim.And(ops.ISZOps(s3t.claims).
+                    slice(s2.claims.size + 1, s3t.claims.size)))
+                  val s3 = s3t(nextFresh = s4NextFresh, claims = ops.ISZOps(s3t.claims).slice(0, s2.claims.size) :+
+                    (if (inPfc) State.Claim.Imply(cs)else State.Claim.And(cs)))
                   r = r :+ ((s3, tv))
                 }
                 for (s4v <- s4vs) {
                   val (s4t, ev) = s4v
-                  val s4 = s4t(claims = s2.claims :+ State.Claim.Imply(ISZ(
-                    negProp, State.Claim.And(ops.ISZOps(s4t.claims).slice(s2.claims.size + 1, s4t.claims.size))
-                  )))
+                  val cs = ISZ[State.Claim](negProp, State.Claim.And(ops.ISZOps(s4t.claims).slice(s2.claims.size + 1, s4t.claims.size)))
+                  val s4 = s4t(claims = ops.ISZOps(s4t.claims).slice(0, s2.claims.size) :+
+                    (if (inPfc) State.Claim.Imply(cs) else State.Claim.And(cs)))
                   r = r :+ ((s4, ev))
                 }
               } else {
@@ -2288,7 +2292,9 @@ import Logika.Split
                 leafClaims = leafClaims :+ ((cond, claims))
               }
             } else {
-              error(posOpt, "Infeasible pattern matching case", reporter)
+              if (!shouldSplit) {
+                error(posOpt, "Infeasible pattern matching case", reporter)
+              }
             }
           }
           if (leafClaims.isEmpty) {
@@ -2363,13 +2369,15 @@ import Logika.Split
             case (T, T) =>
               if (shouldSplit) {
                 for (s4t <- s4s) {
-                  val s4 = s4t(nextFresh = s6NextFresh, claims = s2.claims :+ State.Claim.Imply(ISZ(prop,
-                    State.Claim.And(ops.ISZOps(s4t.claims).slice(s2.claims.size + 1, s4t.claims.size)))))
+                  val cs = ISZ[State.Claim](prop, State.Claim.And(ops.ISZOps(s4t.claims).slice(s2.claims.size + 1, s4t.claims.size)))
+                  val s4 = s4t(nextFresh = s6NextFresh, claims = ops.ISZOps(s4t.claims).slice(0, s2.claims.size) :+
+                    (if (inPfc) State.Claim.Imply(cs) else State.Claim.And(cs)))
                   r = r :+ s4
                 }
                 for (s6t <- s6s) {
-                  val s6 = s6t(claims = s2.claims :+ State.Claim.Imply(ISZ(negProp,
-                    State.Claim.And(ops.ISZOps(s6t.claims).slice(s2.claims.size + 1, s6t.claims.size)))))
+                  val cs = ISZ[State.Claim](negProp, State.Claim.And(ops.ISZOps(s6t.claims).slice(s2.claims.size + 1, s6t.claims.size)))
+                  val s6 = s6t(claims = ops.ISZOps(s6t.claims).slice(0, s2.claims.size) :+
+                    (if (inPfc) State.Claim.Imply(cs) else State.Claim.And(cs)))
                   r = r :+ s6
                 }
               } else {
@@ -2798,7 +2806,7 @@ import Logika.Split
       val pos = exp.posOpt.get
       val (s2, sym) = value2Sym(s1, v, pos)
       val prop = State.Claim.Prop(T, sym)
-      val rvalid = smt2.valid(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]",
+      val rvalid = smt2.valid(config.logVc, config.logVcDirOpt, s"$title$titleSuffix at [${pos.beginLine}, ${pos.beginColumn}]",
         pos, s2.claims, prop, reporter)
       var ok = F
       rvalid.kind match {
