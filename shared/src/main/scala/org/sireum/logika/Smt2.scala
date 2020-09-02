@@ -798,8 +798,8 @@ object Smt2 {
     logDirOpt match {
       case Some(logDir) =>
         val filename: String =
-          if (ops.StringOps(title).contains("[")) s"vc-$title.smt2"
-          else s"vc-$title-at-${pos.beginLine}-${pos.beginColumn}.smt2"
+          if (ops.StringOps(title).contains("[")) s"vc-$title"
+          else s"vc-$title-at-${pos.beginLine}-${pos.beginColumn}"
         writeFile(logDir, filename, res.query)
       case _ =>
     }
