@@ -142,17 +142,34 @@ object Smt2Impl {
       }
       //println(s"$exe Query:")
       //println(query)
-      val pr = Os.proc(config.exe +: config.args(timeoutInMsOpt)).input(query).redirectErr.run()
+      val args = config.args(timeoutInMsOpt)
+      val pr = Os.proc(config.exe +: args).input(query).redirectErr.run()
       val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
       if (out.size == 0) {
         err(pr.out)
       }
       val firstLine = out(0)
       val r: Smt2Query.Result = firstLine match {
-        case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query, pr.out)
-        case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, query, pr.out)
-        case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, config.name, query, pr.out)
-        case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, config.name, query, pr.out)
+        case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name,
+          st"""$query
+              |; Solver: ${config.exe}
+              |; Arguments: ${(args, " ")}
+              |; Result: sat""".render, pr.out)
+        case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name,
+          st"""$query
+              |; Solver: ${config.exe}
+              |; Arguments: ${(args, " ")}
+              |; Result: unsat""".render, pr.out)
+        case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, config.name,
+          st"""$query
+              |; Solver: ${config.exe}
+              |; Arguments: ${(args, " ")}
+              |; Result: timeout""".render, pr.out)
+        case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, config.name,
+          st"""$query
+              |; Solver: ${config.exe}
+              |; Arguments: ${(args, " ")}
+              |; Result: unknown""".render, pr.out)
         case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, query, pr.out)
       }
       //println(s"$exe Result (${r.kind}):")

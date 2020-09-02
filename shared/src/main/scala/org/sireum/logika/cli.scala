@@ -55,6 +55,9 @@ object cli {
           description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)")
       )),
       OptGroup(name = "Path Splitting", opts = ISZ(
+        Opt(name = "dontSplitFunQuant", longKey = "dont-split-pfq", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Do not force splitting in quantifiers and proof functions derived from @strictpure methods"),
         Opt(name = "splitAll", longKey = "split-all", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Split all"),

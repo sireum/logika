@@ -37,6 +37,7 @@ import org.sireum._
                        logRawPc: B,
                        logVc: B,
                        logVcDirOpt: Option[String],
+                       dontSplitPfq: B,
                        splitAll: B,
                        splitIf: B,
                        splitMatch: B,

@@ -541,7 +541,8 @@ import Logika.Split
           posOpt, ISZ(), ISZ(), ISZ())
         val s0 = state(claims = ISZ())
         val (s1, r) = Logika.idIntro(posOpt.get, s0, pf.context, "Res", funType.ret, posOpt)
-        (r, s0.claims.size, logika.evalAssignExpValue(Split.Enabled, smt2, funType.ret, T, s1, body, reporter))
+        val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
+        (r, s0.claims.size, logika.evalAssignExpValue(split, smt2, funType.ret, T, s1, body, reporter))
       }
 
       smt2.addStrictPureMethod(b.asStmt.posOpt.get, pf, svs, res, prefix)
@@ -1156,7 +1157,8 @@ import Logika.Split
       var quantClaims = ISZ[State.Claim]()
       val (s0, sym) = state.freshSym(AST.Typed.b, quant.attr.posOpt.get)
       var nextFresh = s0.nextFresh
-      for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck, s0, quant.fun.exp, reporter)) {
+      val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
+      for (p <- evalAssignExpValue(split, smt2, AST.Typed.b, rtCheck, s0, quant.fun.exp, reporter)) {
         val (s1, v) = p
         val (s2, expSym) = value2Sym(s1, v, quant.fun.exp.asStmt.posOpt.get)
         quantClaims = quantClaims :+ State.Claim.And(ops.ISZOps(s2.claims).slice(s0.claims.size, s2.claims.size) :+ State.Claim.Prop(T, expSym))
@@ -1176,6 +1178,7 @@ import Logika.Split
       val qVarType = quant.attr.typedOpt.get
       val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
       val s0 = state
+      val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
       var r = ISZ[(State, State.Value)]()
       for (p1 <- evalExp(split, smt2, rtCheck, s0, quant.lo, reporter);
            p2 <- evalExp(split, smt2, rtCheck, p1._1, quant.hi, reporter)) {
@@ -1194,7 +1197,7 @@ import Logika.Split
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
-          for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
+          for (p <- evalAssignExpValue(split, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
             val (s9, v) = p
             val (s10, expSym) = value2Sym(s9, v, quant.fun.exp.asStmt.posOpt.get)
             val props: ISZ[State.Claim] = ISZ(loProp, hiProp, State.Claim.Prop(T, expSym))
@@ -1233,6 +1236,7 @@ import Logika.Split
         sType.ids, "lastIndex", ISZ(), Some(AST.Typed.Fun(T, T, ISZ(), qVarType)))), Some(qVarType))
       val firstIndexExp = AST.Exp.Select(Some(seqExp), AST.Id("firstIndex", AST.Attr(posOpt)), ISZ(), firstIndexResAttr)
       val lastIndexExp = AST.Exp.Select(Some(seqExp), AST.Id("lastIndex", AST.Attr(posOpt)), ISZ(), lastIndexResAttr)
+      val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
       var r = ISZ[(State, State.Value)]()
       for (p1 <- evalExp(split, smt2, rtCheck, s0, firstIndexExp, reporter);
            p2 <- evalExp(split, smt2, rtCheck, p1._1, lastIndexExp, reporter)) {
@@ -1250,7 +1254,7 @@ import Logika.Split
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
-          for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
+          for (p <- evalAssignExpValue(split, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
             val (s9, v) = p
             val (s10, expSym) = value2Sym(s9, v, quant.fun.exp.asStmt.posOpt.get)
             val props: ISZ[State.Claim] = ISZ(loProp, hiProp, State.Claim.Prop(T, expSym))
@@ -1284,6 +1288,7 @@ import Logika.Split
       val eType = sType.args(1)
       val pos = quant.fun.params(0).idOpt.get.attr.posOpt.get
       var r = ISZ[(State, State.Value)]()
+      val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
       for (p <- evalExp(split, smt2, rtCheck, state, quant.seq, reporter)) {
         val (s0, seq) = p
         if (s0.status) {
@@ -1298,7 +1303,7 @@ import Logika.Split
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s7.nextFresh
-          for (p <- evalAssignExpValue(Split.Enabled, smt2, AST.Typed.b, rtCheck, s7.addClaim(inBoundProp), quant.fun.exp, reporter)) {
+          for (p <- evalAssignExpValue(split, smt2, AST.Typed.b, rtCheck, s7.addClaim(inBoundProp), quant.fun.exp, reporter)) {
             val (s8, v) = p
             val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
             val props: ISZ[State.Claim] = ISZ(inBoundProp, State.Claim.Prop(T, expSym))
