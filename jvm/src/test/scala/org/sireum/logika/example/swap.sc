@@ -9,7 +9,7 @@ def swap(s: ZS, i: Z, j: Z): Unit = {
       s.size == In(s).size,
       s(i) == In(s)(j),
       s(j) == In(s)(i),
-      All{ k: Z => (0 <= k & k < s.size) imply_: (k != i & k != j) imply_: (s(k) == In(s)(k)) },
+      All{ k: Z => (0 <= k & k < s.size) simply_: (k != i & k != j) imply_: (s(k) == In(s)(k)) },
       All(0 until s.size)(k => (k != i & k != j) imply_: (s(k) == In(s)(k))),
       All(s.indices)(k => (k != i & k != j) imply_: (s(k) == In(s)(k)))
     )
