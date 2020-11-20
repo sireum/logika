@@ -27,7 +27,7 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.lang.symbol.TypeInfo
+import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.symbol.Resolver.QName
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Message, Position}
@@ -1504,7 +1504,7 @@ import Logika.Split
         }
 
         def evalContractCase(logikaComp: Logika, currentReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
-                             labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
+                             labelOpt: Option[AST.Exp.LitString], invs: ISZ[Info.Inv], requires: ISZ[AST.Exp],
                              ensures: ISZ[AST.Exp]): ContractCaseResult = {
           val modLocals = contract.modifiedLocalVars
 
@@ -1555,6 +1555,22 @@ import Logika.Split
             case Some(label) => cs1 = cs1.addClaim(State.Claim.Label(label.value, label.posOpt.get))
             case _ =>
           }
+          for (inv <- invs) {
+            val id = inv.ast.id.value
+            var i = 0
+            val isSingle = inv.ast.claims.size == 1
+            for (claim <- inv.ast.claims) {
+              val title: String = if (isSingle) s"Pre-invariant $id" else s"Pre-invariant $id#$i"
+              if (assume) {
+                val p = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), rep)
+                val size = p._1.claims.size
+                cs1 = p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1))
+              } else {
+                cs1 = logikaComp.evalAssert(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), rep)._1
+              }
+              i = i + 1
+            }
+          }
           var requireSyms = ISZ[State.Value]()
           for (require <- requires if cs1.status) {
             val (cs2, sym): (State, State.Value.Sym) =
@@ -1576,6 +1592,16 @@ import Logika.Split
           }
           val (cs4, result) = modVarsResult(cs1, posOpt)
           cs1 = cs4
+          for (inv <- invs) {
+            val id = inv.ast.id.value
+            var i = 0
+            val isSingle = inv.ast.claims.size == 1
+            for (claim <- inv.ast.claims) {
+              val title: String = if (isSingle) s"Post-invariant $id" else s"Post-invariant $id#$i"
+              cs1 = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), rep)._1
+              i = i + 1
+            }
+          }
           for (ensure <- ensures if cs1.status) {
             cs1 = logikaComp.evalAssume(smt2, F, "Post-condition", cs1, AST.Util.substExp(ensure, typeSubstMap), rep)._1
             if (!cs1.status) {
@@ -1642,9 +1668,10 @@ import Logika.Split
             s1 = s1.addClaim(State.Claim.Let.CurrentId(F, receiver, res.owner :+ res.id, "this", receiverPosOpt))
           case _ =>
         }
+        val invs: ISZ[Info.Inv] = if (res.owner.isEmpty) th.worksheetInvs else ISZ()
         contract match {
           case contract: AST.MethodContract.Simple =>
-            val ccr = evalContractCase(logikaComp, currentReceiverOpt, F, s1, None(), contract.requires, contract.ensures)
+            val ccr = evalContractCase(logikaComp, currentReceiverOpt, F, s1, None(), invs, contract.requires, contract.ensures)
             reporter.reports(ccr.messages)
             r = r :+ ((ccr.state, ccr.retVal))
           case contract: AST.MethodContract.Cases =>
@@ -1654,7 +1681,7 @@ import Logika.Split
             var okCcrs = ISZ[ContractCaseResult]()
             for (cas <- contract.cases) {
               val ccr = evalContractCase(logikaComp, currentReceiverOpt, T, s1,
-                if (cas.label.value == "") None() else Some(cas.label), cas.requires, cas.ensures)
+                if (cas.label.value == "") None() else Some(cas.label), invs, cas.requires, cas.ensures)
               ccrs = ccrs :+ ccr
               isPreOK = isPreOK || ccr.isPreOK
               if (ccr.isOK) {
