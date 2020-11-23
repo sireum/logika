@@ -834,14 +834,14 @@ object State {
         @pure override def toRawST: ST = {
           return if (pf.receiverTypeOpt.isEmpty)
             if (pf.context.isEmpty) st"${sym.toRawST} ≜ ${pf.id}(${(for (arg <- args) yield arg.toRawST, ", ")})"
-            else st"${sym.toRawST} ≜ ${(pf.context, ".")}.${pf.id}(${(for (arg <- args) yield arg.toRawST, ", ")})"
+            else st"${sym.toRawST} ≜ ${(pf.context :+ pf.id, ".")}(${(for (arg <- args) yield arg.toRawST, ", ")})"
           else st"${sym.toRawST} ≜ ${args(0).toRawST}.${pf.id}(${(for (i <- 1 until args.size) yield args(i).toRawST, ", ")})"
         }
 
         @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
           return Some(
             if (pf.receiverTypeOpt.isEmpty)
-              st"${(pf.context, ".")}.${pf.id}(${(for (arg <- args) yield arg.toST(defs), ", ")})"
+              st"${(pf.context :+ pf.id, ".")}(${(for (arg <- args) yield arg.toST(defs), ", ")})"
             else st"${args(0).toST(defs)}.${pf.id}(${(for (i <- 1 until args.size) yield args(i).toST(defs), ", ")})"
           )
         }
