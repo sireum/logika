@@ -53,7 +53,7 @@ object LogikaTest {
 
   val config: Config =
     Config(
-      ISZ(Z3Config(z3Exe, timeoutInMs), Cvc4Config(cvc4Exe, timeoutInMs)),
+      ISZ(Cvc4Config(cvc4Exe, timeoutInMs), Z3Config(z3Exe, timeoutInMs)),
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,
       unroll = T,
