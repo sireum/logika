@@ -32,7 +32,7 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
   @pure def z3ArgF(timeoutInMs: Z): ISZ[String] = {
-    return ISZ("-smt2", s"-t:$timeoutInMs", "-in")
+    return ISZ("-smt2", s"-T:$timeoutInMs", "-in")
   }
 
   @pure def cvc4ArgF(timeoutInMs: Z): ISZ[String] = {
@@ -140,7 +140,7 @@ object Smt2Impl {
     return (r.kind == Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkQuery(firstOnly: B, query: String, timeoutInMsOpt: Option[Z]): Smt2Query.Result = {
+  def checkQuery(isSat: B, query: String, timeoutInMsOpt: Option[Z]): Smt2Query.Result = {
     def checkQueryH(config: Smt2Config): Smt2Query.Result = {
       def err(out: String): Unit = {
         halt(
@@ -152,8 +152,18 @@ object Smt2Impl {
       }
       //println(s"$exe Query:")
       //println(query)
-      val args = config.args(timeoutInMsOpt)
-      val pr = Os.proc(config.exe +: args).input(query).redirectErr.run()
+      var args = config.args(timeoutInMsOpt)
+      config match {
+        case _: Cvc4Config =>
+          args = args :+ (if (isSat) "--finite-model-find" else "--full-saturate-quant")
+        case _ =>
+      }
+      var proc = Os.proc(config.exe +: args).input(query).redirectErr
+      timeoutInMsOpt match {
+        case Some(t) => proc = proc.timeout(t * 5 / 4)
+        case _ =>
+      }
+      val pr = proc.run()
       val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
       if (out.size == 0) {
         err(pr.out)
@@ -200,7 +210,7 @@ object Smt2Impl {
         case Smt2Query.Result.Kind.Timeout => F
         case Smt2Query.Result.Kind.Error => T
       }
-      if (firstOnly || stop) {
+      if (isSat || stop) {
         return r
       }
     }
