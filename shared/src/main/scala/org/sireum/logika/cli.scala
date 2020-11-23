@@ -77,7 +77,7 @@ object cli {
           description = "Simplify SMT2 query"
         ),
         Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
-          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "z3", "cvc4")),
+          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc4", "z3")),
           description = "Smt2 solver"
         ),
         Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
