@@ -38,9 +38,6 @@ object cli {
     header = "Logika Verifier for Slang",
     usage = "<option>* [<slang-file>]",
     opts = ISZ(
-      Opt(name = "par", longKey = "par", shortKey = Some('p'),
-        tpe = Type.Flag(F),
-        description = "Enable parallelization"),
       Opt(name = "sourcepath", longKey = "sourcepath", shortKey = Some('s'),
         tpe = Type.Path(T, None()),
         description = "Sourcepath of Slang .scala files"),
@@ -56,6 +53,27 @@ object cli {
         Opt(name = "intBitWidth", longKey = "z-bitwidth", shortKey = None(),
           tpe = Type.Num(sep = None(), default = 0, min = None(), max = None()),
           description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)")
+      )),
+      OptGroup(name = "SMT2", opts = ISZ(
+        Opt(name = "simplify", longKey = "simplify", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Simplify SMT2 query"
+        ),
+        Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
+          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc4", "z3")),
+          description = "Smt2 solver"
+        ),
+        Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
+          tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
+          description = "Timeout (seconds) for SMT2 solver"),
+      )),
+      OptGroup(name = "Optimizations", opts = ISZ(
+        Opt(name = "par", longKey = "par", shortKey = Some('p'),
+          tpe = Type.Flag(F),
+          description = "Enable parallelization"),
+        Opt(name = "ramFolder", longKey = "ram-folder", shortKey = None(),
+          tpe = Type.Path(F, None()),
+          description = "RAM folder to temporarily store various artifacts (e.g., SMT2 solvers)"),
       )),
       OptGroup(name = "Path Splitting", opts = ISZ(
         Opt(name = "dontSplitFunQuant", longKey = "dont-split-pfq", shortKey = None(),
@@ -73,19 +91,6 @@ object cli {
         Opt(name = "splitMatch", longKey = "split-match", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Split on match expressions and statements"),
-      )),
-      OptGroup(name = "SMT2", opts = ISZ(
-        Opt(name = "simplify", longKey = "simplify", shortKey = None(),
-          tpe = Type.Flag(F),
-          description = "Simplify SMT2 query"
-        ),
-        Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
-          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc4", "z3")),
-          description = "Smt2 solver"
-        ),
-        Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
-          tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
-          description = "Timeout (seconds) for SMT2 solver"),
       )),
       OptGroup(name = "Logging", opts = ISZ(
         Opt(name = "logPc", longKey = "log-pc", shortKey = None(),
