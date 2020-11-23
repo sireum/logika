@@ -38,6 +38,9 @@ object cli {
     header = "Logika Verifier for Slang",
     usage = "<option>* [<slang-file>]",
     opts = ISZ(
+      Opt(name = "par", longKey = "par", shortKey = Some('p'),
+        tpe = Type.Flag(F),
+        description = "Enable parallelization"),
       Opt(name = "sourcepath", longKey = "sourcepath", shortKey = Some('s'),
         tpe = Type.Path(T, None()),
         description = "Sourcepath of Slang .scala files"),

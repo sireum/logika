@@ -492,6 +492,12 @@ object Smt2 {
       for (arg <- t.args) {
         addType(arg, reporter)
       }
+      for (v <- ti.vars.values) {
+        addType(v.typedOpt.get, reporter)
+      }
+      for (v <- ti.specVars.values) {
+        addType(v.typedOpt.get, reporter)
+      }
       posetUp(poset.addNode(t))
       val tId = typeId(t)
       addAdtDecl(st"(define-sort $tId () ADT)")

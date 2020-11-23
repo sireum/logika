@@ -200,10 +200,36 @@ object Logika {
     @strictpure def isOK: B = state.status
   }
 
+  @datatype trait Task {
+    def compute(smt2: Smt2, reporter: Reporter): ISZ[Message]
+  }
+
+  object Task {
+    @datatype class Stmts(th: TypeHierarchy, config: Config, stmts: ISZ[AST.Stmt]) extends Task {
+      override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
+        val logika = Logika(th, config, Context.empty, F)
+        for (state <- logika.evalStmts(Split.Default, smt2, None(), T, State.create, stmts, reporter) if state.status) {
+          if (stmts.nonEmpty) {
+            val lastPos = stmts(stmts.size - 1).posOpt.get
+            logika.logPc(config.logPc, config.logRawPc, state, reporter, Some(Logika.afterPos(lastPos)))
+          }
+        }
+        return reporter.messages
+      }
+    }
+
+    @datatype class Method(th: TypeHierarchy, config: Config, method: AST.Stmt.Method) extends Task {
+      override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
+        checkMethod(th, method, config, smt2, reporter)
+        return reporter.messages
+      }
+    }
+  }
+
   val kind: String = "Logika"
 
   def checkWorksheet(fileUriOpt: Option[String], input: String, config: Config,
-                     smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter): Unit = {
+                     smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter, par: B): Unit = {
     lang.parser.Parser(input).parseTopUnit[AST.TopUnit.Program](allowSireum = F, isWorksheet = T, isDiet = F,
       fileUriOpt = fileUriOpt, reporter = reporter) match {
       case Some(program) if !reporter.hasIssue =>
@@ -214,19 +240,12 @@ object Logika {
           lang.tipe.PostTipeAttrChecker.checkProgram(p, reporter)
         }
         if (!reporter.hasIssue) {
-          val smt2 = smt2f(th)
-          val logika = Logika(th, config, Context.empty, F)
-          for (state <- logika.evalStmts(Split.Default, smt2, None(), T, State.create, p.body.stmts, reporter) if state.status) {
-            if (p.body.stmts.nonEmpty) {
-              val lastPos = p.body.stmts(p.body.stmts.size - 1).posOpt.get
-              logika.logPc(config.logPc, config.logRawPc, state, reporter, Some(Logika.afterPos(lastPos)))
-            }
-          }
+          var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts))
 
           def rec(stmts: ISZ[AST.Stmt]): Unit = {
             for (stmt <- stmts) {
               stmt match {
-                case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty => checkMethod(th, stmt, config, smt2, reporter)
+                case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty => tasks = tasks :+ Task.Method(th, config, stmt)
                 case stmt: AST.Stmt.Object => rec(stmt.stmts)
                 case stmt: AST.Stmt.Adt => rec(stmt.stmts)
                 case stmt: AST.Stmt.Sig => rec(stmt.stmts)
@@ -236,6 +255,18 @@ object Logika {
           }
 
           rec(p.body.stmts)
+
+          @strictpure def combine(ms1: ISZ[Message], ms2: ISZ[Message]): ISZ[Message] = ms1 ++ ms2
+
+          if (par) {
+            reporter.reports(ops.ISZOps(tasks).mParMapFoldLeft[ISZ[Message], ISZ[Message]](
+              (task: Task) => task.compute(smt2f(th), Reporter.create), combine _, ISZ[Message]()))
+          } else {
+            val smt2 = smt2f(th)
+            for (task <- tasks) {
+              task.compute(smt2, reporter)
+            }
+          }
         }
       case _ =>
     }
