@@ -142,12 +142,12 @@ object Smt2Impl {
 
   def checkQuery(isSat: B, query: String, timeoutInMsOpt: Option[Z]): Smt2Query.Result = {
     def checkQueryH(config: Smt2Config): Smt2Query.Result = {
-      def err(out: String): Unit = {
+      def err(out: String, exitCode: Z): Unit = {
         halt(
           st"""Error encountered when running ${config.exe} query:
               |$query
               |
-              |${config.exe} output:
+              |${config.exe} output (exit code $exitCode):
               |$out""".render)
       }
       //println(s"$exe Query:")
@@ -164,10 +164,10 @@ object Smt2Impl {
         case _ =>
       }
       val pr = proc.run()
-      val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
-      if (out.size == 0) {
-        err(pr.out)
+      if (pr.out.size == 0) {
+        err(pr.out, pr.exitCode)
       }
+      val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
       val firstLine = out(0)
       val r: Smt2Query.Result = firstLine match {
         case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name,
@@ -195,7 +195,7 @@ object Smt2Impl {
       //println(s"$exe Result (${r.kind}):")
       //println(r.output)
       if (r.kind == Smt2Query.Result.Kind.Error) {
-        err(pr.out)
+        err(pr.out, pr.exitCode)
       }
 
       return r
