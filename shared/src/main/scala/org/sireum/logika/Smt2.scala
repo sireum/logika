@@ -1001,6 +1001,7 @@ object Smt2 {
           case 8 => AST.Typed.u8
           case 16 => AST.Typed.u16
           case 32 => AST.Typed.u32
+          case _ => halt("Infeasible")
         }
         return toVal(t, conversions.U32.toZ(conversions.C.toU32(v.value)))
       case v: State.Value.R =>
