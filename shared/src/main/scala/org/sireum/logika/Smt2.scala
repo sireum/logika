@@ -210,7 +210,10 @@ object Smt2 {
       v match {
         case v: State.Value.Sym =>
           if (s0.status) {
-            claimss = claimss :+ injectAdditionalClaims(v, s0Claims, acs).get
+            injectAdditionalClaims(v, s0Claims, acs) match {
+              case Some(ics) => claimss = claimss :+ ics
+              case _ => claimss = claimss :+ s0Claims
+            }
           } else {
             claimss = claimss :+ s0Claims
           }

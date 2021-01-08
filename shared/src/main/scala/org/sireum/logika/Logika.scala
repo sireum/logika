@@ -306,7 +306,7 @@ object Logika {
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
       var state = State.create
       labelOpt match {
-        case Some(label) => state = state.addClaim(State.Claim.Label(label.value, label.posOpt.get))
+        case Some(label) if label.value != "" => state = state.addClaim(State.Claim.Label(label.value, label.posOpt.get))
         case _ =>
       }
       val logika: Logika = {
@@ -559,7 +559,7 @@ import Logika.Split
     val r = smt2.valid(config.logVc, config.logVcDirOpt, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]",
       pos, s2.claims, claim, reporter)
     r.kind match {
-      case Smt2Query.Result.Kind.Unsat => return s2.addClaim(claim)
+      case Smt2Query.Result.Kind.Unsat => return s0
       case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly out of bound sequence indexing", reporter)
       case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Could not deduce that the sequence indexing is in bound", reporter)
       case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the sequence indexing is in bound", reporter)
@@ -1800,7 +1800,10 @@ import Logika.Split
                 for (pArg <- ops.ISZOps(ops.ISZOps(info.sig.params).zip(args)).zip(vs)) {
                   val ((p, arg), vOpt) = pArg
                   val id = p.id.value
-                  val argType = arg.typedOpt.get
+                  val argType: AST.Typed = arg.typedOpt.get match {
+                    case t: AST.Typed.Method if t.tpe.isByName => t.tpe.ret
+                    case t => t
+                  }
                   argTypes(i) = argType
                   paramArgs = paramArgs :+
                     ((AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id), argType, arg, vOpt.get))
@@ -1816,7 +1819,10 @@ import Logika.Split
                   val param = info.sig.params(i)
                   val id = param.id.value
                   val arg = m.get(i).get
-                  val argType = arg.typedOpt.get
+                  val argType: AST.Typed = arg.typedOpt.get match {
+                    case t: AST.Typed.Method if t.tpe.isByName => t.tpe.ret
+                    case t => t
+                  }
                   argTypes(i) = argType
                   paramArgs = paramArgs :+
                     ((AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id), argType, arg, v))
@@ -1833,7 +1839,8 @@ import Logika.Split
                 } else {
                   compositional(s1, typeSubstMap, retType, receiverOpt, paramArgs)
                 }
-              case _ => r = r :+ ((s1, State.errorValue))
+              case _ =>
+                r = r :+ ((s1, State.errorValue))
             }
           } else {
             r = r :+ ((s1, State.errorValue))
@@ -2881,6 +2888,7 @@ import Logika.Split
         case _: AST.Stmt.Enum => return ISZ(state)
         case _: AST.Stmt.Adt => return ISZ(state)
         case _: AST.Stmt.Sig => return ISZ(state)
+        case _: AST.Stmt.TypeAlias => return ISZ(state)
         case _ =>
           halt(s"TODO: $stmt") // TODO
       }
