@@ -123,12 +123,13 @@ object Logika {
   }
 
   object Context {
-    @strictpure def empty: Context = Context(ISZ(), None(), ISZ())
+    @strictpure def empty: Context = Context(ISZ(), None(), ISZ(), None())
   }
 
   @datatype class Context(typeParams: ISZ[AST.TypeParam],
                           methodOpt: Option[MethodContext],
-                          caseLabels: ISZ[AST.Exp.LitString]) {
+                          caseLabels: ISZ[AST.Exp.LitString],
+                          implicitCheckOpt: Option[String]) {
     @pure def methodName: ISZ[String] = {
       methodOpt match {
         case Some(m) => return m.name
@@ -286,14 +287,24 @@ object Logika {
       var i = 0
       val id = inv.ast.id.value
       val isSingle = inv.ast.claims.size == 1
+      val methodName: String =
+        if (logika.context.methodName.size == 1) logika.context.methodName(0)
+        else if (logika.context.methodOpt.get.receiverTypeOpt.isEmpty) st"${(logika.context.methodName, ".")}".render
+        else st"${(ops.ISZOps(logika.context.methodName).dropRight(1), ".")}#${logika.context.methodName(0)}".render
       if (isPre) {
         for (claim <- inv.ast.claims if s0.status) {
-          s0 = logika.evalAssume(smt2, T, if (isSingle) s"Pre-invariant $id" else s"Pre-invariant $id#$i", s0, claim, reporter)._1
+          val title: String =
+            if (isSingle) s"Method $methodName pre-invariant $id"
+            else s"Method $methodName pre-invariant $id#$i"
+          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssume(smt2, T, title, s0, claim, reporter)._1
           i = i + 1
         }
       } else {
         for (claim <- inv.ast.claims if s0.status) {
-          s0 = logika.evalAssert(smt2, T, if (isSingle) s"Post-invariant $id" else s"Post-invariant $id#$i", s0, claim, reporter)._1
+          val title: String =
+            if (isSingle) s"Method $methodName post-invariant $id"
+            else s"Method $methodName post-invariant $id#$i"
+          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssert(smt2, T, title, s0, claim, reporter)._1
           i = i + 1
         }
       }
@@ -383,7 +394,7 @@ object Logika {
         checkCase(None(), contract.reads, contract.requires, contract.modifies, contract.ensures)
       case contract: AST.MethodContract.Cases =>
         for (c <- contract.cases) {
-          checkCase(Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
+          checkCase(if (c.label.value === "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
         }
     }
   }
@@ -556,14 +567,14 @@ import Logika.Split
     val (s1, v) = s0.freshSym(AST.Typed.b, pos)
     val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
     val claim = State.Claim.Prop(T, v)
-    val r = smt2.valid(config.logVc, config.logVcDirOpt, s"Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]",
+    val r = smt2.valid(config.logVc, config.logVcDirOpt, st"${context.implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
       pos, s2.claims, claim, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s0
-      case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly out of bound sequence indexing", reporter)
-      case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Could not deduce that the sequence indexing is in bound", reporter)
-      case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the sequence indexing is in bound", reporter)
-      case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the sequence indexing is in bound", reporter)
+      case Smt2Query.Result.Kind.Sat => error(Some(pos), st"${context.implicitCheckOpt}Possibly out of bound sequence indexing".render, reporter)
+      case Smt2Query.Result.Kind.Unknown => error(Some(pos), st"${context.implicitCheckOpt}Could not deduce that the sequence indexing is in bound".render, reporter)
+      case Smt2Query.Result.Kind.Timeout => error(Some(pos), st"${context.implicitCheckOpt}Timed out when deducing that the sequence indexing is in bound".render, reporter)
+      case Smt2Query.Result.Kind.Error => error(Some(pos), st"${context.implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound".render, reporter)
     }
     return s2(status = F)
   }
@@ -846,14 +857,14 @@ import Logika.Split
         val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
         val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
         val r = smt2.valid(config.logVc, config.logVcDirOpt,
-          s"non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]",
+          st"${context.implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
         r.kind match {
           case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
-          case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Possibly zero second operand for ${exp.op}", reporter)
-          case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Could not deduce non-zero second operand for ${exp.op}", reporter)
-          case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing non-zero second operand for ${exp.op}", reporter)
-          case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing non-zero second operand for ${exp.op}", reporter)
+          case Smt2Query.Result.Kind.Sat => error(Some(pos), st"${context.implicitCheckOpt}Possibly zero second operand for ${exp.op}".render, reporter)
+          case Smt2Query.Result.Kind.Unknown => error(Some(pos), st"${context.implicitCheckOpt}Could not deduce non-zero second operand for ${exp.op}".render, reporter)
+          case Smt2Query.Result.Kind.Timeout => error(Some(pos), st"${context.implicitCheckOpt}Timed out when deducing non-zero second operand for ${exp.op}".render, reporter)
+          case Smt2Query.Result.Kind.Error => error(Some(pos), st"${context.implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}".render, reporter)
         }
         return s1(status = F)
       }
@@ -1344,7 +1355,7 @@ import Logika.Split
             val qcs: ISZ[State.Claim] =
               if (quantClaims.size == 1) quantClaims(0).asInstanceOf[State.Claim.And].claims
               else ISZ(State.Claim.And(quantClaims))
-            r = r :+ ((s2.addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, qcs)), sym))
+            r = r :+ ((s2(nextFresh = nextFresh).addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, qcs)), sym))
           }
         } else {
           r = r :+ ((s2, State.errorValue))
@@ -1369,28 +1380,33 @@ import Logika.Split
         val (s0, seq) = p
         if (s0.status) {
           val (s1, qvar) = Logika.idIntro(pos, s0, qVarRes.context, s"${qVarRes.id}$$Idx", iType, Some(pos))
-          val (s2, inBound) = s1.freshSym(AST.Typed.b, pos)
-          val s3 = s2.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvar))
+          val (s2, size) = s1.freshSym(AST.Typed.z, pos)
+          val s3 = s2.addClaim(State.Claim.Let.FieldLookup(size, seq, "size"))
+          val (s4, nonEmpty) = s3.freshSym(AST.Typed.b, pos)
+          val s5 = s4.addClaim(State.Claim.Let.Binary(nonEmpty, size, AST.Exp.BinaryOp.Gt, zero(AST.Typed.z, pos), AST.Typed.z))
+          val nonEmptyProp = State.Claim.Prop(T, nonEmpty)
+          val (s6, inBound) = s5.freshSym(AST.Typed.b, pos)
+          val s7 = s6.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvar))
           val inBoundProp = State.Claim.Prop(T, inBound)
-          val (s4, select) = s3.freshSym(eType, pos)
-          val s5 = s4.addClaim(State.Claim.Let.SeqLookup(select, seq, qvar))
-          val s6 = s5.addClaim(State.Claim.Let.CurrentId(T, select, qVarRes.context, qVarRes.id, None()))
-          val (s7, sym) = s6.freshSym(AST.Typed.b, quant.attr.posOpt.get)
+          val (s8, select) = s7.freshSym(eType, pos)
+          val s9 = s8.addClaim(State.Claim.Let.SeqLookup(select, seq, qvar))
+          val s10 = s9.addClaim(State.Claim.Let.CurrentId(T, select, qVarRes.context, qVarRes.id, None()))
+          val (s11, sym) = s10.freshSym(AST.Typed.b, quant.attr.posOpt.get)
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
           var quantClaims = ISZ[State.Claim]()
-          var nextFresh: Z = s7.nextFresh
-          for (p <- this(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s7.addClaim(inBoundProp), quant.fun.exp, reporter)) {
-            val (s8, v) = p
-            val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
-            if (s9.status) {
-              val props: ISZ[State.Claim] = ISZ(inBoundProp, State.Claim.Prop(T, expSym))
-              val s9ClaimsOps = ops.ISZOps(s9.claims)
-              val quantClaim = (s9ClaimsOps.slice(s1.claims.size, s7.claims.size) ++ s9ClaimsOps.slice(s7.claims.size + 1, s9.claims.size)) :+
+          var nextFresh: Z = s11.nextFresh
+          for (p <- this(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s11.addClaims(ISZ(nonEmptyProp, inBoundProp)), quant.fun.exp, reporter)) {
+            val (s12, v) = p
+            val (s13, expSym) = value2Sym(s12, v, quant.fun.exp.asStmt.posOpt.get)
+            if (s13.status) {
+              val props: ISZ[State.Claim] = ISZ(nonEmptyProp, inBoundProp, State.Claim.Prop(T, expSym))
+              val s9ClaimsOps = ops.ISZOps(s13.claims)
+              val quantClaim = (s9ClaimsOps.slice(s1.claims.size, s11.claims.size) ++ s9ClaimsOps.slice(s11.claims.size + 2, s13.claims.size)) :+
                 (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
               quantClaims = quantClaims :+ State.Claim.And(quantClaim)
             }
-            if (nextFresh < s9.nextFresh) {
-              nextFresh = s9.nextFresh
+            if (nextFresh < s13.nextFresh) {
+              nextFresh = s13.nextFresh
             }
           }
           if (quantClaims.isEmpty) {

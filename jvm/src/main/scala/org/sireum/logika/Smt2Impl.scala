@@ -114,9 +114,11 @@ object Smt2Impl {
     if (!p.exists) {
       p.mkdirAll()
     }
-    val fname = ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(ops.StringOps(filename).
-      replaceAllLiterally(", ", "-")).replaceAllLiterally(" [", "-")).replaceAllChars(' ', '-')).
-      replaceAllChars('[', '-')).replaceAllLiterally("]", "")).toLower
+
+    @strictpure def replaceChar(c: C): C =
+      if (('0' <= c && c <= '9') || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')) c else '-'
+
+    val fname = conversions.String.fromCis(for (c <- conversions.String.toCis(filename)) yield replaceChar(c))
     val countOpt: Option[ST] = filenameCount.get(fname) match {
       case Some(n) =>
         filenameCount = filenameCount + fname ~> (n + 1)
@@ -155,7 +157,10 @@ object Smt2Impl {
       var args = config.args(timeoutInMsOpt)
       config match {
         case _: Cvc4Config =>
-          args = args :+ (if (isSat) "--finite-model-find" else "--full-saturate-quant")
+          if (!isSat) {
+            args = args :+ "--full-saturate-quant"
+          }
+          //args = args :+ (if (isSat) "--finite-model-find" else "--full-saturate-quant")
         case _ =>
       }
       var proc = Os.proc(config.exe +: args).input(query).redirectErr

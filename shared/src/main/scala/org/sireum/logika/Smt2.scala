@@ -406,7 +406,7 @@ object Smt2 {
       } else {
         addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not (|Z.==| ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
       }
-      addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and ($itGeId ($sizeId x) $zOne) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
+      addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
       addSTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       addSTypeDecl(
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
