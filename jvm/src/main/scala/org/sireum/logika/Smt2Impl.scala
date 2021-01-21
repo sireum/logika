@@ -42,6 +42,7 @@ object Smt2Impl {
 
 @record class Smt2Impl(val configs: ISZ[Smt2Config],
                        val typeHierarchy: TypeHierarchy,
+                       val timeoutInMs: Z,
                        val charBitWidth: Z,
                        val intBitWidth: Z,
                        val simplifiedQuery: B)
@@ -132,17 +133,17 @@ object Smt2Impl {
     println(s"Wrote $f")
   }
 
-  def checkSat(query: String, timeoutInMsOpt: Option[Z]): (B, Smt2Query.Result) = {
-    val r = checkQuery(T, query, timeoutInMsOpt)
+  def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
+    val r = checkQuery(T, query, timeoutInMs)
     return (r.kind != Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkUnsat(query: String, timeoutInMsOpt: Option[Z]): (B, Smt2Query.Result) = {
-    val r = checkQuery(F, query, timeoutInMsOpt)
+  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
+    val r = checkQuery(F, query, timeoutInMs)
     return (r.kind == Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkQuery(isSat: B, query: String, timeoutInMsOpt: Option[Z]): Smt2Query.Result = {
+  def checkQuery(isSat: B, query: String, timeoutInMs: Z): Smt2Query.Result = {
     def checkQueryH(config: Smt2Config): Smt2Query.Result = {
       def err(out: String, exitCode: Z): Unit = {
         halt(
@@ -154,7 +155,7 @@ object Smt2Impl {
       }
       //println(s"$exe Query:")
       //println(query)
-      var args = config.args(timeoutInMsOpt)
+      var args = config.args(timeoutInMs)
       config match {
         case _: Cvc4Config =>
           if (!isSat) {
@@ -164,10 +165,7 @@ object Smt2Impl {
         case _ =>
       }
       var proc = Os.proc(config.exe +: args).input(query).redirectErr
-      timeoutInMsOpt match {
-        case Some(t) => proc = proc.timeout(t * 5 / 4)
-        case _ =>
-      }
+      proc = proc.timeout(timeoutInMs * 5 / 4)
       val pr = proc.run()
       if (pr.out.size == 0) {
         err(pr.out, pr.exitCode)

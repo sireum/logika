@@ -28,6 +28,7 @@ package org.sireum.logika
 import org.sireum._
 
 @datatype class Config(smt2Configs: ISZ[Smt2Config],
+                       timeoutInMs: Z,
                        defaultLoopBound: Z,
                        loopBounds: HashMap[LoopId, Z],
                        unroll: B,
@@ -47,25 +48,22 @@ import org.sireum._
 @datatype trait Smt2Config {
   def name: String
   def exe: String
-  def timeoutInMs: Z
-  @pure def args(timeoutInMsOpt: Option[Z]): ISZ[String]
+  @pure def args(timeoutInMs: Z): ISZ[String]
 }
 
-@datatype class Z3Config(val exe: String, val timeoutInMs: Z) extends Smt2Config {
+@datatype class Z3Config(val exe: String) extends Smt2Config {
   val name: String = "z3"
 
-  @pure def args(timeoutInMsOpt: Option[Z]): ISZ[String] = {
-    val t = timeoutInMsOpt.getOrElseEager(timeoutInMs)
-    return ISZ("-smt2", s"-t:$t", "-in")
+  @pure def args(timeoutInMs: Z): ISZ[String] = {
+    return ISZ("-smt2", s"-t:$timeoutInMs", "-in")
   }
 }
 
-@datatype class Cvc4Config(val exe: String, val timeoutInMs: Z) extends Smt2Config {
+@datatype class Cvc4Config(val exe: String) extends Smt2Config {
   val name: String = "cvc4"
 
-  @pure def args(timeoutInMsOpt: Option[Z]): ISZ[String] = {
-    val t = timeoutInMsOpt.getOrElseEager(timeoutInMs)
-    return ISZ(s"--tlimit=$t", "--lang=smt2.6")
+  @pure def args(timeoutInMs: Z): ISZ[String] = {
+    return ISZ(s"--tlimit=$timeoutInMs", "--lang=smt2.6")
   }
 }
 

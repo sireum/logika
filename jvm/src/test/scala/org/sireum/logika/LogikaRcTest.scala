@@ -41,7 +41,7 @@ class LogikaRcTest extends SireumRcSpec {
     val c = config
     //val c = config(logVcDirOpt = Some((Os.home / "Temp" / path.last).string))
     Logika.checkWorksheet(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, c,
-      th => Smt2Impl(config.smt2Configs, th, c.charBitWidth, c.intBitWidth, c.simplifiedQuery), reporter, T)
+      th => Smt2Impl(config.smt2Configs, th, c.timeoutInMs, c.charBitWidth, c.intBitWidth, c.simplifiedQuery), reporter, T)
     reporter.printMessages()
     !reporter.hasIssue
   }

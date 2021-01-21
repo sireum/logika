@@ -53,7 +53,8 @@ object LogikaTest {
 
   val config: Config =
     Config(
-      ISZ(Cvc4Config(cvc4Exe, timeoutInMs), Z3Config(z3Exe, timeoutInMs)),
+      smt2Configs = ISZ(Cvc4Config(cvc4Exe), Z3Config(z3Exe)),
+      timeoutInMs = timeoutInMs,
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,
       unroll = T,
@@ -174,8 +175,8 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkWorksheet(None(), input, config,
-      th => Smt2Impl(config.smt2Configs, th, config.charBitWidth, config.intBitWidth, config.simplifiedQuery), reporter,
-      F)
+      th => Smt2Impl(config.smt2Configs, th, config.timeoutInMs, config.charBitWidth, config.intBitWidth,
+        config.simplifiedQuery), reporter, F)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>
