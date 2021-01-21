@@ -49,6 +49,8 @@ object Logika {
     def query(pos: Position, r: Smt2Query.Result): Unit
 
     def halted(posOpt: Option[Position], s: State): Unit
+
+    def empty: Reporter
   }
 
   @record class ReporterImpl(var _messages: ISZ[Message]) extends Reporter {
@@ -61,6 +63,10 @@ object Logika {
     }
 
     override def halted(posOpt: Option[Position], s: State): Unit = {
+    }
+
+    override def empty: Reporter = {
+      return ReporterImpl(ISZ())
     }
 
     override def messages: ISZ[Message] = {
@@ -261,7 +267,7 @@ object Logika {
 
           if (par) {
             reporter.reports(ops.ISZOps(tasks).mParMapFoldLeft[ISZ[Message], ISZ[Message]](
-              (task: Task) => task.compute(smt2f(th), Reporter.create), combine _, ISZ[Message]()))
+              (task: Task) => task.compute(smt2f(th), reporter.empty), combine _, ISZ[Message]()))
           } else {
             val smt2 = smt2f(th)
             for (task <- tasks) {
