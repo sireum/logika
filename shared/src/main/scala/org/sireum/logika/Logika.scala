@@ -46,7 +46,7 @@ object Logika {
   @msig trait Reporter extends message.Reporter {
     def state(posOpt: Option[Position], s: State): Unit
 
-    def query(pos: Position, r: Smt2Query.Result): Unit
+    def query(pos: Position, time: Z, r: Smt2Query.Result): Unit
 
     def halted(posOpt: Option[Position], s: State): Unit
 
@@ -59,7 +59,7 @@ object Logika {
     override def state(posOpt: Option[Position], s: State): Unit = {
     }
 
-    override def query(pos: Position, r: Smt2Query.Result): Unit = {
+    override def query(pos: Position, time: Z, r: Smt2Query.Result): Unit = {
     }
 
     override def halted(posOpt: Option[Position], s: State): Unit = {
@@ -84,6 +84,8 @@ object Logika {
     override def setMessages(newMessages: ISZ[Message]): Unit = {
       _messages = newMessages
     }
+
+    override def timing(desc: String, timeInMs: Z): Unit = {}
   }
 
   object Reporter {
@@ -234,18 +236,29 @@ object Logika {
   }
 
   val kind: String = "Logika"
+  val parsingDesc: String = "Parsing"
+  val libraryDesc: String = "Library"
+  val typeCheckingDesc: String = "Type Checking"
+  val verifyingDesc: String = "Verifying"
 
   def checkWorksheet(fileUriOpt: Option[String], input: String, config: Config,
                      smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter, par: B): Unit = {
+    val parsingStartTime = extension.Time.currentMillis
     lang.parser.Parser(input).parseTopUnit[AST.TopUnit.Program](allowSireum = F, isWorksheet = T, isDiet = F,
       fileUriOpt = fileUriOpt, reporter = reporter) match {
       case Some(program) if !reporter.hasIssue =>
-        val (tc, rep) = lang.FrontEnd.libraryReporter
+        val libraryStartTime = extension.Time.currentMillis
+        reporter.timing(parsingDesc, libraryStartTime - parsingStartTime)
+        val (tc, rep) = lang.FrontEnd.checkedLibraryReporter
+        val typeCheckingStartTime = extension.Time.currentMillis
+        reporter.timing(libraryDesc, typeCheckingStartTime - libraryStartTime)
         reporter.reports(rep.messages)
         val (th, p) = lang.FrontEnd.checkWorksheet(Some(tc.typeHierarchy), program, reporter)
         if (!reporter.hasIssue) {
           lang.tipe.PostTipeAttrChecker.checkProgram(p, reporter)
         }
+        val verifyingStartTime = extension.Time.currentMillis
+        reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
         if (!reporter.hasIssue) {
           var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts))
 
@@ -274,6 +287,7 @@ object Logika {
               task.compute(smt2, reporter)
             }
           }
+          reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
         }
       case _ =>
     }

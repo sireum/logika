@@ -339,8 +339,9 @@ object Smt2 {
   def sat(log: B, logDirOpt: Option[String], title: String, pos: message.Position, claims: ISZ[State.Claim],
           reporter: Reporter): B = {
     val headers = st"Satisfiability Check for $title:" +: State.Claim.claimsSTs(claims, ClaimDefs.empty)
+    val startTime = extension.Time.currentMillis
     val (r, res) = checkSat(satQuery(headers, claims, None(), reporter).render, 500)
-    reporter.query(pos, res)
+    reporter.query(pos, extension.Time.currentMillis - startTime, res)
     if (log) {
       reporter.info(None(), Logika.kind,
         st"""Satisfiability: ${res.kind}
@@ -799,8 +800,9 @@ object Smt2 {
     val defs = ClaimDefs.empty
     val ps = State.Claim.claimsSTs(premises, defs)
     val headers = (st"Validity Check for $title:" +: ps :+ st"⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs)
+    val startTime = extension.Time.currentMillis
     val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
-    reporter.query(pos, res)
+    reporter.query(pos, extension.Time.currentMillis - startTime, res)
     if (log) {
       reporter.info(None(), Logika.kind,
         st"""Verification Condition: ${if (r) s"Discharged (${res.kind})" else "Undischarged"}
