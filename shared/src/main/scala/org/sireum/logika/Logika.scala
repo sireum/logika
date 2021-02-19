@@ -51,6 +51,8 @@ object Logika {
     def halted(posOpt: Option[Position], s: State): Unit
 
     def empty: Reporter
+
+    def combine(other: Reporter): Reporter
   }
 
   @record class ReporterImpl(var _messages: ISZ[Message]) extends Reporter {
@@ -86,6 +88,11 @@ object Logika {
     }
 
     override def timing(desc: String, timeInMs: Z): Unit = {}
+
+    override def combine(other: Reporter): Reporter = {
+      _messages = _messages ++ other.messages
+      return this
+    }
   }
 
   object Reporter {
@@ -279,11 +286,19 @@ object Logika {
 
           rec(p.body.stmts)
 
-          @strictpure def combine(ms1: ISZ[Message], ms2: ISZ[Message]): ISZ[Message] = ms1 ++ ms2
+          def combine(r1: Reporter, r2: Reporter): Reporter = {
+            r1.combine(r2)
+            return r1
+          }
+
+          @pure def compute(task: Task): Reporter = {
+            val r = reporter.empty
+            task.compute(smt2f(th), r)
+            return r
+          }
 
           if (par) {
-            reporter.reports(ops.ISZOps(tasks).mParMapFoldLeft[ISZ[Message], ISZ[Message]](
-              (task: Task) => task.compute(smt2f(th), reporter.empty), combine _, ISZ[Message]()))
+            ops.ISZOps(tasks).mParMapFoldLeft[Reporter, Reporter](compute _, combine _, reporter)
           } else {
             val smt2 = smt2f(th)
             for (task <- tasks) {
