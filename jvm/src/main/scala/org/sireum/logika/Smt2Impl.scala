@@ -179,10 +179,12 @@ object Smt2Impl {
       }
       var proc = Os.proc(config.exe +: args).input(query).redirectErr
       proc = proc.timeout(timeoutInMs * 5 / 4)
+      val startTime = extension.Time.currentMillis
       val pr = proc.run()
       if (pr.out.size == 0) {
         err(pr.out, pr.exitCode)
       }
+      val duration = extension.Time.currentMillis - startTime
       val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
       val firstLine = out(0)
       val r: Smt2Query.Result = firstLine match {
@@ -190,23 +192,23 @@ object Smt2Impl {
           st"""$query
               |; Solver: ${config.exe}
               |; Arguments: ${(args, " ")}
-              |; Result: sat""".render, pr.out)
+              |; Result: sat""".render, pr.out, duration)
         case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name,
           st"""$query
               |; Solver: ${config.exe}
               |; Arguments: ${(args, " ")}
-              |; Result: unsat""".render, pr.out)
+              |; Result: unsat""".render, pr.out, duration)
         case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, config.name,
           st"""$query
               |; Solver: ${config.exe}
               |; Arguments: ${(args, " ")}
-              |; Result: timeout""".render, pr.out)
+              |; Result: timeout""".render, pr.out, duration)
         case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, config.name,
           st"""$query
               |; Solver: ${config.exe}
               |; Arguments: ${(args, " ")}
-              |; Result: unknown""".render, pr.out)
-        case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, query, pr.out)
+              |; Result: unknown""".render, pr.out, duration)
+        case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, query, pr.out, duration)
       }
       //println(s"$exe Result (${r.kind}):")
       //println(r.output)
