@@ -244,7 +244,8 @@ object Logika {
   val verifyingDesc: String = "Verifying"
 
   def checkWorksheet(fileUriOpt: Option[String], input: String, config: Config,
-                     smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter, par: B): Unit = {
+                     smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
+                     par: B, hasLogika: B): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     extension.Cancel.cancellable(() =>
       lang.parser.Parser(input).parseTopUnit[AST.TopUnit.Program](allowSireum = F, isWorksheet = T, isDiet = F,
@@ -264,7 +265,8 @@ object Logika {
         }
         val verifyingStartTime = extension.Time.currentMillis
         reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
-        if (!reporter.hasIssue) {
+
+        if (!reporter.hasIssue && hasLogika) {
           var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts))
 
           def rec(stmts: ISZ[AST.Stmt]): Unit = {
