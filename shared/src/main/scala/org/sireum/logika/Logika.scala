@@ -51,6 +51,8 @@ object Logika {
     def empty: Reporter
 
     def combine(other: Reporter): Reporter
+
+    def illFormed(): Unit
   }
 
   @record class ReporterImpl(var _messages: ISZ[Message]) extends Reporter {
@@ -60,6 +62,9 @@ object Logika {
     }
 
     override def query(pos: Position, time: Z, r: Smt2Query.Result): Unit = {
+    }
+
+    override def illFormed(): Unit = {
     }
 
     override def empty: Reporter = {
@@ -266,43 +271,47 @@ object Logika {
         val verifyingStartTime = extension.Time.currentMillis
         reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
 
-        if (!reporter.hasIssue && hasLogika) {
-          var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts))
+        if (!reporter.hasIssue) {
+          if (hasLogika) {
+            var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts))
 
-          def rec(stmts: ISZ[AST.Stmt]): Unit = {
-            for (stmt <- stmts) {
-              stmt match {
-                case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty => tasks = tasks :+ Task.Method(th, config, stmt)
-                case stmt: AST.Stmt.Object => rec(stmt.stmts)
-                case stmt: AST.Stmt.Adt => rec(stmt.stmts)
-                case stmt: AST.Stmt.Sig => rec(stmt.stmts)
-                case _ =>
+            def rec(stmts: ISZ[AST.Stmt]): Unit = {
+              for (stmt <- stmts) {
+                stmt match {
+                  case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty => tasks = tasks :+ Task.Method(th, config, stmt)
+                  case stmt: AST.Stmt.Object => rec(stmt.stmts)
+                  case stmt: AST.Stmt.Adt => rec(stmt.stmts)
+                  case stmt: AST.Stmt.Sig => rec(stmt.stmts)
+                  case _ =>
+                }
               }
             }
-          }
 
-          rec(p.body.stmts)
+            rec(p.body.stmts)
 
-          def combine(r1: Reporter, r2: Reporter): Reporter = {
-            r1.combine(r2)
-            return r1
-          }
-
-          @pure def compute(task: Task): Reporter = {
-            val r = reporter.empty
-            task.compute(smt2f(th), r)
-            return r
-          }
-
-          if (par) {
-            ops.ISZOps(tasks).mParMapFoldLeft[Reporter, Reporter](compute _, combine _, reporter)
-          } else {
-            val smt2 = smt2f(th)
-            for (task <- tasks) {
-              extension.Cancel.cancellable(() => task.compute(smt2, reporter))
+            def combine(r1: Reporter, r2: Reporter): Reporter = {
+              r1.combine(r2)
+              return r1
             }
+
+            @pure def compute(task: Task): Reporter = {
+              val r = reporter.empty
+              task.compute(smt2f(th), r)
+              return r
+            }
+
+            if (par) {
+              ops.ISZOps(tasks).mParMapFoldLeft[Reporter, Reporter](compute _, combine _, reporter)
+            } else {
+              val smt2 = smt2f(th)
+              for (task <- tasks) {
+                extension.Cancel.cancellable(() => task.compute(smt2, reporter))
+              }
+            }
+            reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
           }
-          reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
+        } else {
+          reporter.illFormed()
         }
       case _ =>
     }
