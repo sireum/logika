@@ -48,8 +48,6 @@ object Logika {
 
     def query(pos: Position, time: Z, r: Smt2Query.Result): Unit
 
-    def halted(posOpt: Option[Position], s: State): Unit
-
     def empty: Reporter
 
     def combine(other: Reporter): Reporter
@@ -62,9 +60,6 @@ object Logika {
     }
 
     override def query(pos: Position, time: Z, r: Smt2Query.Result): Unit = {
-    }
-
-    override def halted(posOpt: Option[Position], s: State): Unit = {
     }
 
     override def empty: Reporter = {
@@ -2595,7 +2590,6 @@ import Logika.Split
             return ISZ((Logika.conjunctClaimSuffix(state, s0), v))
           case AST.ResolvedInfo.BuiltIn.Kind.Halt =>
             val s0 = state(status = F)
-            reporter.halted(e.posOpt, s0)
             return ISZ((s0, State.errorValue))
           case _ => halt(s"TODO: $stmt") // TODO
         }
