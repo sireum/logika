@@ -1,4 +1,4 @@
-// #Sireum
+// #Sireum #Logika
 import org.sireum._
 
 @pure def inc(x: Z): Z = {

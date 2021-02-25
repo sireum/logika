@@ -1,4 +1,4 @@
-// #Sireum
+// #Sireum #Logika
 import org.sireum._
 
 (Z.random, Z.random) match {

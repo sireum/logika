@@ -1,4 +1,4 @@
-// #Sireum
+// #Sireum #Logika
 import org.sireum._
 
 @datatype class Foo(x: Z, y: Z)

@@ -1,4 +1,4 @@
-// #Sireum
+// #Sireum #Logika
 import org.sireum._
 import org.sireum.S8._
 import org.sireum.S16._

@@ -1,4 +1,4 @@
-// #Sireum
+// #Sireum #Logika
 import org.sireum._
 
 def swap(s: ZS, i: Z, j: Z): Unit = {
