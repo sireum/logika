@@ -338,14 +338,21 @@ object Smt2 {
 
   def sat(log: B, logDirOpt: Option[String], title: String, pos: message.Position, claims: ISZ[State.Claim],
           reporter: Reporter): B = {
-    val headers = st"Satisfiability Check for $title:" +: State.Claim.claimsSTs(claims, ClaimDefs.empty)
     val startTime = extension.Time.currentMillis
-    val (r, res) = checkSat(satQuery(headers, claims, None(), reporter).render, 500)
+    val (r, smt2res) = checkSat(satQuery(claims, None(), reporter).render, 500)
+    val res = smt2res(info = "", query =
+      st"""; Satisfiability check for $title
+          |${smt2res.info}
+          |;
+          |; Claims:
+          |;
+          |${(for (header <- State.Claim.claimsSTs(claims, ClaimDefs.empty); line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
+          |;
+          |${smt2res.query}""".render
+    )
     reporter.query(pos, extension.Time.currentMillis - startTime, res)
     if (log) {
-      reporter.info(None(), Logika.kind,
-        st"""Satisfiability: ${res.kind}
-            |  ${res.query}""".render)
+      reporter.info(None(), Logika.kind, res.query)
     }
     logDirOpt match {
       case Some(logDir) =>
@@ -770,7 +777,7 @@ object Smt2 {
     return r.render
   }
 
-  def satQuery(headers: ISZ[ST], claims: ISZ[State.Claim], negClaimOpt: Option[State.Claim], reporter: Reporter): ST = {
+  def satQuery(claims: ISZ[State.Claim], negClaimOpt: Option[State.Claim], reporter: Reporter): ST = {
     for (c <- claims; t <- c.types) {
       addType(t, reporter)
     }
@@ -792,21 +799,27 @@ object Smt2 {
       case _ =>
     }
     val seqLitDecls: ISZ[String] = for (seqLit <- seqLits.elements) yield seqLit2SmtDeclString(seqLit)
-    return query(headers, seqLitDecls ++ (for (d <- decls.values) yield d.render), claimSmts)
+    return query(seqLitDecls ++ (for (d <- decls.values) yield d.render), claimSmts)
   }
 
   def valid(log: B, logDirOpt: Option[String], title: String, pos: message.Position, premises: ISZ[State.Claim],
             conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
     val defs = ClaimDefs.empty
-    val ps = State.Claim.claimsSTs(premises, defs)
-    val headers = (st"Validity Check for $title:" +: ps :+ st"⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs)
     val startTime = extension.Time.currentMillis
-    val (r, res) = checkUnsat(satQuery(headers, premises, Some(conclusion), reporter).render, timeoutInMs)
+    val (_, smt2res) = checkUnsat(satQuery(premises, Some(conclusion), reporter).render, timeoutInMs)
+    val res = smt2res(info = "", query =
+      st"""; Validity Check for $title
+          |${smt2res.info}
+          |;
+          |; Sequent:
+          |;
+          |${(for (header <- (State.Claim.claimsSTs(premises, defs) :+ st"⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs); line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
+          |;
+          |${smt2res.query}""".render
+    )
     reporter.query(pos, extension.Time.currentMillis - startTime, res)
     if (log) {
-      reporter.info(None(), Logika.kind,
-        st"""Verification Condition: ${if (r) s"Discharged (${res.kind})" else "Undischarged"}
-            |  ${res.query}""".render)
+      reporter.info(None(), Logika.kind, res.query)
     }
     logDirOpt match {
       case Some(logDir) =>
@@ -823,7 +836,7 @@ object Smt2 {
     return adtId(t).render == "ADT"
   }
 
-  def query(headers: ISZ[ST], decls: ISZ[String], claims: ISZ[String]): ST = {
+  def query(decls: ISZ[String], claims: ISZ[String]): ST = {
     val distinctOpt: Option[ST] =
       if (typeHierarchyIds.size <= 1) None()
       else Some(
@@ -868,8 +881,7 @@ object Smt2 {
             |(define-fun |Z./| ((x Z) (y Z)) Z (bvsdiv x y))
             |(define-fun |Z.%| ((x Z) (y Z)) Z (bvsrem x y))"""
     val r =
-      st"""${(for (header <- headers; line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
-          |(set-logic ALL)
+      st"""(set-logic ALL)
           |
           |(define-sort B () Bool)
           |(define-fun |B.unary_!| ((x B)) B (not x))

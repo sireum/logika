@@ -40,6 +40,6 @@ object Smt2Query {
     }
   }
 
-  @datatype class Result(kind: Result.Kind.Type, solverName: String, query: String, output: String, timeMillis: Z)
+  @datatype class Result(kind: Result.Kind.Type, solverName: String, query: String, info: String, output: String, timeMillis: Z)
 
 }
