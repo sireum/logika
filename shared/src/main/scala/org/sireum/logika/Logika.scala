@@ -263,8 +263,12 @@ object Logika {
         isWorksheet = isWorksheet, isDiet = F, fileUriOpt = fileUriOpt, reporter = reporter)
       val libraryStartTime = extension.Time.currentMillis
       reporter.timing(parsingDesc, libraryStartTime - parsingStartTime)
+      if (reporter.hasIssue) {
+        reporter.illFormed()
+        return
+      }
       topUnitOpt match {
-        case Some(program) if !reporter.hasIssue =>
+        case Some(program) =>
           if (!isWorksheet) {
             return
           }
