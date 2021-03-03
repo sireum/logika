@@ -2040,6 +2040,10 @@ import Logika.Split
                   return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
                 case AST.MethodMode.Method =>
                   return evalInvoke(state, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
+                case AST.MethodMode.Ext if res.owner == AST.Typed.sireumName && res.id == "randomInt" =>
+                  val pos = e.posOpt.get
+                  val (s1, sym) = s0.freshSym(res.tpeOpt.get.ret, pos)
+                  return ISZ((s1.addClaim(State.Claim.Def.Random(sym, pos)), sym))
                 case _ =>
               }
             case _ =>

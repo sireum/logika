@@ -82,6 +82,12 @@ class LogikaTest extends TestSuite {
 
       * - passingWorksheet(
         """import org.sireum._
+          |var x = randomInt()
+          |x = x * x
+          |assert(x >= 0)""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
           |var x = Z.random
           |x = x * x
           |assert(x >= 0)""".stripMargin)
