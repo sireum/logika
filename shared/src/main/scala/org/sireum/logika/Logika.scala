@@ -2044,6 +2044,56 @@ import Logika.Split
                   val pos = e.posOpt.get
                   val (s1, sym) = s0.freshSym(res.tpeOpt.get.ret, pos)
                   return ISZ((s1.addClaim(State.Claim.Def.Random(sym, pos)), sym))
+                case AST.MethodMode.Spec if res.owner == AST.Typed.sireumName && res.id == "seqIndexValidSize" =>
+                  var r = ISZ[(State, State.Value)]()
+                  for (p <- evalExp(split, smt2, rtCheck, s0, e.args(0), reporter)) {
+                    val (s1, v) = p
+                    val pos = e.posOpt.get
+                    val t = e.targs(0).typedOpt.get
+                    def addB(value: B): Unit = {
+                      if (value) {
+                        val (s2, sym) = s1.freshSym(AST.Typed.b, pos)
+                        r = r :+ ((s2.addClaim(State.Claim.Let.Binary(sym, State.Value.Z(0, pos), AST.Exp.BinaryOp.Le,
+                          v, AST.Typed.z)), sym))
+                      } else {
+                        r = r :+ ((s1, State.Value.B(F, pos)))
+                      }
+                    }
+                    def addSize(size: Z): Unit = {
+                      val (s2, symLo) = s1.freshSym(AST.Typed.b, pos)
+                      val (s3, symHi) = s2.freshSym(AST.Typed.b, pos)
+                      val (s4, sym) = s3.freshSym(AST.Typed.b, pos)
+                      val s5 = s4.addClaims(ISZ(
+                        State.Claim.Let.Binary(symLo, State.Value.Z(0, pos), AST.Exp.BinaryOp.Le, v, AST.Typed.z),
+                        State.Claim.Let.Binary(symHi, v, AST.Exp.BinaryOp.Le, State.Value.Z(size, pos), AST.Typed.z),
+                        State.Claim.Let.Binary(sym, symLo, AST.Exp.BinaryOp.And, symHi, AST.Typed.b),
+                      ))
+                      r = r :+ ((s5, sym))
+                    }
+                    t match {
+                      case AST.Typed.z => addB(T)
+                      case t: AST.Typed.Name =>
+                        th.typeMap.get(t.ids) match {
+                          case Some(ti: TypeInfo.SubZ) =>
+                            if (ti.ast.isZeroIndex) {
+                              if (!ti.ast.hasMax) {
+                                addB(T)
+                              } else {
+                                addSize(ti.ast.max + 1)
+                              }
+                            } else {
+                              if (!ti.ast.hasMax || !ti.ast.hasMin) {
+                                addB(T)
+                              } else {
+                                addSize(ti.ast.max - ti.ast.min + 1)
+                              }
+                            }
+                          case _ => addB(F)
+                        }
+                      case _ => addB(F)
+                    }
+                  }
+                  return r
                 case _ =>
               }
             case _ =>
