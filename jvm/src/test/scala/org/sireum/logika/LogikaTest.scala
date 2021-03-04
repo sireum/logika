@@ -82,6 +82,12 @@ class LogikaTest extends TestSuite {
 
       * - passingWorksheet(
         """import org.sireum._
+          |val v = Z.random
+          |val zs = ZS.create(3, v)
+          |assert(zs.size == 3 & zs(0) == v & zs(1) == v & zs(2) == v)""".stripMargin)
+
+      * - passingWorksheet(
+        """import org.sireum._
           |def foo(): Unit = {
           |  Contract(
           |    Ensures(seqIndexValidSize[Z8](100))
@@ -172,6 +178,7 @@ class LogikaTest extends TestSuite {
            |}
            |assert(r == m * n)""".stripMargin, "loop unrolling capped")
     }
+
   }
 
   def passingWorksheet(worksheet: String): Unit = {

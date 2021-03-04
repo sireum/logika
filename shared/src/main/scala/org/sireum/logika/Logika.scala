@@ -1515,6 +1515,8 @@ import Logika.Split
           case Some(mi: lang.symbol.Info.Method) =>
             return InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
               extractAssignExpOpt(mi))
+          case Some(mi: lang.symbol.Info.ExtMethod) =>
+            return InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), None())
           case info => halt(s"Infeasible: $owner.$id => $info")
         }
       } else {
@@ -2021,6 +2023,64 @@ import Logika.Split
       return r
     }
 
+    def evalRandomInt(s0: State): ISZ[(State, State.Value)] = {
+      val pos = e.posOpt.get
+      val (s1, sym) = s0.freshSym(AST.Typed.z, pos)
+      return ISZ((s1.addClaim(State.Claim.Def.Random(sym, pos)), sym))
+    }
+
+    def evalSeqIndexValidSize(s0: State, targ: AST.Type, arg: AST.Exp): ISZ[(State, State.Value)] = {
+      var r = ISZ[(State, State.Value)]()
+      for (p <- evalExp(split, smt2, rtCheck, s0, arg, reporter)) {
+        val (s1, v) = p
+        val pos = e.posOpt.get
+        val t = targ.typedOpt.get
+        def addB(value: B): Unit = {
+          if (value) {
+            val (s2, sym) = s1.freshSym(AST.Typed.b, pos)
+            r = r :+ ((s2.addClaim(State.Claim.Let.Binary(sym, State.Value.Z(0, pos), AST.Exp.BinaryOp.Le,
+              v, AST.Typed.z)), sym))
+          } else {
+            r = r :+ ((s1, State.Value.B(F, pos)))
+          }
+        }
+        def addSize(size: Z): Unit = {
+          val (s2, symLo) = s1.freshSym(AST.Typed.b, pos)
+          val (s3, symHi) = s2.freshSym(AST.Typed.b, pos)
+          val (s4, sym) = s3.freshSym(AST.Typed.b, pos)
+          val s5 = s4.addClaims(ISZ(
+            State.Claim.Let.Binary(symLo, State.Value.Z(0, pos), AST.Exp.BinaryOp.Le, v, AST.Typed.z),
+            State.Claim.Let.Binary(symHi, v, AST.Exp.BinaryOp.Le, State.Value.Z(size, pos), AST.Typed.z),
+            State.Claim.Let.Binary(sym, symLo, AST.Exp.BinaryOp.And, symHi, AST.Typed.b),
+          ))
+          r = r :+ ((s5, sym))
+        }
+        t match {
+          case AST.Typed.z => addB(T)
+          case t: AST.Typed.Name =>
+            th.typeMap.get(t.ids) match {
+              case Some(ti: TypeInfo.SubZ) =>
+                if (ti.ast.isZeroIndex) {
+                  if (!ti.ast.hasMax) {
+                    addB(T)
+                  } else {
+                    addSize(ti.ast.max + 1)
+                  }
+                } else {
+                  if (!ti.ast.hasMax || !ti.ast.hasMin) {
+                    addB(T)
+                  } else {
+                    addSize(ti.ast.max - ti.ast.min + 1)
+                  }
+                }
+              case _ => addB(F)
+            }
+          case _ => addB(F)
+        }
+      }
+      return r
+    }
+
     def expH(s0: State): ISZ[(State, State.Value)] = {
       e match {
         case lit: AST.Lit => return ISZ((s0, evalLit(lit)))
@@ -2038,62 +2098,14 @@ import Logika.Split
                 case AST.MethodMode.Select => return evalSeqSelect(e)
                 case AST.MethodMode.Constructor =>
                   return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
+                case AST.MethodMode.Ext if res.id == "randomInt" && res.owner == AST.Typed.sireumName=>
+                  return evalRandomInt(state)
+                case AST.MethodMode.Spec if res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName =>
+                  return evalSeqIndexValidSize(state, e.targs(0), e.args(0))
                 case AST.MethodMode.Method =>
                   return evalInvoke(state, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
-                case AST.MethodMode.Ext if res.owner == AST.Typed.sireumName && res.id == "randomInt" =>
-                  val pos = e.posOpt.get
-                  val (s1, sym) = s0.freshSym(res.tpeOpt.get.ret, pos)
-                  return ISZ((s1.addClaim(State.Claim.Def.Random(sym, pos)), sym))
-                case AST.MethodMode.Spec if res.owner == AST.Typed.sireumName && res.id == "seqIndexValidSize" =>
-                  var r = ISZ[(State, State.Value)]()
-                  for (p <- evalExp(split, smt2, rtCheck, s0, e.args(0), reporter)) {
-                    val (s1, v) = p
-                    val pos = e.posOpt.get
-                    val t = e.targs(0).typedOpt.get
-                    def addB(value: B): Unit = {
-                      if (value) {
-                        val (s2, sym) = s1.freshSym(AST.Typed.b, pos)
-                        r = r :+ ((s2.addClaim(State.Claim.Let.Binary(sym, State.Value.Z(0, pos), AST.Exp.BinaryOp.Le,
-                          v, AST.Typed.z)), sym))
-                      } else {
-                        r = r :+ ((s1, State.Value.B(F, pos)))
-                      }
-                    }
-                    def addSize(size: Z): Unit = {
-                      val (s2, symLo) = s1.freshSym(AST.Typed.b, pos)
-                      val (s3, symHi) = s2.freshSym(AST.Typed.b, pos)
-                      val (s4, sym) = s3.freshSym(AST.Typed.b, pos)
-                      val s5 = s4.addClaims(ISZ(
-                        State.Claim.Let.Binary(symLo, State.Value.Z(0, pos), AST.Exp.BinaryOp.Le, v, AST.Typed.z),
-                        State.Claim.Let.Binary(symHi, v, AST.Exp.BinaryOp.Le, State.Value.Z(size, pos), AST.Typed.z),
-                        State.Claim.Let.Binary(sym, symLo, AST.Exp.BinaryOp.And, symHi, AST.Typed.b),
-                      ))
-                      r = r :+ ((s5, sym))
-                    }
-                    t match {
-                      case AST.Typed.z => addB(T)
-                      case t: AST.Typed.Name =>
-                        th.typeMap.get(t.ids) match {
-                          case Some(ti: TypeInfo.SubZ) =>
-                            if (ti.ast.isZeroIndex) {
-                              if (!ti.ast.hasMax) {
-                                addB(T)
-                              } else {
-                                addSize(ti.ast.max + 1)
-                              }
-                            } else {
-                              if (!ti.ast.hasMax || !ti.ast.hasMin) {
-                                addB(T)
-                              } else {
-                                addSize(ti.ast.max - ti.ast.min + 1)
-                              }
-                            }
-                          case _ => addB(F)
-                        }
-                      case _ => addB(F)
-                    }
-                  }
-                  return r
+                case AST.MethodMode.Ext =>
+                  return evalInvoke(state, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
                 case _ =>
               }
             case _ =>
@@ -2107,7 +2119,11 @@ import Logika.Split
                   return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
                 case AST.MethodMode.Copy =>
                   return evalConstructor(split, T, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
+                case AST.MethodMode.Spec if res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName =>
+                  return evalSeqIndexValidSize(state, e.targs(0), e.args(0).arg)
                 case AST.MethodMode.Method =>
+                  return evalInvoke(state, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
+                case AST.MethodMode.Ext =>
                   return evalInvoke(state, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
                 case _ =>
               }
