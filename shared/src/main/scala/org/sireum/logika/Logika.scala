@@ -356,7 +356,8 @@ object Logika {
           val title: String =
             if (isSingle) s"Method $methodName pre-invariant $id"
             else s"Method $methodName pre-invariant $id#$i"
-          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssume(smt2, T, title, s0, claim, reporter)._1
+          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssume(smt2, T, title, s0,
+            claim, claim.posOpt, reporter)._1
           i = i + 1
         }
       } else {
@@ -364,7 +365,8 @@ object Logika {
           val title: String =
             if (isSingle) s"Method $methodName post-invariant $id"
             else s"Method $methodName post-invariant $id#$i"
-          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssert(smt2, T, title, s0, claim, reporter)._1
+          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssert(smt2, T, title, s0,
+            claim, claim.posOpt, reporter)._1
           i = i + 1
         }
       }
@@ -431,7 +433,7 @@ object Logika {
         state = checkInv(T, state, logika, smt2, th.worksheetInvs, reporter)
       }
       for (r <- requires if state.status) {
-        state = logika.evalAssume(smt2, T, "Precondition", state, r, reporter)._1
+        state = logika.evalAssume(smt2, T, "Precondition", state, r, r.posOpt, reporter)._1
       }
       val stmts = method.bodyOpt.get.stmts
       for (s <- logika.evalStmts(Split.Default, smt2, None(), T, state, stmts, reporter)) {
@@ -440,7 +442,7 @@ object Logika {
           s2 = checkInv(F, s2, logika, smt2, th.worksheetInvs, reporter)
         }
         for (e <- ensures if s2.status) {
-          s2 = logika.evalAssert(smt2, T, "Postcondition", s2, e, reporter)._1
+          s2 = logika.evalAssert(smt2, T, "Postcondition", s2, e, e.posOpt, reporter)._1
         }
         if (stmts.nonEmpty && s2.status) {
           logika.logPc(config.logPc, config.logRawPc, s2, reporter,
@@ -1553,12 +1555,22 @@ import Logika.Split
       }
     }
 
+    def methodResST(res: AST.ResolvedInfo.Method): ST = {
+      val owner: ISZ[String] =
+        if (res.owner.size >= 2 && res.owner(0) == "org" && res.owner(1) == "sireum") ops.ISZOps(res.owner).drop(2)
+        else res.owner
+      return if (owner.isEmpty) st"${res.id}"
+      else if (res.isInObject) st"${(owner, ".")}.${res.id}"
+      else st"${(owner, ".")}#${res.id}"
+    }
+
     def evalInvoke(s0: State,
                    invokeReceiverOpt: Option[AST.Exp],
                    ident: AST.Exp.Ident,
                    eargs: Either[ISZ[AST.Exp], ISZ[AST.NamedArg]],
                    attr: AST.ResolvedAttr): ISZ[(State, State.Value)] = {
       val res = attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+      val resST = methodResST(res)
       val posOpt = attr.posOpt
       val pos = posOpt.get
       val receiverPosOpt: Option[Position] =
@@ -1670,36 +1682,46 @@ import Logika.Split
 
           val rep = Reporter.create
           var cs1 = cs0
-          labelOpt match {
-            case Some(label) => cs1 = cs1.addClaim(State.Claim.Label(label.value, label.posOpt.get))
-            case _ =>
+          val label: String = labelOpt match {
+            case Some(label) if label.value != "" =>
+              cs1 = cs1.addClaim(State.Claim.Label(label.value, label.posOpt.get))
+              s"(${label.value}) p"
+            case _ => "P"
           }
+          var i = 0
           for (inv <- invs) {
             val id = inv.ast.id.value
-            var i = 0
+            i = 0
             val isSingle = inv.ast.claims.size == 1
             for (claim <- inv.ast.claims) {
-              val title: String = if (isSingle) s"Pre-invariant $id" else s"Pre-invariant $id#$i"
+              val title: String =
+                if (isSingle) s"${label}re-invariant $id"
+                else s"${label}re-invariant $id#$i"
               if (assume) {
-                val p = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), rep)
+                val p = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), posOpt, rep)
                 val size = p._1.claims.size
                 cs1 = p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1))
               } else {
-                cs1 = logikaComp.evalAssert(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), rep)._1
+                cs1 = logikaComp.evalAssert(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), posOpt, rep)._1
               }
               i = i + 1
             }
           }
           var requireSyms = ISZ[State.Value]()
+          i = 0
           for (require <- requires if cs1.status) {
+            val title: String =
+              if (requires.size == 1) st"${label}re-condition of $resST".render
+              else st"${label}re-condition#$i of $resST".render
+
             val (cs2, sym): (State, State.Value.Sym) =
               if (assume) {
-                val p = logikaComp.evalAssume(smt2, F, "Pre-condition", cs1, AST.Util.substExp(require, typeSubstMap), rep)
+                val p = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
                 val size = p._1.claims.size
                 assert(p._1.claims(size - 1) == State.Claim.Prop(T, p._2))
                 (p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1)), p._2)
               } else {
-                logikaComp.evalAssert(smt2, F, "Pre-condition", cs1, AST.Util.substExp(require, typeSubstMap), rep)
+                logikaComp.evalAssert(smt2, F, title, cs1, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
               }
             cs1 = cs2
             requireSyms = requireSyms :+ sym
@@ -1708,26 +1730,34 @@ import Logika.Split
               cs1 = cs3.addClaim(State.Claim.Let.And(rsym, requireSyms))
               return ContractCaseResult(F, cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
             }
+            i = i + 1
           }
           val (cs4, result) = modVarsResult(cs1, posOpt)
           cs1 = cs4
           for (inv <- invs) {
             val id = inv.ast.id.value
-            var i = 0
+            i = 0
             val isSingle = inv.ast.claims.size == 1
             for (claim <- inv.ast.claims) {
-              val title: String = if (isSingle) s"Post-invariant $id" else s"Post-invariant $id#$i"
-              cs1 = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), rep)._1
+              val title: String =
+                if (isSingle) s"${label}ost-invariant $id"
+                else s"${label}ost-invariant $id#$i"
+              cs1 = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), posOpt, rep)._1
               i = i + 1
             }
           }
+          i = 0
           for (ensure <- ensures if cs1.status) {
-            cs1 = logikaComp.evalAssume(smt2, F, "Post-condition", cs1, AST.Util.substExp(ensure, typeSubstMap), rep)._1
+            val title: String =
+              if (ensures.size == 1) st"${label}ost-condition of $resST".render
+              else st"${label}ost-condition#$i of $resST".render
+            cs1 = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(ensure, typeSubstMap), posOpt, rep)._1
             if (!cs1.status) {
               val (cs5, rsym) = cs1.freshSym(AST.Typed.b, pos)
               cs1 = cs5.addClaim(State.Claim.Let.And(rsym, requireSyms))
               return ContractCaseResult(T, cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
             }
+            i = i + 1
           }
           cs1 = modVarsRewrite(cs1, posOpt)
           val (cs6, rsym) = cs1.freshSym(AST.Typed.b, pos)
@@ -2184,13 +2214,14 @@ import Logika.Split
     return s1(status = sat)
   }
 
-  def evalAssume(smt2: Smt2, rtCheck: B, title: String, s0: State, cond: AST.Exp, reporter: Reporter): (State, State.Value.Sym) = {
+  def evalAssume(smt2: Smt2, rtCheck: B, title: String, s0: State, cond: AST.Exp, posOpt: Option[Position],
+                 reporter: Reporter): (State, State.Value.Sym) = {
     val (s1, v) = singleStateValue(evalExp(Split.Disabled, smt2, rtCheck, s0, cond, reporter))
     if (!s1.status) {
       return value2Sym(s1, v, cond.posOpt.get)
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
-    return (evalAssumeH(smt2, title, s2, sym, cond.posOpt, reporter), sym)
+    return (evalAssumeH(smt2, title, s2, sym, posOpt, reporter), sym)
   }
 
   def evalAssertH(smt2: Smt2, title: String, s0: State, sym: State.Value.Sym, posOpt: Option[Position],
@@ -2209,13 +2240,14 @@ import Logika.Split
     return s0(status = F, claims = s0.claims :+ conclusion)
   }
 
-  def evalAssert(smt2: Smt2, rtCheck: B, title: String, s0: State, cond: AST.Exp, reporter: Reporter): (State, State.Value.Sym) = {
+  def evalAssert(smt2: Smt2, rtCheck: B, title: String, s0: State, cond: AST.Exp, posOpt: Option[Position],
+                 reporter: Reporter): (State, State.Value.Sym) = {
     val (s1, v) = singleStateValue(evalExp(Split.Disabled, smt2, rtCheck, s0, cond, reporter))
     if (!s1.status) {
       return value2Sym(s1, v, cond.posOpt.get)
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
-    return (evalAssertH(smt2, title, s2, sym, cond.posOpt, reporter), sym)
+    return (evalAssertH(smt2, title, s2, sym, posOpt, reporter), sym)
   }
 
   def evalAssignExp(split: Split.Type, smt2: Smt2, rOpt: Option[State.Value.Sym], rtCheck: B, s0: State, ae: AST.AssignExp, reporter: Reporter): ISZ[State] = {
@@ -2685,16 +2717,20 @@ import Logika.Split
       case AST.ResolvedInfo.BuiltIn(kind) =>
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.Assert =>
-            val (s0, v) = evalAssert(smt2, T, "Assertion", state, e.args(0), reporter)
+            val exp = e.args(0)
+            val (s0, v) = evalAssert(smt2, T, "Assertion", state, exp, exp.posOpt, reporter)
             return ISZ((Logika.conjunctClaimSuffix(state, s0), v))
           case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg =>
-            val (s0, v) = evalAssert(smt2, T, "Assertion", state, e.args(0), reporter)
+            val exp = e.args(0)
+            val (s0, v) = evalAssert(smt2, T, "Assertion", state, exp, exp.posOpt, reporter)
             return ISZ((Logika.conjunctClaimSuffix(state, s0), v))
           case AST.ResolvedInfo.BuiltIn.Kind.Assume =>
-            val (s0, v) = evalAssume(smt2, T, "Assumption", state, e.args(0), reporter)
+            val exp = e.args(0)
+            val (s0, v) = evalAssume(smt2, T, "Assumption", state, exp, exp.posOpt, reporter)
             return ISZ((Logika.conjunctClaimSuffix(state, s0), v))
           case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg =>
-            val (s0, v) = evalAssume(smt2, T, "Assumption", state, e.args(0), reporter)
+            val exp = e.args(0)
+            val (s0, v) = evalAssume(smt2, T, "Assumption", state, exp, exp.posOpt, reporter)
             return ISZ((Logika.conjunctClaimSuffix(state, s0), v))
           case AST.ResolvedInfo.BuiltIn.Kind.Halt =>
             val s0 = state(status = F)
@@ -2976,7 +3012,7 @@ import Logika.Split
         ss = ISZ[State]()
         for (s1 <- sst) {
           val title: String = if (isSingle) s"Invariant $id" else s"Invariant $id#$i"
-          val s2 = evalAssert(smt2, rtCheck, title, s1, claim, reporter)._1
+          val s2 = evalAssert(smt2, rtCheck, title, s1, claim, claim.posOpt, reporter)._1
           if (s2.status) {
             ss = ss :+ s2
             if (nextFresh < s2.nextFresh) {
