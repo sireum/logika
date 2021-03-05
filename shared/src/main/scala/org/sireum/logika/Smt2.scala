@@ -192,7 +192,7 @@ object Smt2 {
                           res: State.Value.Sym, statePrefix: Z): Unit = {
     val id = proofFunId(pf)
     var paramTypes: ISZ[ST] = for (pt <- pf.paramTypes) yield typeId(pt)
-    var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(id)
+    var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(pf.context, id)
     var params: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
     pf.receiverTypeOpt match {
       case Some(receiverType) =>
@@ -1066,11 +1066,11 @@ object Smt2 {
   }
 
   def currentLocalId(c: State.Claim.Let.CurrentId): ST = {
-    return currentLocalIdString(c.id)
+    return currentLocalIdString(c.context, c.id)
   }
 
-  def currentLocalIdString(id: String): ST = {
-    return st"|l:$id|"
+  def currentLocalIdString(context: ISZ[String], id: String): ST = {
+    return if (context.isEmpty) st"|l:$id|" else st"|l:$id:${(context, ".")}|"
   }
 
   def localId(c: State.Claim.Let.Id): ST = {
@@ -1084,7 +1084,7 @@ object Smt2 {
 
   def qvar2ST(x: State.Claim.Let.Quant.Var): ST = {
     x match {
-      case x: State.Claim.Let.Quant.Var.Id => return st"(|l:${x.id}| ${typeId(x.tipe)})"
+      case x: State.Claim.Let.Quant.Var.Id => return st"(${currentLocalIdString(x.context, x.id)} ${typeId(x.tipe)})"
       case x: State.Claim.Let.Quant.Var.Sym => return st"(${v2ST(x.sym)} ${typeId(x.sym.tipe)})"
     }
   }

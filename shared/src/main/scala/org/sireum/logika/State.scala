@@ -727,7 +727,7 @@ object State {
 
         object Var {
 
-          @datatype class Id(id: String, tipe: AST.Typed) extends Var {
+          @datatype class Id(context: ISZ[String], id: String, tipe: AST.Typed) extends Var {
             @pure def toRawST: ST = {
               return st"$id: $tipe"
             }

@@ -1311,7 +1311,7 @@ import Logika.Split
         }
       }
       val vars: ISZ[State.Claim.Let.Quant.Var] =
-        for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var.Id(p.idOpt.get.value, p.typedOpt.get)
+        for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var.Id(quant.fun.context, p.idOpt.get.value, p.typedOpt.get)
       if (quantClaims.isEmpty) {
         return (s0(status = F), State.errorValue)
       }
@@ -1341,7 +1341,7 @@ import Logika.Split
           val s7 = s6.addClaim(State.Claim.Let.Binary(hiSym, ident,
             if (quant.hiExact) AST.Exp.BinaryOp.Le else AST.Exp.BinaryOp.Lt, hi, qVarType))
           val (s8, sym) = s7.freshSym(AST.Typed.b, quant.attr.posOpt.get)
-          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
+          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(quant.fun.context, qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
           for (p <- this (inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
@@ -1404,7 +1404,7 @@ import Logika.Split
           val s7 = s6.addClaim(State.Claim.Let.Binary(hiSym, ident, AST.Exp.BinaryOp.Le, hi, qVarType))
           val hiProp = State.Claim.Prop(T, hiSym)
           val (s8, sym) = s7.freshSym(AST.Typed.b, quant.attr.posOpt.get)
-          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(qVarRes.id, qVarType))
+          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(quant.fun.context, qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
           for (p <- this (inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
