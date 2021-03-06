@@ -669,10 +669,11 @@ import Logika.Split
           AST.Util.TypeSubstitutor(substMap).transformAssignExp(b).getOrElse(b)
         }
         val posOpt = body.asStmt.posOpt
-        val logika: Logika = Logika.logikaMethod(th, config, pf.context :+ pf.id, T, pf.receiverTypeOpt, imi.sig,
+        val context = pf.context :+ pf.id
+        val logika: Logika = Logika.logikaMethod(th, config, context, T, pf.receiverTypeOpt, imi.sig,
           posOpt, ISZ(), ISZ(), ISZ())
         val s0 = state(claims = ISZ())
-        val (s1, r) = Logika.idIntro(posOpt.get, s0, pf.context, "Res", funType.ret, posOpt)
+        val (s1, r) = Logika.idIntro(posOpt.get, s0, context, "Res", funType.ret, posOpt)
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
         (r, s0.claims.size, logika.evalAssignExpValue(split, smt2, funType.ret, T, s1, body, reporter))
       }

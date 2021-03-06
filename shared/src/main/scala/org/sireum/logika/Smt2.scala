@@ -191,15 +191,18 @@ object Smt2 {
   def addStrictPureMethod(pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value)],
                           res: State.Value.Sym, statePrefix: Z): Unit = {
     val id = proofFunId(pf)
+    val context = pf.context :+ pf.id
+    val thisId = currentLocalIdString(context, "this")
+    val resId = currentLocalIdString(context, "Res")
     var paramTypes: ISZ[ST] = for (pt <- pf.paramTypes) yield typeId(pt)
-    var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(pf.context, id)
+    var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(context, id)
     var params: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
     pf.receiverTypeOpt match {
       case Some(receiverType) =>
         val thisType = typeId(receiverType)
         paramTypes = thisType +: paramTypes
-        paramIds = st"|l:this|" +: paramIds
-        params = st"(|l:this| $thisType)" +: params
+        paramIds = st"$thisId" +: paramIds
+        params = st"($thisId $thisType)" +: params
       case _ =>
     }
     val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${typeId(pf.returnType)})"
@@ -233,13 +236,13 @@ object Smt2 {
     }
 
     val claim: ST = if (ecs.size == 1)
-      st"""(assert (forall (${(params, " ")} (|l:Res| ${adtId(pf.returnType)})) (=>
-          |  (= |l:Res| ($id ${(paramIds, " ")}))
+      st"""(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)})) (=>
+          |  (= $resId ($id ${(paramIds, " ")}))
           |  ${ecs(0)}
           |)))"""
     else
-      st"""(assert (forall (${(params, " ")} (|l:Res| ${adtId(pf.returnType)})) (=>
-          |  (= |l:Res| ($id ${(paramIds, " ")}))
+      st"""(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)})) (=>
+          |  (= $resId ($id ${(paramIds, " ")}))
           |  (and
           |    ${(ecs, "\n")}
           |  )
