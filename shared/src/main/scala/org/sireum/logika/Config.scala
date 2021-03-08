@@ -28,6 +28,7 @@ package org.sireum.logika
 import org.sireum._
 
 @datatype class Config(smt2Configs: ISZ[Smt2Config],
+                       sat: B,
                        timeoutInMs: Z,
                        defaultLoopBound: Z,
                        loopBounds: HashMap[LoopId, Z],

@@ -38,6 +38,9 @@ object cli {
     header = "Logika Verifier for Slang",
     usage = "<option>* [<slang-file>]",
     opts = ISZ(
+      Opt(name = "sat", longKey = "sat", shortKey = None(),
+        tpe = Type.Flag(F),
+        description = "Enable assumption satisfiability checking"),
       Opt(name = "sourcepath", longKey = "sourcepath", shortKey = Some('s'),
         tpe = Type.Path(T, None()),
         description = "Sourcepath of Slang .scala files"),

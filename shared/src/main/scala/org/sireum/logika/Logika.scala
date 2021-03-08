@@ -2302,9 +2302,13 @@ import Logika.Split
   def evalAssumeH(smt2: Smt2, title: String, s0: State, sym: State.Value.Sym, posOpt: Option[Position],
                   reporter: Reporter): State = {
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
-    val pos = posOpt.get
-    val sat = smt2.sat(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
-    return s1(status = sat)
+    if (config.sat) {
+      val pos = posOpt.get
+      val sat = smt2.sat(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
+      return s1(status = sat)
+    } else {
+      return s1
+    }
   }
 
   def evalAssume(smt2: Smt2, rtCheck: B, title: String, s0: State, cond: AST.Exp, posOpt: Option[Position],
