@@ -404,7 +404,8 @@ object State {
           if (claims.size == 1) claims(0).toRawST
           else
             st"""∨(
-                |  ${(for (c <- claims) yield c.toRawST, ",\n")})"""
+                |  ${(for (c <- claims) yield c.toRawST, ",\n")}
+                |)"""
         return r
       }
 
@@ -452,7 +453,8 @@ object State {
                 |  ${claims(1).toRawST}"""
           else
             st"""→(
-                |  ${(for (c <- claims) yield c.toRawST, ",\n")})"""
+                |  ${(for (c <- claims) yield c.toRawST, ",\n")}
+                |)"""
         return r
       }
 

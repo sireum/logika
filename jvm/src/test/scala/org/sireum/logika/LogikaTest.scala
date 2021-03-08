@@ -81,6 +81,35 @@ class LogikaTest extends TestSuite {
     "Passing" - {
 
       * - passingWorksheet(
+        """// #Sireum #Logika
+          |import org.sireum._
+          |
+          |def foo(a: ZS): Unit = {
+          |  Contract(Modifies(a))
+          |}
+          |
+          |def baz(): Unit = {
+          |  val s = ZS(0)
+          |  foo(s)
+          |}""".stripMargin)
+
+      * - passingWorksheet(
+        """// #Sireum #Logika
+          |import org.sireum._
+          |
+          |var x: Z = 1
+          |
+          |def foo(): Unit = {
+          |  Contract(Modifies(x))
+          |}
+          |
+          |def baz(): Unit = {
+          |  Contract(Modifies(x))
+          |  foo()
+          |  foo()
+          |}""".stripMargin)
+
+      * - passingWorksheet(
         """import org.sireum._
           |val v = Z.random
           |val zs = ZS.create(3, v)
