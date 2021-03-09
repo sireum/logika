@@ -300,11 +300,17 @@ object Logika {
           if (!reporter.hasError) {
             if (hasLogika) {
               var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts))
+              var spMethodTasks = ISZ[Task.Method]()
 
               def rec(stmts: ISZ[AST.Stmt]): Unit = {
                 for (stmt <- stmts) {
                   stmt match {
-                    case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty => tasks = tasks :+ Task.Method(th, config, stmt)
+                    case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty =>
+                      if (stmt.purity == AST.Purity.StrictPure && stmt.sig.typeParams.isEmpty) {
+                        spMethodTasks = spMethodTasks :+ Task.Method(th, config, stmt)
+                      } else {
+                        tasks = tasks :+ Task.Method(th, config, stmt)
+                      }
                     case stmt: AST.Stmt.Object => rec(stmt.stmts)
                     case stmt: AST.Stmt.Adt => rec(stmt.stmts)
                     case stmt: AST.Stmt.Sig => rec(stmt.stmts)
@@ -315,6 +321,8 @@ object Logika {
 
               rec(p.body.stmts)
 
+              val smt2 = smt2f(th)
+
               def combine(r1: Reporter, r2: Reporter): Reporter = {
                 val r = r1.combine(r2)
                 return r
@@ -322,14 +330,18 @@ object Logika {
 
               @pure def compute(task: Task): Reporter = {
                 val r = reporter.empty
-                task.compute(smt2f(th), r)
+                val csmt2 = smt2
+                task.compute(csmt2, r)
                 return r
+              }
+
+              for (task <- spMethodTasks) {
+                extension.Cancel.cancellable(() => task.compute(smt2, reporter))
               }
 
               if (par) {
                 combine(reporter, ops.ISZOps(tasks).mParMapFoldLeft[Reporter, Reporter](compute _, combine _, reporter.empty))
               } else {
-                val smt2 = smt2f(th)
                 for (task <- tasks) {
                   extension.Cancel.cancellable(() => task.compute(smt2, reporter))
                 }
@@ -397,8 +409,8 @@ object Logika {
         case Some(label) if label.value != "" => state = state.addClaim(State.Claim.Label(label.value, label.posOpt.get))
         case _ =>
       }
+      val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
       val logika: Logika = {
-        val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
         val mname = res.owner :+ method.sig.id.value
         val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
           None()
@@ -448,50 +460,59 @@ object Logika {
       if (logika.context.methodName.size == 1) {
         state = checkInv(T, state, logika, smt2, th.worksheetInvs, method.posOpt, reporter)
       }
-      val hasPreReqInv = state.claims.size != statePreReqInvSize
-      val statePreReqSize = state.claims.size
-      for (r <- requires if state.status) {
-        state = logika.evalAssume(smt2, T, "Precondition", state, r, r.posOpt, reporter)._1
-      }
-      if (state.claims.size != statePreReqSize) {
-        val stateOps = ops.ISZOps(state.claims)
-        state = state(claims = stateOps.slice(0, statePreReqSize) :+ State.Claim.And(
-          stateOps.slice(statePreReqSize, state.claims.size)
-        ))
-      }
-      if (hasPreReqInv && state.claims.size != statePreReqSize) {
-        val stateOps = ops.ISZOps(state.claims)
-        state = state(claims = stateOps.slice(0, statePreReqInvSize) :+ State.Claim.And(
-          stateOps.slice(statePreReqInvSize, state.claims.size)
-        ))
-      }
       val stmts = method.bodyOpt.get.stmts
-      for (s <- logika.evalStmts(Split.Default, smt2, None(), T, state, stmts, reporter)) {
-        var s2 = s
-        val statePreEnInvSize = state.claims.size
-        if (logika.context.methodName.size == 1) {
-          s2 = checkInv(F, s2, logika, smt2, th.worksheetInvs, method.posOpt, reporter)
+      if (method.purity == AST.Purity.StrictPure) {
+        logika.logPc(config.logPc, config.logRawPc, state, reporter, stmts(0).posOpt)
+        val imi = InvokeMethodInfo(method.sig, method.contract, res, stmts(0).asInstanceOf[AST.Stmt.Var].initOpt)
+        state = logika.strictPureMethod(smt2, state, imi, HashMap.empty, reporter)._1
+        for (c <- state.claims; t <- c.types) {
+          smt2.addType(t, reporter)
         }
-        val hasPreEnInv = state.claims.size != statePreEnInvSize
-        val statePreEnSize = state.claims.size
-        for (e <- ensures if s2.status) {
-          s2 = logika.evalAssert(smt2, T, "Postcondition", s2, e, e.posOpt, reporter)._1
+      } else {
+        val hasPreReqInv = state.claims.size != statePreReqInvSize
+        val statePreReqSize = state.claims.size
+        for (r <- requires if state.status) {
+          state = logika.evalAssume(smt2, T, "Precondition", state, r, r.posOpt, reporter)._1
         }
-        if (state.claims.size != statePreEnSize) {
+        if (state.claims.size != statePreReqSize) {
           val stateOps = ops.ISZOps(state.claims)
-          state = state(claims = stateOps.slice(0, statePreEnSize) :+ State.Claim.And(
-            stateOps.slice(statePreEnSize, state.claims.size)
+          state = state(claims = stateOps.slice(0, statePreReqSize) :+ State.Claim.And(
+            stateOps.slice(statePreReqSize, state.claims.size)
           ))
         }
-        if (hasPreEnInv && state.claims.size != statePreEnSize) {
+        if (hasPreReqInv && state.claims.size != statePreReqSize) {
           val stateOps = ops.ISZOps(state.claims)
-          state = state(claims = stateOps.slice(0, statePreEnInvSize) :+ State.Claim.And(
-            stateOps.slice(statePreEnInvSize, state.claims.size)
+          state = state(claims = stateOps.slice(0, statePreReqInvSize) :+ State.Claim.And(
+            stateOps.slice(statePreReqInvSize, state.claims.size)
           ))
         }
-        if (stmts.nonEmpty && s2.status) {
-          logika.logPc(config.logPc, config.logRawPc, s2, reporter,
-            Some(Logika.afterPos(stmts(stmts.size - 1).posOpt.get)))
+        for (s <- logika.evalStmts(Split.Default, smt2, None(), T, state, stmts, reporter)) {
+          var s2 = s
+          val statePreEnInvSize = state.claims.size
+          if (logika.context.methodName.size == 1) {
+            s2 = checkInv(F, s2, logika, smt2, th.worksheetInvs, method.posOpt, reporter)
+          }
+          val hasPreEnInv = state.claims.size != statePreEnInvSize
+          val statePreEnSize = state.claims.size
+          for (e <- ensures if s2.status) {
+            s2 = logika.evalAssert(smt2, T, "Postcondition", s2, e, e.posOpt, reporter)._1
+          }
+          if (state.claims.size != statePreEnSize) {
+            val stateOps = ops.ISZOps(state.claims)
+            state = state(claims = stateOps.slice(0, statePreEnSize) :+ State.Claim.And(
+              stateOps.slice(statePreEnSize, state.claims.size)
+            ))
+          }
+          if (hasPreEnInv && state.claims.size != statePreEnSize) {
+            val stateOps = ops.ISZOps(state.claims)
+            state = state(claims = stateOps.slice(0, statePreEnInvSize) :+ State.Claim.And(
+              stateOps.slice(statePreEnInvSize, state.claims.size)
+            ))
+          }
+          if (stmts.nonEmpty && s2.status) {
+            logika.logPc(config.logPc, config.logRawPc, s2, reporter,
+              Some(Logika.afterPos(stmts(stmts.size - 1).posOpt.get)))
+          }
         }
       }
     }

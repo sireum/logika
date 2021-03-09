@@ -50,6 +50,11 @@ object Smt2Impl {
   @pure def cvc4ArgF(timeoutInMs: Z): ISZ[String] = {
     return ISZ(s"--tlimit=$timeoutInMs", "--lang=smt2.6")
   }
+
+  @strictpure def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, cache: Smt2Impl.Cache, timeoutInMs: Z,
+                         charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B): Smt2Impl =
+    Smt2Impl(configs, typeHierarchy, cache, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery, Smt2.basicTypes,
+      Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
 }
 
 @record class Smt2Impl(val configs: ISZ[Smt2Config],
@@ -58,34 +63,22 @@ object Smt2Impl {
                        val timeoutInMs: Z,
                        val charBitWidth: Z,
                        val intBitWidth: Z,
-                       val simplifiedQuery: B)
-  extends Smt2 {
+                       val simplifiedQuery: B,
+                       var types: HashSet[AST.Typed],
+                       var poset: Poset[AST.Typed.Name],
+                       var sorts: ISZ[ST],
+                       var adtDecls: ISZ[ST],
+                       var sTypeDecls: ISZ[ST],
+                       var typeDecls: ISZ[ST],
+                       var typeHierarchyIds: ISZ[ST],
+                       var shortIds: HashMap[ISZ[String], ISZ[String]],
+                       var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)],
+                       var filenameCount: HashMap[String, Z],
+                       var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
 
-  var types: HashSet[AST.Typed] = Smt2.basicTypes
-
-  var poset: Poset[AST.Typed.Name] = Poset.empty
-
-  var sorts: ISZ[ST] = ISZ()
-
-  var adtDecls: ISZ[ST] = ISZ()
-
-  var sTypeDecls: ISZ[ST] = ISZ()
-
-  var typeDecls: ISZ[ST] = ISZ()
-
-  var typeHierarchyIds: ISZ[ST] = ISZ()
-
-  var shortIds: HashMap[ISZ[String], ISZ[String]] = HashMap.empty
-
-  var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)] = HashSMap.empty
-
-  var filenameCount: HashMap[String, Z] = HashMap.empty
-
-  def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
+ def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
     shortIds = newShortIds
   }
-
-  var seqLits: HashSSet[Smt2.SeqLit] = HashSSet.empty
 
   def sortsUp(newSorts: ISZ[ST]): Unit = {
     sorts = newSorts
