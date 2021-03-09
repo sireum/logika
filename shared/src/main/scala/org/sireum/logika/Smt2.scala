@@ -77,6 +77,104 @@ object Smt2 {
     64 ~> "#x%016X",
   )
 
+  @strictpure def cST(charBitWidth: Z): ST =
+    st"""(define-sort C () (_ BitVec ${charBitWidth}))
+        |(define-fun |C.unary_-| ((x C)) C (bvneg x))
+        |(define-fun |C.unary_~| ((x C)) C (bvnot x))
+        |(define-fun |C.<=| ((x C) (y C)) B (bvule x y))
+        |(define-fun |C.<| ((x C) (y C)) B (bvult x y))
+        |(define-fun |C.>| ((x C) (y C)) B (bvugt x y))
+        |(define-fun |C.>=| ((x C) (y C)) B (bvuge x y))
+        |(define-fun |C.==| ((x C) (y C)) B (= x y))
+        |(define-fun |C.!=| ((x C) (y C)) B (not (= x y)))
+        |(define-fun |C.+| ((x C) (y C)) C (bvadd x y))
+        |(define-fun |C.-| ((x C) (y C)) C (bvsub x y))
+        |(define-fun |C.*| ((x C) (y C)) C (bvmul x y))
+        |(define-fun |C./| ((x C) (y C)) C (bvudiv x y))
+        |(define-fun |C.%| ((x C) (y C)) C (bvurem x y))
+        |(define-fun |C.<<| ((x C) (y C)) C (bvshl x y))
+        |(define-fun |C.>>| ((x C) (y C)) C (bvlshr x y))
+        |(define-fun |C.>>>| ((x C) (y C)) C (bvlshr x y))"""
+
+  @strictpure def zST(intBitWidth: Z): ST =
+    if (intBitWidth == 0)
+      st"""(define-sort Z () Int)
+          |(define-fun |Z.unary_-| ((x Z)) Z (- x))
+          |(define-fun |Z.<=| ((x Z) (y Z)) B (<= x y))
+          |(define-fun |Z.<| ((x Z) (y Z)) B (< x y))
+          |(define-fun |Z.>| ((x Z) (y Z)) B (> x y))
+          |(define-fun |Z.>=| ((x Z) (y Z)) B (>= x y))
+          |(define-fun |Z.==| ((x Z) (y Z)) B (= x y))
+          |(define-fun |Z.!=| ((x Z) (y Z)) B (not (= x y)))
+          |(define-fun |Z.+| ((x Z) (y Z)) Z (+ x y))
+          |(define-fun |Z.-| ((x Z) (y Z)) Z (- x y))
+          |(define-fun |Z.*| ((x Z) (y Z)) Z (* x y))
+          |(define-fun |Z./| ((x Z) (y Z)) Z (div x y))
+          |(define-fun |Z.%| ((x Z) (y Z)) Z (mod x y))"""
+    else
+      st"""(define-sort Z () (_ BitVec $intBitWidth))
+          |(define-fun |Z.unary_-| ((x Z)) Z (bvneg x))
+          |(define-fun |Z.<=| ((x Z) (y Z)) B (bvsle x y))
+          |(define-fun |Z.<| ((x Z) (y Z)) B (bvslt x y))
+          |(define-fun |Z.>| ((x Z) (y Z)) B (bvsgt x y))
+          |(define-fun |Z.>=| ((x Z) (y Z)) B (bvsge x y))
+          |(define-fun |Z.==| ((x Z) (y Z)) B (= x y))
+          |(define-fun |Z.!=| ((x Z) (y Z)) B (not (= x y)))
+          |(define-fun |Z.+| ((x Z) (y Z)) Z (bvadd x y))
+          |(define-fun |Z.-| ((x Z) (y Z)) Z (bvsub x y))
+          |(define-fun |Z.*| ((x Z) (y Z)) Z (bvmul x y))
+          |(define-fun |Z./| ((x Z) (y Z)) Z (bvsdiv x y))
+          |(define-fun |Z.%| ((x Z) (y Z)) Z (bvsrem x y))"""
+
+  val f32ST: ST =
+    st"""(define-sort F32 () Float32)
+        |(define-const |F32.PInf| F32 (_ +oo 8 24))
+        |(define-const |F32.NInf| F32 (_ -oo 8 24))
+        |(define-const |F32.NaN| F32 (_ NaN 8 24))
+        |(define-fun |F32.unary_-| ((x F32)) F32 (fp.neg x))
+        |(define-fun |F32.<=| ((x F32) (y F32)) B (fp.leq x y))
+        |(define-fun |F32.<| ((x F32) (y F32)) B (fp.lt x y))
+        |(define-fun |F32.>| ((x F32) (y F32)) B (fp.gt x y))
+        |(define-fun |F32.>=| ((x F32) (y F32)) B (fp.geq x y))
+        |(define-fun |F32.==| ((x F32) (y F32)) B (fp.eq x y))
+        |(define-fun |F32.!=| ((x F32) (y F32)) B (not (fp.eq x y)))
+        |(define-fun |F32.+| ((x F32) (y F32)) F32 (fp.add RNE x y))
+        |(define-fun |F32.-| ((x F32) (y F32)) F32 (fp.sub RNE x y))
+        |(define-fun |F32.*| ((x F32) (y F32)) F32 (fp.mul RNE x y))
+        |(define-fun |F32./| ((x F32) (y F32)) F32 (fp.div RNE x y))
+        |(define-fun |F32.%| ((x F32) (y F32)) F32 (fp.rem x y))"""
+
+  val f64ST: ST =
+    st"""(define-sort F64 () Float64)
+        |(define-const |F64.PInf| F64 (_ +oo 11 53))
+        |(define-const |F64.NInf| F64 (_ -oo 11 53))
+        |(define-const |F64.NaN| F64 (_ NaN 11 53))
+        |(define-fun |F64.unary_-| ((x F64)) F64 (fp.neg x))
+        |(define-fun |F64.<=| ((x F64) (y F64)) B (fp.leq x y))
+        |(define-fun |F64.<| ((x F64) (y F64)) B (fp.lt x y))
+        |(define-fun |F64.>| ((x F64) (y F64)) B (fp.gt x y))
+        |(define-fun |F64.>=| ((x F64) (y F64)) B (fp.geq x y))
+        |(define-fun |F64.==| ((x F64) (y F64)) B (fp.eq x y))
+        |(define-fun |F64.!=| ((x F64) (y F64)) B (not (fp.eq x y)))
+        |(define-fun |F64.+| ((x F64) (y F64)) F64 (fp.add RNE x y))
+        |(define-fun |F64.-| ((x F64) (y F64)) F64 (fp.sub RNE x y))
+        |(define-fun |F64.*| ((x F64) (y F64)) F64 (fp.mul RNE x y))
+        |(define-fun |F64./| ((x F64) (y F64)) F64 (fp.div RNE x y))
+        |(define-fun |F64.%| ((x F64) (y F64)) F64 (fp.rem x y))"""
+
+  val rST: ST =
+    st"""(define-sort R () Real)
+        |(define-fun |R.<=| ((x R) (y R)) B (<= x y))
+        |(define-fun |R.<| ((x R) (y R)) B (< x y))
+        |(define-fun |R.>| ((x R) (y R)) B (> x y))
+        |(define-fun |R.>=| ((x R) (y R)) B (>= x y))
+        |(define-fun |R.==| ((x R) (y R)) B (= x y))
+        |(define-fun |R.!=| ((x R) (y R)) B (not (= x y)))
+        |(define-fun |R.+| ((x R) (y R)) R (+ x y))
+        |(define-fun |R.-| ((x R) (y R)) R (- x y))
+        |(define-fun |R.*| ((x R) (y R)) R (* x y))
+        |(define-fun |R./| ((x R) (y R)) R (/ x y))"""
+
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 
 }
@@ -674,11 +772,11 @@ object Smt2 {
                 |(define-fun $tGeId ((x $tId) (y $tId)) B (>= x y))
                 |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
                 |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
-                |(define-fun $tAddId ((x $tId) (y $tId)) Z (+ x y))
-                |(define-fun $tSubId ((x $tId) (y $tId)) Z (- x y))
-                |(define-fun $tMulId ((x $tId) (y $tId)) Z (* x y))
-                |(define-fun $tDivId ((x $tId) (y $tId)) Z (div x y))
-                |(define-fun $tRemId ((x $tId) (y $tId)) Z (mod x y))""")
+                |(define-fun $tAddId ((x $tId) (y $tId)) $tId (+ x y))
+                |(define-fun $tSubId ((x $tId) (y $tId)) $tId (- x y))
+                |(define-fun $tMulId ((x $tId) (y $tId)) $tId (* x y))
+                |(define-fun $tDivId ((x $tId) (y $tId)) $tId (div x y))
+                |(define-fun $tRemId ((x $tId) (y $tId)) $tId (mod x y))""")
       }
     }
 
@@ -739,6 +837,11 @@ object Smt2 {
     }
     typesUp(types + tipe)
     tipe match {
+      case AST.Typed.z => sortsUp(sorts :+ Smt2.zST(intBitWidth))
+      case AST.Typed.c => sortsUp(sorts :+ Smt2.cST(charBitWidth))
+      case AST.Typed.f32 => sortsUp(sorts :+ Smt2.f32ST)
+      case AST.Typed.f64 => sortsUp(sorts :+ Smt2.f64ST)
+      case AST.Typed.r => sortsUp(sorts :+ Smt2.rST)
       case t: AST.Typed.Name =>
         if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
           addS(t)
@@ -854,35 +957,6 @@ object Smt2 {
         case _ =>
       }
     }
-    val zST: ST =
-      if (intBitWidth == 0)
-        st"""(define-sort Z () Int)
-            |(define-fun |Z.unary_-| ((x Z)) Z (- x))
-            |(define-fun |Z.<=| ((x Z) (y Z)) B (<= x y))
-            |(define-fun |Z.<| ((x Z) (y Z)) B (< x y))
-            |(define-fun |Z.>| ((x Z) (y Z)) B (> x y))
-            |(define-fun |Z.>=| ((x Z) (y Z)) B (>= x y))
-            |(define-fun |Z.==| ((x Z) (y Z)) B (= x y))
-            |(define-fun |Z.!=| ((x Z) (y Z)) B (not (= x y)))
-            |(define-fun |Z.+| ((x Z) (y Z)) Z (+ x y))
-            |(define-fun |Z.-| ((x Z) (y Z)) Z (- x y))
-            |(define-fun |Z.*| ((x Z) (y Z)) Z (* x y))
-            |(define-fun |Z./| ((x Z) (y Z)) Z (div x y))
-            |(define-fun |Z.%| ((x Z) (y Z)) Z (mod x y))"""
-      else
-        st"""(define-sort Z () (_ BitVec $intBitWidth))
-            |(define-fun |Z.unary_-| ((x Z)) Z (bvneg x))
-            |(define-fun |Z.<=| ((x Z) (y Z)) B (bvsle x y))
-            |(define-fun |Z.<| ((x Z) (y Z)) B (bvslt x y))
-            |(define-fun |Z.>| ((x Z) (y Z)) B (bvsgt x y))
-            |(define-fun |Z.>=| ((x Z) (y Z)) B (bvsge x y))
-            |(define-fun |Z.==| ((x Z) (y Z)) B (= x y))
-            |(define-fun |Z.!=| ((x Z) (y Z)) B (not (= x y)))
-            |(define-fun |Z.+| ((x Z) (y Z)) Z (bvadd x y))
-            |(define-fun |Z.-| ((x Z) (y Z)) Z (bvsub x y))
-            |(define-fun |Z.*| ((x Z) (y Z)) Z (bvmul x y))
-            |(define-fun |Z./| ((x Z) (y Z)) Z (bvsdiv x y))
-            |(define-fun |Z.%| ((x Z) (y Z)) Z (bvsrem x y))"""
     val r =
       st"""(set-logic ALL)
           |
@@ -895,72 +969,6 @@ object Smt2 {
           |(define-fun |B.│| ((x B) (y B)) B (or x y))
           |(define-fun |B.│^| ((x B) (y B)) B (xor x y))
           |(define-fun |B.imply_:| ((x B) (y B)) B (=> x y))
-          |
-          |(define-sort C () (_ BitVec ${charBitWidth}))
-          |(define-fun |C.unary_-| ((x C)) C (bvneg x))
-          |(define-fun |C.unary_~| ((x C)) C (bvnot x))
-          |(define-fun |C.<=| ((x C) (y C)) B (bvule x y))
-          |(define-fun |C.<| ((x C) (y C)) B (bvult x y))
-          |(define-fun |C.>| ((x C) (y C)) B (bvugt x y))
-          |(define-fun |C.>=| ((x C) (y C)) B (bvuge x y))
-          |(define-fun |C.==| ((x C) (y C)) B (= x y))
-          |(define-fun |C.!=| ((x C) (y C)) B (not (= x y)))
-          |(define-fun |C.+| ((x C) (y C)) C (bvadd x y))
-          |(define-fun |C.-| ((x C) (y C)) C (bvsub x y))
-          |(define-fun |C.*| ((x C) (y C)) C (bvmul x y))
-          |(define-fun |C./| ((x C) (y C)) C (bvudiv x y))
-          |(define-fun |C.%| ((x C) (y C)) C (bvurem x y))
-          |(define-fun |C.<<| ((x C) (y C)) C (bvshl x y))
-          |(define-fun |C.>>| ((x C) (y C)) C (bvlshr x y))
-          |(define-fun |C.>>>| ((x C) (y C)) C (bvlshr x y))
-          |
-          |$zST
-          |
-          |(define-sort F32 () Float32)
-          |(define-const |F32.PInf| F32 (_ +oo 8 24))
-          |(define-const |F32.NInf| F32 (_ -oo 8 24))
-          |(define-const |F32.NaN| F32 (_ NaN 8 24))
-          |(define-fun |F32.unary_-| ((x F32)) F32 (fp.neg x))
-          |(define-fun |F32.<=| ((x F32) (y F32)) B (fp.leq x y))
-          |(define-fun |F32.<| ((x F32) (y F32)) B (fp.lt x y))
-          |(define-fun |F32.>| ((x F32) (y F32)) B (fp.gt x y))
-          |(define-fun |F32.>=| ((x F32) (y F32)) B (fp.geq x y))
-          |(define-fun |F32.==| ((x F32) (y F32)) B (fp.eq x y))
-          |(define-fun |F32.!=| ((x F32) (y F32)) B (not (fp.eq x y)))
-          |(define-fun |F32.+| ((x F32) (y F32)) F32 (fp.add RNE x y))
-          |(define-fun |F32.-| ((x F32) (y F32)) F32 (fp.sub RNE x y))
-          |(define-fun |F32.*| ((x F32) (y F32)) F32 (fp.mul RNE x y))
-          |(define-fun |F32./| ((x F32) (y F32)) F32 (fp.div RNE x y))
-          |(define-fun |F32.%| ((x F32) (y F32)) F32 (fp.rem x y))
-          |
-          |(define-sort F64 () Float64)
-          |(define-const |F64.PInf| F64 (_ +oo 11 53))
-          |(define-const |F64.NInf| F64 (_ -oo 11 53))
-          |(define-const |F64.NaN| F64 (_ NaN 11 53))
-          |(define-fun |F64.unary_-| ((x F64)) F64 (fp.neg x))
-          |(define-fun |F64.<=| ((x F64) (y F64)) B (fp.leq x y))
-          |(define-fun |F64.<| ((x F64) (y F64)) B (fp.lt x y))
-          |(define-fun |F64.>| ((x F64) (y F64)) B (fp.gt x y))
-          |(define-fun |F64.>=| ((x F64) (y F64)) B (fp.geq x y))
-          |(define-fun |F64.==| ((x F64) (y F64)) B (fp.eq x y))
-          |(define-fun |F64.!=| ((x F64) (y F64)) B (not (fp.eq x y)))
-          |(define-fun |F64.+| ((x F64) (y F64)) F64 (fp.add RNE x y))
-          |(define-fun |F64.-| ((x F64) (y F64)) F64 (fp.sub RNE x y))
-          |(define-fun |F64.*| ((x F64) (y F64)) F64 (fp.mul RNE x y))
-          |(define-fun |F64./| ((x F64) (y F64)) F64 (fp.div RNE x y))
-          |(define-fun |F64.%| ((x F64) (y F64)) F64 (fp.rem x y))
-          |
-          |(define-sort R () Real)
-          |(define-fun |R.<=| ((x R) (y R)) B (<= x y))
-          |(define-fun |R.<| ((x R) (y R)) B (< x y))
-          |(define-fun |R.>| ((x R) (y R)) B (> x y))
-          |(define-fun |R.>=| ((x R) (y R)) B (>= x y))
-          |(define-fun |R.==| ((x R) (y R)) B (= x y))
-          |(define-fun |R.!=| ((x R) (y R)) B (not (= x y)))
-          |(define-fun |R.+| ((x R) (y R)) R (+ x y))
-          |(define-fun |R.-| ((x R) (y R)) R (- x y))
-          |(define-fun |R.*| ((x R) (y R)) R (* x y))
-          |(define-fun |R./| ((x R) (y R)) R (/ x y))
           |
           |${(sorts, "\n\n")}
           |

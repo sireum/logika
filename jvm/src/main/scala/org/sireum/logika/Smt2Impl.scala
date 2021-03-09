@@ -51,10 +51,14 @@ object Smt2Impl {
     return ISZ(s"--tlimit=$timeoutInMs", "--lang=smt2.6")
   }
 
-  @strictpure def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, cache: Smt2Impl.Cache, timeoutInMs: Z,
-                         charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B): Smt2Impl =
-    Smt2Impl(configs, typeHierarchy, cache, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery, Smt2.basicTypes,
-      Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
+  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, cache: Smt2Impl.Cache, timeoutInMs: Z,
+                         charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B, reporter: Logika.Reporter): Smt2Impl = {
+    val r = Smt2Impl(configs, typeHierarchy, cache, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery,
+      HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), HashMap.empty,
+      HashSMap.empty, HashMap.empty, HashSSet.empty)
+    r.addType(AST.Typed.z, reporter)
+    return r
+  }
 }
 
 @record class Smt2Impl(val configs: ISZ[Smt2Config],
