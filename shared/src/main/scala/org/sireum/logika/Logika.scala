@@ -275,7 +275,7 @@ object Logika {
         isWorksheet = isWorksheet, isDiet = F, fileUriOpt = fileUriOpt, reporter = reporter)
       val libraryStartTime = extension.Time.currentMillis
       reporter.timing(parsingDesc, libraryStartTime - parsingStartTime)
-      if (reporter.hasIssue) {
+      if (reporter.hasError) {
         reporter.illFormed()
         return
       }
@@ -291,13 +291,13 @@ object Logika {
           reporter.reports(rep.messages)
           val (th, p) = extension.Cancel.cancellable(() =>
             lang.FrontEnd.checkWorksheet(Some(tc.typeHierarchy), program, reporter))
-          if (!reporter.hasIssue) {
+          if (!reporter.hasError) {
             lang.tipe.PostTipeAttrChecker.checkProgram(p, reporter)
           }
           val verifyingStartTime = extension.Time.currentMillis
           reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
 
-          if (!reporter.hasIssue) {
+          if (!reporter.hasError) {
             if (hasLogika) {
               var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts))
 
