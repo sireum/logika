@@ -731,9 +731,12 @@ import Logika.Split
       smt2.addStrictPureMethod(b.asStmt.posOpt.get, pf, svs, res, prefix)
 
       val s1 = state(nextFresh = maxStateValuesNextFresh(svs))
-      val posOpt = b.asStmt.posOpt
-      if (!smt2.sat(config.logVc, config.logVcDirOpt, "Satisfiability of proof function", posOpt.get, s1.claims, reporter)) {
-        reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
+      if (config.sat) {
+        val posOpt = b.asStmt.posOpt
+        val title: String = s"the derived proof function of ${imi.res.id}"
+        if (!smt2.sat(config.logVc, config.logVcDirOpt, title, posOpt.get, s1.claims, reporter)) {
+          reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
+        }
       }
       return (s1, pf)
     }
