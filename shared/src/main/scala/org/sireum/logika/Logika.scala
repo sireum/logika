@@ -290,7 +290,7 @@ object Logika {
           reporter.timing(libraryDesc, typeCheckingStartTime - libraryStartTime)
           reporter.reports(rep.messages)
           val (th, p) = extension.Cancel.cancellable(() =>
-            lang.FrontEnd.checkWorksheet(Some(tc.typeHierarchy), program, reporter))
+            lang.FrontEnd.checkWorksheet(par, Some(tc.typeHierarchy), program, reporter))
           if (!reporter.hasError) {
             lang.tipe.PostTipeAttrChecker.checkProgram(p, reporter)
           }
