@@ -969,6 +969,7 @@ object Smt2 {
           |(define-fun |B.│| ((x B) (y B)) B (or x y))
           |(define-fun |B.│^| ((x B) (y B)) B (xor x y))
           |(define-fun |B.imply_:| ((x B) (y B)) B (=> x y))
+          |(define-fun |B.->:| ((x B) (y B)) B (=> x y))
           |
           |${(sorts, "\n\n")}
           |

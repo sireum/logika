@@ -25,8 +25,8 @@ def inc(n: Z): Z = {
 def ite[T](cond: B, t: T, f: T): T = {
   Contract(
     Ensures(
-      cond imply_: (Res == t),
-      (!cond) imply_: (Res == f)
+      cond ->: (Res == t),
+      !cond ->: (Res == f)
     )
   )
   if (cond) {

@@ -13,8 +13,8 @@ def foo[A](a1: A, a2: A): B = {
   def foo[B](a: A, b1: B, b2: B): B = {
     Contract(
       Ensures(
-        (x == a) imply_: (Res == b1),
-        (x != a) imply_: (Res == b2)
+        (x == a) ->: (Res == b1),
+        (x != a) ->: (Res == b2)
       )
     )
     if (x == a) {

@@ -17,8 +17,8 @@ def inc(x: Z): Z = {
 def ifEqual[T](x: T, y: T, t: Z, f: Z): Z = {
   Contract(
     Ensures(
-      eq(x, y) imply_: (Res == t),
-      !eq(x, y) imply_: (Res == f)
+      eq(x, y) ->: (Res == t),
+      !eq(x, y) ->: (Res == f)
     )
   )
   if (x != y) {
@@ -34,8 +34,8 @@ def ifEqual[T](x: T, y: T, t: Z, f: Z): Z = {
   def min(other: A): A = {
     Contract(
       Ensures(
-        (this < other) imply_: (Res == this),
-        !(this < other) imply_: (Res == other)
+        (this < other) ->: (Res == this),
+        !(this < other) ->: (Res == other)
       )
     )
     if (x >= other.x) {

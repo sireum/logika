@@ -27,8 +27,8 @@ import org.sireum._
   def iteEq[B](a2: A, t: B, f: B): B = {
     Contract(
       Ensures(
-        (a == a2) imply_: (Res == t),
-        (a != a2) imply_: (Res == f)
+        (a == a2) ->: (Res == t),
+        (a != a2) ->: (Res == f)
       )
     )
     if (a == a2) {
