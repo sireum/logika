@@ -42,7 +42,7 @@ val homeDir = Os.slashDir.up.canon
 
 val (logikaShared, logikaJvm) = moduleSharedJvm(
   baseId = logika,
-  baseDir = homeDir / logika,
+  baseDir = homeDir,
   sharedDeps = ISZ(frontend),
   sharedIvyDeps = ISZ(),
   jvmDeps = ISZ(library, test),
@@ -51,4 +51,4 @@ val (logikaShared, logikaJvm) = moduleSharedJvm(
 
 val project = Project.empty + logikaShared + logikaJvm
 
-println(JSON.fromProject(project, T))
+projectCli(Os.cliArgs, project)
