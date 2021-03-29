@@ -32,7 +32,6 @@ import org.sireum.project.ProjectUtil._
 import org.sireum.project.{JSON, Project}
 
 val library = "library"
-val test = "test"
 
 val frontend = "slang-frontend"
 
@@ -45,7 +44,7 @@ val (logikaShared, logikaJvm) = moduleSharedJvm(
   baseDir = homeDir,
   sharedDeps = ISZ(frontend),
   sharedIvyDeps = ISZ(),
-  jvmDeps = ISZ(library, test),
+  jvmDeps = ISZ(library),
   jvmIvyDeps = ISZ()
 )
 
