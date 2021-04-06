@@ -28,13 +28,19 @@ val logika = "logika"
 
 val homeDir = Os.slashDir.up.canon
 
-val (logikaShared, logikaJvm) = moduleSharedJvm(
+val (logikaShared, logikaJvm) = moduleSharedJvmPub(
   baseId = logika,
   baseDir = homeDir,
   sharedDeps = ISZ(frontend),
   sharedIvyDeps = ISZ(),
   jvmDeps = ISZ(library),
-  jvmIvyDeps = ISZ()
+  jvmIvyDeps = ISZ(),
+  pubOpt = pub(
+    desc = "Logika Slang Program Verifier",
+    url = "github.com/sireum/logika",
+    licenses = org.sireum.project.ProjectUtil.bsd2,
+    devs = ISZ(robby)
+  )
 )
 
 val project = Project.empty + logikaShared + logikaJvm
