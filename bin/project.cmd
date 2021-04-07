@@ -38,7 +38,7 @@ val (logikaShared, logikaJvm) = moduleSharedJvmPub(
   pubOpt = pub(
     desc = "Logika Slang Program Verifier",
     url = "github.com/sireum/logika",
-    licenses = org.sireum.project.ProjectUtil.bsd2,
+    licenses = bsd2,
     devs = ISZ(robby)
   )
 )
