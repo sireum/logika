@@ -37,6 +37,7 @@ object cli {
     description = "Logika verifier",
     header = "Logika Verifier for Slang",
     usage = "<option>* [<slang-file>]",
+    usageDescOpt = None(),
     opts = ISZ(
       Opt(name = "sat", longKey = "sat", shortKey = None(),
         tpe = Type.Flag(F),
