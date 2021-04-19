@@ -226,7 +226,7 @@ class LogikaTest extends TestSuite {
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkFile(None(), input, config,
       th => Smt2Impl.create(config.smt2Configs, th, Smt2Impl.NoCache(), config.timeoutInMs, config.charBitWidth,
-        config.intBitWidth, config.simplifiedQuery, reporter), reporter, F, T)
+        config.intBitWidth, config.simplifiedQuery, reporter), reporter, F, T, Logika.defaultPlugins)
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

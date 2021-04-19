@@ -447,7 +447,7 @@ object Smt2 {
           |;
           |; Claims:
           |;
-          |${(for (header <- State.Claim.claimsSTs(claims, ClaimDefs.empty); line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
+          |${(toSTs(claims), "\n")}
           |;
           |${smt2res.query}""".render
     )
@@ -908,9 +908,12 @@ object Smt2 {
     return query(seqLitDecls ++ (for (d <- decls.values) yield d.render), claimSmts)
   }
 
+  @strictpure def toSTs(claims: ISZ[State.Claim]): ISZ[ST] =
+    for (cST <- State.Claim.claimsSTs(claims, ClaimDefs.empty)) yield
+      st"${(for (line <- ops.StringOps(cST.render).split(c => c == '\n')) yield st"; $line", "\n")}"
+
   def valid(log: B, logDirOpt: Option[String], title: String, pos: message.Position, premises: ISZ[State.Claim],
             conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
-    val defs = ClaimDefs.empty
     val startTime = extension.Time.currentMillis
     val (_, smt2res) = checkUnsat(satQuery(premises, Some(conclusion), reporter).render, timeoutInMs)
     val res = smt2res(info = "", query =
@@ -919,7 +922,9 @@ object Smt2 {
           |;
           |; Sequent:
           |;
-          |${(for (header <- (State.Claim.claimsSTs(premises, defs) :+ st"⊢") ++ State.Claim.claimsSTs(ISZ(conclusion), defs); line <- ops.StringOps(header.render).split(c => c == '\n')) yield st"; $line", "\n")}
+          |${(toSTs(premises), ",\n")}
+          |; ⊢
+          |${(toSTs(ISZ(conclusion)), ",\n")}
           |;
           |${smt2res.query}""".render
     )

@@ -26,7 +26,6 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.message.Reporter
 import org.sireum.test._
 import LogikaTest._
 
@@ -42,7 +41,7 @@ class LogikaRcTest extends SireumRcSpec {
     //val c = config(logVcDirOpt = Some((Os.home / "Temp" / path.last).string))
     Logika.checkFile(Some(Os.path(path.mkString(Os.fileSep.value)).string), content, c,
       th => Smt2Impl.create(config.smt2Configs, th, Smt2Impl.NoCache(), c.timeoutInMs, c.charBitWidth, c.intBitWidth,
-        c.simplifiedQuery, reporter), reporter, T, T)
+        c.simplifiedQuery, reporter), reporter, T, T, Logika.defaultPlugins)
     reporter.printMessages()
     !reporter.hasIssue
   }

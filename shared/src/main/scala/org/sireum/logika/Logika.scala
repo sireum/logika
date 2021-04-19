@@ -234,9 +234,9 @@ object Logika {
 
   object Task {
 
-    @datatype class Stmts(th: TypeHierarchy, config: Config, stmts: ISZ[AST.Stmt]) extends Task {
+    @datatype class Stmts(th: TypeHierarchy, config: Config, stmts: ISZ[AST.Stmt], plugins: ISZ[Plugin]) extends Task {
       override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
-        val logika = Logika(th, config, Context.empty, F)
+        val logika = Logika(th, config, Context.empty, F, plugins)
         for (state <- logika.evalStmts(Split.Default, smt2, None(), T, State.create, stmts, reporter) if state.status) {
           if (stmts.nonEmpty) {
             val lastPos = stmts(stmts.size - 1).posOpt.get
@@ -247,11 +247,91 @@ object Logika {
       }
     }
 
-    @datatype class Method(th: TypeHierarchy, config: Config, method: AST.Stmt.Method) extends Task {
+    @datatype class Method(th: TypeHierarchy, config: Config, method: AST.Stmt.Method, plugins: ISZ[Plugin]) extends Task {
       override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
-        checkMethod(th, method, config, smt2, reporter)
+        checkMethod(th, plugins, method, config, smt2, reporter)
         return reporter.messages
       }
+    }
+
+  }
+
+  @datatype class StepProofContext(val stepNo: Z, val exp: AST.Exp, val claims: ISZ[State.Claim])
+
+  @sig trait Plugin {
+    def canHandle(just: AST.ProofAst.Step.Justification): B
+
+    def handle(logika: Logika,
+               smt2: Smt2,
+               log: B,
+               logDirOpt: Option[String],
+               spcMap: HashSMap[Z, StepProofContext],
+               state: State,
+               step: AST.ProofAst.Step.Regular,
+               reporter: Reporter): (B, Z, ISZ[State.Claim])
+  }
+
+  @datatype class AutoPlugin extends Plugin {
+
+    override def canHandle(just: AST.ProofAst.Step.Justification): B = {
+      return just.id.value === "auto"
+    }
+
+    override def handle(logika: Logika,
+                        smt2: Smt2,
+                        log: B,
+                        logDirOpt: Option[String],
+                        spcMap: HashSMap[Z, StepProofContext],
+                        state: State,
+                        step: AST.ProofAst.Step.Regular,
+                        reporter: Reporter): (B, Z, ISZ[State.Claim]) = {
+      val just = step.just
+      val posOpt = just.id.attr.posOpt
+      if (ops.ISZOps(just.args).exists((arg: AST.Exp) => !arg.isInstanceOf[AST.Exp.LitZ])) {
+        reporter.error(posOpt, Logika.kind, "The auto justification can only accept integer literal arguments")
+        return (F, state.nextFresh, ISZ())
+      }
+
+      val pos = posOpt.get
+
+      val ((nextFresh, premises, conclusion), claims): ((Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) =
+        if (just.args.isEmpty) {
+          val t = logika.evalRegularStepClaim(smt2, state, step, reporter)
+          (t, ops.ISZOps(t._2).slice(state.claims.size, t._2.size) :+ t._3)
+        } else {
+          var s0 = state(claims = ISZ())
+          var ok = T
+          for (arg <- just.args) {
+            val stepNo = arg.asInstanceOf[AST.Exp.LitZ].value
+            spcMap.get(stepNo) match {
+              case Some(spc) =>
+                s0 = s0.addClaim(State.Claim.And(spc.claims))
+              case _ =>
+                reporter.error(posOpt, Logika.kind, s"Could not find proof step #$stepNo")
+                ok = F
+            }
+          }
+          if (!ok) {
+            return (F, s0.nextFresh, s0.claims)
+          }
+          val t = logika.evalRegularStepClaim(smt2, s0, step, reporter)
+          (t, t._2 :+ t._3)
+        }
+      val r = smt2.valid(log, logDirOpt, "Auto Justification", pos, premises, conclusion, reporter)
+
+      def error(msg: String): B = {
+        reporter.error(posOpt, Logika.kind, msg)
+        return F
+      }
+
+      val status: B = r.kind match {
+        case Smt2Query.Result.Kind.Unsat => T
+        case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step #${step.no.value}")
+        case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step #${step.no.value}")
+        case Smt2Query.Result.Kind.Timeout => error(s"Time out when deducing the claim of proof step #${step.no.value}")
+        case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step #${step.no.value}")
+      }
+      return (status, nextFresh, claims)
     }
 
   }
@@ -261,15 +341,17 @@ object Logika {
   val libraryDesc: String = "Library"
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
+  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin())
 
   def checkFile(fileUriOpt: Option[String], input: String, config: Config,
                 smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
-                par: B, hasLogika: B): Unit = {
+                par: B, hasLogika: B, plugins: ISZ[Plugin]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
       case Some(p) => !ops.StringOps(p).endsWith(".scala") && !ops.StringOps(p).endsWith(".slang")
       case _ => T
     }
+
     def checkFileH(): Unit = {
       val topUnitOpt = lang.parser.Parser(input).parseTopUnit[AST.TopUnit.Program](
         isWorksheet = isWorksheet, isDiet = F, fileUriOpt = fileUriOpt, reporter = reporter)
@@ -299,7 +381,7 @@ object Logika {
 
           if (!reporter.hasError) {
             if (hasLogika) {
-              var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts))
+              var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts, plugins))
               var spMethodTasks = ISZ[Task.Method]()
 
               def rec(stmts: ISZ[AST.Stmt]): Unit = {
@@ -307,9 +389,9 @@ object Logika {
                   stmt match {
                     case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty =>
                       if (stmt.purity == AST.Purity.StrictPure && stmt.sig.typeParams.isEmpty) {
-                        spMethodTasks = spMethodTasks :+ Task.Method(th, config, stmt)
+                        spMethodTasks = spMethodTasks :+ Task.Method(th, config, stmt, plugins)
                       } else {
-                        tasks = tasks :+ Task.Method(th, config, stmt)
+                        tasks = tasks :+ Task.Method(th, config, stmt, plugins)
                       }
                     case stmt: AST.Stmt.Object => rec(stmt.stmts)
                     case stmt: AST.Stmt.Adt => rec(stmt.stmts)
@@ -354,15 +436,16 @@ object Logika {
         case _ =>
       }
     }
+
     extension.Cancel.cancellable(checkFileH _)
   }
 
   def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], inPfc: B, receiverTypeOpt: Option[AST.Typed],
                    sig: AST.MethodSig, posOpt: Option[Position], reads: ISZ[AST.Exp.Ident], modifies: ISZ[AST.Exp.Ident],
-                   caseLabels: ISZ[AST.Exp.LitString]): Logika = {
+                   caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[Plugin]): Logika = {
     val mctx = MethodContext(name, receiverTypeOpt, sig, reads, modifies, HashMap.empty, HashMap.empty, HashMap.empty, posOpt)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels)
-    return Logika(th, config, ctx, inPfc)
+    return Logika(th, config, ctx, inPfc, plugins)
   }
 
   def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, invs: ISZ[lang.symbol.Info.Inv], posOpt: Option[Position], reporter: Reporter): State = {
@@ -401,7 +484,12 @@ object Logika {
     ))
   }
 
-  def checkMethod(th: TypeHierarchy, method: AST.Stmt.Method, config: Config, smt2: Smt2, reporter: Reporter): Unit = {
+  def checkMethod(th: TypeHierarchy,
+                  plugins: ISZ[Plugin],
+                  method: AST.Stmt.Method,
+                  config: Config,
+                  smt2: Smt2,
+                  reporter: Reporter): Unit = {
     def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
       var state = State.create
@@ -422,7 +510,7 @@ object Logika {
           }
         }
         val l = logikaMethod(th, config, mname, F, receiverTypeOpt, method.sig, method.posOpt, reads, modifies,
-          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get))
+          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins)
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
         for (p <- mctx.objectVarMap(TypeChecker.emptySubstMap).entries) {
@@ -667,7 +755,8 @@ import Logika.Split
 @datatype class Logika(th: lang.tipe.TypeHierarchy,
                        config: Config,
                        context: Logika.Context,
-                       inPfc: B) {
+                       inPfc: B,
+                       plugins: ISZ[Logika.Plugin]) {
 
   @pure def isBasic(smt2: Smt2, t: AST.Typed): B = {
     if (Smt2.basicTypes.contains(t)) {
@@ -742,7 +831,7 @@ import Logika.Split
         val posOpt = body.asStmt.posOpt
         val context = pf.context :+ pf.id
         val logika: Logika = Logika.logikaMethod(th, config, context, T, pf.receiverTypeOpt, imi.sig,
-          posOpt, ISZ(), ISZ(), ISZ())
+          posOpt, ISZ(), ISZ(), ISZ(), plugins)
         val s0 = state(claims = ISZ())
         val (s1, r) = Logika.idIntro(posOpt.get, s0, context, "Res", funType.ret, posOpt)
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
@@ -1885,7 +1974,7 @@ import Logika.Split
 
         val logikaComp: Logika = {
           val l = Logika.logikaMethod(th, config, ctx, F, receiverOpt.map(t => t.tipe), info.sig, receiverPosOpt,
-            contract.reads, contract.modifies, ISZ())
+            contract.reads, contract.modifies, ISZ(), plugins)
           val mctx = l.context.methodOpt.get
           var objectVarInMap = mctx.objectVarInMap
           for (p <- mctx.objectVarMap(typeSubstMap).entries) {
@@ -2182,6 +2271,7 @@ import Logika.Split
         val (s1, v) = p
         val pos = e.posOpt.get
         val t = targ.typedOpt.get
+
         def addB(value: B): Unit = {
           if (value) {
             val (s2, sym) = s1.freshSym(AST.Typed.b, pos)
@@ -2191,6 +2281,7 @@ import Logika.Split
             r = r :+ ((s1, State.Value.B(F, pos)))
           }
         }
+
         def addSize(size: Z): Unit = {
           val (s2, symLo) = s1.freshSym(AST.Typed.b, pos)
           val (s3, symHi) = s2.freshSym(AST.Typed.b, pos)
@@ -2198,10 +2289,11 @@ import Logika.Split
           val s5 = s4.addClaims(ISZ(
             State.Claim.Let.Binary(symLo, State.Value.Z(0, pos), AST.Exp.BinaryOp.Le, v, AST.Typed.z),
             State.Claim.Let.Binary(symHi, v, AST.Exp.BinaryOp.Le, State.Value.Z(size, pos), AST.Typed.z),
-            State.Claim.Let.Binary(sym, symLo, AST.Exp.BinaryOp.And, symHi, AST.Typed.b),
+            State.Claim.Let.Binary(sym, symLo, AST.Exp.BinaryOp.And, symHi, AST.Typed.b)
           ))
           r = r :+ ((s5, sym))
         }
+
         t match {
           case AST.Typed.z => addB(T)
           case t: AST.Typed.Name =>
@@ -2245,7 +2337,7 @@ import Logika.Split
                 case AST.MethodMode.Select => return evalSeqSelect(e)
                 case AST.MethodMode.Constructor =>
                   return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
-                case AST.MethodMode.Ext if res.id == "randomInt" && res.owner == AST.Typed.sireumName=>
+                case AST.MethodMode.Ext if res.id == "randomInt" && res.owner == AST.Typed.sireumName =>
                   return evalRandomInt(state)
                 case AST.MethodMode.Spec if res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName =>
                   return evalSeqIndexValidSize(state, e.targs(0), e.args(0))
@@ -2286,8 +2378,8 @@ import Logika.Split
             case seq: AST.Exp.Select =>
               seq.attr.resOpt.get match {
                 case res: AST.ResolvedInfo.Method if
-                (res.owner == AST.Typed.isName || res.owner == AST.Typed.msName) &&
-                  res.id == "indices" =>
+                  (res.owner == AST.Typed.isName || res.owner == AST.Typed.msName) &&
+                    res.id == "indices" =>
                   return evalQuantEachIndex(e, seq.receiverOpt.get)
                 case _ =>
               }
@@ -2861,6 +2953,7 @@ import Logika.Split
       val r = State.Value.Unit(pos)
       return for (s <- ss) yield (s, r)
     }
+
     e.attr.resOpt.get match {
       case AST.ResolvedInfo.BuiltIn(kind) =>
         kind match {
@@ -2894,6 +2987,33 @@ import Logika.Split
       case _ =>
         return for (p <- evalExp(split, smt2, rtCheck, state, e, reporter)) yield (Logika.conjunctClaimSuffix(state, p._1), p._2)
     }
+  }
+
+  def evalProofStep(smt2: Smt2,
+                    stateMap: (State, HashSMap[Z, Logika.StepProofContext]),
+                    step: AST.ProofAst.Step,
+                    reporter: Reporter): (State, HashSMap[Z, Logika.StepProofContext]) = {
+    val stepNo = step.no.value
+    val (s0, m) = stateMap
+    step match {
+      case step: AST.ProofAst.Step.Regular =>
+        for (plugin <- plugins if plugin.canHandle(step.just)) {
+          val (r, nextFresh, claims) = plugin.handle(this, smt2, config.logVc, config.logVcDirOpt, m, s0, step, reporter)
+          return (s0(status = r, nextFresh = nextFresh).addClaim(State.Claim.And(claims)),
+            m + stepNo ~> Logika.StepProofContext(stepNo, step.claim, claims))
+        }
+        reporter.error(step.just.id.attr.posOpt, Logika.kind, "Could not recognize justification form")
+        return (s0(status = F), m)
+      case _ => halt(s"TODO: $step")
+    }
+  }
+
+  def evalRegularStepClaim(smt2: Smt2, s0: State, step: AST.ProofAst.Step.Regular, reporter: Reporter): (Z, ISZ[State.Claim], State.Claim) = {
+    val svs = evalExp(Logika.Split.Disabled, smt2, T, s0, step.claim, reporter)
+    val (s1, v) = svs(0)
+    val (s2, sym) = value2Sym(s1, v, step.just.id.attr.posOpt.get)
+    val vProp = State.Claim.Prop(T, sym)
+    return (s2.nextFresh, s2.claims, vProp)
   }
 
   def evalStmt(split: Split.Type, smt2: Smt2, rtCheck: B, state: State, stmt: AST.Stmt, reporter: Reporter): ISZ[State] = {
@@ -3182,6 +3302,14 @@ import Logika.Split
       return ss ++ r
     }
 
+    def evalDeduceSteps(s0: State, deduceStmt: AST.Stmt.DeduceSteps): ISZ[State] = {
+      var p = (s0, HashSMap.empty[Z, Logika.StepProofContext])
+      for (step <- deduceStmt.steps if p._1.status) {
+        p = evalProofStep(smt2, p, step, reporter)
+      }
+      return ISZ(p._1)
+    }
+
     def evalStmtH(): ISZ[State] = {
       stmt match {
         case stmt@AST.Stmt.Expr(e: AST.Exp.Invoke) =>
@@ -3226,6 +3354,7 @@ import Logika.Split
         case stmt: AST.Stmt.SpecBlock => return evalSpecBlock(split, state, stmt)
         case stmt: AST.Stmt.Match => return evalMatch(split, smt2, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.Inv => return evalInv(state, stmt)
+        case stmt: AST.Stmt.DeduceSteps => return evalDeduceSteps(state, stmt)
         case _: AST.Stmt.Object => return ISZ(state)
         case _: AST.Stmt.Import => return ISZ(state)
         case _: AST.Stmt.Method => return ISZ(state)
@@ -3368,7 +3497,7 @@ import Logika.Split
     if (rOpt.nonEmpty) {
       return (for (current <- currents;
                    s <- evalAssignExp(split, smt2, rOpt, rtCheck, current, stmts(stmts.size - 1).asAssignExp, reporter))
-        yield s) ++ done
+      yield s) ++ done
     } else {
       return currents ++ done
     }
