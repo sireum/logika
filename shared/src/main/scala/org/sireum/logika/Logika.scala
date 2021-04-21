@@ -274,7 +274,10 @@ object Logika {
   @datatype class AutoPlugin extends Plugin {
 
     override def canHandle(just: AST.ProofAst.Step.Justification): B = {
-      return just.id.value === "auto"
+      just match {
+        case just: AST.ProofAst.Step.Justification.Apply => return just.id.value === "auto"
+        case _ => return F
+      }
     }
 
     override def handle(logika: Logika,
@@ -285,7 +288,7 @@ object Logika {
                         state: State,
                         step: AST.ProofAst.Step.Regular,
                         reporter: Reporter): (B, Z, ISZ[State.Claim]) = {
-      val just = step.just
+      val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
       val posOpt = just.id.attr.posOpt
       if (ops.ISZOps(just.args).exists((arg: AST.Exp) => !arg.isInstanceOf[AST.Exp.LitZ])) {
         reporter.error(posOpt, Logika.kind, "The auto justification can only accept integer literal arguments")
@@ -3002,7 +3005,7 @@ import Logika.Split
           return (s0(status = r, nextFresh = nextFresh).addClaim(State.Claim.And(claims)),
             m + stepNo ~> Logika.StepProofContext(stepNo, step.claim, claims))
         }
-        reporter.error(step.just.id.attr.posOpt, Logika.kind, "Could not recognize justification form")
+        reporter.error(step.just.posOpt, Logika.kind, "Could not recognize justification form")
         return (s0(status = F), m)
       case _ => halt(s"TODO: $step")
     }
@@ -3011,7 +3014,7 @@ import Logika.Split
   def evalRegularStepClaim(smt2: Smt2, s0: State, step: AST.ProofAst.Step.Regular, reporter: Reporter): (Z, ISZ[State.Claim], State.Claim) = {
     val svs = evalExp(Logika.Split.Disabled, smt2, T, s0, step.claim, reporter)
     val (s1, v) = svs(0)
-    val (s2, sym) = value2Sym(s1, v, step.just.id.attr.posOpt.get)
+    val (s2, sym) = value2Sym(s1, v, step.just.posOpt.get)
     val vProp = State.Claim.Prop(T, sym)
     return (s2.nextFresh, s2.claims, vProp)
   }
