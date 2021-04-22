@@ -258,8 +258,12 @@ object Logika {
 
   @datatype class StepProofContext(val stepNo: Z, val exp: AST.Exp, val claims: ISZ[State.Claim])
 
+  object Plugin {
+    @datatype class Result(status: B, nextFresh: Z, clams: ISZ[State.Claim])
+  }
+
   @sig trait Plugin {
-    def canHandle(just: AST.ProofAst.Step.Justification): B
+    @pure def canHandle(just: AST.ProofAst.Step.Justification): B
 
     def handle(logika: Logika,
                smt2: Smt2,
@@ -268,12 +272,12 @@ object Logika {
                spcMap: HashSMap[Z, StepProofContext],
                state: State,
                step: AST.ProofAst.Step.Regular,
-               reporter: Reporter): (B, Z, ISZ[State.Claim])
+               reporter: Reporter): Plugin.Result
   }
 
   @datatype class AutoPlugin extends Plugin {
 
-    override def canHandle(just: AST.ProofAst.Step.Justification): B = {
+    @pure override def canHandle(just: AST.ProofAst.Step.Justification): B = {
       just match {
         case just: AST.ProofAst.Step.Justification.Apply => return just.id.value === "auto"
         case _ => return F
@@ -287,20 +291,20 @@ object Logika {
                         spcMap: HashSMap[Z, StepProofContext],
                         state: State,
                         step: AST.ProofAst.Step.Regular,
-                        reporter: Reporter): (B, Z, ISZ[State.Claim]) = {
+                        reporter: Reporter): Plugin.Result = {
       val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
       val posOpt = just.id.attr.posOpt
       if (ops.ISZOps(just.args).exists((arg: AST.Exp) => !arg.isInstanceOf[AST.Exp.LitZ])) {
         reporter.error(posOpt, Logika.kind, "The auto justification can only accept integer literal arguments")
-        return (F, state.nextFresh, ISZ())
+        return Plugin.Result(F, state.nextFresh, ISZ())
       }
 
       val pos = posOpt.get
 
-      val ((nextFresh, premises, conclusion), claims): ((Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) =
+      val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) =
         if (just.args.isEmpty) {
-          val t = logika.evalRegularStepClaim(smt2, state, step, reporter)
-          (t, ops.ISZOps(t._2).slice(state.claims.size, t._2.size) :+ t._3)
+          val q = logika.evalRegularStepClaim(smt2, state, step, reporter)
+          (q, ops.ISZOps(q._3).slice(state.claims.size, q._3.size) :+ q._4)
         } else {
           var s0 = state(claims = ISZ())
           var ok = T
@@ -315,28 +319,163 @@ object Logika {
             }
           }
           if (!ok) {
-            return (F, s0.nextFresh, s0.claims)
+            return Plugin.Result(F, s0.nextFresh, s0.claims)
           }
-          val t = logika.evalRegularStepClaim(smt2, s0, step, reporter)
-          (t, t._2 :+ t._3)
+          val q = logika.evalRegularStepClaim(smt2, s0, step, reporter)
+          (q, q._3 :+ q._4)
         }
-      val r = smt2.valid(log, logDirOpt, "Auto Justification", pos, premises, conclusion, reporter)
+      val status: B = if (stat) {
+        val r = smt2.valid(log, logDirOpt, "Auto Justification", pos, premises, conclusion, reporter)
 
-      def error(msg: String): B = {
-        reporter.error(posOpt, Logika.kind, msg)
-        return F
-      }
+        def error(msg: String): B = {
+          reporter.error(posOpt, Logika.kind, msg)
+          return F
+        }
 
-      val status: B = r.kind match {
-        case Smt2Query.Result.Kind.Unsat => T
-        case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step #${step.no.value}")
-        case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step #${step.no.value}")
-        case Smt2Query.Result.Kind.Timeout => error(s"Time out when deducing the claim of proof step #${step.no.value}")
-        case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step #${step.no.value}")
+        r.kind match {
+          case Smt2Query.Result.Kind.Unsat => T
+          case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step #${step.no.value}")
+          case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step #${step.no.value}")
+          case Smt2Query.Result.Kind.Timeout => error(s"Time out when deducing the claim of proof step #${step.no.value}")
+          case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step #${step.no.value}")
+        }
+      } else {
+        F
       }
-      return (status, nextFresh, claims)
+      return Plugin.Result(status, nextFresh, claims)
     }
 
+  }
+
+  object InceptionPlugin {
+    @record class Substitutor(substMap: HashMap[String, AST.Typed],
+                              context: QName,
+                              paramMap: HashMap[String, AST.Exp]) extends AST.MTransformer {
+      override def preTyped(o: AST.Typed): AST.MTransformer.PreResult[AST.Typed] = {
+        o match {
+          case o: AST.Typed.TypeVar =>
+            substMap.get(o.id) match {
+              case Some(t) => return AST.MTransformer.PreResult(F, MSome(t))
+              case _ =>
+            }
+          case _ =>
+        }
+        return super.preTyped(o)
+      }
+
+      override def preExpIdent(o: AST.Exp.Ident): AST.MTransformer.PreResult[AST.Exp] = {
+        o.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.LocalVar if paramMap.contains(res.id) && res.context == context =>
+            return AST.MTransformer.PreResult(F, MSome(paramMap.get(res.id).get))
+          case _ =>
+        }
+        return super.preExpIdent(o)
+      }
+    }
+  }
+
+  @datatype class InceptionPlugin extends Plugin {
+    @strictpure def canHandle(just: AST.ProofAst.Step.Justification): B = just.isInstanceOf[AST.ProofAst.Step.Inception]
+
+    def handle(logika: Logika,
+               smt2: Smt2,
+               log: B,
+               logDirOpt: Option[String],
+               spcMap: HashSMap[Z, StepProofContext],
+               state: State,
+               step: AST.ProofAst.Step.Regular,
+               reporter: Reporter): Plugin.Result = {
+      @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+      val just = step.just.asInstanceOf[AST.ProofAst.Step.Inception]
+      val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+      val mi = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
+      val posOpt = just.invokeIdent.posOpt
+      val args = just.args
+      val contract: AST.MethodContract.Simple = mi.ast.contract match {
+        case c: AST.MethodContract.Simple => c
+        case _: AST.MethodContract.Cases =>
+          reporter.error(posOpt, Logika.kind, "Could not use method with contract cases")
+          return emptyResult
+      }
+      if (contract.reads.nonEmpty) {
+        reporter.error(posOpt, Logika.kind, "Could not use method with non-empty reads clause")
+        return emptyResult
+      }
+      if (contract.modifies.nonEmpty) {
+        reporter.error(posOpt, Logika.kind, "Could not use method with non-empty modifies clause")
+        return emptyResult
+      }
+
+      val smOpt = TypeChecker.unifyFun(Logika.kind, logika.th, posOpt, TypeChecker.TypeRelation.Subtype, res.tpeOpt.get,
+        mi.methodType.tpe, reporter)
+      val ips = InceptionPlugin.Substitutor(smOpt.get, mi.name,
+        HashMap.empty[String, AST.Exp] ++ ops.ISZOps(res.paramNames).zip(args))
+      if (just.witnesses.isEmpty) {
+        var s0 = state
+        var props = ISZ[State.Claim]()
+        for (require <- contract.requires) {
+          for (sv <- logika.evalExp(Logika.Split.Disabled, smt2, T, s0,
+            ips.transformExp(require).getOrElseEager(require), reporter) if s0.status) {
+            val (s1, sym) = logika.value2Sym(sv._1, sv._2, posOpt.get)
+            props = props :+ State.Claim.Prop(T, sym)
+            s0 = s1
+          }
+        }
+        if (!s0.status) {
+          return emptyResult
+        }
+        val r = smt2.valid(log, logDirOpt, "Auto Inception", posOpt.get, s0.claims, State.Claim.And(props), reporter)
+        r.kind match {
+          case Smt2Query.Result.Kind.Unsat =>
+          case Smt2Query.Result.Kind.Sat =>
+            reporter.error(posOpt, Logika.kind, st"Cannot not satisfy ${(mi.name, ".")}'s pre-conditions'".render)
+            return emptyResult(nextFresh = s0.nextFresh)
+          case Smt2Query.Result.Kind.Unknown =>
+            reporter.error(posOpt, Logika.kind, st"Could not deduce ${(mi.name, ".")}'s pre-conditions'".render)
+            return emptyResult(nextFresh = s0.nextFresh)
+          case Smt2Query.Result.Kind.Timeout =>
+            reporter.error(posOpt, Logika.kind, st"Time out when deducing ${(mi.name, ".")}'s pre-conditions'".render)
+            return emptyResult(nextFresh = s0.nextFresh)
+          case Smt2Query.Result.Kind.Error =>
+            reporter.error(posOpt, Logika.kind, st"Error occurred when deducing ${(mi.name, ".")}'s pre-conditions'".render)
+            return emptyResult(nextFresh = s0.nextFresh)
+        }
+      } else {
+        var witnesses = HashSet.empty[AST.Exp]
+        var ok = T
+        for (w <- just.witnesses) {
+          spcMap.get(w.value) match {
+            case Some(spc) => witnesses = witnesses + spc.exp
+            case _ =>
+              reporter.error(w.posOpt, Logika.kind, s"Could not find proof step #${w.value}")
+              ok = F
+          }
+        }
+        if (!ok) {
+          return emptyResult
+        }
+        val requires: ISZ[AST.Exp] =
+          for (require <- contract.requires) yield ips.transformExp(require).getOrElseEager(require)
+        for (i <- 0 until requires.size) {
+          if (!witnesses.contains(requires(i))) {
+            val pos = contract.requires(i).posOpt.get
+            reporter.error(posOpt, Logika.kind, st"Could not find witness for ${(mi.name, ".")}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]".render)
+            ok = F
+          }
+        }
+        if (!ok) {
+          return emptyResult
+        }
+      }
+      val ensures = HashSet.empty[AST.Exp] ++
+        (for (ensure <- contract.ensures) yield ips.transformExp(ensure).getOrElseEager(ensure))
+      if (!ensures.contains(step.claim)) {
+        reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive claim from ${(mi.name, ".")}'s post-conditions".render)
+        return emptyResult
+      }
+      val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step, reporter)
+      return Plugin.Result(status, nextFresh, ops.ISZOps(claims).slice(state.claims.size, claims.size) :+ claim)
+    }
   }
 
   val kind: String = "Logika"
@@ -344,7 +483,7 @@ object Logika {
   val libraryDesc: String = "Library"
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
-  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin())
+  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), InceptionPlugin())
 
   def checkFile(fileUriOpt: Option[String], input: String, config: Config,
                 smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
@@ -3001,7 +3140,8 @@ import Logika.Split
     step match {
       case step: AST.ProofAst.Step.Regular =>
         for (plugin <- plugins if plugin.canHandle(step.just)) {
-          val (r, nextFresh, claims) = plugin.handle(this, smt2, config.logVc, config.logVcDirOpt, m, s0, step, reporter)
+          val Logika.Plugin.Result(r, nextFresh, claims) =
+            plugin.handle(this, smt2, config.logVc, config.logVcDirOpt, m, s0, step, reporter)
           return (s0(status = r, nextFresh = nextFresh).addClaim(State.Claim.And(claims)),
             m + stepNo ~> Logika.StepProofContext(stepNo, step.claim, claims))
         }
@@ -3011,12 +3151,15 @@ import Logika.Split
     }
   }
 
-  def evalRegularStepClaim(smt2: Smt2, s0: State, step: AST.ProofAst.Step.Regular, reporter: Reporter): (Z, ISZ[State.Claim], State.Claim) = {
+  def evalRegularStepClaim(smt2: Smt2, s0: State, step: AST.ProofAst.Step.Regular, reporter: Reporter): (B, Z, ISZ[State.Claim], State.Claim) = {
     val svs = evalExp(Logika.Split.Disabled, smt2, T, s0, step.claim, reporter)
-    val (s1, v) = svs(0)
-    val (s2, sym) = value2Sym(s1, v, step.just.posOpt.get)
-    val vProp = State.Claim.Prop(T, sym)
-    return (s2.nextFresh, s2.claims, vProp)
+    for (sv <- svs) {
+      val (s1, v) = sv
+      val (s2, sym) = value2Sym(s1, v, step.just.posOpt.get)
+      val vProp = State.Claim.Prop(T, sym)
+      return (s2.status, s2.nextFresh, s2.claims, vProp)
+    }
+    return (F, s0.nextFresh, s0.claims, State.Claim.And(ISZ()))
   }
 
   def evalStmt(split: Split.Type, smt2: Smt2, rtCheck: B, state: State, stmt: AST.Stmt, reporter: Reporter): ISZ[State] = {

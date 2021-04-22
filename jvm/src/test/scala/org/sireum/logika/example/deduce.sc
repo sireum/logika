@@ -1,29 +1,23 @@
 // #Sireum #Logika
+
 import org.sireum._
 
-def square(n: Z): Z = {
+@pure def squareNonNeg(n: Z): Unit = {
   Contract(
-    Ensures(
-      Res[Z] == n * n,
-      Res[Z] >= 0
-    )
+    Ensures(n * n >= 0, !(n * n < 0))
   )
   Deduce(
     //@formatter:off
     1 #>  (n * n >= 0)  by "auto",
-    2 #>  !(n * n < 0)  by "auto"(1)
+    2 #>  !(n * n < 0)  by "auto"(1),
     //@formatter:on
   )
-  return n * n
 }
 
-def andElim1(p: B, q: B): B = {
+@pure def andElim1(p: B, q: B): Unit = {
   Contract(
     Requires(p & q),
-    Ensures(
-      Res[B] == p,
-      Res[B]
-    )
+    Ensures(p)
   )
   Deduce(
     //@formatter:off
@@ -31,16 +25,12 @@ def andElim1(p: B, q: B): B = {
     2 #>  p        by "auto"(1)
     //@formatter:on
   )
-  return p
 }
 
-def andIntro(p: B, q: B): B = {
+@pure def andIntro(p: B, q: B): Unit = {
   Contract(
     Requires(p, q),
-    Ensures(
-      Res[B] == p & q,
-      Res[B]
-    )
+    Ensures(p & q)
   )
   Deduce(
     //@formatter:off
@@ -49,16 +39,31 @@ def andIntro(p: B, q: B): B = {
     3 #>  (p & q)  by "auto"(1, 2)
     //@formatter:on
   )
-  return p & q
 }
 
-def orIntro1(p: B, q: B): B = {
+def andIntroInceptionExample(x: Z, y: Z): B = {
+  Contract(
+    Requires(x > 0, y > 0),
+    Ensures((x > 0) & (y > 0))
+  )
+
+  Deduce(
+    //@formatter:off
+    1 #> (x > 0)                by "auto",
+    2 #> (y > 0)                by "auto",
+    3 #> ((x > 0) & (y > 0))    by andIntro(x > 0, y > 0) and (1, 2),
+    4 #> ((x > 0) & (y > 0))    by andIntro(p = x > 0, q = y > 0) and (1, 2),
+    5 #> ((x > 0) & (y > 0))    by andIntro(x > 0, y > 0),
+    6 #> ((x > 0) & (y > 0))    by andIntro(p = x > 0, q = y > 0),
+    //@formatter:on
+  )
+  return T
+}
+
+@pure def orIntro1(p: B, q: B): Unit = {
   Contract(
     Requires(p),
-    Ensures(
-      Res[B] == p | q,
-      Res[B]
-    )
+    Ensures(p | q)
   )
   Deduce(
     //@formatter:off
@@ -66,5 +71,4 @@ def orIntro1(p: B, q: B): B = {
     2 #>  (p | q)  by "auto"(1)
     //@formatter:on
   )
-  return p | q
 }
