@@ -687,7 +687,7 @@ object Logika {
           localInMap = localInMap))))
       }
       val statePreReqInvSize = state.claims.size
-      if (logika.context.methodName.size == 1) {
+      if (logika.context.methodName.size == 1 && !method.isHelper) {
         state = checkInv(T, state, logika, smt2, th.worksheetInvs, method.posOpt, reporter)
       }
       val stmts = method.bodyOpt.get.stmts
@@ -719,7 +719,7 @@ object Logika {
         for (s <- logika.evalStmts(Split.Default, smt2, None(), T, state, stmts, reporter)) {
           var s2 = s
           val statePreEnInvSize = state.claims.size
-          if (logika.context.methodName.size == 1) {
+          if (logika.context.methodName.size == 1 && !method.isHelper) {
             s2 = checkInv(F, s2, logika, smt2, th.worksheetInvs, method.posOpt, reporter)
           }
           val hasPreEnInv = state.claims.size != statePreEnInvSize
