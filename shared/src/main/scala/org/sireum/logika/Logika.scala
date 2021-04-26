@@ -1837,7 +1837,7 @@ import Logika.Split
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
-                    return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple(ISZ(), ISZ(), ISZ(), ISZ()),
+                    return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple.empty,
                       extractResolvedInfo(mi.ast.attr), None())
                   case _ => halt("Infeasible")
                 }
@@ -1850,7 +1850,7 @@ import Logika.Split
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
-                    return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple(ISZ(), ISZ(), ISZ(), ISZ()),
+                    return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple.empty,
                       extractResolvedInfo(mi.ast.attr), None())
                   case _ => halt("Infeasible")
                 }
