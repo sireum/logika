@@ -279,7 +279,8 @@ object Logika {
 
     @pure override def canHandle(just: AST.ProofAst.Step.Justification): B = {
       just match {
-        case just: AST.ProofAst.Step.Justification.Apply => return just.id.value === "auto"
+        case just: AST.ProofAst.Step.Justification.Apply =>
+          return just.id.value === "auto" || just.id.value === "premise"
         case _ => return F
       }
     }
@@ -294,7 +295,10 @@ object Logika {
                         reporter: Reporter): Plugin.Result = {
       val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
       val posOpt = just.id.attr.posOpt
-      if (ops.ISZOps(just.args).exists((arg: AST.Exp) => !arg.isInstanceOf[AST.Exp.LitZ])) {
+      if (just.id.value === "premise" && just.args.nonEmpty) {
+        reporter.error(posOpt, Logika.kind, "The premise justification does not accept any argument")
+        return Plugin.Result(F, state.nextFresh, ISZ())
+      } else if (ops.ISZOps(just.args).exists((arg: AST.Exp) => !arg.isInstanceOf[AST.Exp.LitZ])) {
         reporter.error(posOpt, Logika.kind, "The auto justification can only accept integer literal arguments")
         return Plugin.Result(F, state.nextFresh, ISZ())
       }
