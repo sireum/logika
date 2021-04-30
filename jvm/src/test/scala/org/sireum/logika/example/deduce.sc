@@ -55,6 +55,7 @@ def andIntroInceptionExample(x: Z, y: Z): B = {
     4 #> ((x > 0) & (y > 0))    by andIntro(p = x > 0, q = y > 0) and (1, 2),
     5 #> ((x > 0) & (y > 0))    by andIntro(x > 0, y > 0),
     6 #> ((x > 0) & (y > 0))    by andIntro(p = x > 0, q = y > 0),
+    7 #> ((x > 0) & (y > 0))    by andIntro _ and (1, 2),
     //@formatter:on
   )
   return T

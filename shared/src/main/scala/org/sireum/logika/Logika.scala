@@ -391,94 +391,101 @@ object Logika {
                reporter: Reporter): Plugin.Result = {
       @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
       val just = step.just.asInstanceOf[AST.ProofAst.Step.Inception]
-      val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-      val mi = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
-      val posOpt = just.invokeIdent.posOpt
-      val args = just.args
-      val contract: AST.MethodContract.Simple = mi.ast.contract match {
-        case c: AST.MethodContract.Simple => c
-        case _: AST.MethodContract.Cases =>
-          reporter.error(posOpt, Logika.kind, "Could not use method with contract cases")
+      def handleH(invokeIdent: AST.Exp.Ident, args: ISZ[AST.Exp]): Plugin.Result = {
+        val res = invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+        val mi = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
+        val posOpt = invokeIdent.posOpt
+        val contract: AST.MethodContract.Simple = mi.ast.contract match {
+          case c: AST.MethodContract.Simple => c
+          case _: AST.MethodContract.Cases =>
+            reporter.error(posOpt, Logika.kind, "Could not use method with contract cases")
+            return emptyResult
+        }
+        if (contract.reads.nonEmpty) {
+          reporter.error(posOpt, Logika.kind, "Could not use method with non-empty reads clause")
           return emptyResult
-      }
-      if (contract.reads.nonEmpty) {
-        reporter.error(posOpt, Logika.kind, "Could not use method with non-empty reads clause")
-        return emptyResult
-      }
-      if (contract.modifies.nonEmpty) {
-        reporter.error(posOpt, Logika.kind, "Could not use method with non-empty modifies clause")
-        return emptyResult
-      }
+        }
+        if (contract.modifies.nonEmpty) {
+          reporter.error(posOpt, Logika.kind, "Could not use method with non-empty modifies clause")
+          return emptyResult
+        }
 
-      val smOpt = TypeChecker.unifyFun(Logika.kind, logika.th, posOpt, TypeChecker.TypeRelation.Subtype, res.tpeOpt.get,
-        mi.methodType.tpe, reporter)
-      val ips = InceptionPlugin.Substitutor(smOpt.get, mi.name,
-        HashMap.empty[String, AST.Exp] ++ ops.ISZOps(res.paramNames).zip(args))
-      if (just.witnesses.isEmpty) {
-        var s0 = state
-        var props = ISZ[State.Claim]()
-        for (require <- contract.requires) {
-          for (sv <- logika.evalExp(Logika.Split.Disabled, smt2, T, s0,
-            ips.transformExp(require).getOrElseEager(require), reporter) if s0.status) {
-            val (s1, sym) = logika.value2Sym(sv._1, sv._2, posOpt.get)
-            props = props :+ State.Claim.Prop(T, sym)
-            s0 = s1
+        val smOpt = TypeChecker.unifyFun(Logika.kind, logika.th, posOpt, TypeChecker.TypeRelation.Subtype, res.tpeOpt.get,
+          mi.methodType.tpe, reporter)
+        val ips = InceptionPlugin.Substitutor(smOpt.get, mi.name,
+          HashMap.empty[String, AST.Exp] ++ ops.ISZOps(res.paramNames).zip(args))
+        if (just.witnesses.isEmpty) {
+          var s0 = state
+          var props = ISZ[State.Claim]()
+          for (require <- contract.requires) {
+            for (sv <- logika.evalExp(Logika.Split.Disabled, smt2, T, s0,
+              ips.transformExp(require).getOrElseEager(require), reporter) if s0.status) {
+              val (s1, sym) = logika.value2Sym(sv._1, sv._2, posOpt.get)
+              props = props :+ State.Claim.Prop(T, sym)
+              s0 = s1
+            }
           }
-        }
-        if (!s0.status) {
-          return emptyResult
-        }
-        val r = smt2.valid(log, logDirOpt, "Auto Inception", posOpt.get, s0.claims, State.Claim.And(props), reporter)
-        r.kind match {
-          case Smt2Query.Result.Kind.Unsat =>
-          case Smt2Query.Result.Kind.Sat =>
-            reporter.error(posOpt, Logika.kind, st"Cannot not satisfy ${(mi.name, ".")}'s pre-conditions'".render)
-            return emptyResult(nextFresh = s0.nextFresh)
-          case Smt2Query.Result.Kind.Unknown =>
-            reporter.error(posOpt, Logika.kind, st"Could not deduce ${(mi.name, ".")}'s pre-conditions'".render)
-            return emptyResult(nextFresh = s0.nextFresh)
-          case Smt2Query.Result.Kind.Timeout =>
-            reporter.error(posOpt, Logika.kind, st"Time out when deducing ${(mi.name, ".")}'s pre-conditions'".render)
-            return emptyResult(nextFresh = s0.nextFresh)
-          case Smt2Query.Result.Kind.Error =>
-            reporter.error(posOpt, Logika.kind, st"Error occurred when deducing ${(mi.name, ".")}'s pre-conditions'".render)
-            return emptyResult(nextFresh = s0.nextFresh)
-        }
-      } else {
-        var witnesses = HashSet.empty[AST.Exp]
-        var ok = T
-        for (w <- just.witnesses) {
-          spcMap.get(w.value) match {
-            case Some(spc) => witnesses = witnesses + spc.exp
-            case _ =>
-              reporter.error(w.posOpt, Logika.kind, s"Could not find proof step #${w.value}")
+          if (!s0.status) {
+            return emptyResult
+          }
+          val r = smt2.valid(log, logDirOpt, "Auto Inception", posOpt.get, s0.claims, State.Claim.And(props), reporter)
+          r.kind match {
+            case Smt2Query.Result.Kind.Unsat =>
+            case Smt2Query.Result.Kind.Sat =>
+              reporter.error(posOpt, Logika.kind, st"Cannot not satisfy ${(mi.name, ".")}'s pre-conditions'".render)
+              return emptyResult(nextFresh = s0.nextFresh)
+            case Smt2Query.Result.Kind.Unknown =>
+              reporter.error(posOpt, Logika.kind, st"Could not deduce ${(mi.name, ".")}'s pre-conditions'".render)
+              return emptyResult(nextFresh = s0.nextFresh)
+            case Smt2Query.Result.Kind.Timeout =>
+              reporter.error(posOpt, Logika.kind, st"Time out when deducing ${(mi.name, ".")}'s pre-conditions'".render)
+              return emptyResult(nextFresh = s0.nextFresh)
+            case Smt2Query.Result.Kind.Error =>
+              reporter.error(posOpt, Logika.kind, st"Error occurred when deducing ${(mi.name, ".")}'s pre-conditions'".render)
+              return emptyResult(nextFresh = s0.nextFresh)
+          }
+        } else {
+          var witnesses = HashSet.empty[AST.Exp]
+          var ok = T
+          for (w <- just.witnesses) {
+            spcMap.get(w.value) match {
+              case Some(spc) => witnesses = witnesses + spc.exp
+              case _ =>
+                reporter.error(w.posOpt, Logika.kind, s"Could not find proof step #${w.value}")
+                ok = F
+            }
+          }
+          if (!ok) {
+            return emptyResult
+          }
+          val requires: ISZ[AST.Exp] =
+            for (require <- contract.requires) yield ips.transformExp(require).getOrElseEager(require)
+          for (i <- 0 until requires.size) {
+            if (!witnesses.contains(requires(i))) {
+              val pos = contract.requires(i).posOpt.get
+              reporter.error(posOpt, Logika.kind, st"Could not find witness for ${(mi.name, ".")}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]".render)
               ok = F
+            }
+          }
+          if (!ok) {
+            return emptyResult
           }
         }
-        if (!ok) {
+        val ensures = HashSet.empty[AST.Exp] ++
+          (for (ensure <- contract.ensures) yield ips.transformExp(ensure).getOrElseEager(ensure))
+        if (!ensures.contains(step.claim)) {
+          reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive claim from ${(mi.name, ".")}'s post-conditions".render)
           return emptyResult
         }
-        val requires: ISZ[AST.Exp] =
-          for (require <- contract.requires) yield ips.transformExp(require).getOrElseEager(require)
-        for (i <- 0 until requires.size) {
-          if (!witnesses.contains(requires(i))) {
-            val pos = contract.requires(i).posOpt.get
-            reporter.error(posOpt, Logika.kind, st"Could not find witness for ${(mi.name, ".")}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]".render)
-            ok = F
-          }
-        }
-        if (!ok) {
-          return emptyResult
-        }
+        val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step, reporter)
+        return Plugin.Result(status, nextFresh, ops.ISZOps(claims).slice(state.claims.size, claims.size) :+ claim)
       }
-      val ensures = HashSet.empty[AST.Exp] ++
-        (for (ensure <- contract.ensures) yield ips.transformExp(ensure).getOrElseEager(ensure))
-      if (!ensures.contains(step.claim)) {
-        reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive claim from ${(mi.name, ".")}'s post-conditions".render)
-        return emptyResult
+      just match {
+        case just: AST.ProofAst.Step.Justification.Incept => return handleH(just.invokeIdent, just.args)
+        case just: AST.ProofAst.Step.Justification.InceptNamed => return handleH(just.invokeIdent, just.args)
+        case _: AST.ProofAst.Step.Justification.InceptEta =>
+          halt("TODO") // TODO
       }
-      val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step, reporter)
-      return Plugin.Result(status, nextFresh, ops.ISZOps(claims).slice(state.claims.size, claims.size) :+ claim)
     }
   }
 
