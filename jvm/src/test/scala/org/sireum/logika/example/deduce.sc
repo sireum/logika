@@ -1,6 +1,7 @@
 // #Sireum #Logika
 
 import org.sireum._
+import org.sireum.justification._
 
 @pure def squareNonNeg(n: Z): Unit = {
   Contract(
@@ -21,8 +22,8 @@ import org.sireum._
   )
   Deduce(
     //@formatter:off
-    1 #>  (p & q)  by "premise",
-    2 #>  p        by "auto"(1)
+    1 #>  (p & q)  by Premise,
+    2 #>  p        by Auto(ISZ(1))
     //@formatter:on
   )
 }
@@ -34,9 +35,9 @@ import org.sireum._
   )
   Deduce(
     //@formatter:off
-    1 #>  p        by "premise",
-    2 #>  q        by "premise",
-    3 #>  (p & q)  by "auto"(1, 2)
+    1 #>  p        by Premise,
+    2 #>  q        by Premise,
+    3 #>  (p & q)  by Auto(ISZ(1, 2))
     //@formatter:on
   )
 }
@@ -49,8 +50,8 @@ def andIntroInceptionExample(x: Z, y: Z): B = {
 
   Deduce(
     //@formatter:off
-    1 #> (x > 0)                by "premise",
-    2 #> (y > 0)                by "premise",
+    1 #> (x > 0)                by Premise,
+    2 #> (y > 0)                by Premise,
     3 #> ((x > 0) & (y > 0))    by andIntro(x > 0, y > 0) and (1, 2),
     4 #> ((x > 0) & (y > 0))    by andIntro(p = x > 0, q = y > 0) and (1, 2),
     5 #> ((x > 0) & (y > 0))    by andIntro(x > 0, y > 0),
@@ -68,8 +69,8 @@ def andIntroInceptionExample(x: Z, y: Z): B = {
   )
   Deduce(
     //@formatter:off
-    1 #>  p        by "premise",
-    2 #>  (p | q)  by "auto"(1)
+    1 #>  p        by Premise,
+    2 #>  (p | q)  by Auto(ISZ(1))
     //@formatter:on
   )
 }

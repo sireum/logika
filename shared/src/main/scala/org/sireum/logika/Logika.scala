@@ -277,10 +277,19 @@ object Logika {
 
   @datatype class AutoPlugin extends Plugin {
 
+    val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("auto", "premise", "Auto", "Premise")
+
+    val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
+
+    val iszzTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.z)))
+
     @pure override def canHandle(just: AST.ProofAst.Step.Justification): B = {
       just match {
         case just: AST.ProofAst.Step.Justification.Apply =>
-          return just.id.value === "auto" || just.id.value === "premise"
+          return justificationIds.contains(just.idString) && just.isOwnedBy(justificationName)
+        case just: AST.ProofAst.Step.Justification.Incept if just.witnesses.isEmpty =>
+          val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+          return res.id == "Auto" && res.owner == justificationName
         case _ => return F
       }
     }
@@ -293,27 +302,60 @@ object Logika {
                         state: State,
                         step: AST.ProofAst.Step.Regular,
                         reporter: Reporter): Plugin.Result = {
-      val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-      val posOpt = just.id.attr.posOpt
-      if (just.id.value === "premise" && just.args.nonEmpty) {
-        reporter.error(posOpt, Logika.kind, "The premise justification does not accept any argument")
-        return Plugin.Result(F, state.nextFresh, ISZ())
-      } else if (ops.ISZOps(just.args).exists((arg: AST.Exp) => !arg.isInstanceOf[AST.Exp.LitZ])) {
-        reporter.error(posOpt, Logika.kind, "The auto justification can only accept integer literal arguments")
+      var args = ISZ[AST.Exp.LitZ]()
+      var ok = T
+      def processArgs(id: String, justArgs: ISZ[AST.Exp]): Unit = {
+        for (arg <- justArgs) {
+          arg match {
+            case arg: AST.Exp.LitZ => args = args :+ arg
+            case arg =>
+              ok = F
+              reporter.error(arg.posOpt, Logika.kind, s"The $id justification only accepts an integer literal argument")
+          }
+        }
+      }
+      val (id, posOpt): (String, Option[Position]) = step.just match {
+        case just: AST.ProofAst.Step.Justification.Apply =>
+          val id = just.idString
+          processArgs(id, just.args)
+          (id, just.id.posOpt)
+        case just: AST.ProofAst.Step.Justification.Incept =>
+          val invokeId = just.invokeIdent.id.value
+          def err(arg: AST.Exp): Unit = {
+            ok = F
+            reporter.error(arg.posOpt, Logika.kind, s"Invalid argument for the $invokeId justification")
+          }
+          if (just.args.size === 1) {
+            just.args(0) match {
+              case arg: AST.Exp.Invoke if arg.typedOpt == iszzTypedOpt =>
+                arg.attr.resOpt.get match {
+                  case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor => processArgs(invokeId, arg.args)
+                  case _ => err(arg)
+                }
+              case arg: AST.Exp.LitZ => args = args :+ arg
+              case arg => err(arg)
+            }
+          } else {
+            processArgs(invokeId, just.args)
+          }
+          (invokeId, just.invokeIdent.posOpt)
+        case _ => halt("Infeasible")
+      }
+      if (!ok) {
         return Plugin.Result(F, state.nextFresh, ISZ())
       }
 
       val pos = posOpt.get
 
       val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) =
-        if (just.args.isEmpty) {
+        if (args.isEmpty) {
           val q = logika.evalRegularStepClaim(smt2, state, step, reporter)
           (q, ops.ISZOps(q._3).slice(state.claims.size, q._3.size) :+ q._4)
         } else {
           var s0 = state(claims = ISZ())
-          var ok = T
-          for (arg <- just.args) {
-            val stepNo = arg.asInstanceOf[AST.Exp.LitZ].value
+          ok = T
+          for (arg <- args) {
+            val stepNo = arg.value
             spcMap.get(stepNo) match {
               case Some(spc) =>
                 s0 = s0.addClaim(State.Claim.And(spc.claims))
@@ -329,7 +371,7 @@ object Logika {
           (q, q._3 :+ q._4)
         }
       val status: B = if (stat) {
-        val r = smt2.valid(log, logDirOpt, "Auto Justification", pos, premises, conclusion, reporter)
+        val r = smt2.valid(log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
 
         def error(msg: String): B = {
           reporter.error(posOpt, Logika.kind, msg)
