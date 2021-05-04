@@ -124,7 +124,7 @@ object Plugin {
 
     val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) =
       if (args.isEmpty) {
-        val q = logika.evalRegularStepClaim(smt2, state, step, reporter)
+        val q = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
         (q, ops.ISZOps(q._3).slice(state.claims.size, q._3.size) :+ q._4)
       } else {
         var s0 = state(claims = ISZ())
@@ -132,8 +132,11 @@ object Plugin {
         for (arg <- args) {
           val stepNo = arg.value
           spcMap.get(stepNo) match {
-            case Some(spc) =>
+            case Some(spc: StepProofContext.Regular) =>
               s0 = s0.addClaim(State.Claim.And(spc.claims))
+            case Some(_) =>
+              reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step #$stepNo as an argument for $id")
+              ok = F
             case _ =>
               reporter.error(posOpt, Logika.kind, s"Could not find proof step #$stepNo")
               ok = F
@@ -142,7 +145,7 @@ object Plugin {
         if (!ok) {
           return Plugin.Result(F, s0.nextFresh, s0.claims)
         }
-        val q = logika.evalRegularStepClaim(smt2, s0, step, reporter)
+        val q = logika.evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
         (q, q._3 :+ q._4)
       }
     val status: B = if (stat) {
@@ -266,7 +269,10 @@ object InceptionPlugin {
         var ok = T
         for (w <- just.witnesses) {
           spcMap.get(w.value) match {
-            case Some(spc) => witnesses = witnesses + spc.exp
+            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + spc.exp
+            case Some(_) =>
+              reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step #${w.value} as an argument for inception")
+              ok = F
             case _ =>
               reporter.error(w.posOpt, Logika.kind, s"Could not find proof step #${w.value}")
               ok = F
@@ -294,7 +300,7 @@ object InceptionPlugin {
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive claim from ${(mi.name, ".")}'s post-conditions".render)
         return emptyResult
       }
-      val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step, reporter)
+      val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
       return Plugin.Result(status, nextFresh, ops.ISZOps(claims).slice(state.claims.size, claims.size) :+ claim)
     }
     just match {

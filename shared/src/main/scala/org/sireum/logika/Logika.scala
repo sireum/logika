@@ -2914,26 +2914,84 @@ import Logika.Split
                     step: AST.ProofAst.Step,
                     reporter: Reporter): (State, HashSMap[Z, StepProofContext]) = {
     val stepNo = step.no.value
-    val (s0, m) = stateMap
+    var (s0, m) = stateMap
     step match {
       case step: AST.ProofAst.Step.Regular =>
         for (plugin <- plugins if plugin.canHandle(step.just)) {
           val Plugin.Result(r, nextFresh, claims) =
             plugin.handle(this, smt2, config.logVc, config.logVcDirOpt, m, s0, step, reporter)
           return (s0(status = r, nextFresh = nextFresh).addClaim(State.Claim.And(claims)),
-            m + stepNo ~> StepProofContext(stepNo, step.claim, claims))
+            m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims))
         }
         reporter.error(step.just.posOpt, Logika.kind, "Could not recognize justification form")
         return (s0(status = F), m)
-      case _ => halt(s"TODO: $step")
+      case step: AST.ProofAst.Step.Assume =>
+        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
+        return (s0(status = status, nextFresh = nextFresh, claims = claims :+ claim),
+          m + stepNo ~> StepProofContext.Regular(stepNo, step.claim,
+            ops.ISZOps(claims).slice(s0.claims.size, claims.size) :+ claim))
+      case step: AST.ProofAst.Step.SubProof =>
+        for (sub <- step.steps if s0.status) {
+          val p = evalProofStep(smt2, stateMap, sub, reporter)
+          s0 = p._1
+          m  = p._2
+        }
+        if (s0.status) {
+          return (stateMap._1(nextFresh = s0.nextFresh), stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo, step))
+        } else {
+          return (stateMap._1(status = F), stateMap._2)
+        }
+      case step: AST.ProofAst.Step.Assert =>
+        var provenClaims = HashSet.empty[AST.Exp]
+        for (sub <- step.steps if s0.status) {
+          val p = evalProofStep(smt2, stateMap, sub, reporter)
+          s0 = p._1
+          m  = p._2
+          sub match {
+            case sub: AST.ProofAst.Step.Regular if s0.status => provenClaims = provenClaims + sub.claim
+            case _ =>
+          }
+        }
+        if (!s0.status) {
+          return (stateMap._1(status = F), stateMap._2)
+        }
+        if (!provenClaims.contains(step.claim)) {
+          reporter.error(step.claim.posOpt, Logika.kind, "The claim is not proven in the assertion's sub-proof")
+          return (stateMap._1(status = F), stateMap._2)
+        }
+        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, stateMap._1(nextFresh = s0.nextFresh),
+          step.claim, step.no.posOpt, reporter)
+        return (stateMap._1(status = status, nextFresh = nextFresh, claims = claims :+ claim),
+          m + stepNo ~> StepProofContext.Regular(stepNo, step.claim,
+            ops.ISZOps(claims).slice(stateMap._1.claims.size, claims.size) :+ claim))
+      case step: AST.ProofAst.Step.Let =>
+        for (sub <- step.steps if s0.status) {
+          val p = evalProofStep(smt2, stateMap, sub, reporter)
+          s0 = p._1
+          m  = p._2
+        }
+        if (s0.status) {
+          if (step.steps.nonEmpty && step.steps(0).isInstanceOf[AST.ProofAst.Step.Assume]) {
+            return (stateMap._1(nextFresh = s0.nextFresh),
+              stateMap._2 + stepNo ~> StepProofContext.FreshPredSubProof(stepNo, step.params,
+                step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim,
+                ops.ISZOps(step.steps).drop(1)))
+          } else {
+            return (stateMap._1(nextFresh = s0.nextFresh),
+              stateMap._2 + stepNo ~> StepProofContext.FreshSubProof(stepNo, step.params, step.steps))
+          }
+        } else {
+          return (stateMap._1(status = F), stateMap._2)
+        }
+      case step: AST.ProofAst.Step.StructInduction => halt(s"TODO: $step")
     }
   }
 
-  def evalRegularStepClaim(smt2: Smt2, s0: State, step: AST.ProofAst.Step.Regular, reporter: Reporter): (B, Z, ISZ[State.Claim], State.Claim) = {
-    val svs = evalExp(Logika.Split.Disabled, smt2, T, s0, step.claim, reporter)
+  def evalRegularStepClaim(smt2: Smt2, s0: State, claim: AST.Exp, posOpt: Option[Position], reporter: Reporter): (B, Z, ISZ[State.Claim], State.Claim) = {
+    val svs = evalExp(Logika.Split.Disabled, smt2, T, s0, claim, reporter)
     for (sv <- svs) {
       val (s1, v) = sv
-      val (s2, sym) = value2Sym(s1, v, step.just.posOpt.get)
+      val (s2, sym) = value2Sym(s1, v, posOpt.get)
       val vProp = State.Claim.Prop(T, sym)
       return (s2.status, s2.nextFresh, s2.claims, vProp)
     }

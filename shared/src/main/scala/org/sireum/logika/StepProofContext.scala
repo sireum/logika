@@ -28,5 +28,26 @@ package org.sireum.logika
 import org.sireum._
 import org.sireum.lang.{ast => AST}
 
-@datatype class StepProofContext(val stepNo: Z, val exp: AST.Exp, val claims: ISZ[State.Claim])
+@datatype trait StepProofContext {
+  @pure def stepNo: Z
+}
 
+object StepProofContext {
+
+  @datatype class Regular(val stepNo: Z,
+                          val exp: AST.Exp,
+                          val claims: ISZ[State.Claim]) extends StepProofContext
+
+  @datatype class SubProof(val stepNo: Z,
+                           val subProof: AST.ProofAst.Step.SubProof) extends StepProofContext
+
+  @datatype class FreshSubProof(val stepNo: Z,
+                                val params: ISZ[AST.ProofAst.Step.Let.Param],
+                                val steps: ISZ[AST.ProofAst.Step]) extends StepProofContext
+
+  @datatype class FreshPredSubProof(val stepNo: Z,
+                                    val params: ISZ[AST.ProofAst.Step.Let.Param],
+                                    val exp: AST.Exp,
+                                    val steps: ISZ[AST.ProofAst.Step]) extends StepProofContext
+
+}
