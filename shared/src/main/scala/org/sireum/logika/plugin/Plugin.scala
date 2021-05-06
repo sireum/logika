@@ -23,32 +23,26 @@
  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package org.sireum.logika
+package org.sireum.logika.plugin
 
 import org.sireum._
 import org.sireum.lang.{ast => AST}
+import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
+import org.sireum.logika.Logika.Reporter
 
-@datatype trait StepProofContext {
-  @pure def stepNo: Z
+object Plugin {
+  @datatype class Result(val status: B, val nextFresh: Z, val claims: ISZ[State.Claim])
 }
 
-object StepProofContext {
+@sig trait Plugin {
+  @pure def canHandle(just: AST.ProofAst.Step.Justification): B
 
-  @datatype class Regular(val stepNo: Z,
-                          val exp: AST.Exp,
-                          val claims: ISZ[State.Claim]) extends StepProofContext
-
-  @datatype class SubProof(val stepNo: Z,
-                           val assumption: AST.Exp,
-                           val claims: ISZ[AST.Exp]) extends StepProofContext
-
-  @datatype class FreshSubProof(val stepNo: Z,
-                                val params: ISZ[AST.ProofAst.Step.Let.Param],
-                                val claims: ISZ[AST.Exp]) extends StepProofContext
-
-  @datatype class FreshAssumeSubProof(val stepNo: Z,
-                                      val params: ISZ[AST.ProofAst.Step.Let.Param],
-                                      val assumption: AST.Exp,
-                                      val claims: ISZ[AST.Exp]) extends StepProofContext
-
+  def handle(logika: Logika,
+             smt2: Smt2,
+             log: B,
+             logDirOpt: Option[String],
+             spcMap: HashSMap[Z, StepProofContext],
+             state: State,
+             step: AST.ProofAst.Step.Regular,
+             reporter: Reporter): Plugin.Result
 }

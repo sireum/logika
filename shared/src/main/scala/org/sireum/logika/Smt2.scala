@@ -856,6 +856,13 @@ object Smt2 {
         }
       case t: AST.Typed.TypeVar => addTypeVar(t)
       case t: AST.Typed.Tuple => addTuple(t)
+      case t: AST.Typed.Fun if t.isPureFun =>
+        if (t.args.size > 1) {
+          addType(AST.Typed.Tuple(t.args), reporter)
+        } else {
+          addType(t.args(0), reporter)
+        }
+        addType(t.ret, reporter)
       case _ => halt(s"TODO: $tipe") // TODO
     }
   }
@@ -945,7 +952,10 @@ object Smt2 {
   }
 
   def isAdtType(t: AST.Typed): B = {
-    return adtId(t).render == "ADT"
+    t match {
+      case _: AST.Typed.Fun => return F
+      case _ => return adtId(t).render == "ADT"
+    }
   }
 
   def query(decls: ISZ[String], claims: ISZ[String]): ST = {
@@ -1079,15 +1089,19 @@ object Smt2 {
     return rec(ISZ(ids(ids.size - 1)))
   }
 
-  def currentNameId(c: State.Claim.Let.CurrentName): ST = {
-    return st"|g:${(shorten(c.ids), ".")}|"
+  @pure def currentNameId(c: State.Claim.Let.CurrentName): ST = {
+    return currentNameIdString(c.ids)
   }
 
-  def currentLocalId(c: State.Claim.Let.CurrentId): ST = {
+  @pure def currentNameIdString(name: ISZ[String]): ST = {
+    return st"|g:${(shorten(name), ".")}|"
+  }
+
+  @pure def currentLocalId(c: State.Claim.Let.CurrentId): ST = {
     return currentLocalIdString(c.context, c.id)
   }
 
-  def currentLocalIdString(context: ISZ[String], id: String): ST = {
+  @pure def currentLocalIdString(context: ISZ[String], id: String): ST = {
     return if (context.isEmpty) st"|l:$id|" else st"|l:$id:${(context, ".")}|"
   }
 
@@ -1283,7 +1297,10 @@ object Smt2 {
       case c: State.Claim.Let.ProofFunApply =>
         return st"(${proofFunId(c.pf)} ${(for (arg <- c.args) yield v2st(arg), " ")})"
       case c: State.Claim.Let.Apply =>
-        halt("TODO") // TODO
+        val args: ST =
+          if (c.args.size == 1) v2st(c.args(0))
+          else st"(${typeOpId(AST.Typed.Tuple(c.sym.tipe.asInstanceOf[AST.Typed.Fun].args), "new")} ${(for (arg <- c.args) yield v2st(arg), " ")})"
+        return st"(select ${if (c.isLocal) currentLocalIdString(c.context, c.id) else currentNameIdString(c.context :+ c.id)} $args)"
       case c: State.Claim.Let.IApply =>
         halt("TODO") // TODO
     }
@@ -1494,7 +1511,8 @@ object Smt2 {
       case t: AST.Typed.TypeVar => return st"$$${t.id}"
       case t: AST.Typed.Enum => return st"${(shorten(t.name), ".")}"
       case t: AST.Typed.Tuple => return st"(${(for (arg <- t.args) yield typeIdRaw(arg), ", ")})"
-      case _ => halt("TODO") // TODO
+      case t: AST.Typed.Fun => return st"${(for (arg <- t.args) yield typeIdRaw(arg), ", ")} => ${typeIdRaw(t.ret)}"
+      case _ => halt(s"TODO: $t") // TODO
     }
   }
 
@@ -1517,7 +1535,16 @@ object Smt2 {
   }
 
   @pure def typeId(t: AST.Typed): ST = {
-    return id(t, "")
+    t match {
+      case t: AST.Typed.Fun =>
+        if (t.args.size === 1) {
+          return st"(Array ${typeId(t.args(0))} ${typeId(t.ret)})"
+        } else {
+          return st"(Array ${typeId(AST.Typed.Tuple(t.args))} ${typeId(t.ret)})"
+        }
+      case _ => return id(t, "")
+    }
+
   }
 
   @pure def typeHierarchyId(t: AST.Typed): ST = {

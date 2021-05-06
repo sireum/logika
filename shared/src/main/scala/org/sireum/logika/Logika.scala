@@ -34,6 +34,7 @@ import org.sireum.message.{Message, Position}
 import StateTransformer.{PrePost, PreResult}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{ContractCaseResult, InvokeMethodInfo}
+import org.sireum.logika.plugin._
 
 object Logika {
 
@@ -261,7 +262,7 @@ object Logika {
   val libraryDesc: String = "Library"
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
-  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), InceptionPlugin())
+  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), PropNatDedPlugin(), InceptionPlugin())
 
   def checkFile(fileUriOpt: Option[String], input: String, config: Config,
                 smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
@@ -2179,15 +2180,15 @@ import Logika.Split
       return r
     }
 
-    def evalRandomInt(s0: State): ISZ[(State, State.Value)] = {
+    def evalRandomInt(): ISZ[(State, State.Value)] = {
       val pos = e.posOpt.get
-      val (s1, sym) = s0.freshSym(AST.Typed.z, pos)
+      val (s1, sym) = state.freshSym(AST.Typed.z, pos)
       return ISZ((s1.addClaim(State.Claim.Def.Random(sym, pos)), sym))
     }
 
-    def evalSeqIndexValidSize(s0: State, targ: AST.Type, arg: AST.Exp): ISZ[(State, State.Value)] = {
+    def evalSeqIndexValidSize(targ: AST.Type, arg: AST.Exp): ISZ[(State, State.Value)] = {
       var r = ISZ[(State, State.Value)]()
-      for (p <- evalExp(split, smt2, rtCheck, s0, arg, reporter)) {
+      for (p <- evalExp(split, smt2, rtCheck, state, arg, reporter)) {
         val (s1, v) = p
         val pos = e.posOpt.get
         val t = targ.typedOpt.get
@@ -2240,6 +2241,20 @@ import Logika.Split
       return r
     }
 
+    def evalApplyFun(pos: Position, isLocal: B, context: ISZ[String], id: String, t: AST.Typed.Fun, args: ISZ[AST.Exp]): ISZ[(State, State.Value)] = {
+      var r = ISZ[(State, State.Value)]()
+      for (p <- evalArgs(split, smt2, rtCheck, state, t.args.size, Either.Left(args), reporter)) {
+        val (s0, valueOpts) = p
+        if (s0.status && ops.ISZOps(valueOpts).forall((vOpt: Option[State.Value]) => vOpt.nonEmpty)) {
+          val (s1, sym) = s0.freshSym(t.ret, pos)
+          r = r :+ ((s1.addClaim(State.Claim.Let.Apply(sym, isLocal, context, id, for (vOpt <- valueOpts) yield vOpt.get)), sym))
+        } else {
+          r = r :+ ((s0(nextFresh = s0.nextFresh + 1), State.errorValue))
+        }
+      }
+      return r
+    }
+
     def expH(s0: State): ISZ[(State, State.Value)] = {
       e match {
         case lit: AST.Lit => return ISZ((s0, evalLit(lit)))
@@ -2258,13 +2273,18 @@ import Logika.Split
                 case AST.MethodMode.Constructor =>
                   return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
                 case AST.MethodMode.Ext if res.id == "randomInt" && res.owner == AST.Typed.sireumName =>
-                  return evalRandomInt(state)
+                  return evalRandomInt()
                 case AST.MethodMode.Spec if res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName =>
-                  return evalSeqIndexValidSize(state, e.targs(0), e.args(0))
+                  return evalSeqIndexValidSize(e.targs(0), e.args(0))
                 case AST.MethodMode.Method =>
-                  return evalInvoke(state, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
+                  return evalInvoke(s0, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
                 case AST.MethodMode.Ext =>
-                  return evalInvoke(state, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
+                  return evalInvoke(s0, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
+                case _ =>
+              }
+            case res: AST.ResolvedInfo.LocalVar =>
+              e.attr.typedOpt.get match {
+                case t: AST.Typed.Fun if t.isPureFun => return evalApplyFun(e.posOpt.get, T, res.context, res.id, t, e.args)
                 case _ =>
               }
             case _ =>
@@ -2279,11 +2299,11 @@ import Logika.Split
                 case AST.MethodMode.Copy =>
                   return evalConstructor(split, T, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
                 case AST.MethodMode.Spec if res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName =>
-                  return evalSeqIndexValidSize(state, e.targs(0), e.args(0).arg)
+                  return evalSeqIndexValidSize(e.targs(0), e.args(0).arg)
                 case AST.MethodMode.Method =>
-                  return evalInvoke(state, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
+                  return evalInvoke(s0, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
                 case AST.MethodMode.Ext =>
-                  return evalInvoke(state, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
+                  return evalInvoke(s0, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
                 case _ =>
               }
             case _ =>
@@ -2913,6 +2933,17 @@ import Logika.Split
                     stateMap: (State, HashSMap[Z, StepProofContext]),
                     step: AST.ProofAst.Step,
                     reporter: Reporter): (State, HashSMap[Z, StepProofContext]) = {
+    @pure def extractClaims(steps: ISZ[AST.ProofAst.Step]): ISZ[AST.Exp] = {
+      var r = ISZ[AST.Exp]()
+      for (stp <- steps) {
+        stp match {
+          case stp: AST.ProofAst.Step.Regular => r = r :+ stp.claim
+          case stp: AST.ProofAst.Step.Assert => r = r :+ stp.claim
+          case _ =>
+        }
+      }
+      return r
+    }
     val stepNo = step.no.value
     var (s0, m) = stateMap
     step match {
@@ -2928,8 +2959,7 @@ import Logika.Split
       case step: AST.ProofAst.Step.Assume =>
         val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
         return (s0(status = status, nextFresh = nextFresh, claims = claims :+ claim),
-          m + stepNo ~> StepProofContext.Regular(stepNo, step.claim,
-            ops.ISZOps(claims).slice(s0.claims.size, claims.size) :+ claim))
+          m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.SubProof =>
         for (sub <- step.steps if s0.status) {
           val p = evalProofStep(smt2, stateMap, sub, reporter)
@@ -2937,7 +2967,9 @@ import Logika.Split
           m  = p._2
         }
         if (s0.status) {
-          return (stateMap._1(nextFresh = s0.nextFresh), stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo, step))
+          return (stateMap._1(nextFresh = s0.nextFresh),
+            stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
+              step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim, extractClaims(step.steps)))
         } else {
           return (stateMap._1(status = F), stateMap._2)
         }
@@ -2962,8 +2994,7 @@ import Logika.Split
         val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, stateMap._1(nextFresh = s0.nextFresh),
           step.claim, step.no.posOpt, reporter)
         return (stateMap._1(status = status, nextFresh = nextFresh, claims = claims :+ claim),
-          m + stepNo ~> StepProofContext.Regular(stepNo, step.claim,
-            ops.ISZOps(claims).slice(stateMap._1.claims.size, claims.size) :+ claim))
+          m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.Let =>
         for (sub <- step.steps if s0.status) {
           val p = evalProofStep(smt2, stateMap, sub, reporter)
@@ -2973,12 +3004,12 @@ import Logika.Split
         if (s0.status) {
           if (step.steps.nonEmpty && step.steps(0).isInstanceOf[AST.ProofAst.Step.Assume]) {
             return (stateMap._1(nextFresh = s0.nextFresh),
-              stateMap._2 + stepNo ~> StepProofContext.FreshPredSubProof(stepNo, step.params,
+              stateMap._2 + stepNo ~> StepProofContext.FreshAssumeSubProof(stepNo, step.params,
                 step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim,
-                ops.ISZOps(step.steps).drop(1)))
+                extractClaims(step.steps)))
           } else {
             return (stateMap._1(nextFresh = s0.nextFresh),
-              stateMap._2 + stepNo ~> StepProofContext.FreshSubProof(stepNo, step.params, step.steps))
+              stateMap._2 + stepNo ~> StepProofContext.FreshSubProof(stepNo, step.params, extractClaims(step.steps)))
           }
         } else {
           return (stateMap._1(status = F), stateMap._2)
@@ -2993,7 +3024,7 @@ import Logika.Split
       val (s1, v) = sv
       val (s2, sym) = value2Sym(s1, v, posOpt.get)
       val vProp = State.Claim.Prop(T, sym)
-      return (s2.status, s2.nextFresh, s2.claims, vProp)
+      return (s2.status, s2.nextFresh, ops.ISZOps(s2.claims).slice(s0.claims.size, s2.claims.size), vProp)
     }
     return (F, s0.nextFresh, s0.claims, State.Claim.And(ISZ()))
   }
@@ -3292,6 +3323,36 @@ import Logika.Split
       return ISZ(p._1)
     }
 
+    def evalDeduceSequent(s0: State, deduceStmt: AST.Stmt.DeduceSequent): ISZ[State] = {
+      @pure def premises(st: State, sequent: AST.Sequent): (State, HashSMap[Z, StepProofContext]) = {
+        var r = HashSMap.empty[Z, StepProofContext]
+        var no: Z = -1
+        var st0 = st
+        for (premise <- sequent.premises if st0.status) {
+          val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, st0, premise, premise.posOpt, reporter)
+          r = r + no ~> StepProofContext.Regular(no, premise, claims :+ claim)
+          no = no - 1
+          st0 = st0(status = status, nextFresh = nextFresh, claims = (st0.claims ++ claims) :+ claim)
+        }
+        return (st0, r)
+      }
+      var st0 = s0
+      for (sequent <- deduceStmt.sequents if st0.status) {
+        var p = premises(st0, sequent)
+        for (step <- sequent.steps if p._1.status) {
+          p = evalProofStep(smt2, p, step, reporter)
+        }
+        st0 = s0(status = p._1.status, nextFresh = p._1.nextFresh, claims = s0.claims)
+        val provenClaims = HashSet ++ (for (spc <- p._2.values if spc.isInstanceOf[StepProofContext.Regular]) yield
+          spc.asInstanceOf[StepProofContext.Regular].exp)
+        if (st0.status && !provenClaims.contains(sequent.conclusion)) {
+          reporter.error(sequent.conclusion.posOpt, Logika.kind, "The sequent's conclusion has not been proven")
+          st0 = st0(status = F)
+        }
+      }
+      return ISZ(s0(status = st0.status, nextFresh = st0.nextFresh))
+    }
+
     def evalStmtH(): ISZ[State] = {
       stmt match {
         case stmt@AST.Stmt.Expr(e: AST.Exp.Invoke) =>
@@ -3337,6 +3398,7 @@ import Logika.Split
         case stmt: AST.Stmt.Match => return evalMatch(split, smt2, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.Inv => return evalInv(state, stmt)
         case stmt: AST.Stmt.DeduceSteps => return evalDeduceSteps(state, stmt)
+        case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty => return evalDeduceSequent(state, stmt)
         case _: AST.Stmt.Object => return ISZ(state)
         case _: AST.Stmt.Import => return ISZ(state)
         case _: AST.Stmt.Method => return ISZ(state)

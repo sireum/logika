@@ -32,7 +32,7 @@ import LogikaTest._
 class LogikaRcTest extends SireumRcSpec {
 
   def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = $internal.RC.text(Vector("example")) { (p, f) =>
-    p.last.endsWith(".sc") && !p.last.startsWith("wip-")
+    p.last.endsWith("natded.sc") && !p.last.startsWith("wip-")
   }
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {

@@ -850,7 +850,9 @@ object State {
 
       }
 
-      @datatype class Apply(val sym: Value.Sym, name: ISZ[String], args: ISZ[Value]) extends Let {
+      @datatype class Apply(val sym: Value.Sym, isLocal: B, context: ISZ[String], id: String, args: ISZ[Value]) extends Let {
+        @strictpure def name: ISZ[String] = context :+ id
+
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${(name, ".")}(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
