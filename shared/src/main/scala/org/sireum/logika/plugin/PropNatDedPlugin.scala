@@ -72,6 +72,20 @@ import org.sireum.logika.Logika.Reporter
       }
       return F
     }
+    @pure def isBottom(exp: AST.Exp): B = {
+      if (exp == bottom) {
+        return T
+      }
+      val res: AST.ResolvedInfo = exp match {
+        case exp: AST.Exp.Ident => exp.attr.resOpt.get
+        case exp: AST.Exp.Select => exp.attr.resOpt.get
+        case _ => return F
+      }
+      res match {
+        case res: AST.ResolvedInfo.Var => return res.id === "F" && res.owner == AST.Typed.sireumName
+        case _ =>return F
+      }
+    }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     var args = ISZ[AST.Exp.LitZ]()
@@ -140,33 +154,33 @@ import org.sireum.logika.Logika.Reporter
             return emptyResult
         }
         val ISZ(subProofNo) = args
-        val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo.value) match {
-          case Some(sp: StepProofContext.SubProof) if sp.assumption == claim.exp => HashSet ++ sp.claims
+        val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo.value) match {
+          case Some(sp: StepProofContext.SubProof) if sp.assumption == claim.exp => sp.claims
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the operand of step #${step.no.value}'s claim")
             return emptyResult
         }
-        if (!subProof.contains(bottom)) {
+        if (!ops.ISZOps(subProof).exists(isBottom _)) {
           reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof #${subProofNo.value}")
           return emptyResult
         }
       case string"BottomE" =>
         val ISZ(bottomNo) = args
         spcMap.get(bottomNo.value) match {
-          case Some(sp: StepProofContext.Regular) if sp.exp == bottom =>
+          case Some(sp: StepProofContext.Regular) if isBottom(sp.exp) =>
           case _ =>
             reporter.error(bottomNo.posOpt, Logika.kind, s"Expecting F as step #${bottomNo.value}'s claim")
             return emptyResult
         }
       case string"PbC" =>
         val ISZ(subProofNo) = args
-        val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo.value) match {
-          case Some(sp: StepProofContext.SubProof) if isUBuiltIn(sp.assumption, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => HashSet ++ sp.claims
+        val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo.value) match {
+          case Some(sp: StepProofContext.SubProof) if isUBuiltIn(sp.assumption, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => sp.claims
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the negation of step #${step.no.value}'s claim")
             return emptyResult
         }
-        if (!subProof.contains(bottom)) {
+        if (!ops.ISZOps(subProof).exists(isBottom _)) {
           reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof #${subProofNo.value}")
           return emptyResult
         }

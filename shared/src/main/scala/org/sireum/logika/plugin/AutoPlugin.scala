@@ -129,7 +129,11 @@ import org.sireum.logika.Logika.Reporter
         val q = logika.evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
         ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
       }
-    val status: B = if (stat) {
+    val provenClaims = HashSet ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
+      spc.asInstanceOf[StepProofContext.Regular].exp)
+    val status: B = if (args.isEmpty && provenClaims.contains(step.claim)) {
+      T
+    } else if (stat) {
       val r = smt2.valid(log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
 
       def error(msg: String): B = {

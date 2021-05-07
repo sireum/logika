@@ -2939,6 +2939,7 @@ import Logika.Split
         stp match {
           case stp: AST.ProofAst.Step.Regular => r = r :+ stp.claim
           case stp: AST.ProofAst.Step.Assert => r = r :+ stp.claim
+          case stp: AST.ProofAst.Step.Assume => r = r :+ stp.claim
           case _ =>
         }
       }
@@ -2958,25 +2959,26 @@ import Logika.Split
         return (s0(status = F), m)
       case step: AST.ProofAst.Step.Assume =>
         val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
-        return (s0(status = status, nextFresh = nextFresh, claims = claims :+ claim),
+        return (s0(status = status, nextFresh = nextFresh, claims = (s0.claims ++ claims) :+ claim),
           m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.SubProof =>
         for (sub <- step.steps if s0.status) {
-          val p = evalProofStep(smt2, stateMap, sub, reporter)
+          val p = evalProofStep(smt2, (s0, m), sub, reporter)
           s0 = p._1
           m  = p._2
         }
+        s0 = stateMap._1(status = s0.status, nextFresh = s0.nextFresh)
         if (s0.status) {
-          return (stateMap._1(nextFresh = s0.nextFresh),
-            stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
-              step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim, extractClaims(step.steps)))
+          m = stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
+            step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim, extractClaims(step.steps))
+          return (s0, m)
         } else {
-          return (stateMap._1(status = F), stateMap._2)
+          return (s0, stateMap._2)
         }
       case step: AST.ProofAst.Step.Assert =>
         var provenClaims = HashSet.empty[AST.Exp]
         for (sub <- step.steps if s0.status) {
-          val p = evalProofStep(smt2, stateMap, sub, reporter)
+          val p = evalProofStep(smt2, (s0, m), sub, reporter)
           s0 = p._1
           m  = p._2
           sub match {
@@ -2984,35 +2986,36 @@ import Logika.Split
             case _ =>
           }
         }
+        s0 = stateMap._1(nextFresh = s0.nextFresh)
         if (!s0.status) {
-          return (stateMap._1(status = F), stateMap._2)
+          return (s0(status = F), stateMap._2)
         }
         if (!provenClaims.contains(step.claim)) {
           reporter.error(step.claim.posOpt, Logika.kind, "The claim is not proven in the assertion's sub-proof")
-          return (stateMap._1(status = F), stateMap._2)
+          return (s0(status = F), stateMap._2)
         }
-        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, stateMap._1(nextFresh = s0.nextFresh),
-          step.claim, step.no.posOpt, reporter)
-        return (stateMap._1(status = status, nextFresh = nextFresh, claims = claims :+ claim),
+        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
+        return (s0(status = status, nextFresh = nextFresh, claims = (s0.claims ++ claims) :+ claim),
           m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.Let =>
         for (sub <- step.steps if s0.status) {
-          val p = evalProofStep(smt2, stateMap, sub, reporter)
+          val p = evalProofStep(smt2, (s0, m), sub, reporter)
           s0 = p._1
           m  = p._2
         }
+        s0 = stateMap._1(status = s0.status, nextFresh = s0.nextFresh)
         if (s0.status) {
           if (step.steps.nonEmpty && step.steps(0).isInstanceOf[AST.ProofAst.Step.Assume]) {
-            return (stateMap._1(nextFresh = s0.nextFresh),
+            return (s0,
               stateMap._2 + stepNo ~> StepProofContext.FreshAssumeSubProof(stepNo, step.params,
                 step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim,
                 extractClaims(step.steps)))
           } else {
-            return (stateMap._1(nextFresh = s0.nextFresh),
+            return (s0,
               stateMap._2 + stepNo ~> StepProofContext.FreshSubProof(stepNo, step.params, extractClaims(step.steps)))
           }
         } else {
-          return (stateMap._1(status = F), stateMap._2)
+          return (s0, stateMap._2)
         }
       case step: AST.ProofAst.Step.StructInduction => halt(s"TODO: $step")
     }
