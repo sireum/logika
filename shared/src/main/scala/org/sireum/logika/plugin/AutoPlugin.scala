@@ -39,7 +39,7 @@ import org.sireum.logika.Logika.Reporter
 
   val iszzTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.z)))
 
-  @pure override def canHandle(just: AST.ProofAst.Step.Justification): B = {
+  @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Apply =>
         return justificationIds.contains(just.idString) && just.isOwnedBy(justificationName)

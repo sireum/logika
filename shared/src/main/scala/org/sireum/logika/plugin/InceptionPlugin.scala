@@ -99,7 +99,20 @@ object InceptionPlugin {
 }
 
 @datatype class InceptionPlugin extends Plugin {
-  @strictpure def canHandle(just: AST.ProofAst.Step.Justification): B = just.isInstanceOf[AST.ProofAst.Step.Inception]
+  @pure def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
+    val res: AST.ResolvedInfo.Method = just match {
+      case just: AST.ProofAst.Step.Justification.Incept =>
+        just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+      case just: AST.ProofAst.Step.Justification.InceptNamed =>
+        just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+      case _ => return F
+    }
+    logika.th.nameMap.get(res.owner :+ res.id).get match {
+      case _: Info.Method => return T
+      case info: Info.JustMethod if info.ast.etaOpt.nonEmpty => return T
+      case _ => return F
+    }
+  }
 
   def handle(logika: Logika,
              smt2: Smt2,

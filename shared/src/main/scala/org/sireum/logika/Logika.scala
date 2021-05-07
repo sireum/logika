@@ -33,7 +33,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Message, Position}
 import StateTransformer.{PrePost, PreResult}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
-import org.sireum.logika.Logika.{ContractCaseResult, InvokeMethodInfo}
+import org.sireum.logika.Logika.{ContractCaseResult, InvokeMethodInfo, idIntro}
 import org.sireum.logika.plugin._
 
 object Logika {
@@ -2948,7 +2948,7 @@ import Logika.Split
     var (s0, m) = stateMap
     step match {
       case step: AST.ProofAst.Step.Regular =>
-        for (plugin <- plugins if plugin.canHandle(step.just)) {
+        for (plugin <- plugins if plugin.canHandle(this, step.just)) {
           val Plugin.Result(r, nextFresh, claims) =
             plugin.handle(this, smt2, config.logVc, config.logVcDirOpt, m, s0, step, reporter)
           return (s0(status = r, nextFresh = nextFresh).addClaim(State.Claim.And(claims)),
@@ -3353,6 +3353,34 @@ import Logika.Split
       return ISZ(s0(status = st0.status, nextFresh = st0.nextFresh))
     }
 
+    def evalVarPattern(varPattern: AST.Stmt.VarPattern): ISZ[State] = {
+      var r = ISZ[State]()
+      var nextFresh = state.nextFresh
+      for (p <- evalAssignExpValue(split, smt2, varPattern.pattern.typedOpt.get, rtCheck, state, varPattern.init, reporter)) {
+        val (s1, init) = p
+        val s7: State = if (s1.status) {
+          val (s2, sym) = value2Sym(s1, init, varPattern.init.asStmt.posOpt.get)
+          val (s3, cond, m) = evalPattern(s2, sym, varPattern.pattern, reporter)
+          var s4 = s3
+          for (p <- m.entries) {
+            val (id, (v, _, pos)) = p
+            val (s5, vSym) = value2Sym(s4, v, pos)
+            s4 = s5.addClaim(State.Claim.Let.CurrentId(T, vSym, context.methodName, id, Some(pos)))
+          }
+          val (s6, condSym) = value2Sym(s4, cond, varPattern.pattern.posOpt.get)
+          evalAssertH(smt2, "Variable Pattern Matching", s6, condSym, varPattern.pattern.posOpt, reporter)
+        } else {
+          s1
+        }
+        r = r :+ s7
+        if (nextFresh < s7.nextFresh) {
+          nextFresh = s7.nextFresh
+        }
+
+      }
+      return for (s <- r) yield s(nextFresh = nextFresh)
+    }
+
     def evalStmtH(): ISZ[State] = {
       stmt match {
         case stmt@AST.Stmt.Expr(e: AST.Exp.Invoke) =>
@@ -3366,6 +3394,9 @@ import Logika.Split
                 stmt.id.attr.posOpt)
             case _ => halt(s"TODO: $stmt") // TODO
           }
+        case stmt: AST.Stmt.VarPattern =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          return evalVarPattern(stmt)
         case stmt: AST.Stmt.Assign =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalAssign(state, stmt)

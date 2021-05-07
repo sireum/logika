@@ -32,3 +32,46 @@ import org.sireum.justification.natded.pred._
     //@formatter:on
   )
 }
+
+@pure def imply1(p: B, q: B, r: B): Unit = {
+  Deduce(
+    //@formatter:off
+    ((p & q) ->: r, p ->: q, p) |- r Proof(
+      1 #> ((p & q) ->: r)       by Premise,
+      2 #> (p ->: q)             by Premise,
+      3 #> p                     by Premise,
+      4 #> q                     by implyE(p, q) and (2, 3),
+      5 #> (p & q)               by andI(p, q) and (3, 4),
+      6 #> r                     by implyE(p & q, r) and (1, 5),
+    )
+    //@formatter:on
+  )
+}
+
+@pure def imply2(p: B, q: B, r: B): Unit = {
+  Deduce(
+    //@formatter:off
+    ((p | q) ->: r,  q) |- r Proof(
+      1 #> ((p | q) ->: r)       by Premise,
+      2 #> q                     by Premise,
+      3 #> (p | q)               by orI2(p, q) and 2,
+      4 #> r                     by implyE(p | q, r) and (1, 3),
+    )
+    //@formatter:on
+  )
+}
+
+@pure def imply3a(p: B, q: B): Unit = {
+  Deduce(
+    //@formatter:off
+    q |- (p ->: q) Proof(
+      1 #> q                   by Premise,
+      2 #> SubProof(
+        3 #> Assume(p),
+        4 #> q                 by Premise,
+      ),
+      5 #> (p ->: q)           by ImplyI(2),
+    )
+    //@formatter:on
+  )
+}

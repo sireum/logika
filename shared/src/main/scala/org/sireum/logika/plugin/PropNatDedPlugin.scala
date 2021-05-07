@@ -34,11 +34,11 @@ import org.sireum.logika.Logika.Reporter
 
   val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("OrE", "ImplyI", "NegI", "BottomE", "PbC")
 
-  val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
+  val justificationName: ISZ[String] = ISZ("org", "sireum", "justification", "natded", "prop")
 
   val bottom: AST.Exp = AST.Exp.LitB(F, AST.Attr(None()))
 
-  @pure override def canHandle(just: AST.ProofAst.Step.Justification): B = {
+  @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Incept =>
         val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
@@ -74,9 +74,19 @@ import org.sireum.logika.Logika.Reporter
     }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+    var args = ISZ[AST.Exp.LitZ]()
+    for (arg <- just.args) {
+      arg match {
+        case arg: AST.Exp.LitZ => args = args :+ arg
+        case _ => reporter.error(arg.posOpt, Logika.kind, "Expecting a proof step number literal")
+      }
+    }
+    if (args.size != just.args.size) {
+      return emptyResult
+    }
     res.id match {
       case string"OrE" =>
-        val ISZ(orClaimNo, leftSubProofNo, rightSubProofNo) = just.witnesses
+        val ISZ(orClaimNo, leftSubProofNo, rightSubProofNo) = args
         val orClaim: AST.Exp.Binary = spcMap.get(orClaimNo.value) match {
           case Some(StepProofContext.Regular(_, exp: AST.Exp.Binary, _)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) => exp
           case _ =>
@@ -111,7 +121,7 @@ import org.sireum.logika.Logika.Reporter
             reporter.error(step.claim.posOpt, Logika.kind, s"Expecting an implication")
             return emptyResult
         }
-        val ISZ(subProofNo) = just.witnesses
+        val ISZ(subProofNo) = args
         val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo.value) match {
           case Some(sp: StepProofContext.SubProof) if sp.assumption == claim.left => HashSet ++ sp.claims + sp.assumption
           case _ =>
@@ -129,7 +139,7 @@ import org.sireum.logika.Logika.Reporter
             reporter.error(step.claim.posOpt, Logika.kind, s"Expecting an implication")
             return emptyResult
         }
-        val ISZ(subProofNo) = just.witnesses
+        val ISZ(subProofNo) = args
         val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo.value) match {
           case Some(sp: StepProofContext.SubProof) if sp.assumption == claim.exp => HashSet ++ sp.claims
           case _ =>
@@ -141,7 +151,7 @@ import org.sireum.logika.Logika.Reporter
           return emptyResult
         }
       case string"BottomE" =>
-        val ISZ(bottomNo) = just.witnesses
+        val ISZ(bottomNo) = args
         spcMap.get(bottomNo.value) match {
           case Some(sp: StepProofContext.Regular) if sp.exp == bottom =>
           case _ =>
@@ -149,7 +159,7 @@ import org.sireum.logika.Logika.Reporter
             return emptyResult
         }
       case string"PbC" =>
-        val ISZ(subProofNo) = just.witnesses
+        val ISZ(subProofNo) = args
         val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo.value) match {
           case Some(sp: StepProofContext.SubProof) if isUBuiltIn(sp.assumption, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => HashSet ++ sp.claims
           case _ =>

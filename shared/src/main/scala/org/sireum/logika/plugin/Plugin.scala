@@ -35,7 +35,7 @@ object Plugin {
 }
 
 @sig trait Plugin {
-  @pure def canHandle(just: AST.ProofAst.Step.Justification): B
+  @pure def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B
 
   def handle(logika: Logika,
              smt2: Smt2,
