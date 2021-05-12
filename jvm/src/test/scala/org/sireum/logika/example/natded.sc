@@ -8,7 +8,8 @@ import org.sireum.justification.natded.pred._
 @pure def introNatDed(p: B, q: B, r: B): Unit = {
   Deduce(
     //@formatter:off
-    (p | q, r) |- (p & r | q & r) Proof(
+    (p | q, r)  |-  (p & r | q & r)
+    Proof(
       1 #> (p | q)             by Premise,
       2 #> r                   by Premise,
       3 #> SubProof(
@@ -19,7 +20,7 @@ import org.sireum.justification.natded.pred._
       7 #> SubProof(
         8 #> Assume(q),
         9 #> (q & r)           by andI(q, r)         and (8, 2),
-        10 #> (p & r | q & r)   by orI2(p & r, q & r) and 9,
+        10 #> (p & r | q & r)  by orI2(p & r, q & r) and 9,
       ),
       11 #> (p & r | q & r)    by OrE(1, 3, 7),
     )
@@ -30,7 +31,8 @@ import org.sireum.justification.natded.pred._
 @pure def and1(p: B, q: B, r: B): Unit = {
   Deduce(
     //@formatter:off
-    (p, q, r) |- (r & (q & p)) Proof(
+    (p, q, r)  |-  (r & (q & p))
+    Proof(
       1 #> p               by Premise,
       2 #> q               by Premise,
       3 #> r               by Premise,
@@ -44,7 +46,8 @@ import org.sireum.justification.natded.pred._
 @pure def and2(p: B, q: B, r: B): Unit = {
   Deduce(
     //@formatter:off
-    (p & (q & r)) |- (r & p) Proof(
+    (p & (q & r))  |-  (r & p)
+    Proof(
       1 #> (p & (q & r))   by Premise,
       2 #> p               by andE1(p, q & r) and 1,
       3 #> (q & r)         by andE2(p, q & r) and 1,
@@ -58,7 +61,8 @@ import org.sireum.justification.natded.pred._
 @pure def or1(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    p |- (p | q) Proof(
+    p  |-  (p | q)
+    Proof(
       1 #> p         by Premise,
       2 #> (p | q)   by orI1(p, q) and 1,
     )
@@ -69,7 +73,8 @@ import org.sireum.justification.natded.pred._
 @pure def or2(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    (p & q) |- (p | q) Proof(
+    (p & q)  |-  (p | q)
+    Proof(
       1 #> (p & q)   by Premise,
       2 #> p         by andE1(p, q) and 1,
       3 #> (p | q)   by orI1(p, q)  and 2,
@@ -81,7 +86,8 @@ import org.sireum.justification.natded.pred._
 @pure def or2b(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    (p & q) |- (p | q) Proof(
+    (p & q)  |-  (p | q)
+    Proof(
       1 #> (p & q)   by Premise,
       2 #> q         by andE2(p, q) and 1,
       3 #> (p | q)   by orI2(p, q)  and 2,
@@ -93,7 +99,8 @@ import org.sireum.justification.natded.pred._
 @pure def or3(p: B, q: B, r: B): Unit = {
   Deduce(
     //@formatter:off
-    (p | q,  r) |- (p & r | q & r) Proof(
+    (p | q,  r)  |-  (p & r | q & r)
+    Proof(
       1 #> (p | q)                  by Premise,
       2 #> r                        by Premise,
       3 #> SubProof(
@@ -104,9 +111,9 @@ import org.sireum.justification.natded.pred._
       7 #> SubProof(
         8 #> Assume(q),
         9 #> (q & r)                by andI(q, r)         and (8, 2),
-        10 #> (p & r | q & r)        by orI2(p & r, q & r) and 9,
+        10 #> (p & r | q & r)       by orI2(p & r, q & r) and 9,
       ),
-      11 #> (p & r | q & r)          by OrE(1, 3, 7),
+      11 #> (p & r | q & r)         by OrE(1, 3, 7),
     )
     //@formatter:on
   )
@@ -115,7 +122,8 @@ import org.sireum.justification.natded.pred._
 @pure def imply1(p: B, q: B, r: B): Unit = {
   Deduce(
     //@formatter:off
-    ((p & q) ->: r, p ->: q, p) |- r Proof(
+    ((p & q) ->: r, p ->: q, p)  |-  r
+    Proof(
       1 #> ((p & q) ->: r)       by Premise,
       2 #> (p ->: q)             by Premise,
       3 #> p                     by Premise,
@@ -130,7 +138,8 @@ import org.sireum.justification.natded.pred._
 @pure def imply2(p: B, q: B, r: B): Unit = {
   Deduce(
     //@formatter:off
-    ((p | q) ->: r,  q) |- r Proof(
+    ((p | q) ->: r,  q)  |-  r
+    Proof(
       1 #> ((p | q) ->: r)       by Premise,
       2 #> q                     by Premise,
       3 #> (p | q)               by orI2(p, q)       and 2,
@@ -143,7 +152,8 @@ import org.sireum.justification.natded.pred._
 @pure def imply3a(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    q |- (p ->: q) Proof(
+    q  |-  (p ->: q)
+    Proof(
       1 #> q                   by Premise,
       2 #> SubProof(
         3 #> Assume(p),
@@ -158,7 +168,8 @@ import org.sireum.justification.natded.pred._
 @pure def imply3b(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    q |- (p ->: q) Proof(
+    q  |-  (p ->: q)
+    Proof(
       1 #> SubProof(
         2 #> Assume(p),
         3 #> q             by Premise,
@@ -172,7 +183,8 @@ import org.sireum.justification.natded.pred._
 @pure def imply4(p: B, q: B, r: B): Unit = {
   Deduce(
     //@formatter:off
-    (p ->: r,  q ->: r) |- ((p | q) ->: r) Proof(
+    (p ->: r,  q ->: r)  |-  ((p | q) ->: r)
+    Proof(
       1 #> (p ->: r)             by Premise,
       2 #> (q ->: r)             by Premise,
       3 #> SubProof(
@@ -196,7 +208,8 @@ import org.sireum.justification.natded.pred._
 @pure def negation1(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    (p | q, !p) |- q Proof(
+    (p | q, !p)  |-  q
+    Proof(
       1 #> (p | q)        by Premise,
       2 #> (!p)           by Premise,
       3 #> SubProof(
@@ -216,7 +229,8 @@ import org.sireum.justification.natded.pred._
 @pure def negation2(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    (!p) |- (p ->: q) Proof(
+    (!p)  |-  (p ->: q)
+    Proof(
       1 #> (!p)            by Premise,
       2 #> SubProof(
         3 #> Assume(p),
@@ -232,7 +246,8 @@ import org.sireum.justification.natded.pred._
 @pure def negation3(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    (p ->: !q) |- (!(p & q)) Proof(
+    (p ->: !q)  |-  (!(p & q))
+    Proof(
       1 #> (p ->: !q)         by Premise,
       2 #> SubProof(
         3 #> Assume(p & q),
@@ -250,7 +265,8 @@ import org.sireum.justification.natded.pred._
 @pure def negation4(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    (p, q ->: !p) |- (!q) Proof(
+    (p, q ->: !p)  |-  (!q)
+    Proof(
       1 #> p              by Premise,
       2 #> (q ->: !p)     by Premise,
       3 #> SubProof(
@@ -267,7 +283,8 @@ import org.sireum.justification.natded.pred._
 @pure def negation5(p: B): Unit = {
   Deduce(
     //@formatter:off
-    p |- (!(!p)) Proof(
+    p  |-  (!(!p))
+    Proof(
       1 #> p               by Premise,
       2 #> SubProof(
         3 #> Assume(!p),
@@ -282,7 +299,8 @@ import org.sireum.justification.natded.pred._
 @pure def negation6(p: B): Unit = {
   Deduce(
     //@formatter:off
-    (!(!p)) |- p Proof(
+    (!(!p))  |-  p
+    Proof(
       1 #> (!(!p))         by Premise,
       2 #> SubProof(
         3 #> Assume(!p),
@@ -297,7 +315,8 @@ import org.sireum.justification.natded.pred._
 @pure def negation7(p: B, q: B): Unit = {
   Deduce(
     //@formatter:off
-    (!(!p | !q)) |- (p & q) Proof(
+    (!(!p | !q))  |-  (p & q)
+    Proof(
       1 #> (!(!p | !q))    by Premise,
       2 #> SubProof(
         3 #> Assume(!p),
@@ -320,7 +339,8 @@ import org.sireum.justification.natded.pred._
 @pure def negation8(p: B): Unit = {
   Deduce(
     //@formatter:off
-    |- (p | !p) Proof(
+    |-  (p | !p)
+    Proof(
       1 #> SubProof(
         2 #> Assume(!(p | !p)),
         3 #> SubProof(
@@ -341,7 +361,12 @@ import org.sireum.justification.natded.pred._
 @pure def universal1[T](human: T => B @pure, mortal: T => B @pure, Socrates: T): Unit = {
   Deduce(
     //@formatter:off
-    (∀{(x: T) => human(x) ->: mortal(x)}, human(Socrates))  |- mortal(Socrates) Proof(
+    (
+      ∀{(x: T) => human(x) ->: mortal(x)},
+      human(Socrates)
+    ) |-
+      mortal(Socrates)
+    Proof(
       1 #> ∀{(x: T) => human(x) ->: mortal(x)}        by Premise,
       2 #> human(Socrates)                            by Premise,
       3 #> (human(Socrates) ->: mortal(Socrates))     by allE((x: T) => human(x) ->: mortal(x), Socrates) and 1,
@@ -354,7 +379,12 @@ import org.sireum.justification.natded.pred._
 @pure def universal2[T](gt: (T, T) => B @pure, inc: T => T @pure, dec: T => T @pure): Unit = {
   Deduce(
     //@formatter:off
-    (∀{(x: T) => gt(inc(x), x)},  ∀{(x: T) => gt(x, dec(x))}) |- ∀{(x: T) => gt(inc(x), x) & gt(x, dec(x))} Proof(
+    (
+      ∀{(x: T) => gt(inc(x), x)},
+      ∀{(x: T) => gt(x, dec(x))}
+    ) |-
+      ∀{(x: T) => gt(inc(x), x) & gt(x, dec(x))}
+    Proof(
       1 #> ∀{(x: T) => gt(inc(x), x)}                   by Premise,
       2 #> ∀{(x: T) => gt(x, dec(x))}                   by Premise,
       3 #> Let { (a: T) => SubProof(
@@ -371,7 +401,12 @@ import org.sireum.justification.natded.pred._
 @pure def universal3[T](human: T => B @pure, mortal: T => B @pure, soul: T => B @pure): Unit = {
   Deduce(
     //@formatter:off
-    (∀{(x: T) => human(x) ->: mortal(x)},  ∀{(y: T) => mortal(y) ->: soul(y)}) |- ∀{(x: T) => human(x) ->: soul(x)} Proof(
+    (
+      ∀{(x: T) => human(x) ->: mortal(x)},
+      ∀{(y: T) => mortal(y) ->: soul(y)}
+    ) |-
+      ∀{(x: T) => human(x) ->: soul(x)}
+    Proof(
       1 #> ∀{(x: T) => human(x) ->: mortal(x)}   by Premise,
       2 #> ∀{(y: T) => mortal(y) ->: soul(y)}    by Premise,
       3 #> Let { (a: T) => SubProof(
@@ -393,7 +428,8 @@ import org.sireum.justification.natded.pred._
 @pure def universal4[T](healthy: T => B @pure, happy: T => B @pure): Unit = {
   Deduce(
     //@formatter:off
-    ∀{(x: T) => healthy(x) ->: happy(x)} |- (∀{(y: T) => healthy(y)} ->: ∀{(x: T) => happy(x)}) Proof(
+    ∀{(x: T) => healthy(x) ->: happy(x)}  |-  (∀{(y: T) => healthy(y)} ->: ∀{(x: T) => happy(x)})
+    Proof(
       1 #> ∀{(x: T) => healthy(x) ->: happy(x)}                   by Premise,
       2 #> SubProof(
         3 #> Assume(∀{(y: T) => healthy(y)}),
@@ -413,7 +449,8 @@ import org.sireum.justification.natded.pred._
 @pure def existential1[T](human: T => B @pure, mortal: T => B @pure, Socrates: T): Unit = {
   Deduce(
     //@formatter:off
-    (human(Socrates),  mortal(Socrates)) |- ∃{(x: T) => human(x) & mortal(x)} Proof(
+    (human(Socrates),  mortal(Socrates))  |-  ∃{(x: T) => human(x) & mortal(x)}
+    Proof(
       1 #> human(Socrates)                        by Premise,
       2 #> mortal(Socrates)                       by Premise,
       3 #> (human(Socrates) & mortal(Socrates))   by andI(human(Socrates), mortal(Socrates))           and (1, 2),
@@ -426,7 +463,8 @@ import org.sireum.justification.natded.pred._
 @pure def existential2(vowel: C => B @pure, square: (Z, Z) => C @pure, holds: (C, C) => B @pure, e: C): Unit = {
   Deduce(
     //@formatter:off
-    (vowel(e), holds(square(1, 4), e)) |- ∃{(y: C) => vowel(y) & ∃{(x: C) => holds(x, y)}} Proof(
+    (vowel(e), holds(square(1, 4), e))  |-  ∃{(y: C) => vowel(y) & ∃{(x: C) => holds(x, y)}}
+    Proof(
       1 #> vowel(e)                                           by Premise,
       2 #> holds(square(1, 4), e)                             by Premise,
       3 #> ∃{(x: C) => holds(x, e)}                           by existsI((z: C) => holds(z, e), square(1, 4))              and 2,
@@ -440,7 +478,8 @@ import org.sireum.justification.natded.pred._
 @pure def existential3(vowel: C => B @pure, square: (Z, Z) => C @pure, holds: (C, C) => B @pure, e: C): Unit = {
   Deduce(
     //@formatter:off
-    (vowel(e),  holds(square(1, 4), e)) |- ∃{(y: C, x: C) => vowel(y) & holds(x, y)} Proof(
+    (vowel(e), holds(square(1, 4), e))  |-  ∃{(y: C, x: C) => vowel(y) & holds(x, y)}
+    Proof(
       1 #> vowel(e)                                    by Premise,
       2 #> holds(square(1, 4), e)                      by Premise,
       3 #> (vowel(e) & holds(square(1, 4), e))         by andI(vowel(e), holds(square(1, 4), e))                    and (1, 2),
@@ -454,7 +493,12 @@ import org.sireum.justification.natded.pred._
 @pure def existential4[T](human: T => B @pure, mortal: T => B @pure): Unit = {
   Deduce(
     //@formatter:off
-    (∀{(x: T) => human(x) ->: mortal(x)},  ∃{(y: T) => human(y)}) |- ∃{(z: T) => mortal(z)} Proof(
+    (
+      ∀{(x: T) => human(x) ->: mortal(x)},
+      ∃{(y: T) => human(y)}
+    ) |-
+      ∃{(z: T) => mortal(z)}
+    Proof(
       1 #> ∀{(x: T) => human(x) ->: mortal(x)}    by Premise,
       2 #> ∃{(y: T) => human(y)}                  by Premise,
       3 #> Let { (a: T) => SubProof(
@@ -472,7 +516,13 @@ import org.sireum.justification.natded.pred._
 @pure def existential5(vowel: C => B @pure, covered: Z => B @pure, holds: (Z, C) => B @pure, gameOver: B): Unit = {
   Deduce(
     //@formatter:off
-    (∃{(s: Z) => covered(s) & ∃{(c: C) => vowel(c) & holds(s, c)}}, ∃{(x: Z) => covered(x)} ->: !gameOver) |- (!gameOver) Proof(
+    (
+      ∃{(s: Z) => covered(s) & ∃{(c: C) => vowel(c) & holds(s, c)}},
+      ∃{(x: Z) => covered(x)} ->: !gameOver
+    ) |- (
+      !gameOver
+    )
+    Proof(
       1 #> ∃{(s: Z) => covered(s) & ∃{(c: C) => vowel(c) & holds(s, c)}}   by Premise,
       2 #> (∃{(x: Z) => covered(x)} ->: !gameOver)                         by Premise,
       3 #> Let { (a: Z) => SubProof(
