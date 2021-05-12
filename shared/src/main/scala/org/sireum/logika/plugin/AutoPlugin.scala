@@ -130,8 +130,8 @@ import org.sireum.logika.Logika.Reporter
         ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
       }
     val provenClaims = HashSet ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
-      spc.asInstanceOf[StepProofContext.Regular].exp)
-    val status: B = if (args.isEmpty && provenClaims.contains(step.claim)) {
+      AST.Util.deBruijn(spc.asInstanceOf[StepProofContext.Regular].exp))
+    val status: B = if (args.isEmpty && provenClaims.contains(step.claimDeBruijn)) {
       T
     } else if (stat) {
       val r = smt2.valid(log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)

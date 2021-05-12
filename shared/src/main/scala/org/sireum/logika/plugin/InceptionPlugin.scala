@@ -26,6 +26,7 @@
 package org.sireum.logika.plugin
 
 import org.sireum._
+import org.sireum.message.Position
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.Info
 import org.sireum.lang.symbol.Resolver.QName
@@ -77,9 +78,14 @@ object InceptionPlugin {
                 }
               }
               val subst = Substitutor(substMap, arg.context, fParamMap, Reporter.create)
-              val exp = subst.transformExp(argExp.exp)
+              val expOpt = subst.transformExp(argExp.exp)
               reporter.reports(subst.reporter.messages)
-              return AST.MTransformer.PreResult(T, exp)
+              if (expOpt.isEmpty) {
+                return AST.MTransformer.PreResult(T, MSome(o(receiverOpt = paramMap.get(res.id),
+                  ident = o.ident(id = AST.Id("apply", o.ident.id.attr), attr = o.ident.attr(resOpt = TypeChecker.applyResOpt)))))
+              } else {
+                return AST.MTransformer.PreResult(T, expOpt)
+              }
             case _ =>
               reporter.error(arg.posOpt, Logika.kind, "Invalid argument form for inception")
           }
@@ -124,10 +130,8 @@ object InceptionPlugin {
              reporter: Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Inception]
-    def handleH(invokeIdent: AST.Exp.Ident, args: ISZ[AST.Exp]): Plugin.Result = {
-      val res = invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+    def handleH(res: AST.ResolvedInfo.Method, posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
       val mi = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
-      val posOpt = invokeIdent.posOpt
       val contract: AST.MethodContract.Simple = mi.ast.contract match {
         case c: AST.MethodContract.Simple => c
         case _: AST.MethodContract.Cases =>
@@ -158,9 +162,9 @@ object InceptionPlugin {
         var ok = T
         for (require <- contract.requires) {
           val req = ips.transformExp(require).getOrElseEager(require)
-          if (ips.reporter.messages.isEmpty && !provenClaims.contains(req)) {
+          if (ips.reporter.messages.isEmpty && !provenClaims.contains(AST.Util.deBruijn(req))) {
             val pos = require.posOpt.get
-            reporter.error(posOpt, Logika.kind, st"Could not find a claim satisfying ${(mi.name, ".")}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]'".render)
+            reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]")
             ok = F
           }
         }
@@ -173,7 +177,7 @@ object InceptionPlugin {
         var ok = T
         for (w <- just.witnesses) {
           spcMap.get(w.value) match {
-            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + spc.exp
+            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + AST.Util.deBruijn(spc.exp)
             case Some(_) =>
               reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step #${w.value} as an argument for inception")
               ok = F
@@ -192,9 +196,9 @@ object InceptionPlugin {
           return emptyResult
         }
         for (i <- 0 until requires.size) {
-          if (!witnesses.contains(requires(i))) {
+          if (!witnesses.contains(AST.Util.deBruijn(requires(i)))) {
             val pos = contract.requires(i).posOpt.get
-            reporter.error(posOpt, Logika.kind, st"Could not find a claim satisfying ${(mi.name, ".")}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]".render)
+            reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]")
             ok = F
           }
         }
@@ -202,22 +206,21 @@ object InceptionPlugin {
           return emptyResult
         }
       }
-      val ensures = HashSet.empty[AST.Exp] ++
-        (for (ensure <- contract.ensures) yield ips.transformExp(ensure).getOrElseEager(ensure))
+      val ensures: ISZ[AST.Exp] = for (ensure <- contract.ensures) yield ips.transformExp(ensure).getOrElseEager(ensure)
       if (ips.reporter.messages.nonEmpty) {
         reporter.reports(ips.reporter.messages)
         return emptyResult
       }
-      if (!ensures.contains(step.claim)) {
-        reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from any of ${(mi.name, ".")}'s post-conditions".render)
+      if (!(HashSet ++ (for (e <- ensures) yield AST.Util.deBruijn(e))).contains(step.claimDeBruijn)) {
+        reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from any of ${mi.methodRes.id}'s post-conditions".render)
         return emptyResult
       }
       val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
       return Plugin.Result(status, nextFresh, claims :+ claim)
     }
     just match {
-      case just: AST.ProofAst.Step.Justification.Incept => return handleH(just.invokeIdent, just.args)
-      case just: AST.ProofAst.Step.Justification.InceptNamed => return handleH(just.invokeIdent, just.args)
+      case just: AST.ProofAst.Step.Justification.Incept => return handleH(just.invoke.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], just.invoke.posOpt, just.args)
+      case just: AST.ProofAst.Step.Justification.InceptNamed => return handleH(just.invoke.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], just.invoke.posOpt, just.args)
       case _: AST.ProofAst.Step.Justification.InceptEta =>
         halt("TODO") // TODO
     }
