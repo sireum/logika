@@ -1196,12 +1196,15 @@ import Logika.Split
 
     def evalSelect(exp: AST.Exp.Select): ISZ[(State, State.Value)] = {
       val pos = exp.id.attr.posOpt.get
+      @pure def random(tpe: AST.Typed): ISZ[(State, State.Value)] = {
+        val s0 = state
+        val (s1, sym) = s0.freshSym(tpe, pos)
+        return ISZ((s1.addClaim(State.Claim.Def.Random(sym, pos)), sym))
+      }
       exp.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random => return random(exp.typedOpt.get)
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext && res.owner.size == 3
-          && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id == "random" =>
-          val s0 = state
-          val (s1, sym) = s0.freshSym(res.tpeOpt.get.ret, pos)
-          return ISZ((s1.addClaim(State.Claim.Def.Random(sym, pos)), sym))
+          && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id == "random" => return random(res.tpeOpt.get.ret)
         case res => return evalSelectH(split, res, exp.receiverOpt, exp.id.value, exp.typedOpt.get, pos)
       }
     }
