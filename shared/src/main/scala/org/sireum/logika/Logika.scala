@@ -31,10 +31,9 @@ import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.symbol.Resolver.QName
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Message, Position}
-import StateTransformer.{PrePost, PreResult}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
-import org.sireum.logika.Logika.{ContractCaseResult, InvokeMethodInfo, idIntro}
 import org.sireum.logika.plugin._
+import StateUtil._
 
 object Logika {
 
@@ -99,54 +98,6 @@ object Logika {
   object Reporter {
     def create: Reporter = {
       return ReporterImpl(ISZ())
-    }
-  }
-
-  @datatype class CurrentIdPossCollector(context: ISZ[String], id: String) extends PrePost[Set[Position]] {
-    override def preStateClaimLetCurrentId(ctx: Set[Position],
-                                           o: State.Claim.Let.CurrentId): PreResult[Set[Position], State.Claim.Let] = {
-      return if (o.defPosOpt.nonEmpty && o.context == context && o.id == id) PreResult(ctx + o.defPosOpt.get, T, None())
-      else PreResult(ctx, T, None())
-    }
-  }
-
-  @datatype class CurrentNamePossCollector(ids: ISZ[String]) extends PrePost[ISZ[Position]] {
-    override def preStateClaimLetCurrentName(ctx: ISZ[Position],
-                                             o: State.Claim.Let.CurrentName): PreResult[ISZ[Position], State.Claim.Let] = {
-      return if (o.defPosOpt.nonEmpty && o.ids == ids) PreResult(ctx :+ o.defPosOpt.get, T, None())
-      else PreResult(ctx, T, None())
-    }
-  }
-
-  @datatype class CurrentIdRewriter(posOpt: Option[Position], nextFresh: Z,
-                                    map: HashMap[(ISZ[String], String), (ISZ[Position], Z, B)])
-    extends PrePost[ISZ[State.Claim]] {
-    override def preStateClaimLetCurrentId(ctx: ISZ[State.Claim],
-                                           o: State.Claim.Let.CurrentId): PreResult[ISZ[State.Claim], State.Claim.Let] = {
-      map.get((o.context, o.id)) match {
-        case Some((poss, num, addNewSym)) =>
-          var newCtx = ctx
-          if (addNewSym) {
-            newCtx = newCtx :+ State.Claim.Let.CurrentId(F,
-              State.Value.Sym(nextFresh + ctx.size, o.sym.tipe, posOpt.get), o.context, o.id, posOpt)
-          }
-          posOpt match {
-            case Some(pos) =>
-            case _ =>
-          }
-          return PreResult(newCtx, T, Some(State.Claim.Let.Id(o.sym, o.context, o.id, num, poss)))
-        case _ => return PreResult(ctx, T, None())
-      }
-    }
-  }
-
-  @datatype class CurrentNameRewriter(map: HashMap[ISZ[String], (ISZ[Position], Z)]) extends PrePost[B] {
-    override def preStateClaimLetCurrentName(ctx: B,
-                                             o: State.Claim.Let.CurrentName): PreResult[B, State.Claim.Let] = {
-      map.get(o.ids) match {
-        case Some((poss, num)) => return PreResult(ctx, T, Some(State.Claim.Let.Name(o.sym, o.ids, num, poss)))
-        case _ => return PreResult(ctx, T, None())
-      }
     }
   }
 
@@ -578,7 +529,7 @@ object Logika {
   }
 
   def collectLocalPoss(s0: State, lcontext: ISZ[String], id: String): ISZ[Position] = {
-    return StateTransformer(Logika.CurrentIdPossCollector(lcontext, id)).transformState(Set.empty, s0).ctx.elements
+    return StateTransformer(CurrentIdPossCollector(lcontext, id)).transformState(Set.empty, s0).ctx.elements
   }
 
   def rewriteLocal(s0: State, addNewSym: B, lcontext: ISZ[String], id: String, posOpt: Option[Position],
@@ -590,7 +541,7 @@ object Logika {
     }
     val (s1, num) = s0.fresh
     val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z, B)] + (lcontext, id) ~> ((poss, num, addNewSym))
-    val r = StateTransformer(Logika.CurrentIdRewriter(posOpt, s1.nextFresh, locals)).transformState(ISZ(), s1)
+    val r = StateTransformer(CurrentIdRewriter(posOpt, s1.nextFresh, locals)).transformState(ISZ(), s1)
     val s2 = r.resultOpt.get
     return s2(nextFresh = s2.nextFresh + r.ctx.size, claims = s2.claims ++ r.ctx)
   }
@@ -609,7 +560,7 @@ object Logika {
         s1 = s2
       }
     }
-    val r = StateTransformer(Logika.CurrentIdRewriter(None(), s1.nextFresh, locals)).transformState(ISZ(), s1)
+    val r = StateTransformer(CurrentIdRewriter(None(), s1.nextFresh, locals)).transformState(ISZ(), s1)
     return (r.resultOpt.getOrElse(s1), r.ctx)
   }
 
@@ -620,7 +571,7 @@ object Logika {
     var current = state
     var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z, B)]
     for (l <- localVars) {
-      val poss = StateTransformer(Logika.CurrentIdPossCollector(l.context, l.id)).
+      val poss = StateTransformer(CurrentIdPossCollector(l.context, l.id)).
         transformState(Set.empty, current).ctx.elements
       if (poss.isEmpty) {
         reporter.error(posOpt, kind, s"Missing Modifies clause for ${l.id}")
@@ -630,7 +581,7 @@ object Logika {
       current = s1
       locals = locals + (l.context, l.id) ~> ((poss, num, introSym))
     }
-    val r = StateTransformer(Logika.CurrentIdRewriter(posOpt, current.nextFresh, locals)).transformState(ISZ(), current)
+    val r = StateTransformer(CurrentIdRewriter(posOpt, current.nextFresh, locals)).transformState(ISZ(), current)
     current = r.resultOpt.get
     return current(nextFresh = current.nextFresh + r.ctx.size, claims = current.claims ++ r.ctx)
   }
@@ -644,7 +595,7 @@ object Logika {
     var vars = HashMap.empty[ISZ[String], (ISZ[Position], Z)]
     for (l <- objectVars.keys) {
       val ids = l.owner :+ l.id
-      val poss = StateTransformer(Logika.CurrentNamePossCollector(ids)).
+      val poss = StateTransformer(CurrentNamePossCollector(ids)).
         transformState(ISZ(), current).ctx
       if (poss.isEmpty) {
         reporter.error(Some(pos), kind, s"Missing Modifies clause for ${(l.owner, ".")}.${l.id}")
@@ -654,7 +605,7 @@ object Logika {
       current = s1
       vars = vars + ids ~> ((poss, num))
     }
-    current = StateTransformer(Logika.CurrentNameRewriter(vars)).transformState(T, current).resultOpt.get
+    current = StateTransformer(CurrentNameRewriter(vars)).transformState(T, current).resultOpt.get
     for (p <- objectVars.entries) {
       val (x, (t, namePos)) = p
       current = nameIntro(pos, current, x.owner :+ x.id, t, Some(namePos))._1
@@ -746,7 +697,7 @@ import Logika.Split
     return s2(status = F)
   }
 
-  def strictPureMethod(smt2: Smt2, state: State, imi: InvokeMethodInfo, substMap: HashMap[String, AST.Typed],
+  def strictPureMethod(smt2: Smt2, state: State, imi: Logika.InvokeMethodInfo, substMap: HashMap[String, AST.Typed],
                        reporter: Reporter): (State, State.ProofFun) = {
     val funType = imi.res.tpeOpt.get.subst(substMap)
     val pf: State.ProofFun = {
@@ -1608,7 +1559,7 @@ import Logika.Split
       return r
     }
 
-    def methodInfo(isInObject: B, owner: QName, id: String): InvokeMethodInfo = {
+    def methodInfo(isInObject: B, owner: QName, id: String): Logika.InvokeMethodInfo = {
       def extractAssignExpOpt(mi: lang.symbol.Info.Method): Option[AST.AssignExp] = {
         if (mi.ast.purity == AST.Purity.StrictPure) {
           mi.ast.bodyOpt.get.stmts match {
@@ -1627,10 +1578,10 @@ import Logika.Split
       if (isInObject) {
         th.nameMap.get(owner :+ id) match {
           case Some(mi: lang.symbol.Info.Method) =>
-            return InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
+            return Logika.InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
               extractAssignExpOpt(mi))
           case Some(mi: lang.symbol.Info.ExtMethod) =>
-            return InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), None())
+            return Logika.InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), None())
           case info => halt(s"Infeasible: $owner.$id => $info")
         }
       } else {
@@ -1638,12 +1589,12 @@ import Logika.Split
           case Some(info: lang.symbol.TypeInfo.Adt) =>
             info.methods.get(id) match {
               case Some(mi) =>
-                return InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
+                return Logika.InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
                   extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
-                    return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple.empty,
+                    return Logika.InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple.empty,
                       extractResolvedInfo(mi.ast.attr), None())
                   case _ => halt("Infeasible")
                 }
@@ -1651,12 +1602,12 @@ import Logika.Split
           case Some(info: lang.symbol.TypeInfo.Sig) =>
             info.methods.get(id) match {
               case Some(mi) =>
-                return InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
+                return Logika.InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
                   extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
-                    return InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple.empty,
+                    return Logika.InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple.empty,
                       extractResolvedInfo(mi.ast.attr), None())
                   case _ => halt("Infeasible")
                 }
@@ -1748,7 +1699,7 @@ import Logika.Split
 
         def evalContractCase(logikaComp: Logika, currentReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
                              labelOpt: Option[AST.Exp.LitString], invs: ISZ[Info.Inv], requires: ISZ[AST.Exp],
-                             ensures: ISZ[AST.Exp]): ContractCaseResult = {
+                             ensures: ISZ[AST.Exp]): Logika.ContractCaseResult = {
           val modLocals = contract.modifiedLocalVars
 
           def modVarsResult(ms0: State, mposOpt: Option[Position]): (State, State.Value) = {
@@ -1849,7 +1800,7 @@ import Logika.Split
             if (!cs1.status) {
               val (cs3, rsym) = cs1.freshSym(AST.Typed.b, pos)
               cs1 = cs3.addClaim(State.Claim.Let.And(rsym, requireSyms))
-              return ContractCaseResult(F, cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+              return Logika.ContractCaseResult(F, cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
             }
             i = i + 1
           }
@@ -1897,7 +1848,7 @@ import Logika.Split
             if (!cs1.status) {
               val (cs5, rsym) = cs1.freshSym(AST.Typed.b, pos)
               cs1 = cs5.addClaim(State.Claim.Let.And(rsym, requireSyms))
-              return ContractCaseResult(T, cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+              return Logika.ContractCaseResult(T, cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
             }
             i = i + 1
           }
@@ -1916,7 +1867,7 @@ import Logika.Split
           cs1 = modVarsRewrite(cs1, posOpt)
           val (cs6, rsym) = cs1.freshSym(AST.Typed.b, pos)
           cs1 = cs6.addClaim(State.Claim.Let.And(rsym, requireSyms))
-          return ContractCaseResult(T, Logika.conjunctClaimSuffix(cs0, cs1), result, State.Claim.Prop(T, rsym),
+          return Logika.ContractCaseResult(T, Logika.conjunctClaimSuffix(cs0, cs1), result, State.Claim.Prop(T, rsym),
             rep.messages)
         }
 
@@ -1980,8 +1931,8 @@ import Logika.Split
           case contract: AST.MethodContract.Cases =>
             val root = s1
             var isPreOK = F
-            var ccrs = ISZ[ContractCaseResult]()
-            var okCcrs = ISZ[ContractCaseResult]()
+            var ccrs = ISZ[Logika.ContractCaseResult]()
+            var okCcrs = ISZ[Logika.ContractCaseResult]()
             for (cas <- contract.cases) {
               val ccr = evalContractCase(logikaComp, currentReceiverOpt, T, s1,
                 if (cas.label.value == "") None() else Some(cas.label), invs, cas.requires, cas.ensures)
@@ -2014,7 +1965,7 @@ import Logika.Split
                 reporter.reports(ccr.messages)
               }
               var nextFresh: Z =
-                ops.ISZOps(okCcrs).foldLeft((nf: Z, ccr: ContractCaseResult) =>
+                ops.ISZOps(okCcrs).foldLeft((nf: Z, ccr: Logika.ContractCaseResult) =>
                   if (nf < ccr.state.nextFresh) ccr.state.nextFresh else nf, -1)
               if (!isUnit) {
                 nextFresh = nextFresh + 1
@@ -2031,7 +1982,7 @@ import Logika.Split
                 var claims = ISZ[State.Claim]()
                 for (i <- 0 until root.claims.size) {
                   val rootClaim = root.claims(i)
-                  if (ops.ISZOps(okCcrs).forall((ccr: ContractCaseResult) => ccr.state.claims(i) == rootClaim)) {
+                  if (ops.ISZOps(okCcrs).forall((ccr: Logika.ContractCaseResult) => ccr.state.claims(i) == rootClaim)) {
                     claims = claims :+ rootClaim
                   } else {
                     claims = claims :+ State.Claim.And(
@@ -2499,14 +2450,14 @@ import Logika.Split
   def evalAssignObjectVarH(s0: State, ids: ISZ[String], rhs: State.Value.Sym, namePosOpt: Option[Position],
                            reporter: Reporter): State = {
     val s2: State = {
-      val poss = StateTransformer(Logika.CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
+      val poss = StateTransformer(CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
       if (poss.isEmpty) {
         reporter.error(namePosOpt, Logika.kind, s"Missing Modifies clause for ${(ids, ".")}.")
         return s0(status = F)
       }
       val (s1, num) = s0.fresh
       val objectVars = HashMap.empty[ISZ[String], (ISZ[Position], Z)] + ids ~> ((poss, num))
-      StateTransformer(Logika.CurrentNameRewriter(objectVars)).transformState(T, s1).resultOpt.get
+      StateTransformer(CurrentNameRewriter(objectVars)).transformState(T, s1).resultOpt.get
     }
     return s2(claims = s2.claims :+ State.Claim.Let.CurrentName(rhs, ids, namePosOpt))
   }

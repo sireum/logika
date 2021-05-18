@@ -31,7 +31,7 @@ import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.Reporter
-import org.sireum.logika.Smt2.stTrue
+import StateUtil._
 
 object Smt2 {
 
