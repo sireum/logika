@@ -33,7 +33,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Message, Position}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.plugin._
-import StateUtil._
+import Util._
 
 object Logika {
 

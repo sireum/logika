@@ -85,7 +85,7 @@ object ClaimDefs {
 
 }
 
-object StateUtil {
+object Util {
   @record class LetCollector(var value: HashMap[Z, HashSet[State.Claim.Let]]) extends MStateTransformer {
 
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {

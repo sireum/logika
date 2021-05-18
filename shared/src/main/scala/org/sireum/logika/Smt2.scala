@@ -31,7 +31,7 @@ import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.Reporter
-import StateUtil._
+import Util._
 
 object Smt2 {
 
@@ -947,8 +947,8 @@ object Smt2 {
     }
     var decls: HashSMap[String, ST] = HashSMap.empty[String, ST] ++
       (for (c <- claims; p <- c2DeclST(c)) yield p)
-    val lets = StateUtil.collectLetClaims(simplifiedQuery, claims)
-    val sv2ST = StateUtil.value2ST(this, lets)
+    val lets = Util.collectLetClaims(simplifiedQuery, claims)
+    val sv2ST = Util.value2ST(this, lets)
     var claimSmts = ISZ[String]()
     for (c <- claims) {
       c2ST(c, sv2ST, lets) match {
@@ -1257,7 +1257,7 @@ object Smt2 {
     }
 
     def simplified: ST = {
-      var lets = StateUtil.collectLetClaims(simplifiedQuery, claims)
+      var lets = Util.collectLetClaims(simplifiedQuery, claims)
       letsOpt match {
         case Some(ls) =>
           for (p <- ls.entries) {
@@ -1266,7 +1266,7 @@ object Smt2 {
           }
         case _ =>
       }
-      val sv2ST = StateUtil.value2ST(this, lets)
+      val sv2ST = Util.value2ST(this, lets)
       var simplifiedClaimSTs = ISZ[ST]()
       for (i <- 0 until (if (isImply) claims.size - 1 else claims.size)) {
         c2ST(claims(i), sv2ST, lets) match {
