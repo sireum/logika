@@ -723,6 +723,12 @@ object Smt2 {
       val tShlId = typeOpId(t, "<<")
       val tShrId = typeOpId(t, ">>")
       val tUshrId = typeOpId(t, ">>>")
+      val tMaxOpt: Option[ST] =
+        if (ti.ast.hasMax) Some(st"(define-const ${typeOpId(t, "MAX")} $tId ${toVal(t, ti.ast.max)})")
+        else None()
+      val tMinOpt: Option[ST] =
+        if (ti.ast.hasMax) Some(st"(define-const ${typeOpId(t, "MIN")}  $tId ${toVal(t, ti.ast.min)})")
+        else None()
       (ti.ast.isSigned, ti.ast.isBitVector) match {
         case (T, T) =>
           addTypeDecl(
@@ -742,7 +748,9 @@ object Smt2 {
                  |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvsrem x y))
                  |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
                  |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvashr x y))
-                 |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))""")
+                 |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
+                 |$tMaxOpt
+                 |$tMinOpt""")
         case (F, T) =>
           addTypeDecl(
             st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
@@ -761,7 +769,9 @@ object Smt2 {
                 |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvurem x y))
                 |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
                 |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvlshr x y))
-                |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))""")
+                |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
+                |$tMaxOpt
+                |$tMinOpt""")
         case (_, _) =>
           addTypeDecl(
             st"""(define-sort $tId () Int)
@@ -776,7 +786,9 @@ object Smt2 {
                 |(define-fun $tSubId ((x $tId) (y $tId)) $tId (- x y))
                 |(define-fun $tMulId ((x $tId) (y $tId)) $tId (* x y))
                 |(define-fun $tDivId ((x $tId) (y $tId)) $tId (div x y))
-                |(define-fun $tRemId ((x $tId) (y $tId)) $tId (mod x y))""")
+                |(define-fun $tRemId ((x $tId) (y $tId)) $tId (mod x y))
+                |$tMaxOpt
+                |$tMinOpt""")
       }
     }
 
