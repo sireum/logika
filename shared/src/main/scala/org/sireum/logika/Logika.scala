@@ -235,9 +235,28 @@ object Logika {
 
   object Task {
 
+    @record class IndexTypeVarCollector(var s: HashSet[AST.Typed.TypeVar]) extends AST.MTransformer {
+      override def postTypedName(o: AST.Typed.Name): MOption[AST.Typed] = {
+        if (o.ids == AST.Typed.isName || o.ids == AST.Typed.msName) {
+          o.args(0) match {
+            case t: AST.Typed.TypeVar => s = s + t
+            case _ =>
+          }
+        }
+        return super.postTypedName(o)
+      }
+    }
+
     @datatype class Stmts(th: TypeHierarchy, config: Config, stmts: ISZ[AST.Stmt], plugins: ISZ[Plugin]) extends Task {
       override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
         val logika = Logika(th, config, Context.empty, F, plugins)
+        val itvc = IndexTypeVarCollector(HashSet.empty)
+        for (stmt <- stmts) {
+          itvc.transformStmt(stmt)
+        }
+        for (tv <- itvc.s.elements) {
+          smt2.addTypeVarIndex(tv)
+        }
         for (state <- logika.evalStmts(Split.Default, smt2, None(), T, State.create, stmts, reporter) if state.status) {
           if (stmts.nonEmpty) {
             val lastPos = stmts(stmts.size - 1).posOpt.get
@@ -250,6 +269,11 @@ object Logika {
 
     @datatype class Method(th: TypeHierarchy, config: Config, method: AST.Stmt.Method, plugins: ISZ[Plugin]) extends Task {
       override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
+        val itvc = IndexTypeVarCollector(HashSet.empty)
+        itvc.transformStmt(method)
+        for (tv <- itvc.s.elements) {
+          smt2.addTypeVarIndex(tv)
+        }
         checkMethod(th, plugins, method, config, smt2, reporter)
         return reporter.messages
       }
@@ -2258,6 +2282,20 @@ import Logika.Split
       return r
     }
 
+    def evalIsInBound(s0: State, receiver: AST.Exp, index: AST.Exp, attr: AST.ResolvedAttr): ISZ[(State, State.Value)] = {
+      var r = ISZ[(State, State.Value)]()
+      for (sv <- evalExp(split, smt2, rtCheck, s0, receiver, reporter)) {
+        for (sv2 <- evalExp(split, smt2, rtCheck, sv._1, index, reporter)) {
+          val s1 = sv2._1
+          val rcv = sv._2
+          val idx = sv2._2
+          val (s2, sym) = s1.freshSym(AST.Typed.b, attr.posOpt.get)
+          r = r :+ ((s2.addClaim(State.Claim.Let.SeqInBound(sym, rcv, idx)), sym))
+        }
+      }
+      return r
+    }
+
     def expH(s0: State): ISZ[(State, State.Value)] = {
       e match {
         case lit: AST.Lit => return ISZ((s0, evalLit(lit)))
@@ -2280,7 +2318,11 @@ import Logika.Split
                 case AST.MethodMode.Spec if res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName =>
                   return evalSeqIndexValidSize(e.targs(0), e.args(0))
                 case AST.MethodMode.Method =>
-                  return evalInvoke(s0, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
+                  if (res.id == "isInBound" && (res.owner == AST.Typed.isName || res.owner == AST.Typed.msName)) {
+                    return evalIsInBound(s0, e.receiverOpt.get, e.args(0), e.attr)
+                  } else {
+                    return evalInvoke(s0, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
+                  }
                 case AST.MethodMode.Ext =>
                   return evalInvoke(s0, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
                 case _ =>
