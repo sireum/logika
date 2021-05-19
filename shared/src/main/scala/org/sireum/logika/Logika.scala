@@ -669,11 +669,12 @@ import Logika.Split
     return T
   }
 
-  @memoize def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
+  def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
     if (tipe == AST.Typed.z) {
       return State.Value.Z(0, pos)
     }
-    halt(s"TODO: 0 of type $tipe") // TODO
+    val ti = th.typeMap.get(tipe.ids).get.asInstanceOf[TypeInfo.SubZ]
+    return z2SubZVal(ti, 0, pos)
   }
 
   def checkSeqIndexing(smt2: Smt2, rtCheck: B, s0: State, seq: State.Value, i: State.Value, posOpt: Option[Position],
@@ -1174,7 +1175,26 @@ import Logika.Split
       @pure def random(tpe: AST.Typed): ISZ[(State, State.Value)] = {
         val s0 = state
         val (s1, sym) = s0.freshSym(tpe, pos)
-        return ISZ((s1.addClaim(State.Claim.Def.Random(sym, pos)), sym))
+        var s2 = s1.addClaim(State.Claim.Def.Random(sym, pos))
+        tpe match {
+          case tpe: AST.Typed.Name =>
+            th.typeMap.get(tpe.ids).get match {
+              case ti: TypeInfo.SubZ =>
+                if (ti.ast.hasMin) {
+                  val (s3, minCond) = s2.freshSym(tpe, pos)
+                  s2 = s3.addClaims(ISZ(State.Claim.Let.Binary(minCond, z2SubZVal(ti, ti.ast.min, pos),
+                    AST.Exp.BinaryOp.Le, sym, tpe), State.Claim.Prop(T, minCond)))
+                }
+                if (ti.ast.hasMax) {
+                  val (s4, maxCond) = s2.freshSym(tpe, pos)
+                  s2 = s4.addClaims(ISZ(State.Claim.Let.Binary(maxCond, sym, AST.Exp.BinaryOp.Le,
+                    z2SubZVal(ti, ti.ast.min, pos), tpe), State.Claim.Prop(T, maxCond)))
+                }
+              case _ =>
+            }
+          case _ =>
+        }
+        return ISZ((s2, sym))
       }
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random => return random(exp.typedOpt.get)
