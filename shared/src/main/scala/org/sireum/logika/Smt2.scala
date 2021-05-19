@@ -520,6 +520,7 @@ object Smt2 {
       val prependId = typeOpId(t, "+:")
       val upId = typeOpId(t, "up")
       val eqId = typeOpId(t, "==")
+      val neId = typeOpId(t, "!=")
       val isInBoundId = typeOpId(t, "isInBound")
       val itLeId = typeOpId(it, "<=")
       val itEqId = typeOpId(it, "==")
@@ -591,6 +592,7 @@ object Smt2 {
             |    (= ($sizeId x) ($sizeId y))
             |    ($itEqId ($lastIndexId x) ($lastIndexId y))
             |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x))) (= (select x i) (select y i))))))""")
+      addSTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       if (isAdtType(et)) {
         addSTypeDecl(
           st"""(assert (forall ((x $tId) (i $itId) (v ADT))
