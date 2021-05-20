@@ -554,7 +554,7 @@ object Smt2 {
         case _ => halt(s"Infeasible: $it")
       }
       addSTypeDecl(st"(define-fun $firstIndexId ((s $tId)) $itId $itMin)")
-      addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
+      addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and (not (|Z.==| ($sizeId x) 0)) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
       addSTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       addSTypeDecl(
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
