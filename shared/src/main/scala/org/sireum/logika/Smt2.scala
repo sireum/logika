@@ -389,7 +389,8 @@ object Smt2 {
     shortIdsUp(shortIds + ids ~> shortenedIds)
   }
 
-  def addSeqLit(t: AST.Typed.Name, n: Z): Unit = {
+  def addSeqLit(t: AST.Typed.Name, n: Z, reporter: Reporter): Unit = {
+    addType(t, reporter)
     seqLitsUp(seqLits + Smt2.SeqLit(t, n))
   }
 

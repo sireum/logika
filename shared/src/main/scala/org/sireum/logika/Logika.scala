@@ -218,14 +218,23 @@ object Logika {
       }
     }
 
-    @datatype class Method(th: TypeHierarchy, config: Config, method: AST.Stmt.Method, plugins: ISZ[Plugin]) extends Task {
+    @datatype class Method(par: B, th: TypeHierarchy, config: Config, method: AST.Stmt.Method, plugins: ISZ[Plugin]) extends Task {
       override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
         val itvc = IndexTypeVarCollector(HashSet.empty)
         itvc.transformStmt(method)
-        for (tv <- itvc.s.elements) {
-          smt2.addTypeVarIndex(tv)
+        val tvs = itvc.s.elements
+        if (!par && tvs.nonEmpty) {
+          val csmt2 = smt2
+          for (tv <- tvs) {
+            csmt2.addTypeVarIndex(tv)
+          }
+          checkMethod(th, plugins, method, config, csmt2, reporter)
+        } else {
+          for (tv <- tvs) {
+            smt2.addTypeVarIndex(tv)
+          }
+          checkMethod(th, plugins, method, config, smt2, reporter)
         }
-        checkMethod(th, plugins, method, config, smt2, reporter)
         return reporter.messages
       }
     }
@@ -285,9 +294,9 @@ object Logika {
                   stmt match {
                     case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty =>
                       if (stmt.purity == AST.Purity.StrictPure && stmt.sig.typeParams.isEmpty) {
-                        spMethodTasks = spMethodTasks :+ Task.Method(th, config, stmt, plugins)
+                        spMethodTasks = spMethodTasks :+ Task.Method(par, th, config, stmt, plugins)
                       } else {
-                        tasks = tasks :+ Task.Method(th, config, stmt, plugins)
+                        tasks = tasks :+ Task.Method(par, th, config, stmt, plugins)
                       }
                     case stmt: AST.Stmt.Object => rec(stmt.stmts)
                     case stmt: AST.Stmt.Adt => rec(stmt.stmts)
@@ -1255,7 +1264,7 @@ import Logika.Split
                 i = i + 1
               }
             }
-            smt2.addSeqLit(t, indices.size)
+            smt2.addSeqLit(t, indices.size, reporter)
             val as: ISZ[State.Claim.Def.SeqLit.Arg] =
               for (p <- ops.ISZOps(indices).zip(args)) yield State.Claim.Def.SeqLit.Arg(p._1, p._2.get)
             r = r :+ ((s1.addClaim(State.Claim.Def.SeqLit(sym, as)), sym))
