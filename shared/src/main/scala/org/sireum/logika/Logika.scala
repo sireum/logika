@@ -3354,16 +3354,27 @@ import Logika.Split
       }
       var st0 = s0
       for (sequent <- deduceStmt.sequents if st0.status) {
-        var p = premises(st0, sequent)
-        for (step <- sequent.steps if p._1.status) {
-          p = evalProofStep(smt2, p, step, reporter)
-        }
-        st0 = s0(status = p._1.status, nextFresh = p._1.nextFresh, claims = s0.claims)
-        val provenClaims = HashSet ++ (for (spc <- p._2.values if spc.isInstanceOf[StepProofContext.Regular]) yield
-          AST.Util.deBruijn(spc.asInstanceOf[StepProofContext.Regular].exp))
-        if (st0.status && !provenClaims.contains(AST.Util.deBruijn(sequent.conclusion))) {
-          reporter.error(sequent.conclusion.posOpt, Logika.kind, "The sequent's conclusion has not been proven")
-          st0 = st0(status = F)
+        if (deduceStmt.justOpt.isEmpty && sequent.steps.isEmpty) {
+          var i = 0
+          for (premise <- sequent.premises if st0.status) {
+            st0 = evalAssume(smt2, rtCheck, s"Premise #$i", st0, premise, premise.posOpt, reporter)._1
+            i = i + 1
+          }
+          if (st0.status) {
+            st0 = evalAssert(smt2, rtCheck, "Conclusion", st0, sequent.conclusion, sequent.conclusion.posOpt, reporter)._1
+          }
+        } else {
+          var p = premises(st0, sequent)
+          for (step <- sequent.steps if p._1.status) {
+            p = evalProofStep(smt2, p, step, reporter)
+          }
+          st0 = s0(status = p._1.status, nextFresh = p._1.nextFresh, claims = s0.claims)
+          val provenClaims = HashSet ++ (for (spc <- p._2.values if spc.isInstanceOf[StepProofContext.Regular]) yield
+            AST.Util.deBruijn(spc.asInstanceOf[StepProofContext.Regular].exp))
+          if (st0.status && !provenClaims.contains(AST.Util.deBruijn(sequent.conclusion))) {
+            reporter.error(sequent.conclusion.posOpt, Logika.kind, "The sequent's conclusion has not been proven")
+            st0 = st0(status = F)
+          }
         }
       }
       return ISZ(s0(status = st0.status, nextFresh = st0.nextFresh))
