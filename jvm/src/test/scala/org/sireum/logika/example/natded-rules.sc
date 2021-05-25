@@ -3,64 +3,37 @@
 import org.sireum._
 
 @pure def andI(p: B, q: B): Unit = {
-  Contract(
-    Requires(p, q),
-    Ensures(p & q)
-  )
+  Deduce((p, q) |- (p & q))
 }
 
 @pure def andE1(p: B, q: B): Unit = {
-  Contract(
-    Requires(p & q),
-    Ensures(p)
-  )
+  Deduce((p & q) |- p)
 }
 
 @pure def andE2(p: B, q: B): Unit = {
-  Contract(
-    Requires(p & q),
-    Ensures(q)
-  )
+  Deduce((p & q) |- q)
 }
 
 @pure def orI1(p: B, q: B): Unit = {
-  Contract(
-    Requires(p),
-    Ensures(p | q)
-  )
+  Deduce(p |- (p | q))
 }
 
 @pure def orI2(p: B, q: B): Unit = {
-  Contract(
-    Requires(q),
-    Ensures(p | q)
-  )
+  Deduce(q |- (p | q))
 }
 
 @pure def implyE(p: B, q: B): Unit = {
-  Contract(
-    Requires(p ->: q, p),
-    Ensures(q)
-  )
+  Deduce((p ->: q, p) |- q)
 }
 
 @pure def negE(p: B): Unit = {
-  Contract(
-    Requires(p, !p),
-    Ensures(F)
-  )
+  Deduce((p, !p) |- F)
 }
 
-@pure def allE[T](P: T => B @pure, E: T): Unit = {
-  Contract(
-    Requires(All{(x: T) => P(x)}),
-    Ensures(P(E))
-  )
+@pure def allE[T](P: T => B@pure, E: T): Unit = {
+  Deduce(All { (x: T) => P(x) } |- P(E))
 }
 
-@pure def existsI[T](P: T => B @pure, E: T): Unit = {
-  Contract(
-    Requires(P(E)),
-    Ensures(Exists{(x: T) => P(x)})
-  )
+@pure def existsI[T](P: T => B@pure, E: T): Unit = {
+  Deduce(P(E) |- Exists { (x: T) => P(x) })
 }

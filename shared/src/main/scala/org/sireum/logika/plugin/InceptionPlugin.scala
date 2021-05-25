@@ -132,17 +132,29 @@ object InceptionPlugin {
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Inception]
     def handleH(res: AST.ResolvedInfo.Method, posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
       val mi = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
-      val contract: AST.MethodContract.Simple = mi.ast.contract match {
-        case c: AST.MethodContract.Simple => c
-        case _: AST.MethodContract.Cases =>
-          reporter.error(posOpt, Logika.kind, "Could not use method with contract cases")
-          return emptyResult
+      val (reads, requires, modifies, ensures): (ISZ[AST.Exp.Ident], ISZ[AST.Exp], ISZ[AST.Exp.Ident], ISZ[AST.Exp]) = {
+        if (mi.ast.contract.isEmpty) {
+          mi.ast.bodyOpt match {
+            case Some(AST.Body(ISZ(AST.Stmt.DeduceSequent(_, ISZ(sequent)), _*))) =>
+              (ISZ(), sequent.premises, ISZ(), ISZ(sequent.conclusion))
+            case _ =>
+              reporter.error(posOpt, Logika.kind, "Could not use method without contract or a single sequent deduction")
+              return emptyResult
+          }
+        } else {
+          mi.ast.contract match {
+            case c: AST.MethodContract.Simple => (c.reads, c.requires, c.modifies, c.ensures)
+            case _: AST.MethodContract.Cases =>
+              reporter.error(posOpt, Logika.kind, "Could not use method with contract cases")
+              return emptyResult
+          }
+        }
       }
-      if (contract.reads.nonEmpty) {
+      if (reads.nonEmpty) {
         reporter.error(posOpt, Logika.kind, "Could not use method with non-empty reads clause")
         return emptyResult
       }
-      if (contract.modifies.nonEmpty) {
+      if (modifies.nonEmpty) {
         reporter.error(posOpt, Logika.kind, "Could not use method with non-empty modifies clause")
         return emptyResult
       }
@@ -160,7 +172,7 @@ object InceptionPlugin {
           }
         }
         var ok = T
-        for (require <- contract.requires) {
+        for (require <- requires) {
           val req = ips.transformExp(require).getOrElseEager(require)
           if (ips.reporter.messages.isEmpty && !provenClaims.contains(AST.Util.deBruijn(req))) {
             val pos = require.posOpt.get
@@ -189,15 +201,14 @@ object InceptionPlugin {
         if (!ok) {
           return emptyResult
         }
-        val requires: ISZ[AST.Exp] =
-          for (require <- contract.requires) yield ips.transformExp(require).getOrElseEager(require)
+        val rs: ISZ[AST.Exp] = for (require <- requires) yield ips.transformExp(require).getOrElseEager(require)
         if (ips.reporter.messages.nonEmpty) {
           reporter.reports(ips.reporter.messages)
           return emptyResult
         }
-        for (i <- 0 until requires.size) {
-          if (!witnesses.contains(AST.Util.deBruijn(requires(i)))) {
-            val pos = contract.requires(i).posOpt.get
+        for (i <- 0 until rs.size) {
+          if (!witnesses.contains(AST.Util.deBruijn(rs(i)))) {
+            val pos = requires(i).posOpt.get
             reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]")
             ok = F
           }
@@ -206,12 +217,12 @@ object InceptionPlugin {
           return emptyResult
         }
       }
-      val ensures: ISZ[AST.Exp] = for (ensure <- contract.ensures) yield ips.transformExp(ensure).getOrElseEager(ensure)
+      val es: ISZ[AST.Exp] = for (ensure <- ensures) yield ips.transformExp(ensure).getOrElseEager(ensure)
       if (ips.reporter.messages.nonEmpty) {
         reporter.reports(ips.reporter.messages)
         return emptyResult
       }
-      if (!(HashSet ++ (for (e <- ensures) yield AST.Util.deBruijn(e))).contains(step.claimDeBruijn)) {
+      if (!(HashSet ++ (for (e <- es) yield AST.Util.deBruijn(e))).contains(step.claimDeBruijn)) {
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from any of ${mi.methodRes.id}'s post-conditions".render)
         return emptyResult
       }
