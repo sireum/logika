@@ -74,3 +74,16 @@ def andIntroInceptionExample(x: Z, y: Z): B = {
     //@formatter:on
   )
 }
+
+@pure def implyElim(p: B, q: B): Unit = {
+  Contract(
+    Requires(p ->: q, p),
+    Ensures(q)
+  )
+  Deduce(
+    1 #>  (p ->: q)        by "premise",
+    2 #>  p                by Premise,
+    3 #>  q                by Auto(ISZ(1, 2))
+  )
+}
+
