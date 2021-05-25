@@ -532,43 +532,56 @@ object Smt2 {
       val lastIndexId = typeOpId(t, "lastIndex")
       val zZero = toVal(AST.Typed.z, 0)
       val zOne = toVal(AST.Typed.z, 1)
+      val zAddId = typeOpId(AST.Typed.z, "+")
       val zSubId = typeOpId(AST.Typed.z, "-")
       val zGeId = typeOpId(AST.Typed.z, ">=")
+      val zEqId = typeOpId(AST.Typed.z, "==")
       addSTypeDecl(st"(define-sort $tId () (Array $itId $etId))")
       addSTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
       addSTypeDecl(st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
+      addSTypeDecl(st"(declare-fun $firstIndexId ($tId) $itId)")
       addSTypeDecl(st"(declare-fun $lastIndexId ($tId) $itId)")
-      val (itOne, itMin): (ST, ST) = it match {
+      val (itMin, itOne): (ST, ST) = it match {
         case it: AST.Typed.Name =>
           if (it == AST.Typed.z) {
-            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not (|Z.==| ($sizeId x) $zZero)) (= ($lastIndexId x) ($zSubId ($sizeId x) $zOne)))))")
-            (toVal(it, 1), toVal(it, 0))
+            val min = toVal(it, 0)
+            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
+            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($lastIndexId x) ($zSubId ($sizeId x) $zOne)))))")
+            (min, toVal(it, 1))
           } else {
-            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not (|Z.==| ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
             val ti = typeHierarchy.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.SubZ]
-            (toVal(it, 1), if (ti.ast.isZeroIndex) toVal(it, 0) else typeOpId(it, "Min"))
+            val min: ST = if (ti.ast.isZeroIndex) toVal(it, 0) else typeOpId(it, "Min")
+            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
+            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
+            (min, toVal(it, 1))
           }
         case it: AST.Typed.TypeVar =>
-          addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not (|Z.==| ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
-          (typeOpId(it, "1"), typeOpId(it, "Min"))
+          val min = typeOpId(it, "Min")
+          addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
+          addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
+          (min, typeOpId(it, "1"))
         case _ => halt(s"Infeasible: $it")
       }
-      addSTypeDecl(st"(define-fun $firstIndexId ((s $tId)) $itId $itMin)")
-      addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and (not (|Z.==| ($sizeId x) 0)) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
+      addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and (not ($zEqId ($sizeId x) 0)) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
       addSTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       addSTypeDecl(
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
             |  (and
-            |    ($itEqId ($sizeId z) ($itAddId ($sizeId x) $zOne))
-            |    ($itEqId ($lastIndexId z) ($itAddId ($lastIndexId x) $itOne))
+            |    ($itEqId ($sizeId z) ($zAddId ($sizeId x) $zOne))
+            |    ($itEqId ($lastIndexId z) (ite (= ($sizeId x) $zZero) $itMin ($itAddId ($lastIndexId x) $itOne)))
             |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                        (= ($atId z i) ($atId x i))))
             |    (= ($atId z ($lastIndexId z)) y)))""")
       addSTypeDecl(
         st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
             |  (and
-            |    (= ($sizeId z) (+ ($sizeId x) ($sizeId y)))
-            |    ($itEqId ($lastIndexId z) ($itAddId ($lastIndexId x) ($itSubId ($lastIndexId y) ($firstIndexId y))))
+            |    (= ($sizeId z) ($zAddId ($sizeId x) ($sizeId y)))
+            |    (ite (= ($sizeId x) $zZero)
+            |      (=> (not (= ($sizeId y) $zZero)) (= ($lastIndexId z) ($lastIndexId y)))
+            |      (= ($lastIndexId z)
+            |        (ite (= ($sizeId y) $zZero)
+            |          ($lastIndexId x)
+            |          ($itAddId ($lastIndexId x) ($itSubId ($lastIndexId y) ($firstIndexId y))))))
             |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                            (= ($atId z i) ($atId x i))))
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
@@ -576,8 +589,8 @@ object Smt2 {
       addSTypeDecl(
         st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
             |  (and
-            |    (= ($sizeId z) (+ ($sizeId y) 1))
-            |    ($itEqId ($lastIndexId z) ($itAddId ($lastIndexId y) $itOne))
+            |    (= ($sizeId z) ($zAddId ($sizeId y) 1))
+            |    ($itEqId ($lastIndexId z) (ite (= ($sizeId y) $zZero) $itMin ($itAddId ($lastIndexId y) $itOne)))
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId i $itOne)) ($atId y i))))
             |    (= ($atId z ($firstIndexId z)) x)))""")
@@ -592,7 +605,7 @@ object Smt2 {
             |  (and
             |    (= ($sizeId x) ($sizeId y))
             |    ($itEqId ($lastIndexId x) ($lastIndexId y))
-            |    (forall ((i $itId)) (=> (and (<= 0 i) (< i ($sizeId x))) (= (select x i) (select y i))))))""")
+            |    (forall ((i $itId)) (=> ($isInBoundId x i) (= (select x i) (select y i))))))""")
       addSTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       if (isAdtType(et)) {
         addSTypeDecl(
