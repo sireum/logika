@@ -258,7 +258,7 @@ object Logika {
     }
 
     def checkFileH(): Unit = {
-      val topUnitOpt = lang.parser.Parser(input).parseTopUnit[AST.TopUnit.Program](
+      val topUnitOpt = lang.parser.Parser(input).parseTopUnit[AST.TopUnit](
         isWorksheet = isWorksheet, isDiet = F, fileUriOpt = fileUriOpt, reporter = reporter)
       val libraryStartTime = extension.Time.currentMillis
       reporter.timing(parsingDesc, libraryStartTime - parsingStartTime)
@@ -267,7 +267,7 @@ object Logika {
         return
       }
       topUnitOpt match {
-        case Some(program) =>
+        case Some(program: AST.TopUnit.Program) =>
           if (!isWorksheet) {
             return
           }
