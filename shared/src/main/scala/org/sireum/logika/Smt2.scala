@@ -1366,7 +1366,7 @@ object Smt2 {
       case c: State.Claim.Let.Apply =>
         val args: ST =
           if (c.args.size == 1) v2st(c.args(0))
-          else st"(${typeOpId(AST.Typed.Tuple(c.sym.tipe.asInstanceOf[AST.Typed.Fun].args), "new")} ${(for (arg <- c.args) yield v2st(arg), " ")})"
+          else st"(${typeOpId(AST.Typed.Tuple(for (arg <- c.args) yield arg.tipe), "new")} ${(for (arg <- c.args) yield v2st(arg), " ")})"
         return st"(select ${if (c.isLocal) currentLocalIdString(c.context, c.id) else currentNameIdString(c.context :+ c.id)} $args)"
       case c: State.Claim.Let.IApply =>
         halt("TODO") // TODO

@@ -133,21 +133,11 @@ object InceptionPlugin {
     def handleH(res: AST.ResolvedInfo.Method, posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
       val mi = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
       val (reads, requires, modifies, ensures): (ISZ[AST.Exp.Ident], ISZ[AST.Exp], ISZ[AST.Exp.Ident], ISZ[AST.Exp]) = {
-        if (mi.ast.contract.isEmpty) {
-          mi.ast.bodyOpt match {
-            case Some(AST.Body(ISZ(AST.Stmt.DeduceSequent(_, ISZ(sequent)), _*))) =>
-              (ISZ(), sequent.premises, ISZ(), ISZ(sequent.conclusion))
-            case _ =>
-              reporter.error(posOpt, Logika.kind, "Could not use method without contract or a single sequent deduction")
-              return emptyResult
-          }
-        } else {
-          mi.ast.contract match {
-            case c: AST.MethodContract.Simple => (c.reads, c.requires, c.modifies, c.ensures)
-            case _: AST.MethodContract.Cases =>
-              reporter.error(posOpt, Logika.kind, "Could not use method with contract cases")
-              return emptyResult
-          }
+        mi.ast.contract match {
+          case c: AST.MethodContract.Simple => (c.reads, c.requires, c.modifies, c.ensures)
+          case _: AST.MethodContract.Cases =>
+            reporter.error(posOpt, Logika.kind, "Could not use method with contract cases")
+            return emptyResult
         }
       }
       if (reads.nonEmpty) {
