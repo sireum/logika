@@ -760,7 +760,7 @@ object Smt2 {
           st"""(define-fun $eqId ((x!0 $tId) (x!1 $tId)) B
               |  (and
               |    (= (type-of x!0) (type-of x!1) $thId)
-              |    ${(for (q <- fieldInfos) yield st"(${if (q.fieldAdtType.render == "ADT") st"|ADT.==|" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
+              |    ${(for (q <- fieldInfos if q.isParam) yield st"(${if (q.fieldAdtType.render == "ADT") st"|ADT.==|" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
         addTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       }

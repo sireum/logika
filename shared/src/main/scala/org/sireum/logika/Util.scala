@@ -27,6 +27,7 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.lang.{ast => AST}
 import org.sireum.message.Position
 
 @record class ClaimSTs(var value: ISZ[ST]) {
@@ -139,7 +140,7 @@ object Util {
     }
   }
 
-  @datatype class CurrentIdRewriter(posOpt: Option[Position], nextFresh: Z,
+  @datatype class CurrentIdRewriter(th: lang.tipe.TypeHierarchy, posOpt: Option[Position], nextFresh: Z,
                                     map: HashMap[(ISZ[String], String), (ISZ[Position], Z, B)])
     extends StateTransformer.PrePost[ISZ[State.Claim]] {
     override def preStateClaimLetCurrentId(ctx: ISZ[State.Claim],
@@ -148,8 +149,26 @@ object Util {
         case Some((poss, num, addNewSym)) =>
           var newCtx = ctx
           if (addNewSym) {
-            newCtx = newCtx :+ State.Claim.Let.CurrentId(F,
-              State.Value.Sym(nextFresh + ctx.size, o.sym.tipe, posOpt.get), o.context, o.id, posOpt)
+            val n = nextFresh + ctx.size
+            val sym = State.Value.Sym(n, o.sym.tipe, posOpt.get)
+            newCtx = newCtx :+ State.Claim.Let.CurrentId(F, sym, o.context, o.id, posOpt)
+            val tipe = sym.tipe
+            val pos = posOpt.get
+            if (!th.isMutable(tipe, T)) {
+              val cond = State.Value.Sym(n + 1, AST.Typed.b, pos)
+              newCtx = newCtx ++ ISZ[State.Claim](State.Claim.Let.Binary(cond, sym, AST.Exp.BinaryOp.Eq, o.sym, tipe),
+                State.Claim.Prop(T, cond))
+            } else if (AST.Util.isSeq(tipe)) {
+              val size1 = State.Value.Sym(n + 1, AST.Typed.z, pos)
+              val size2 = State.Value.Sym(n + 2, AST.Typed.z, pos)
+              val cond = State.Value.Sym(n + 3, AST.Typed.b, pos)
+              newCtx = newCtx ++ ISZ[State.Claim](
+                State.Claim.Let.FieldLookup(size1, o.sym, "size"),
+                State.Claim.Let.FieldLookup(size2, sym, "size"),
+                State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
+                State.Claim.Prop(T, cond)
+              )
+            }
           }
           return StateTransformer.PreResult(newCtx, T, Some(State.Claim.Let.Id(o.sym, o.context, o.id, num, poss)))
         case _ => return StateTransformer.PreResult(ctx, T, None())
@@ -157,11 +176,13 @@ object Util {
     }
   }
 
-  @datatype class CurrentNameRewriter(map: HashMap[ISZ[String], (ISZ[Position], Z)]) extends StateTransformer.PrePost[B] {
-    override def preStateClaimLetCurrentName(ctx: B,
-                                             o: State.Claim.Let.CurrentName): StateTransformer.PreResult[B, State.Claim.Let] = {
+  @datatype class CurrentNameRewriter(map: HashMap[ISZ[String], (ISZ[Position], Z)])
+    extends StateTransformer.PrePost[HashMap[ISZ[String], State.Value.Sym]] {
+    override def preStateClaimLetCurrentName(ctx: HashMap[ISZ[String], State.Value.Sym],
+                                             o: State.Claim.Let.CurrentName): StateTransformer.PreResult[HashMap[ISZ[String], State.Value.Sym], State.Claim.Let] = {
       map.get(o.ids) match {
-        case Some((poss, num)) => return StateTransformer.PreResult(ctx, T, Some(State.Claim.Let.Name(o.sym, o.ids, num, poss)))
+        case Some((poss, num)) => return StateTransformer.PreResult(ctx + o.ids ~> o.sym,
+          T, Some(State.Claim.Let.Name(o.sym, o.ids, num, poss)))
         case _ => return StateTransformer.PreResult(ctx, T, None())
       }
     }
