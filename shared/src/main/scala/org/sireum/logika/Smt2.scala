@@ -229,6 +229,10 @@ object Smt2 {
 
   def strictPureMethodsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit
 
+  def constraints: ISZ[ST]
+
+  def constraintsUp(newConstraints: ISZ[ST]): Unit
+
   def writeFile(dir: String, filename: String, content: String): Unit
 
   @strictpure def proofFunId(pf: State.ProofFun): ST =
@@ -373,6 +377,10 @@ object Smt2 {
 
   def addTypeDecls(typeDecls: ISZ[ST]): Unit = {
     typeDeclsUp(this.typeDecls ++ typeDecls)
+  }
+
+  def addConstraint(constraint: ST): Unit = {
+    constraintsUp(constraints :+ constraint)
   }
 
   def typeHierarchyIds: ISZ[ST]
@@ -647,6 +655,14 @@ object Smt2 {
             val childT = tipe.subst(sm)
             children = children :+ childT
             addType(childT, reporter)
+            val childThId = typeHierarchyId(childT)
+            addConstraint(
+              st"""(assert (forall ((o1 ADT) (o2 ADT))
+                  |  (=> (sub-type (type-of o1) $childThId)
+                  |      (sub-type (type-of o2) $childThId)
+                  |      (= (${typeOpId(t, "==")} o1 o2) (${typeOpId(childT, "==")} o1 o2)))
+                  |))"""
+            )
           }
         }
         posetUp(poset.addChildren(t, children))
@@ -688,7 +704,11 @@ object Smt2 {
         return Smt2.AdtFieldInfo(F, T, id, typeOpId(t, id), typeOpId(t, s"${id}_="), adtId(ft), ft)
       }
 
+      val eqId = typeOpId(t, "==")
+      val neId = typeOpId(t, "!=")
       if (ti.ast.isRoot) {
+        addAdtDecl(st"(declare-fun $eqId ($tId $tId) B)")
+        addAdtDecl(st"(define-fun $neId ((o1 $tId) (o2 $tId)) B (not ($eqId o1 o2)))")
         var leaves: ISZ[ST] = ISZ()
         for (child <- poset.childrenOf(t).elements) {
           typeHierarchy.typeMap.get(child.ids) match {
@@ -709,8 +729,6 @@ object Smt2 {
         }
       } else {
         val newId = typeOpId(t, "new")
-        val eqId = typeOpId(t, "==")
-        val neId = typeOpId(t, "!=")
         val params = HashSet.empty[String] ++ (for (p <- ti.ast.params) yield p.id.value)
         val fieldInfos: ISZ[Smt2.AdtFieldInfo] =
           (for (f <- ti.vars.values) yield fieldInfo(params.contains(f.ast.id.value), f)) ++ (for (f <- ti.specVars.values) yield specFieldInfo(f))
@@ -751,11 +769,38 @@ object Smt2 {
         addType(arg, reporter)
       }
       posetUp(poset.addNode(t))
-      addTypeDecl(st"(define-sort ${typeId(t)} () ADT)")
+      val tid = typeId(t)
+      addAdtDecl(st"(define-sort $tid () ADT)")
       val tId = typeHierarchyId(t)
       addTypeHiearchyId(tId)
-      addTypeDecl(st"(declare-const $tId Type)")
+      addAdtDecl(st"(declare-const $tId Type)")
+      val eqId = typeOpId(t, "==")
+      val neId = typeOpId(t, "!=")
+      addAdtDecl(st"(declare-fun $eqId ($tid $tid) B)")
+      addAdtDecl(st"(define-fun $neId ((o1 $tid) (o2 $tid)) B (not ($eqId o1 o2)))")
       addSub(T, t, ti.ast.typeParams, tId, ti.parents)
+      var ops = ISZ[(String, ST)]()
+      for (info <- ti.specVars.values) {
+        val opId = info.ast.id.value
+        val op = typeOpId(t, opId)
+        val opT = info.typedOpt.get
+        addType(opT, reporter)
+        val opTid = typeId(opT)
+        addAdtDecl(st"(declare-fun $op ($tid) $opTid)")
+        ops = ops :+ ((opId, opTid))
+      }
+      for (p <- ops) {
+        val (opId, opTid) = p
+        val opAssignId = s"${opId}_="
+        val op = typeOpId(t, opId)
+        val opAssign = typeOpId(t, opAssignId)
+        addTypeDecl(
+          st"""(define-fun $opAssign ((o $tid) ($opId $opTid) (o2 $tid)) B
+              |  (and
+              |    ($eqId o2 o)
+              |    ${(for (p2 <- ops if p2._1 != opId) yield st"(= (${typeOpId(t, p2._1)} o2) (${typeOpId(t, p2._1)} o))", "\n")}
+              |    (= $opId ($op o2) ($op o))))""")
+      }
     }
 
     def addSubZ(t: AST.Typed.Name, ti: TypeInfo.SubZ): Unit = {
@@ -1033,6 +1078,12 @@ object Smt2 {
       else Some(
         st"""(assert (distinct
             |  ${(typeHierarchyIds, "\n")}))""")
+    var cs: ISZ[ST] = constraints
+    if (typeHierarchyIds.size > 1) {
+      cs = cs :+
+        st"""(assert (distinct
+            |  ${(typeHierarchyIds, "\n")}))"""
+    }
 
     var adtEqs = ISZ[ST]()
     for (t <- poset.nodes.keys) {
@@ -1080,7 +1131,7 @@ object Smt2 {
           |          (= t (type-of y))
           |          ${(adtEqs, "\n")})))))
           |
-          |$distinctOpt
+          |${(constraints, "\n")}
           |
           |${(for (p <- strictPureMethods.values) yield p._1, "\n")}
           |

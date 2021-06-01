@@ -54,7 +54,7 @@ object Smt2Impl {
   def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, cache: Smt2Impl.Cache, timeoutInMs: Z,
                          charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B, reporter: Logika.Reporter): Smt2Impl = {
     val r = Smt2Impl(configs, typeHierarchy, cache, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery,
-      HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), HashMap.empty,
+      HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), HashMap.empty,
       HashSMap.empty, HashMap.empty, HashSSet.empty)
     r.addType(AST.Typed.z, reporter)
     return r
@@ -74,6 +74,7 @@ object Smt2Impl {
                        var adtDecls: ISZ[ST],
                        var sTypeDecls: ISZ[ST],
                        var typeDecls: ISZ[ST],
+                       var constraints: ISZ[ST],
                        var typeHierarchyIds: ISZ[ST],
                        var shortIds: HashMap[ISZ[String], ISZ[String]],
                        var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)],
@@ -98,6 +99,10 @@ object Smt2Impl {
 
   def typeDeclsUp(newTypeDecls: ISZ[ST]): Unit = {
     typeDecls = newTypeDecls
+  }
+
+  def constraintsUp(newConstraints: ISZ[ST]): Unit = {
+    constraints = newConstraints
   }
 
   def typeHierarchyIdsUp(newTypeHierarchyIds: ISZ[ST]): Unit = {
