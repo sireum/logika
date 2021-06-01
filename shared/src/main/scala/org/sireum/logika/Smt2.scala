@@ -48,6 +48,8 @@ object Smt2 {
   @datatype class MemPrinter(defs: HashMap[Z, ISZ[State.Claim.Def]]) {
   }
 
+  val topPrefix: String = "_"
+
   val basicTypes: HashSet[AST.Typed] = HashSet ++ ISZ[AST.Typed](
     AST.Typed.b,
     AST.Typed.z,
@@ -1153,7 +1155,7 @@ object Smt2 {
           }
       }
     }
-    return rec(ISZ(ids(ids.size - 1)))
+    return if (ids(0) === Smt2.topPrefix) ids2ST(ids) else rec(ISZ(ids(ids.size - 1)))
   }
 
   @pure def currentNameId(c: State.Claim.Let.CurrentName): ST = {
@@ -1570,10 +1572,11 @@ object Smt2 {
   def typeIdRaw(t: AST.Typed): ST = {
     t match {
       case t: AST.Typed.Name =>
+        val ids: ISZ[String] = if (t.ids.size === 1) Smt2.topPrefix +: t.ids else t.ids
         if (t.args.isEmpty) {
-          return st"${(shorten(t.ids), ".")}"
+          return st"${(shorten(ids), ".")}"
         } else {
-          return st"${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]"
+          return st"${(shorten(ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]"
         }
       case t: AST.Typed.TypeVar => return st"$$${t.id}"
       case t: AST.Typed.Enum => return st"${(shorten(t.name), ".")}"
@@ -1586,14 +1589,15 @@ object Smt2 {
   @pure def id(t: AST.Typed, prefix: String): ST = {
     t match {
       case t: AST.Typed.Name =>
-        if (t.ids.size == 3 && t.args.isEmpty && t.ids(0) == "org" && t.ids(1) == "sireum") {
-          return st"${t.ids(2)}"
+        val ids: ISZ[String] = if (t.ids.size === 1) Smt2.topPrefix +: t.ids else t.ids
+        if (ids.size == 3 && t.args.isEmpty && ids(0) == "org" && ids(1) == "sireum") {
+          return st"${ids(2)}"
         } else {
           if (t.args.nonEmpty) {
-            return if (prefix == "") st"|${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
-            else st"|$prefix:${(shorten(t.ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
+            return if (prefix == "") st"|${(shorten(ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
+            else st"|$prefix:${(shorten(ids), ".")}[${(for (arg <- t.args) yield typeIdRaw(arg), ", ")}]|"
           } else {
-            return if (prefix == "") st"|${(t.ids, ".")}|" else st"|$prefix:${(t.ids, ".")}|"
+            return if (prefix == "") st"|${(ids, ".")}|" else st"|$prefix:${(ids, ".")}|"
           }
         }
       case t: AST.Typed.TypeVar => return st"$$${t.id}"
