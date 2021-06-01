@@ -626,7 +626,8 @@ object Smt2 {
       }
     }
 
-    def addSub(isRoot: B,
+    def addSub(posOpt: Option[message.Position],
+               isRoot: B,
                t: AST.Typed.Name,
                tTypeParams: ISZ[AST.TypeParam],
                tId: ST,
@@ -665,6 +666,9 @@ object Smt2 {
             )
           }
         }
+        if (children.isEmpty) {
+          reporter.warn(posOpt, Logika.kind, s"$t does not have any concrete implementation")
+        }
         posetUp(poset.addChildren(t, children))
         addTypeDecls(for (child <- children) yield st"(assert (sub-type ${typeHierarchyId(child)} $tId))")
       }
@@ -690,7 +694,7 @@ object Smt2 {
       if (!ti.ast.isRoot) {
         addAdtDecl(st"(assert (forall ((x ${typeId(t)})) (= (sub-type (type-of x) $thId) (= (type-of x) $thId))))")
       }
-      val sm = addSub(ti.ast.isRoot, t, ti.ast.typeParams, thId, ti.parents)
+      val sm = addSub(ti.posOpt, ti.ast.isRoot, t, ti.ast.typeParams, thId, ti.parents)
 
       @pure def fieldInfo(isParam: B, f: Info.Var): Smt2.AdtFieldInfo = {
         val ft = f.typedOpt.get.subst(sm)
@@ -716,9 +720,7 @@ object Smt2 {
             case _ =>
           }
         }
-        if (leaves.isEmpty) {
-          reporter.warn(ti.ast.posOpt, Logika.kind, s"$t does not have any concrete implementation")
-        } else {
+        if (leaves.nonEmpty) {
           addAdtDecl(
             st"""(assert (forall ((x $tId))
                 |  (let ((t (type-of x)))
@@ -778,7 +780,7 @@ object Smt2 {
       val neId = typeOpId(t, "!=")
       addAdtDecl(st"(declare-fun $eqId ($tid $tid) B)")
       addAdtDecl(st"(define-fun $neId ((o1 $tid) (o2 $tid)) B (not ($eqId o1 o2)))")
-      addSub(T, t, ti.ast.typeParams, tId, ti.parents)
+      addSub(ti.posOpt, T, t, ti.ast.typeParams, tId, ti.parents)
       var ops = ISZ[(String, ST)]()
       for (info <- ti.specVars.values) {
         val opId = info.ast.id.value
