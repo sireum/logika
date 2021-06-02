@@ -52,7 +52,7 @@ object Smt2Impl {
   }
 
   def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, cache: Smt2Impl.Cache, timeoutInMs: Z,
-                         charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B, reporter: Logika.Reporter): Smt2Impl = {
+                         charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B, reporter: Logika.Reporter): Smt2 = {
     val r = Smt2Impl(configs, typeHierarchy, cache, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery,
       HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), HashMap.empty,
       HashSMap.empty, HashMap.empty, HashSSet.empty)

@@ -248,6 +248,66 @@ object Logika {
   val verifyingDesc: String = "Verifying"
   val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
 
+  def checkStmts(initStmtss: ISZ[ISZ[AST.Stmt]], config: Config, th: TypeHierarchy,
+                 smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
+                 par: B, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B): Unit = {
+    var tasks = ISZ[Task]()
+    if (includeInit) {
+      for (initStmts <- initStmtss) {
+        tasks = tasks :+ Task.Stmts(th, config, initStmts, plugins)
+      }
+    }
+    var spMethodTasks = ISZ[Task.Method]()
+
+    def rec(stmts: ISZ[AST.Stmt]): Unit = {
+      for (stmt <- stmts) {
+        stmt match {
+          case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty =>
+            if (stmt.purity == AST.Purity.StrictPure && stmt.sig.typeParams.isEmpty) {
+              spMethodTasks = spMethodTasks :+ Task.Method(par, th, config, stmt, plugins)
+            } else {
+              tasks = tasks :+ Task.Method(par, th, config, stmt, plugins)
+            }
+          case stmt: AST.Stmt.Object => rec(stmt.stmts)
+          case stmt: AST.Stmt.Adt => rec(stmt.stmts)
+          case stmt: AST.Stmt.Sig => rec(stmt.stmts)
+          case _ =>
+        }
+      }
+    }
+
+    for (initStmts <- initStmtss) {
+      rec(initStmts)
+    }
+
+    val smt2 = smt2f(th)
+
+    def combine(r1: Reporter, r2: Reporter): Reporter = {
+      val r = r1.combine(r2)
+      return r
+    }
+
+    @pure def compute(task: Task): Reporter = {
+      val r = reporter.empty
+      val csmt2 = smt2
+      task.compute(csmt2, r)
+      return r
+    }
+
+    for (task <- spMethodTasks) {
+      extension.Cancel.cancellable(() => task.compute(smt2, reporter))
+    }
+
+    if (par) {
+      combine(reporter, ops.ISZOps(tasks).mParMapFoldLeft[Reporter, Reporter](compute _, combine _, reporter.empty))
+    } else {
+      for (task <- tasks) {
+        extension.Cancel.cancellable(() => task.compute(smt2, reporter))
+      }
+    }
+    reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
+  }
+
   def checkFile(fileUriOpt: Option[String], input: String, config: Config,
                 smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
                 par: B, hasLogika: B, plugins: ISZ[Plugin]): Unit = {
@@ -286,54 +346,7 @@ object Logika {
 
           if (!reporter.hasError) {
             if (hasLogika) {
-              var tasks = ISZ[Task](Task.Stmts(th, config, p.body.stmts, plugins))
-              var spMethodTasks = ISZ[Task.Method]()
-
-              def rec(stmts: ISZ[AST.Stmt]): Unit = {
-                for (stmt <- stmts) {
-                  stmt match {
-                    case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty =>
-                      if (stmt.purity == AST.Purity.StrictPure && stmt.sig.typeParams.isEmpty) {
-                        spMethodTasks = spMethodTasks :+ Task.Method(par, th, config, stmt, plugins)
-                      } else {
-                        tasks = tasks :+ Task.Method(par, th, config, stmt, plugins)
-                      }
-                    case stmt: AST.Stmt.Object => rec(stmt.stmts)
-                    case stmt: AST.Stmt.Adt => rec(stmt.stmts)
-                    case stmt: AST.Stmt.Sig => rec(stmt.stmts)
-                    case _ =>
-                  }
-                }
-              }
-
-              rec(p.body.stmts)
-
-              val smt2 = smt2f(th)
-
-              def combine(r1: Reporter, r2: Reporter): Reporter = {
-                val r = r1.combine(r2)
-                return r
-              }
-
-              @pure def compute(task: Task): Reporter = {
-                val r = reporter.empty
-                val csmt2 = smt2
-                task.compute(csmt2, r)
-                return r
-              }
-
-              for (task <- spMethodTasks) {
-                extension.Cancel.cancellable(() => task.compute(smt2, reporter))
-              }
-
-              if (par) {
-                combine(reporter, ops.ISZOps(tasks).mParMapFoldLeft[Reporter, Reporter](compute _, combine _, reporter.empty))
-              } else {
-                for (task <- tasks) {
-                  extension.Cancel.cancellable(() => task.compute(smt2, reporter))
-                }
-              }
-              reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
+              checkStmts(ISZ(p.body.stmts), config, th, smt2f, reporter, par, plugins, verifyingStartTime, T)
             }
           } else {
             reporter.illFormed()
@@ -343,6 +356,76 @@ object Logika {
     }
 
     extension.Cancel.cancellable(checkFileH _)
+  }
+
+  def checkPrograms(sources: ISZ[(Option[String], String)], files: ISZ[String], config: Config,
+                    th: TypeHierarchy, smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
+                    par: B, strictAliasing: B, sanityCheck: B, plugins: ISZ[Plugin]): Unit = {
+    val parsingStartTime = extension.Time.currentMillis
+    val (rep, _, nameMap, typeMap) = extension.Cancel.cancellable(() =>
+      lang.FrontEnd.parseProgramAndGloballyResolve(par, sources, th.nameMap, th.typeMap))
+    reporter.reports(rep.messages)
+    val typeCheckingStartTime = extension.Time.currentMillis
+    reporter.timing(parsingDesc, typeCheckingStartTime - parsingStartTime)
+    if (reporter.hasError) {
+      reporter.illFormed()
+      return
+    }
+    val th2 = extension.Cancel.cancellable(() =>
+      TypeHierarchy.build(th(nameMap = nameMap, typeMap = typeMap), reporter))
+    if (reporter.hasError) {
+      reporter.illFormed()
+      return
+    }
+    val th3 = extension.Cancel.cancellable(() =>
+      lang.tipe.TypeOutliner.checkOutline(par, strictAliasing, th2, reporter))
+    if (reporter.hasError) {
+      reporter.illFormed()
+      return
+    }
+    val th4 = extension.Cancel.cancellable(() =>
+      TypeChecker.checkComponents(par, strictAliasing, th3, th3.nameMap, th3.typeMap, reporter))
+    if (reporter.hasError) {
+      reporter.illFormed()
+      return
+    }
+    if (sanityCheck) {
+      extension.Cancel.cancellable(() =>
+        lang.tipe.PostTipeAttrChecker.checkNameTypeMaps(th4.nameMap, th4.typeMap, reporter))
+      if (reporter.hasError) {
+        reporter.illFormed()
+        return
+      }
+    }
+    val verifyingStartTime = extension.Time.currentMillis
+    reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
+
+    val fileSet: HashSet[String] = HashSet ++ files
+    @pure def shouldCheck(posOpt: Option[Position]): B = {
+      posOpt match {
+        case Some(pos) => pos.uriOpt match {
+          case Some(uri) => return fileSet.contains(uri)
+          case _ =>
+        }
+        case _ =>
+      }
+      return F
+    }
+    var initStmtss = ISZ[ISZ[AST.Stmt]]()
+    for (info <- th4.nameMap.values) {
+      info match {
+        case info: Info.Object if shouldCheck(info.posOpt) => initStmtss = initStmtss :+ info.ast.stmts
+        case _ =>
+      }
+    }
+    for (info <- th4.typeMap.values) {
+      info match {
+        case info: TypeInfo.Adt if shouldCheck(info.posOpt) => initStmtss = initStmtss :+ info.ast.stmts
+        case info: TypeInfo.Sig if shouldCheck(info.posOpt) => initStmtss = initStmtss :+ info.ast.stmts
+        case _ =>
+      }
+    }
+    checkStmts(initStmtss, config, th4, smt2f, reporter, par, plugins, verifyingStartTime, F)
   }
 
   def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], inPfc: B, receiverTypeOpt: Option[AST.Typed],
