@@ -339,14 +339,16 @@ object Smt2 {
       }
     }
 
+    val resEq: ST = if (paramIds.isEmpty) st"(= $resId $id)" else st"(= $resId ($id ${(paramIds, " ")}))"
+
     val claim: ST = if (ecs.size == 1)
       st"""(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)})) (=>
-          |  (= $resId ($id ${(paramIds, " ")}))
+          |  $resEq
           |  ${ecs(0)}
           |)))"""
     else
       st"""(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)})) (=>
-          |  (= $resId ($id ${(paramIds, " ")}))
+          |  $resEq
           |  (and
           |    ${(ecs, "\n")}
           |  )
@@ -664,9 +666,16 @@ object Smt2 {
                   |      (= (${typeOpId(t, "==")} o1 o2) (${typeOpId(childT, "==")} o1 o2)))
                   |))"""
             )
+            addConstraint(
+              st"""(assert (forall ((o1 ADT) (o2 ADT))
+                  |  (=> (sub-type (type-of o1) $childThId)
+                  |      (not (sub-type (type-of o2) $childThId))
+                  |      (= (${typeOpId(t, "==")} o1 o2) false))
+                  |))"""
+            )
           }
         }
-        if (children.isEmpty) {
+        if (children.isEmpty && t != AST.Typed.nothing) {
           reporter.warn(posOpt, Logika.kind, s"$t does not have any concrete implementation")
         }
         posetUp(poset.addChildren(t, children))
@@ -1075,11 +1084,6 @@ object Smt2 {
   }
 
   def query(decls: ISZ[String], claims: ISZ[String]): ST = {
-    val distinctOpt: Option[ST] =
-      if (typeHierarchyIds.size <= 1) None()
-      else Some(
-        st"""(assert (distinct
-            |  ${(typeHierarchyIds, "\n")}))""")
     var cs: ISZ[ST] = constraints
     if (typeHierarchyIds.size > 1) {
       cs = cs :+
@@ -1133,7 +1137,7 @@ object Smt2 {
           |          (= t (type-of y))
           |          ${(adtEqs, "\n")})))))
           |
-          |${(constraints, "\n")}
+          |${(cs, "\n")}
           |
           |${(for (p <- strictPureMethods.values) yield p._1, "\n")}
           |
@@ -1417,7 +1421,8 @@ object Smt2 {
       case c: State.Claim.Let.Ite =>
         return st"(ite ${v2st(c.cond)} ${v2st(c.left)} ${v2st(c.right)})"
       case c: State.Claim.Let.ProofFunApply =>
-        return st"(${proofFunId(c.pf)} ${(for (arg <- c.args) yield v2st(arg), " ")})"
+        return if (c.args.isEmpty) proofFunId(c.pf)
+        else st"(${proofFunId(c.pf)} ${(for (arg <- c.args) yield v2st(arg), " ")})"
       case c: State.Claim.Let.Apply =>
         val args: ST =
           if (c.args.size == 1) v2st(c.args(0))
