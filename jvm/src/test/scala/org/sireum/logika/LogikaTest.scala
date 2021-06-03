@@ -150,6 +150,27 @@ class LogikaTest extends TestSuite {
 
       * - failingWorksheet(
         """import org.sireum._
+          |
+          |def foo[T](o: Option[T]): Unit = {
+          |  Contract(
+          |    Requires(o.isEmpty)
+          |  )
+          |  return o.get
+          |}""".stripMargin, "pre-condition org.sireum.Option#get")
+
+      * - failingWorksheet(
+        """import org.sireum._
+          |
+          |def foo(o: Option[Z], x: Z): Unit = {
+          |  Contract(
+          |    Requires(o == Some(x)),
+          |    Ensures(Res >= 0)
+          |  )
+          |  return o.get
+          |}""".stripMargin, "post-condition")
+
+      * - failingWorksheet(
+        """import org.sireum._
           |import org.sireum.Z8._
           |val a = z8"127" + z8"1"""".stripMargin, "Max range check")
 
@@ -207,6 +228,7 @@ class LogikaTest extends TestSuite {
            |  i = i + 1
            |}
            |assert(r == m * n)""".stripMargin, "loop unrolling capped")
+
     }
 
   }

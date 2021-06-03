@@ -247,6 +247,9 @@ object Logika {
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
   val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
+  val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
+    (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size")
+  )
 
   def checkStmts(initStmtss: ISZ[ISZ[AST.Stmt]], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
@@ -383,23 +386,6 @@ object Logika {
       reporter.illFormed()
       return
     }
-    val th4 = extension.Cancel.cancellable(() =>
-      TypeChecker.checkComponents(par, strictAliasing, th3, th3.nameMap, th3.typeMap, reporter))
-    if (reporter.hasError) {
-      reporter.illFormed()
-      return
-    }
-    if (sanityCheck) {
-      extension.Cancel.cancellable(() =>
-        lang.tipe.PostTipeAttrChecker.checkNameTypeMaps(th4.nameMap, th4.typeMap, reporter))
-      if (reporter.hasError) {
-        reporter.illFormed()
-        return
-      }
-    }
-    val verifyingStartTime = extension.Time.currentMillis
-    reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
-
     val fileSet: HashSet[String] = HashSet ++ files
     @pure def shouldCheck(posOpt: Option[Position]): B = {
       posOpt match {
@@ -411,6 +397,44 @@ object Logika {
       }
       return F
     }
+    @pure def filterNameMap(map: lang.symbol.Resolver.NameMap): lang.symbol.Resolver.NameMap = {
+      var r = HashMap.empty[QName, Info]
+      for (info <- map.values) {
+        info match {
+          case info: Info.Object if shouldCheck(info.posOpt) => r = r + info.name ~> info
+          case _ =>
+        }
+      }
+      return r
+    }
+    @pure def filterTypeMap(map: lang.symbol.Resolver.TypeMap): lang.symbol.Resolver.TypeMap = {
+      var r = HashMap.empty[QName, TypeInfo]
+      for (info <- map.values) {
+        info match {
+          case info: TypeInfo.Adt if shouldCheck(info.posOpt) => r = r + info.name ~> info
+          case info: TypeInfo.Sig if shouldCheck(info.posOpt) => r = r + info.name ~> info
+          case _ =>
+        }
+      }
+      return r
+    }
+    val th4 = extension.Cancel.cancellable(() =>
+      TypeChecker.checkComponents(par, strictAliasing, th3, filterNameMap(th3.nameMap), filterTypeMap(th3.typeMap), reporter))
+    if (reporter.hasError) {
+      reporter.illFormed()
+      return
+    }
+    if (sanityCheck) {
+      extension.Cancel.cancellable(() =>
+        lang.tipe.PostTipeAttrChecker.checkNameTypeMaps(filterNameMap(th4.nameMap), filterTypeMap(th4.typeMap), reporter))
+      if (reporter.hasError) {
+        reporter.illFormed()
+        return
+      }
+    }
+    val verifyingStartTime = extension.Time.currentMillis
+    reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
+
     var initStmtss = ISZ[ISZ[AST.Stmt]]()
     for (info <- th4.nameMap.values) {
       info match {
@@ -1028,8 +1052,17 @@ import Logika.Split
       }
     }
 
-    def evalIdent(exp: AST.Exp.Ident): (State, State.Value) = {
-      return evalIdentH(state, exp.attr.resOpt.get, exp.attr.typedOpt.get, exp.posOpt.get)
+    def evalIdent(exp: AST.Exp.Ident): ISZ[(State, State.Value)] = {
+      val res = exp.attr.resOpt.get
+      res match {
+        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName &&
+          !Logika.builtInByNameMethods.contains((res.isInObject, res.owner, res.id)) =>
+          val mType = res.tpeOpt.get
+          val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
+          return evalInvoke(state, None(), exp, Either.Left(ISZ()), attr)
+        case _ =>
+          return ISZ(evalIdentH(state, res, exp.attr.typedOpt.get, exp.posOpt.get))
+      }
     }
 
     def evalUnaryExp(exp: AST.Exp.Unary): ISZ[(State, State.Value)] = {
@@ -1309,9 +1342,16 @@ import Logika.Split
         return ISZ((s2, sym))
       }
       exp.attr.resOpt.get match {
-        case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random => return random(exp.typedOpt.get)
+        case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random =>
+          return random(exp.typedOpt.get)
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext && res.owner.size == 3
-          && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id == "random" => return random(res.tpeOpt.get.ret)
+          && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id == "random" =>
+          return random(res.tpeOpt.get.ret)
+        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName &&
+          !Logika.builtInByNameMethods.contains((res.isInObject, res.owner, res.id)) =>
+          val mType = res.tpeOpt.get
+          val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
+          return evalInvoke(state, exp.receiverOpt, AST.Exp.Ident(exp.id, exp.attr), Either.Left(ISZ()), attr)
         case res => return evalSelectH(split, res, exp.receiverOpt, exp.id.value, exp.typedOpt.get, pos)
       }
     }
@@ -1410,9 +1450,17 @@ import Logika.Split
       if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
         evalSConstructor()
       } else {
-        val stateReceiverOpts: ISZ[(State, Option[State.Value])] =
-          if (isCopy) for (p <- evalReceiver(Split.Default, invokeReceiverOpt, ident)) yield (p._1, Some(p._2))
-          else ISZ((state, None()))
+        val stateReceiverOpts: ISZ[(State, Option[State.Value])] = {
+          if (isCopy) {
+            val receiver: AST.Exp = invokeReceiverOpt match {
+              case Some(_) => AST.Exp.Select(invokeReceiverOpt, ident.id, ident.targs, ident.attr)
+              case _ => ident
+            }
+            for (p <- evalExp(split, smt2, rtCheck, state, receiver, reporter)) yield (p._1, Some(p._2))
+          } else {
+            ISZ((state, None()))
+          }
+        }
         for (p <- stateReceiverOpts) {
           val (s0, receiverOpt) = p
           evalAdtConstructor(s0, receiverOpt)
@@ -1421,7 +1469,7 @@ import Logika.Split
       return r
     }
 
-    def evalReceiver(sp: Split.Type, receiverOpt: Option[AST.Exp], ident: AST.Exp.Ident): ISZ[(State, State.Value)] = {
+    def evalReceiver(sp: Split.Type, receiverOpt: Option[AST.Exp], ident: AST.Exp.Ident, isInObject: B): ISZ[(State, State.Value)] = {
       receiverOpt match {
         case Some(rcv) =>
           ident.attr.resOpt.get match {
@@ -1429,13 +1477,22 @@ import Logika.Split
               return evalSelectH(sp, res, receiverOpt, ident.id.value, ident.typedOpt.get, ident.posOpt.get)
             case _ => return evalExp(sp, smt2, rtCheck, state, rcv, reporter)
           }
-        case _ => return evalExp(sp, smt2, rtCheck, state, ident, reporter)
+        case _ =>
+          if (isInObject) {
+            return ISZ()
+          } else {
+            return ISZ(evalThis(AST.Exp.This(AST.TypedAttr(ident.posOpt, context.methodOpt.get.receiverTypeOpt))))
+          }
       }
     }
 
     def evalSeqSelect(exp: AST.Exp.Invoke): ISZ[(State, State.Value)] = {
       var r = ISZ[(State, State.Value)]()
-      for (p0 <- evalReceiver(split, exp.receiverOpt, exp.ident); p1 <- evalExp(split, smt2, rtCheck, p0._1, exp.args(0), reporter)) {
+      val srcv: ISZ[(State, State.Value)] = exp.receiverOpt match {
+        case Some(rcv) => evalExp(split, smt2, rtCheck, state, rcv , reporter)
+        case _ => evalIdent(exp.ident)
+      }
+      for (p0 <- srcv; p1 <- evalExp(split, smt2, rtCheck, p0._1, exp.args(0), reporter)) {
         val (_, seq) = p0
         val (s1, i) = p1
         val s2 = checkSeqIndexing(smt2, rtCheck, s1, seq, i, exp.args(0).posOpt, reporter)
@@ -1770,7 +1827,7 @@ import Logika.Split
           ISZ((s0, TypeChecker.emptySubstMap, None()))
         } else {
           var ssmros = ISZ[(State, HashMap[String, AST.Typed], Option[State.Value.Sym])]()
-          for (p <- evalReceiver(split, invokeReceiverOpt, ident)) {
+          for (p <- evalReceiver(split, invokeReceiverOpt, ident, res.isInObject)) {
             var typeSubstMap = TypeChecker.emptySubstMap
             val p2 = value2Sym(p._1, p._2, receiverPosOpt.get)
             val s1 = p2._1
@@ -2371,7 +2428,7 @@ import Logika.Split
       e match {
         case lit: AST.Lit => return ISZ((s0, evalLit(lit)))
         case lit: AST.Exp.StringInterpolate => return ISZ((s0, evalInterpolate(lit)))
-        case e: AST.Exp.Ident => return ISZ(evalIdent(e))
+        case e: AST.Exp.Ident => return evalIdent(e)
         case e: AST.Exp.Select => return evalSelect(e)
         case e: AST.Exp.Unary => return evalUnaryExp(e)
         case e: AST.Exp.Binary => return evalBinaryExp(e)

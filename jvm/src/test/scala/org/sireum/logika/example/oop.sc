@@ -30,7 +30,7 @@ object B {
         a.x == In(a).x + 1 /* inc */,
         a.y == In(a).y + a.x,
         a.z == In(a).z,
-        a == In(a)
+        a == In(a) // inferred
       )
     )
     Spec {
@@ -47,7 +47,7 @@ def foo(az: A): Unit = {
       az.x > In(az).x,
       az.y == In(az).y + az.x,
       az.z == In(az).z,
-      az == In(az)
+      az == In(az) // inferred
     )
   )
   B.compute(az)
