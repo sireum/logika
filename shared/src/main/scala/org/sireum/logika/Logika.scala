@@ -1373,7 +1373,38 @@ import Util._
             val modObjectVars = contract.modifiedObjectVars
             val mpos = mposOpt.get
             ms1 = rewriteObjectVars(th, ms1, modObjectVars, mpos, reporter)
-            ms1 = rewriteLocalVars(th, T, ms1, modLocals.keys, mposOpt, reporter)
+            var oldIdMap = HashMap.empty[ISZ[String], State.Value.Sym]
+            for (pair <- modLocals.entries) {
+              val (info, (t, _)) = pair
+              val (ls0, sym) = idIntro(pos, ms1, info.context, info.id, t, None())
+              ms1 = ls0
+              oldIdMap = oldIdMap + (info.context :+ info.id) ~> sym
+            }
+            ms1 = rewriteLocalVars(th, ms1, modLocals.keys, mposOpt, reporter)
+            for (pair <- modLocals.entries) {
+              val (info, (t, pos)) = pair
+              val oldSym = oldIdMap.get(info.context :+ info.id).get
+              val (ls1, newSym) = idIntro(pos, ms1, info.context, info.id, t, Some(pos))
+              if (!th.isMutable(t, T)) {
+                val (ls2, cond) = ls1.freshSym(AST.Typed.b, pos)
+                val ls3 = ls2.addClaims(ISZ[State.Claim](
+                  State.Claim.Let.Binary(cond, newSym, AST.Exp.BinaryOp.Eq, oldSym, t),
+                  State.Claim.Prop(T, cond)
+                ))
+                ms1 = ls3
+              } else if (AST.Util.isSeq(t)) {
+                val (ls4, size1) = ls1.freshSym(AST.Typed.z, pos)
+                val (ls5, size2) = ls4.freshSym(AST.Typed.z, pos)
+                val (ls6, cond) = ls5.freshSym(AST.Typed.b, pos)
+                val ls7 = ls6.addClaims(ISZ[State.Claim](
+                  State.Claim.Let.FieldLookup(size1, oldSym, "size"),
+                  State.Claim.Let.FieldLookup(size2, newSym, "size"),
+                  State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
+                  State.Claim.Prop(T, cond)
+                ))
+                ms1 = ls7
+              }
+            }
             if (isUnit) {
               return (ms1, State.Value.Unit(mpos))
             } else {
@@ -1399,7 +1430,7 @@ import Util._
             if (receiverOpt.nonEmpty) {
               rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "this")
             }
-            ms1 = rewriteLocalVars(th, F, ms1, rwLocals, modPosOpt, reporter)
+            ms1 = rewriteLocalVars(th, ms1, rwLocals, modPosOpt, reporter)
             currentReceiverOpt match {
               case Some(receiver) =>
                 ms1 = ms1.addClaim(State.Claim.Let.CurrentId(F, receiver, context.methodOpt.get.name, "this",
@@ -1577,7 +1608,7 @@ import Util._
               val lcontext = context.methodOpt.get.name
               val p = idIntro(posOpt.get, s1, lcontext, "this", currentReceiverType, None())
               s1 = p._1
-              s1 = rewriteLocal(th, s1, F, lcontext, "this", posOpt, reporter)
+              s1 = rewriteLocal(th, s1, lcontext, "this", posOpt, reporter)
               Some(p._2)
             case _ => None()
           }
@@ -2109,7 +2140,7 @@ import Util._
 
   def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym,
                        idPosOpt: Option[Position], reporter: Reporter): State = {
-    val s1: State = if (decl) s0 else rewriteLocal(th, s0, F, lcontext, id, idPosOpt, reporter)
+    val s1: State = if (decl) s0 else rewriteLocal(th, s0, lcontext, id, idPosOpt, reporter)
     return s1(claims = s1.claims :+ State.Claim.Let.CurrentId(F, rhs, lcontext, id, idPosOpt))
   }
 
@@ -2345,9 +2376,9 @@ import Util._
     }
 
     def addPatternVars(s0: State, lcontext: ISZ[String],
-                       m: Map[String, (State.Value, AST.Typed, Position)]): (State, ISZ[State.Claim], ISZ[State.Value]) = {
+                       m: Map[String, (State.Value, AST.Typed, Position)]): (State, ISZ[State.Value]) = {
       val ids = m.keys
-      val (s1, oldIds) = rewriteLocals(th, s0, lcontext, ids)
+      val s1 = rewriteLocals(th, s0, lcontext, ids)
       var s2 = s1
       var bindings = ISZ[State.Value]()
       for (p <- m.entries) {
@@ -2357,7 +2388,7 @@ import Util._
         s2 = s4.addClaim(State.Claim.Let.Binary(sym, x, "==", v, t))
         bindings = bindings :+ sym
       }
-      return (s2, oldIds, bindings)
+      return (s2, bindings)
     }
 
     for (p <- evalExp(split, smt2, rtCheck, state, stmt.exp, reporter)) {
@@ -2371,7 +2402,7 @@ import Util._
         var s1 = s0
         for (c <- stmt.cases) {
           val (s2, pcond, m) = evalPattern(s1, v, c.pattern, reporter)
-          val (s3, oldIds, bindings) = addPatternVars(s2, lcontext, m)
+          val (s3, bindings) = addPatternVars(s2, lcontext, m)
           var conds = ISZ(pcond)
           val s6: State = c.condOpt match {
             case Some(cond) =>
@@ -2390,8 +2421,8 @@ import Util._
           val pos = c.pattern.posOpt.get
           val (s7, sym) = s6.freshSym(AST.Typed.b, pos)
           val s8 = s7.addClaim(State.Claim.Let.And(sym, conds))
-          val s9 = rewriteLocals(th, s8, lcontext, m.keys)._1
-          val s10 = s9.addClaims(oldIds)
+          val s9 = rewriteLocals(th, s8, lcontext, m.keys)
+          val s10 = s9
           s1 = s1(nextFresh = s10.nextFresh).
             addClaim(State.Claim.And(for (i <- s1.claims.size until s10.claims.size) yield s10.claims(i)))
           caseSyms = caseSyms :+ ((c, sym, m))
@@ -2415,7 +2446,7 @@ import Util._
             if (smt2.sat(config.logVc, config.logVcDirOpt, s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]",
               pos, s10.claims, reporter)) {
               possibleCases = T
-              val (s11, _, bindings) = addPatternVars(s10, lcontext, m)
+              val (s11, bindings) = addPatternVars(s10, lcontext, m)
               var claims = ISZ[State.Claim]()
               for (s12 <- evalBody(split, smt2, rOpt, rtCheck, s11.addClaim(State.Claim.And(for (b <- bindings) yield
                 State.Claim.Prop(T, b.asInstanceOf[State.Value.Sym]))), c.body, c.pattern.posOpt, reporter)) {
@@ -2828,7 +2859,7 @@ import Util._
             halt("TODO: rewrite Vars/fields as well") // TODO
           }
           val s0R: State = {
-            var srw = rewriteLocalVars(th, F, s0(nextFresh = s1.nextFresh), modLocalVars.keys, whileStmt.posOpt, reporter)
+            var srw = rewriteLocalVars(th, s0(nextFresh = s1.nextFresh), modLocalVars.keys, whileStmt.posOpt, reporter)
             for (p <- modLocalVars.entries) {
               val (res, (tipe, pos)) = p
               val (srw1, sym) = srw.freshSym(tipe, pos)
@@ -3322,7 +3353,7 @@ import Util._
     var r = ISZ[State]()
     for (s1 <- evalStmts(split, smt2, rOpt, rtCheck, s0, body.stmts, reporter)) {
       if (s1.status) {
-        r = r :+ rewriteLocalVars(th, F, s1, body.undecls, posOpt, reporter)
+        r = r :+ rewriteLocalVars(th, s1, body.undecls, posOpt, reporter)
       } else {
         r = r :+ s1
       }

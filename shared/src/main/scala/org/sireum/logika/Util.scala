@@ -32,6 +32,9 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.TypeInfo
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{Reporter, Split}
+import org.sireum.logika.State.Claim
+import org.sireum.logika.State.Claim.Let
+import org.sireum.logika.State.Claim.Let.Quant
 
 @record class ClaimSTs(var value: ISZ[ST]) {
   def add(st: ST): Unit = {
@@ -143,38 +146,16 @@ object Util {
     }
   }
 
-  @datatype class CurrentIdRewriter(th: lang.tipe.TypeHierarchy, posOpt: Option[Position], nextFresh: Z,
-                                    map: HashMap[(ISZ[String], String), (ISZ[Position], Z, B)])
-    extends StateTransformer.PrePost[ISZ[State.Claim]] {
-    override def preStateClaimLetCurrentId(ctx: ISZ[State.Claim],
-                                           o: State.Claim.Let.CurrentId): StateTransformer.PreResult[ISZ[State.Claim], State.Claim.Let] = {
+  @datatype class CurrentIdRewriter(map: HashMap[(ISZ[String], String), (ISZ[Position], Z)])
+    extends StateTransformer.PrePost[B] {
+
+    override def preStateClaimLetCurrentId(ctx: B,
+                                           o: State.Claim.Let.CurrentId): StateTransformer.PreResult[B, State.Claim.Let] = {
       map.get((o.context, o.id)) match {
-        case Some((poss, num, addNewSym)) =>
-          var newCtx = ctx
-          if (addNewSym) {
-            val n = nextFresh + ctx.size
-            val sym = State.Value.Sym(n, o.sym.tipe, posOpt.get)
-            newCtx = newCtx :+ State.Claim.Let.CurrentId(F, sym, o.context, o.id, posOpt)
-            val tipe = sym.tipe
-            val pos = posOpt.get
-            if (!th.isMutable(tipe, T)) {
-              val cond = State.Value.Sym(n + 1, AST.Typed.b, pos)
-              newCtx = newCtx ++ ISZ[State.Claim](State.Claim.Let.Binary(cond, sym, AST.Exp.BinaryOp.Eq, o.sym, tipe),
-                State.Claim.Prop(T, cond))
-            } else if (AST.Util.isSeq(tipe)) {
-              val size1 = State.Value.Sym(n + 1, AST.Typed.z, pos)
-              val size2 = State.Value.Sym(n + 2, AST.Typed.z, pos)
-              val cond = State.Value.Sym(n + 3, AST.Typed.b, pos)
-              newCtx = newCtx ++ ISZ[State.Claim](
-                State.Claim.Let.FieldLookup(size1, o.sym, "size"),
-                State.Claim.Let.FieldLookup(size2, sym, "size"),
-                State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
-                State.Claim.Prop(T, cond)
-              )
-            }
-          }
-          return StateTransformer.PreResult(newCtx, T, Some(State.Claim.Let.Id(o.sym, o.context, o.id, num, poss)))
-        case _ => return StateTransformer.PreResult(ctx, T, None())
+        case Some((poss, num)) =>
+          return StateTransformer.PreResult(ctx, T, Some(State.Claim.Let.Id(o.sym, o.context, o.id, num, poss)))
+        case _ =>
+          return StateTransformer.PreResult(ctx, T, None())
       }
     }
   }
@@ -422,7 +403,7 @@ object Util {
     return StateTransformer(CurrentIdPossCollector(lcontext, id)).transformState(Set.empty, s0).ctx.elements
   }
 
-  def rewriteLocal(th: TypeHierarchy, s0: State, addNewSym: B, lcontext: ISZ[String], id: String, posOpt: Option[Position],
+  def rewriteLocal(th: TypeHierarchy, s0: State, lcontext: ISZ[String], id: String, posOpt: Option[Position],
                    reporter: Reporter): State = {
     val poss = collectLocalPoss(s0, lcontext, id)
     if (poss.isEmpty) {
@@ -430,36 +411,36 @@ object Util {
       return s0(status = F)
     }
     val (s1, num) = s0.fresh
-    val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z, B)] + (lcontext, id) ~> ((poss, num, addNewSym))
-    val r = StateTransformer(CurrentIdRewriter(th, posOpt, s1.nextFresh, locals)).transformState(ISZ(), s1)
+    val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
+    val r = StateTransformer(CurrentIdRewriter(locals)).transformState(F, s1)
     val s2 = r.resultOpt.get
-    return s2(nextFresh = s2.nextFresh + r.ctx.size, claims = s2.claims ++ r.ctx)
+    return s2
   }
 
-  def rewriteLocals(th: TypeHierarchy, s0: State, lcontext: ISZ[String], ids: ISZ[String]): (State, ISZ[State.Claim]) = {
+  def rewriteLocals(th: TypeHierarchy, s0: State, lcontext: ISZ[String], ids: ISZ[String]): State = {
     if (ids.isEmpty) {
-      return (s0, ISZ())
+      return s0
     }
-    var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z, B)]
+    var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)]
     var s1 = s0
     for (id <- ids) {
       val poss = collectLocalPoss(s0, lcontext, id)
       if (poss.nonEmpty) {
         val (s2, num) = s1.fresh
-        locals = locals + (lcontext, id) ~> ((poss, num, F))
+        locals = locals + (lcontext, id) ~> ((poss, num))
         s1 = s2
       }
     }
-    val r = StateTransformer(CurrentIdRewriter(th, None(), s1.nextFresh, locals)).transformState(ISZ(), s1)
-    return (r.resultOpt.getOrElse(s1), r.ctx)
+    val r = StateTransformer(CurrentIdRewriter(locals)).transformState(F, s1)
+    return r.resultOpt.getOrElse(s1)
   }
 
-  def rewriteLocalVars(th: TypeHierarchy, introSym: B, state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar], posOpt: Option[Position], reporter: Reporter): State = {
+  def rewriteLocalVars(th: TypeHierarchy, state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar], posOpt: Option[Position], reporter: Reporter): State = {
     if (localVars.isEmpty) {
       return state
     }
     var current = state
-    var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z, B)]
+    var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)]
     for (l <- localVars) {
       val poss = StateTransformer(CurrentIdPossCollector(l.context, l.id)).
         transformState(Set.empty, current).ctx.elements
@@ -469,11 +450,11 @@ object Util {
       }
       val (s1, num) = current.fresh
       current = s1
-      locals = locals + (l.context, l.id) ~> ((poss, num, introSym))
+      locals = locals + (l.context, l.id) ~> ((poss, num))
     }
-    val r = StateTransformer(CurrentIdRewriter(th, posOpt, current.nextFresh, locals)).transformState(ISZ(), current)
+    val r = StateTransformer(CurrentIdRewriter(locals)).transformState(F, current)
     current = r.resultOpt.get
-    return current(nextFresh = current.nextFresh + r.ctx.size, claims = current.claims ++ r.ctx)
+    return current
   }
 
   def rewriteObjectVars(th: TypeHierarchy, state: State, objectVars: HashSMap[AST.ResolvedInfo.Var, (AST.Typed, Position)],
