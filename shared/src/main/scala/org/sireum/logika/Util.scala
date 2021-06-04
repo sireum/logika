@@ -27,8 +27,11 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.lang.{ast => AST}
 import org.sireum.message.Position
+import org.sireum.lang.{ast => AST}
+import org.sireum.lang.symbol.TypeInfo
+import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
+import org.sireum.logika.Logika.{Reporter, Split}
 
 @record class ClaimSTs(var value: ISZ[ST]) {
   def add(st: ST): Unit = {
@@ -222,5 +225,378 @@ object Util {
       }
     }
     return sv2ST _
+  }
+
+
+  def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], inPfc: B, receiverTypeOpt: Option[AST.Typed],
+                   params: ISZ[(AST.Id, AST.Typed)], posOpt: Option[Position], reads: ISZ[AST.Exp.Ident],
+                   modifies: ISZ[AST.Exp.Ident], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin]): Logika = {
+    val mctx = Context.Method(name, receiverTypeOpt, params, reads, modifies, HashMap.empty, HashMap.empty,
+      HashMap.empty, posOpt)
+    val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels)
+    return Logika(th, config, ctx, inPfc, plugins)
+  }
+
+  def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, invs: ISZ[lang.symbol.Info.Inv], posOpt: Option[Position], reporter: Reporter): State = {
+    var s0 = state
+    for (inv <- invs) {
+      var i = 0
+      val id = inv.ast.id.value
+      val isSingle = inv.ast.claims.size == 1
+      val methodName: String =
+        if (logika.context.methodName.size == 1) logika.context.methodName(0)
+        else if (logika.context.methodOpt.get.receiverTypeOpt.isEmpty) st"${(logika.context.methodName, ".")}".render
+        else st"${(ops.ISZOps(logika.context.methodName).dropRight(1), ".")}#${logika.context.methodName(0)}".render
+      if (isPre) {
+        for (claim <- inv.ast.claims if s0.status) {
+          val title: String =
+            if (isSingle) s"Method $methodName pre-invariant $id"
+            else s"Method $methodName pre-invariant $id#$i"
+          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssume(smt2, T, title, s0,
+            claim, posOpt, reporter)._1
+          i = i + 1
+        }
+      } else {
+        for (claim <- inv.ast.claims if s0.status) {
+          val title: String =
+            if (isSingle) s"Method $methodName post-invariant $id"
+            else s"Method $methodName post-invariant $id#$i"
+          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssert(smt2, T, title, s0,
+            claim, posOpt, reporter)._1
+          i = i + 1
+        }
+      }
+    }
+    val s0Ops = ops.ISZOps(s0.claims)
+    return s0(claims = s0Ops.slice(0, state.claims.size) :+ State.Claim.And(
+      s0Ops.slice(state.claims.size, s0.claims.size)
+    ))
+  }
+
+  def checkMethod(th: TypeHierarchy,
+                  plugins: ISZ[plugin.Plugin],
+                  method: AST.Stmt.Method,
+                  config: Config,
+                  smt2: Smt2,
+                  reporter: Reporter): Unit = {
+    def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
+                  modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
+      var state = State.create
+      labelOpt match {
+        case Some(label) if label.value != "" => state = state.addClaim(State.Claim.Label(label.value, label.posOpt.get))
+        case _ =>
+      }
+      val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+      val logika: Logika = {
+        val mname = res.owner :+ method.sig.id.value
+        val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
+          None()
+        } else {
+          th.typeMap.get(res.owner).get match {
+            case ti: TypeInfo.Sig => Some(ti.tpe)
+            case ti: TypeInfo.Adt => Some(ti.tpe)
+            case _ => halt("Infeasible")
+          }
+        }
+        val l = logikaMethod(th, config, mname, F, receiverTypeOpt, method.sig.paramIdTypes, method.posOpt, reads, modifies,
+          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins)
+        val mctx = l.context.methodOpt.get
+        var objectVarInMap = mctx.objectVarInMap
+        for (p <- mctx.objectVarMap(TypeChecker.emptySubstMap).entries) {
+          val (ids, t) = p
+          val posOpt = th.nameMap.get(ids).get.posOpt
+          val (s, sym) = nameIntro(posOpt.get, state, ids, t, posOpt)
+          objectVarInMap = objectVarInMap + ids ~> sym
+          state = s
+        }
+        var fieldVarInMap = mctx.fieldVarInMap
+        mctx.receiverTypeOpt match {
+          case Some(receiverType) =>
+            val (s0, thiz) = idIntro(method.posOpt.get, state, mname, "this", receiverType, method.sig.id.attr.posOpt)
+            state = s0
+            for (p <- mctx.fieldVarMap(TypeChecker.emptySubstMap).entries) {
+              val (id, (t, posOpt)) = p
+              val (s1, sym) = state.freshSym(t, posOpt.get)
+              state = s1.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
+              fieldVarInMap = fieldVarInMap + id ~> sym
+            }
+          case _ =>
+        }
+        var localInMap = mctx.localInMap
+        for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
+          val (mname, id, t) = v
+          val posOpt = id.attr.posOpt
+          val (s, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
+          localInMap = localInMap + id.value ~> sym
+          state = s
+        }
+        l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
+          localInMap = localInMap))))
+      }
+      val statePreReqInvSize = state.claims.size
+      if (logika.context.methodName.size == 1 && !method.isHelper) {
+        state = checkInv(T, state, logika, smt2, th.worksheetInvs, method.posOpt, reporter)
+      }
+      val stmts = method.bodyOpt.get.stmts
+      val hasPreReqInv = state.claims.size != statePreReqInvSize
+      val statePreReqSize = state.claims.size
+      for (r <- requires if state.status) {
+        state = logika.evalAssume(smt2, T, "Precondition", state, r, r.posOpt, reporter)._1
+      }
+      if (state.claims.size != statePreReqSize) {
+        val stateOps = ops.ISZOps(state.claims)
+        state = state(claims = stateOps.slice(0, statePreReqSize) :+ State.Claim.And(
+          stateOps.slice(statePreReqSize, state.claims.size)
+        ))
+      }
+      if (hasPreReqInv && state.claims.size != statePreReqSize) {
+        val stateOps = ops.ISZOps(state.claims)
+        state = state(claims = stateOps.slice(0, statePreReqInvSize) :+ State.Claim.And(
+          stateOps.slice(statePreReqInvSize, state.claims.size)
+        ))
+      }
+      val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
+        val body = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
+        logika.evalAssignExp(Split.Default, smt2, None(), T, state, body, reporter)
+      } else {
+        logika.evalStmts(Split.Default, smt2, None(), T, state, stmts, reporter)
+      }
+      for (s <- ss) {
+        var s2 = s
+        val statePreEnInvSize = state.claims.size
+        if (logika.context.methodName.size == 1 && !method.isHelper) {
+          s2 = checkInv(F, s2, logika, smt2, th.worksheetInvs, method.posOpt, reporter)
+        }
+        val hasPreEnInv = state.claims.size != statePreEnInvSize
+        val statePreEnSize = state.claims.size
+        for (e <- ensures if s2.status) {
+          s2 = logika.evalAssert(smt2, T, "Postcondition", s2, e, e.posOpt, reporter)._1
+        }
+        if (state.claims.size != statePreEnSize) {
+          val stateOps = ops.ISZOps(state.claims)
+          state = state(claims = stateOps.slice(0, statePreEnSize) :+ State.Claim.And(
+            stateOps.slice(statePreEnSize, state.claims.size)
+          ))
+        }
+        if (hasPreEnInv && state.claims.size != statePreEnSize) {
+          val stateOps = ops.ISZOps(state.claims)
+          state = state(claims = stateOps.slice(0, statePreEnInvSize) :+ State.Claim.And(
+            stateOps.slice(statePreEnInvSize, state.claims.size)
+          ))
+        }
+        if (stmts.nonEmpty && s2.status) {
+          logika.logPc(config.logPc, config.logRawPc, s2, reporter,
+            Some(afterPos(stmts(stmts.size - 1).posOpt.get)))
+        }
+      }
+    }
+
+    method.contract match {
+      case contract: AST.MethodContract.Simple =>
+        checkCase(None(), contract.reads, contract.requires, contract.modifies, contract.ensures)
+      case contract: AST.MethodContract.Cases =>
+        for (c <- contract.cases) {
+          checkCase(if (c.label.value === "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
+        }
+    }
+  }
+
+  @pure def idIntro(pos: Position, state: State, idContext: ISZ[String],
+                    id: String, t: AST.Typed, idPosOpt: Option[Position]): (State, State.Value.Sym) = {
+    val (s0, sym) = state.freshSym(t, pos)
+    return (s0.addClaim(State.Claim.Let.CurrentId(F, sym, idContext, id, idPosOpt)), sym)
+  }
+
+  @pure def nameIntro(pos: Position, state: State, ids: ISZ[String], t: AST.Typed,
+                      namePosOpt: Option[Position]): (State, State.Value.Sym) = {
+    val (s0, sym) = state.freshSym(t, pos)
+    return (s0.addClaim(State.Claim.Let.CurrentName(sym, ids, namePosOpt)), sym)
+  }
+
+  @pure def resIntro(pos: Position, state: State, context: ISZ[String], t: AST.Typed,
+                     posOpt: Option[Position]): (State, State.Value.Sym) = {
+    return idIntro(pos, state, context, "Res", t, posOpt)
+  }
+
+  def collectLocalPoss(s0: State, lcontext: ISZ[String], id: String): ISZ[Position] = {
+    return StateTransformer(CurrentIdPossCollector(lcontext, id)).transformState(Set.empty, s0).ctx.elements
+  }
+
+  def rewriteLocal(th: TypeHierarchy, s0: State, addNewSym: B, lcontext: ISZ[String], id: String, posOpt: Option[Position],
+                   reporter: Reporter): State = {
+    val poss = collectLocalPoss(s0, lcontext, id)
+    if (poss.isEmpty) {
+      reporter.error(posOpt, Logika.kind, s"Missing Modifies clause for $id")
+      return s0(status = F)
+    }
+    val (s1, num) = s0.fresh
+    val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z, B)] + (lcontext, id) ~> ((poss, num, addNewSym))
+    val r = StateTransformer(CurrentIdRewriter(th, posOpt, s1.nextFresh, locals)).transformState(ISZ(), s1)
+    val s2 = r.resultOpt.get
+    return s2(nextFresh = s2.nextFresh + r.ctx.size, claims = s2.claims ++ r.ctx)
+  }
+
+  def rewriteLocals(th: TypeHierarchy, s0: State, lcontext: ISZ[String], ids: ISZ[String]): (State, ISZ[State.Claim]) = {
+    if (ids.isEmpty) {
+      return (s0, ISZ())
+    }
+    var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z, B)]
+    var s1 = s0
+    for (id <- ids) {
+      val poss = collectLocalPoss(s0, lcontext, id)
+      if (poss.nonEmpty) {
+        val (s2, num) = s1.fresh
+        locals = locals + (lcontext, id) ~> ((poss, num, F))
+        s1 = s2
+      }
+    }
+    val r = StateTransformer(CurrentIdRewriter(th, None(), s1.nextFresh, locals)).transformState(ISZ(), s1)
+    return (r.resultOpt.getOrElse(s1), r.ctx)
+  }
+
+  def rewriteLocalVars(th: TypeHierarchy, introSym: B, state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar], posOpt: Option[Position], reporter: Reporter): State = {
+    if (localVars.isEmpty) {
+      return state
+    }
+    var current = state
+    var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z, B)]
+    for (l <- localVars) {
+      val poss = StateTransformer(CurrentIdPossCollector(l.context, l.id)).
+        transformState(Set.empty, current).ctx.elements
+      if (poss.isEmpty) {
+        reporter.error(posOpt, Logika.kind, s"Missing Modifies clause for ${l.id}")
+        return state(status = F)
+      }
+      val (s1, num) = current.fresh
+      current = s1
+      locals = locals + (l.context, l.id) ~> ((poss, num, introSym))
+    }
+    val r = StateTransformer(CurrentIdRewriter(th, posOpt, current.nextFresh, locals)).transformState(ISZ(), current)
+    current = r.resultOpt.get
+    return current(nextFresh = current.nextFresh + r.ctx.size, claims = current.claims ++ r.ctx)
+  }
+
+  def rewriteObjectVars(th: TypeHierarchy, state: State, objectVars: HashSMap[AST.ResolvedInfo.Var, (AST.Typed, Position)],
+                        pos: Position, reporter: Reporter): State = {
+    if (objectVars.isEmpty) {
+      return state
+    }
+    var current = state
+    var vars = HashMap.empty[ISZ[String], (ISZ[Position], Z)]
+    for (l <- objectVars.keys) {
+      val ids = l.owner :+ l.id
+      val poss = StateTransformer(CurrentNamePossCollector(ids)).
+        transformState(ISZ(), current).ctx
+      if (poss.isEmpty) {
+        reporter.error(Some(pos), Logika.kind, s"Missing Modifies clause for ${(l.owner, ".")}.${l.id}")
+        return state(status = F)
+      }
+      val (s1, num) = current.fresh
+      current = s1
+      vars = vars + ids ~> ((poss, num))
+    }
+    val rt = StateTransformer(CurrentNameRewriter(vars)).transformState(HashMap.empty, current)
+    current = rt.resultOpt.get
+    for (p <- objectVars.entries) {
+      val (x, (t, namePos)) = p
+      val name =  x.owner :+ x.id
+      val (s2, sym) = nameIntro(pos, current, name, t, Some(namePos))
+      current = s2
+      val tipe = sym.tipe
+      if (!th.isMutable(tipe, T)) {
+        val (s3, cond) = current.freshSym(AST.Typed.b, pos)
+        current = s3.addClaims(ISZ(State.Claim.Let.Binary(cond, sym, AST.Exp.BinaryOp.Eq, rt.ctx.get(name).get, tipe),
+          State.Claim.Prop(T, cond)))
+      } else if (AST.Util.isSeq(tipe)) {
+        val (s3, size1) = current.freshSym(AST.Typed.z, pos)
+        val (s4, size2) = s3.freshSym(AST.Typed.z, pos)
+        val (s5, cond) = s4.freshSym(AST.Typed.b, pos)
+        val o1 = rt.ctx.get(name).get
+        current = s5.addClaims(ISZ(
+          State.Claim.Let.FieldLookup(size1, o1, "size"),
+          State.Claim.Let.FieldLookup(size2, sym, "size"),
+          State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
+          State.Claim.Prop(T, cond)
+        ))
+      }
+    }
+    return current
+  }
+
+  def conjunctClaimSuffix(s0: State, s1: State): State = {
+    if (s1.claims.size - s0.claims.size <= 1) {
+      assert(s1.claims.size - s0.claims.size >= 0)
+      return s1
+    }
+    val size1 = s0.claims.size
+    val size2 = s1.claims.size
+    val claimsOps = ops.ISZOps(s1.claims)
+    return s1(claims = claimsOps.slice(0, size1) :+ State.Claim.And(claimsOps.slice(size1, size2)))
+  }
+
+  def constructAssume(cond: AST.Exp, posOpt: Option[Position]): AST.Stmt = {
+    val assumeResAttr = AST.ResolvedAttr(
+      posOpt = posOpt,
+      resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Assume)),
+      typedOpt = Some(AST.Typed.Fun(F, F, ISZ(AST.Typed.b), AST.Typed.unit))
+    )
+    AST.Stmt.Expr(AST.Exp.Invoke(
+      None(), AST.Exp.Ident(AST.Id("assume", AST.Attr(posOpt)), assumeResAttr), ISZ(), ISZ(cond),
+      AST.ResolvedAttr(assumeResAttr.posOpt, assumeResAttr.resOpt, AST.Typed.unitOpt)
+    ), AST.TypedAttr(posOpt, AST.Typed.unitOpt))
+  }
+
+  @strictpure def afterPos(pos: Position): Position = message.FlatPos(pos.uriOpt,
+    conversions.Z.toU32(pos.endLine + 1),
+    conversions.Z.toU32(1),
+    conversions.Z.toU32(pos.endLine + 1),
+    conversions.Z.toU32(2),
+    conversions.Z.toU32(pos.offset),
+    conversions.Z.toU32(1))
+
+  def strictPureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, state: State,
+                       receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String], id: String,
+                       paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter): (State, State.ProofFun) = {
+    val pf = State.ProofFun(receiverTypeOpt, owner, id, for (id <- paramIds) yield id.value, funType.args, funType.ret)
+    if (smt2.strictPureMethods.contains(pf)) {
+      return (state, pf)
+    } else {
+      val posOpt = body.asStmt.posOpt
+      smt2.strictPureMethodsUp(smt2.strictPureMethods + pf ~> ((st"", st"")))
+      val (res, prefix, svs): (State.Value.Sym, Z, ISZ[(State, State.Value)]) = {
+        val context = pf.context :+ pf.id
+        val logika: Logika = logikaMethod(th, config, context, T, pf.receiverTypeOpt,
+          ops.ISZOps(paramIds).zip(funType.args), posOpt, ISZ(), ISZ(), ISZ(), plugins)
+        val s0 = state(claims = ISZ())
+        val (s1, r) = idIntro(posOpt.get, s0, context, "Res", funType.ret, posOpt)
+        val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
+        (r, s0.claims.size, logika.evalAssignExpValue(split, smt2, funType.ret, T, s1, body, reporter))
+      }
+
+      val pos = posOpt.get
+      smt2.addStrictPureMethod(pos, pf, svs, res, prefix)
+
+      val s1 = state(nextFresh = maxStateValuesNextFresh(svs))
+      if (config.sat) {
+        val title: String = s"the derived proof function of $id"
+        if (!smt2.sat(config.logVc, config.logVcDirOpt, title, pos, s1.claims, reporter)) {
+          reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
+        }
+      }
+      return (s1, pf)
+    }
+  }
+
+  @pure def maxStateValuesNextFresh(svs: ISZ[(State, State.Value)]): Z = {
+    var r = svs(0)._1.nextFresh
+    if (svs.size > 1) {
+      for (i <- 1 until svs.size) {
+        val nf = svs(i)._1.nextFresh
+        if (r < nf) {
+          r = nf
+        }
+      }
+    }
+    return r
   }
 }
