@@ -2971,6 +2971,44 @@ import Util._
       return evalBlock(sp, smt2, None(), rtCheck, s0, block.block, reporter)
     }
 
+//    def evalInv(s0: State, invStmt: AST.Stmt.Inv): ISZ[State] = {
+//      var r = ISZ[State]()
+//      var ss = ISZ(s0)
+//      var i = 0
+//      val isSingle = invStmt.claims.size == 1
+//      val id = invStmt.id.value
+//      var nextFresh: Z = -1
+//      val res = invStmt.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
+//      val name = res.owner :+ res.id
+//      for (claim <- invStmt.claims) {
+//        val sst = ss
+//        ss = ISZ[State]()
+//        for (s1 <- sst) {
+//          val title: String = if (isSingle) s"Invariant $id" else s"Invariant $id#$i"
+//          val receiverTypeOpt: Option[AST.Typed] = context.methodOpt match {
+//            case Some(cm) => cm.receiverTypeOpt
+//            case _ => None()
+//          }
+//          val pos = claim.posOpt.get
+//          val pfid = s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
+//          val (s2, v) = evalExtractPureMethod(this, smt2, s1, receiverTypeOpt, name, pfid, claim, reporter)
+//          val (s3, sym) = value2Sym(s2, v, pos)
+//          val s4: State = if (s3.status) evalAssertH(smt2, title, s3, sym, claim.posOpt, reporter) else s3
+//          if (s4.status) {
+//            ss = ss :+ s4
+//            if (nextFresh < s4.nextFresh) {
+//              nextFresh = s4.nextFresh
+//            }
+//          } else {
+//            r = r :+ s4
+//          }
+//        }
+//        ss = for (s3 <- ss) yield s3(nextFresh = nextFresh)
+//        i = i + 1
+//      }
+//      return ss ++ r
+//    }
+
     def evalInv(s0: State, invStmt: AST.Stmt.Inv): ISZ[State] = {
       var r = ISZ[State]()
       var ss = ISZ(s0)

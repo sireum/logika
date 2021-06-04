@@ -599,4 +599,84 @@ object Util {
     }
     return r
   }
+
+  @record class VarSubstitutor(val context: ISZ[String], var hasThis: B,
+                               var map: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)])
+    extends AST.MTransformer {
+    def introIdent(o: AST.Exp, res: AST.ResolvedInfo, id: AST.Id, typedOpt: Option[AST.Typed]): MOption[AST.Exp] = {
+      map.get(res) match {
+        case Some((_, ident)) => return MSome(ident)
+        case _ =>
+          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+          val ident = AST.Exp.Ident(id, AST.ResolvedAttr(id.attr.posOpt, Some(lres), typedOpt))
+          map = map + res ~> ((o, ident))
+          return MSome(ident)
+      }
+    }
+    override def postExpIdent(o: AST.Exp.Ident): MOption[AST.Exp] = {
+      o.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.Var =>
+          if (res.isInObject) {
+            return introIdent(o, res, o.id, o.typedOpt)
+          } else {
+            hasThis = T
+          }
+        case res: AST.ResolvedInfo.LocalVar => return introIdent(o, res, o.id, o.typedOpt)
+        case _ =>
+      }
+      return super.postExpIdent(o)
+    }
+
+    override def postExpThis(o: AST.Exp.This): MOption[AST.Exp] = {
+      hasThis = T
+      return super.postExpThis(o)
+    }
+
+    override def postExpSelect(o: AST.Exp.Select): MOption[AST.Exp] = {
+      o.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.Var if res.isInObject =>
+          return introIdent(o, res, o.id, o.typedOpt)
+        case _ =>
+      }
+      return super.postExpSelect(o)
+    }
+  }
+
+  def evalExtractPureMethod(logika: Logika, smt2: Smt2, state: State, receiverTypeOpt: Option[AST.Typed],
+                            owner: ISZ[String], id: String, exp: AST.Exp, reporter: Reporter): (State, State.Value) = {
+    val posOpt = exp.posOpt
+    val tOpt = exp.typedOpt
+    val t = tOpt.get
+    val vs = VarSubstitutor(owner :+ id, F, HashSMap.empty)
+    val newExp = vs.transformExp(exp).getOrElse(exp)
+    if (vs.hasThis || vs.map.nonEmpty) {
+      var paramIds = ISZ[AST.Id]()
+      var paramTypes = ISZ[AST.Typed]()
+      var s0 = state
+      var args = ISZ[State.Value]()
+      if (vs.hasThis) {
+        paramIds = paramIds :+ AST.Id("this", AST.Attr(posOpt))
+        paramTypes = paramTypes :+ receiverTypeOpt.get
+        val e = AST.Exp.This(AST.TypedAttr(posOpt, receiverTypeOpt))
+        val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
+        s0 = s1
+        args = args :+ arg
+      }
+      for (pair <- vs.map.values) {
+        val (e, paramIdent) = pair
+        paramIds = paramIds :+ paramIdent.id
+        paramTypes = paramTypes :+ paramIdent.typedOpt.get
+        val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
+        s0 = s1
+        args = args :+ arg
+      }
+      val (s2, pf) = strictPureMethod(logika.th, logika.config, logika.plugins, smt2, s0, None(),
+        AST.Typed.Fun(T, F, paramTypes, t), owner, id, paramIds,
+        AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter)
+      val (s3, sym) = s2.freshSym(t, posOpt.get)
+      return (s3.addClaim(State.Claim.Let.ProofFunApply(sym, pf, args)), sym)
+    } else {
+      return logika.evalExp(Split.Disabled, smt2, T, state, newExp, reporter)(0)
+    }
+  }
 }
