@@ -1440,73 +1440,67 @@ import Util._
             return ms1
           }
 
-          val rep = Reporter.create
-          var cs1 = cs0
-          val label: String = labelOpt match {
-            case Some(label) if label.value != "" =>
-              cs1 = cs1.addClaim(State.Claim.Label(label.value, label.posOpt.get))
-              s"(${label.value}) p"
-            case _ => "P"
-          }
-          var i = 0
-          var requireSyms = ISZ[State.Value]()
-          i = 0
-          val cs1PreReqSize = cs1.claims.size
-          for (require <- requires if cs1.status) {
-            val title: String =
-              if (requires.size == 1) st"${label}re-condition of $resST".render
-              else st"${label}re-condition#$i of $resST".render
+          def evalRequires(cs1: State, label: String, rep: Reporter): (State, ISZ[State.Value]) = {
+            var requireSyms = ISZ[State.Value]()
+            var i = 0
+            var csr0 = cs1
+            for (require <- requires if csr0.status) {
+              val title: String =
+                if (requires.size == 1) st"${label}re-condition of $resST".render
+                else st"${label}re-condition#$i of $resST".render
 
-            val (cs2, sym): (State, State.Value.Sym) =
-              if (assume) {
-                val p = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
-                val size = p._1.claims.size
-                assert(p._1.claims(size - 1) == State.Claim.Prop(T, p._2))
-                (p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1)), p._2)
-              } else {
-                logikaComp.evalAssert(smt2, F, title, cs1, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
-              }
-            cs1 = cs2
-            requireSyms = requireSyms :+ sym
-            if (!cs1.status) {
-              val (cs3, rsym) = cs1.freshSym(AST.Typed.b, pos)
-              cs1 = cs3.addClaim(State.Claim.Let.And(rsym, requireSyms))
-              return Context.ContractCaseResult(F, cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+              val (csr1, sym): (State, State.Value.Sym) =
+                if (assume) {
+                  val p = logikaComp.evalAssume(smt2, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
+                  val size = p._1.claims.size
+                  assert(p._1.claims(size - 1) == State.Claim.Prop(T, p._2))
+                  (p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1)), p._2)
+                } else {
+                  logikaComp.evalAssert(smt2, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
+                }
+              requireSyms = requireSyms :+ sym
+              csr0 = csr1
+              i = i + 1
             }
-            i = i + 1
+            return (conjunctClaimSuffix(cs1, csr0), requireSyms)
           }
-          if (cs1.claims.size != cs1PreReqSize) {
-            val cs1Ops = ops.ISZOps(cs1.claims)
-            cs1 = cs1(claims = cs1Ops.slice(0, cs1PreReqSize) :+ State.Claim.And(
-              cs1Ops.slice(cs1PreReqSize, cs1.claims.size)
-            ))
-          }
-          val (cs4, result) = modVarsResult(cs1, posOpt)
-          cs1 = cs4
-          i = 0
-          val cs1PreEnSize = cs1.claims.size
-          for (ensure <- ensures if cs1.status) {
-            val title: String =
-              if (ensures.size == 1) st"${label}ost-condition of $resST".render
-              else st"${label}ost-condition#$i of $resST".render
-            cs1 = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(ensure, typeSubstMap), posOpt, rep)._1
-            if (!cs1.status) {
-              val (cs5, rsym) = cs1.freshSym(AST.Typed.b, pos)
-              cs1 = cs5.addClaim(State.Claim.Let.And(rsym, requireSyms))
-              return Context.ContractCaseResult(T, cs1, State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+
+          def evalEnsures(cs1: State, label: String, rep: Reporter): State = {
+            var i = 0
+            var cse0 = cs1
+            for (ensure <- ensures if cse0.status) {
+              val title: String =
+                if (ensures.size == 1) st"${label}ost-condition of $resST".render
+                else st"${label}ost-condition#$i of $resST".render
+              cse0 = logikaComp.evalAssume(smt2, F, title, cse0, AST.Util.substExp(ensure, typeSubstMap), posOpt, rep)._1
+              i = i + 1
             }
-            i = i + 1
+            return conjunctClaimSuffix(cs1, cse0)
           }
-          if (cs1.claims.size != cs1PreEnSize) {
-            val cs1Ops = ops.ISZOps(cs1.claims)
-            cs1 = cs1(claims = cs1Ops.slice(0, cs1PreEnSize) :+ State.Claim.And(
-              cs1Ops.slice(cs1PreEnSize, cs1.claims.size)
-            ))
+
+          val rep = Reporter.create
+          val (label, cs1): (String, State) = labelOpt match {
+            case Some(lbl) if lbl.value =!= "" =>
+              (s"(${lbl.value}) p", cs0.addClaim(State.Claim.Label(lbl.value, lbl.posOpt.get)))
+            case _ => ("P", cs0)
           }
-          cs1 = modVarsRewrite(cs1, posOpt)
-          val (cs6, rsym) = cs1.freshSym(AST.Typed.b, pos)
-          cs1 = cs6.addClaim(State.Claim.Let.And(rsym, requireSyms))
-          return Context.ContractCaseResult(T, conjunctClaimSuffix(cs0, cs1), result, State.Claim.Prop(T, rsym),
+          val (cs2, requireSyms) = evalRequires(cs1, label, rep)
+          if (!cs2.status) {
+            val (cs3, rsym) = cs2.freshSym(AST.Typed.b, pos)
+            return Context.ContractCaseResult(F, cs3.addClaim(State.Claim.Let.And(rsym, requireSyms)),
+              State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+          }
+          val (cs4, result) = modVarsResult(cs2, posOpt)
+          val cs5 = evalEnsures(cs4, label, rep)
+          if (!cs5.status) {
+            val (cs6, rsym) = cs5.freshSym(AST.Typed.b, pos)
+            return Context.ContractCaseResult(T, cs6.addClaim(State.Claim.Let.And(rsym, requireSyms)),
+              State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+          }
+          val cs7 = modVarsRewrite(cs5, posOpt)
+          val (cs8, rsym) = cs7.freshSym(AST.Typed.b, pos)
+          val cs9 = cs8.addClaim(State.Claim.Let.And(rsym, requireSyms))
+          return Context.ContractCaseResult(T, conjunctClaimSuffix(cs0, cs9), result, State.Claim.Prop(T, rsym),
             rep.messages)
         }
 
