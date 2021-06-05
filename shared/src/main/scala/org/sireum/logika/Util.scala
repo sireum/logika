@@ -46,6 +46,7 @@ import org.sireum.logika.Logika.{Reporter, Split}
       case _ => value = value + d.sym.num ~> ISZ(d)
     }
   }
+
   def hasDef(d: State.Claim.Def): B = {
     return value.contains(d.sym.num)
   }
@@ -84,6 +85,7 @@ object ClaimDefs {
         case _ =>
       }
     }
+
     rec(claim)
   }
 
@@ -186,6 +188,7 @@ object Util {
       return smt2.v2ST _
     }
     var cache = HashMap.empty[Z, ST]
+
     def sv2ST(v: State.Value): ST = {
       v match {
         case v: State.Value.Sym =>
@@ -202,6 +205,7 @@ object Util {
         case _ => return smt2.v2ST(v)
       }
     }
+
     return sv2ST _
   }
 
@@ -370,13 +374,17 @@ object Util {
       }
     }
 
-    method.contract match {
-      case contract: AST.MethodContract.Simple =>
-        checkCase(None(), contract.reads, contract.requires, contract.modifies, contract.ensures)
-      case contract: AST.MethodContract.Cases =>
-        for (c <- contract.cases) {
-          checkCase(if (c.label.value === "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
-        }
+    if (method.mcontract.isEmpty) {
+      checkCase(None(), ISZ(), ISZ(), ISZ(), ISZ())
+    } else {
+      method.mcontract match {
+        case contract: AST.MethodContract.Simple =>
+          checkCase(None(), contract.reads, contract.requires, contract.modifies, contract.ensures)
+        case contract: AST.MethodContract.Cases =>
+          for (c <- contract.cases) {
+            checkCase(if (c.label.value === "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
+          }
+      }
     }
   }
 
@@ -477,7 +485,7 @@ object Util {
     current = rt.resultOpt.get
     for (p <- objectVars.entries) {
       val (x, (t, namePos)) = p
-      val name =  x.owner :+ x.id
+      val name = x.owner :+ x.id
       val (s2, sym) = nameIntro(pos, current, name, t, Some(namePos))
       current = s2
       val tipe = sym.tipe
