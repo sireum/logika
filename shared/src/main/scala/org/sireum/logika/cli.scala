@@ -36,7 +36,7 @@ object cli {
     command = "verifier",
     description = "Logika verifier",
     header = "Logika Verifier for Slang",
-    usage = "<option>* [<slang-file>]",
+    usage = "<option>* <slang-file>+",
     usageDescOpt = None(),
     opts = ISZ(
       Opt(name = "line", longKey = "line", shortKey = None(),
@@ -120,7 +120,7 @@ object cli {
     name = "logika",
     description = "Logika toolset",
     header = "Logika Toolset for Slang",
-    unlisted = T,
+    unlisted = F,
     subs = ISZ(logikaVerifier)
   )
 
