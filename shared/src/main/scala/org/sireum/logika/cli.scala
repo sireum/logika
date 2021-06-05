@@ -118,8 +118,8 @@ object cli {
 
   val group: Group = Group(
     name = "logika",
-    description = "Logika toolset",
-    header = "Logika Toolset for Slang",
+    description = "Logika tools",
+    header = "Logika Tools for Slang",
     unlisted = F,
     subs = ISZ(logikaVerifier)
   )
