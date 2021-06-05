@@ -220,8 +220,8 @@ object InceptionPlugin {
       return Plugin.Result(status, nextFresh, claims :+ claim)
     }
     just match {
-      case just: AST.ProofAst.Step.Justification.Incept => return handleH(just.invoke.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], just.invoke.posOpt, just.args)
-      case just: AST.ProofAst.Step.Justification.InceptNamed => return handleH(just.invoke.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], just.invoke.posOpt, just.args)
+      case just: AST.ProofAst.Step.Justification.Incept => return handleH(just.invoke.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], just.invoke.ident.posOpt, just.args)
+      case just: AST.ProofAst.Step.Justification.InceptNamed => return handleH(just.invoke.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], just.invoke.ident.posOpt, just.args)
       case _: AST.ProofAst.Step.Justification.InceptEta =>
         halt("TODO") // TODO
     }
