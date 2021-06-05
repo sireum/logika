@@ -111,31 +111,91 @@ object Logika {
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size")
   )
 
-  def checkStmts(initStmtss: ISZ[ISZ[AST.Stmt]], config: Config, th: TypeHierarchy,
+  def checkStmts(initStmts: ISZ[AST.Stmt], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
-                 par: B, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B): Unit = {
-    var tasks = ISZ[Task]()
-    if (includeInit) {
-      for (initStmts <- initStmtss) {
-        tasks = tasks :+ Task.Stmts(th, config, initStmts, plugins)
-      }
-    }
-    def rec(stmts: ISZ[AST.Stmt]): Unit = {
+                 par: B, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z): Unit = {
+
+    var taskMap = HashSMap.empty[(Z, Z), ISZ[Task]]
+    def rec(ownerPosOpt: Option[(Z, Z)], stmts: ISZ[AST.Stmt]): Unit = {
+      var ownerTasks = ISZ[Task]()
       for (stmt <- stmts) {
         stmt match {
           case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty =>
-            tasks = tasks :+ Task.Method(par, th, config, stmt, plugins)
-          case stmt: AST.Stmt.Object => rec(stmt.stmts)
-          case stmt: AST.Stmt.Adt => rec(stmt.stmts)
-          case stmt: AST.Stmt.Sig => rec(stmt.stmts)
+            if (ownerPosOpt.nonEmpty) {
+              ownerTasks = ownerTasks :+ Task.Method(par, th, config, stmt, plugins)
+            } else {
+              val pos = stmt.posOpt.get
+              val ownerPos = (pos.beginLine, pos.beginColumn)
+              val tasks: ISZ[Task] = taskMap.get(ownerPos) match {
+                case Some(ts) => ts
+                case _ => ISZ()
+              }
+              taskMap = taskMap + ownerPos ~> (tasks :+ Task.Method(par, th, config, stmt, plugins))
+            }
+          case stmt: AST.Stmt.Object =>
+            val pos = stmt.posOpt.get
+            rec(Some((pos.beginLine, pos.endLine)), stmt.stmts)
+          case stmt: AST.Stmt.Adt =>
+            val pos = stmt.posOpt.get
+            rec(Some((pos.beginLine, pos.endLine)), stmt.stmts)
+          case stmt: AST.Stmt.Sig =>
+            val pos = stmt.posOpt.get
+            rec(Some((pos.beginLine, pos.endLine)), stmt.stmts)
           case _ =>
         }
       }
+      if (ownerTasks.nonEmpty) {
+        taskMap = taskMap + ownerPosOpt.get ~> ownerTasks
+      }
     }
 
-    for (initStmts <- initStmtss) {
-      rec(initStmts)
+    rec(None(), initStmts)
+
+    def findTasks(): ISZ[Task] = {
+      def findMethodTasks(): ISZ[Task] = {
+        if (line <= 0) {
+          return ISZ()
+        }
+        for (ts <- taskMap.values; t <- ts) {
+          t match {
+            case t: Task.Method =>
+              val pos = t.method.posOpt.get
+              if (pos.beginLine <= line && line <= pos.endLine) {
+                return ISZ(t)
+              }
+            case _ =>
+          }
+        }
+        return ISZ()
+      }
+      def findOwnerTasks(): ISZ[Task] = {
+        if (line <= 0) {
+          return ISZ()
+        }
+        for (p <- taskMap.entries) {
+          val (pos, ts) = p
+          if (pos._1 <= line && line <= pos._2) {
+            return ts
+          }
+        }
+        return ISZ()
+      }
+      var r = findMethodTasks()
+      if (r.nonEmpty) {
+        return r
+      }
+      r = findOwnerTasks()
+      if (r.nonEmpty) {
+        return r
+      }
+      r = for (ts <- taskMap.values; t <- ts) yield t
+      if (includeInit) {
+        r = r :+ Task.Stmts(th, config, initStmts, plugins)
+      }
+      return r
     }
+
+    val tasks = findTasks()
 
     val smt2 = smt2f(th)
 
@@ -161,16 +221,16 @@ object Logika {
     reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
   }
 
-  def checkFile(fileUriOpt: Option[String], input: String, config: Config,
-                smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
-                par: B, hasLogika: B, plugins: ISZ[Plugin]): Unit = {
+  def checkScript(fileUriOpt: Option[String], input: String, config: Config,
+                  smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
+                  par: B, hasLogika: B, plugins: ISZ[Plugin], line: Z): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
       case Some(p) => !ops.StringOps(p).endsWith(".scala") && !ops.StringOps(p).endsWith(".slang")
       case _ => T
     }
 
-    def checkFileH(): Unit = {
+    def checkScriptH(): Unit = {
       val topUnitOpt = lang.parser.Parser(input).parseTopUnit[AST.TopUnit](
         isWorksheet = isWorksheet, isDiet = F, fileUriOpt = fileUriOpt, reporter = reporter)
       val libraryStartTime = extension.Time.currentMillis
@@ -199,7 +259,7 @@ object Logika {
 
           if (!reporter.hasError) {
             if (hasLogika) {
-              checkStmts(ISZ(p.body.stmts), config, th, smt2f, reporter, par, plugins, verifyingStartTime, T)
+              checkStmts(p.body.stmts, config, th, smt2f, reporter, par, plugins, verifyingStartTime, T, line)
             }
           } else {
             reporter.illFormed()
@@ -208,12 +268,12 @@ object Logika {
       }
     }
 
-    extension.Cancel.cancellable(checkFileH _)
+    extension.Cancel.cancellable(checkScriptH _)
   }
 
   def checkPrograms(sources: ISZ[(Option[String], String)], files: ISZ[String], config: Config,
                     th: TypeHierarchy, smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
-                    par: B, strictAliasing: B, sanityCheck: B, plugins: ISZ[Plugin]): Unit = {
+                    par: B, strictAliasing: B, sanityCheck: B, plugins: ISZ[Plugin], line: Z): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val (rep, _, nameMap, typeMap) = extension.Cancel.cancellable(() =>
       lang.FrontEnd.parseProgramAndGloballyResolve(par, sources, th.nameMap, th.typeMap))
@@ -240,7 +300,12 @@ object Logika {
     @pure def shouldCheck(posOpt: Option[Position]): B = {
       posOpt match {
         case Some(pos) => pos.uriOpt match {
-          case Some(uri) => return fileSet.contains(uri)
+          case Some(uri) if fileSet.contains(uri) =>
+            if (line > 0) {
+              return pos.beginLine <= line && line <= pos.endLine
+            } else {
+              return T
+            }
           case _ =>
         }
         case _ =>
@@ -285,21 +350,21 @@ object Logika {
     val verifyingStartTime = extension.Time.currentMillis
     reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
 
-    var initStmtss = ISZ[ISZ[AST.Stmt]]()
+    var initStmts = ISZ[AST.Stmt]()
     for (info <- th4.nameMap.values) {
       info match {
-        case info: Info.Object if shouldCheck(info.posOpt) => initStmtss = initStmtss :+ info.ast.stmts
+        case info: Info.Object if shouldCheck(info.posOpt) => initStmts = initStmts :+ info.ast
         case _ =>
       }
     }
     for (info <- th4.typeMap.values) {
       info match {
-        case info: TypeInfo.Adt if shouldCheck(info.posOpt) => initStmtss = initStmtss :+ info.ast.stmts
-        case info: TypeInfo.Sig if shouldCheck(info.posOpt) => initStmtss = initStmtss :+ info.ast.stmts
+        case info: TypeInfo.Adt if shouldCheck(info.posOpt) => initStmts = initStmts :+ info.ast
+        case info: TypeInfo.Sig if shouldCheck(info.posOpt) => initStmts = initStmts :+ info.ast
         case _ =>
       }
     }
-    checkStmts(initStmtss, config, th4, smt2f, reporter, par, plugins, verifyingStartTime, F)
+    checkStmts(initStmts, config, th4, smt2f, reporter, par, plugins, verifyingStartTime, F, line)
   }
 }
 

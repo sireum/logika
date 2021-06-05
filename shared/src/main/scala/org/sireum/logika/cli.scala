@@ -39,6 +39,9 @@ object cli {
     usage = "<option>* [<slang-file>]",
     usageDescOpt = None(),
     opts = ISZ(
+      Opt(name = "line", longKey = "line", shortKey = None(),
+        tpe = Type.Num(None(), 0, Some(0), None()),
+        description = "Focus verification to the specified program line number"),
       Opt(name = "sat", longKey = "sat", shortKey = None(),
         tpe = Type.Flag(F),
         description = "Enable assumption satisfiability checking"),
