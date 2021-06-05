@@ -1364,7 +1364,7 @@ import Util._
         }
 
         def evalContractCase(logikaComp: Logika, currentReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
-                             labelOpt: Option[AST.Exp.LitString], invs: ISZ[Info.Inv], requires: ISZ[AST.Exp],
+                             labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
                              ensures: ISZ[AST.Exp]): Context.ContractCaseResult = {
           val modLocals = contract.modifiedLocalVars
 
@@ -1449,32 +1449,6 @@ import Util._
             case _ => "P"
           }
           var i = 0
-          val cs1PreReqInvSize = cs1.claims.size
-          for (inv <- invs) {
-            val id = inv.ast.id.value
-            i = 0
-            val isSingle = inv.ast.claims.size == 1
-            for (claim <- inv.ast.claims) {
-              val title: String =
-                if (isSingle) s"${label}re-invariant $id"
-                else s"${label}re-invariant $id#$i"
-              if (assume) {
-                val p = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), posOpt, rep)
-                val size = p._1.claims.size
-                cs1 = p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1))
-              } else {
-                cs1 = logikaComp.evalAssert(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), posOpt, rep)._1
-              }
-              i = i + 1
-            }
-          }
-          if (cs1.claims.size != cs1PreReqInvSize) {
-            val cs1Ops = ops.ISZOps(cs1.claims)
-            cs1 = cs1(claims = cs1Ops.slice(0, cs1PreReqInvSize) :+ State.Claim.And(
-              cs1Ops.slice(cs1PreReqInvSize, cs1.claims.size)
-            ))
-          }
-          val hasPreReqInv = cs1.claims.size != cs1PreReqInvSize
           var requireSyms = ISZ[State.Value]()
           i = 0
           val cs1PreReqSize = cs1.claims.size
@@ -1507,34 +1481,8 @@ import Util._
               cs1Ops.slice(cs1PreReqSize, cs1.claims.size)
             ))
           }
-          if (hasPreReqInv && cs1.claims.size != cs1PreReqSize) {
-            val cs1Ops = ops.ISZOps(cs1.claims)
-            cs1 = cs1(claims = cs1Ops.slice(0, cs1PreReqInvSize) :+ State.Claim.And(
-              cs1Ops.slice(cs1PreReqInvSize, cs1.claims.size)
-            ))
-          }
           val (cs4, result) = modVarsResult(cs1, posOpt)
           cs1 = cs4
-          val cs1PreEnInvSize = cs1.claims.size
-          for (inv <- invs) {
-            val id = inv.ast.id.value
-            i = 0
-            val isSingle = inv.ast.claims.size == 1
-            for (claim <- inv.ast.claims) {
-              val title: String =
-                if (isSingle) s"${label}ost-invariant $id"
-                else s"${label}ost-invariant $id#$i"
-              cs1 = logikaComp.evalAssume(smt2, F, title, cs1, AST.Util.substExp(claim, typeSubstMap), posOpt, rep)._1
-              i = i + 1
-            }
-          }
-          if (cs1.claims.size != cs1PreEnInvSize) {
-            val cs1Ops = ops.ISZOps(cs1.claims)
-            cs1 = cs1(claims = cs1Ops.slice(0, cs1PreEnInvSize) :+ State.Claim.And(
-              cs1Ops.slice(cs1PreEnInvSize, cs1.claims.size)
-            ))
-          }
-          val hasPreEnInv = cs1.claims.size != cs1PreEnInvSize
           i = 0
           val cs1PreEnSize = cs1.claims.size
           for (ensure <- ensures if cs1.status) {
@@ -1553,12 +1501,6 @@ import Util._
             val cs1Ops = ops.ISZOps(cs1.claims)
             cs1 = cs1(claims = cs1Ops.slice(0, cs1PreEnSize) :+ State.Claim.And(
               cs1Ops.slice(cs1PreEnSize, cs1.claims.size)
-            ))
-          }
-          if (hasPreEnInv && cs1.claims.size != cs1PreEnSize) {
-            val cs1Ops = ops.ISZOps(cs1.claims)
-            cs1 = cs1(claims = cs1Ops.slice(0, cs1PreEnInvSize) :+ State.Claim.And(
-              cs1Ops.slice(cs1PreEnInvSize, cs1.claims.size)
             ))
           }
           cs1 = modVarsRewrite(cs1, posOpt)
@@ -1620,19 +1562,23 @@ import Util._
           case _ =>
         }
         val invs: ISZ[Info.Inv] = if (res.owner.isEmpty) th.worksheetInvs else ISZ()
+        s1 = {
+          val pis = logikaComp.evalInvs(F, "Pre-invariant", smt2, rtCheck, s1, invs, reporter)
+          s1(status = pis.status, nextFresh = pis.nextFresh)
+        }
         contract match {
-          case contract: AST.MethodContract.Simple =>
-            val ccr = evalContractCase(logikaComp, currentReceiverOpt, F, s1, None(), invs, contract.requires, contract.ensures)
+          case contract: AST.MethodContract.Simple if s1.status =>
+            val ccr = evalContractCase(logikaComp, currentReceiverOpt, F, s1, None(), contract.requires, contract.ensures)
             reporter.reports(ccr.messages)
             r = r :+ ((ccr.state, ccr.retVal))
-          case contract: AST.MethodContract.Cases =>
+          case contract: AST.MethodContract.Cases if s1.status =>
             val root = s1
             var isPreOK = F
             var ccrs = ISZ[Context.ContractCaseResult]()
             var okCcrs = ISZ[Context.ContractCaseResult]()
             for (cas <- contract.cases) {
               val ccr = evalContractCase(logikaComp, currentReceiverOpt, T, s1,
-                if (cas.label.value == "") None() else Some(cas.label), invs, cas.requires, cas.ensures)
+                if (cas.label.value == "") None() else Some(cas.label), cas.requires, cas.ensures)
               ccrs = ccrs :+ ccr
               isPreOK = isPreOK || ccr.isPreOK
               if (ccr.isOK) {
@@ -1695,15 +1641,32 @@ import Util._
                 if (isUnit) {
                   r = r :+ ((s1(nextFresh = nextFresh), okCcrs(0).retVal))
                 } else {
-                  val (s7, sym) = s1.freshSym(retType, pos)
-                  s1 = s7
+                  val (s8, sym) = s1.freshSym(retType, pos)
+                  s1 = s8
                   r = r :+ ((s1(nextFresh = nextFresh).addClaim(State.Claim.And(
                     for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
                       State.Claim.Let.Eq(sym, ccr.retVal))))), sym))
                 }
               }
             }
+          case _ => r = r :+ ((s1, State.errorValue))
         }
+        val oldR = r
+        r = ISZ()
+        var nextFresh: Z = -1
+        for (sv <- oldR) {
+          val (s9, sym) = sv
+          if (s9.status) {
+            val s10 = logikaComp.evalInvs(T, "Post-invariant", smt2, rtCheck, s9, invs, reporter)
+            if (s10.nextFresh > nextFresh) {
+              nextFresh = s10.nextFresh
+            }
+            r = r :+ ((conjunctClaimSuffix(s9, s10), sym))
+          } else {
+            r = r :+ sv
+          }
+        }
+        r = for (sv <- r) yield (sv._1(nextFresh = nextFresh), sv._2)
       }
 
       for (t <- stateSubstMapReceiverOpts) {
@@ -2744,6 +2707,29 @@ import Util._
     return (F, s0.nextFresh, s0.claims, State.Claim.And(ISZ()))
   }
 
+  def evalInvs(isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State, invs: ISZ[Info.Inv], reporter: Reporter): State = {
+    var s1 = s0
+    for (inv <- invs if s1.status) {
+      s1 = evalInv(isAssume, title, smt2, rtCheck, s1, inv.ast, reporter)
+    }
+    return s1
+  }
+
+  def evalInv(isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State, invStmt: AST.Stmt.Inv, reporter: Reporter): State = {
+    var s1 = s0
+    var i = 0
+    val isSingle = invStmt.claims.size == 1
+    val id = invStmt.id.value
+    for (claim <- invStmt.claims if s1.status) {
+      val titl: String = if (isSingle) s"$title $id" else s"$title $id#$i"
+      s1 =
+        if (isAssume) evalAssume(smt2, rtCheck, titl, s1, claim, claim.posOpt, reporter)._1
+        else evalAssert(smt2, rtCheck, titl, s1, claim, claim.posOpt, reporter)._1
+      i = i + 1
+    }
+    return s1
+  }
+
   def evalStmt(split: Split.Type, smt2: Smt2, rtCheck: B, state: State, stmt: AST.Stmt, reporter: Reporter): ISZ[State] = {
     if (!state.status) {
       return ISZ(state)
@@ -3002,44 +2988,6 @@ import Util._
       return evalBlock(sp, smt2, None(), rtCheck, s0, block.block, reporter)
     }
 
-    def evalInv(s0: State, invStmt: AST.Stmt.Inv): ISZ[State] = {
-      var r = ISZ[State]()
-      var ss = ISZ(s0)
-      var i = 0
-      val isSingle = invStmt.claims.size == 1
-      val id = invStmt.id.value
-      var nextFresh: Z = -1
-      val res = invStmt.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
-      val name = res.owner :+ res.id
-      for (claim <- invStmt.claims) {
-        val sst = ss
-        ss = ISZ[State]()
-        for (s1 <- sst) {
-          val title: String = if (isSingle) s"Invariant $id" else s"Invariant $id#$i"
-          val receiverTypeOpt: Option[AST.Typed] = context.methodOpt match {
-            case Some(cm) => cm.receiverTypeOpt
-            case _ => None()
-          }
-          val pos = claim.posOpt.get
-          val pfid = s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
-          val (s2, v) = evalExtractPureMethod(this, smt2, s1, receiverTypeOpt, name, pfid, claim, reporter)
-          val (s3, sym) = value2Sym(s2, v, pos)
-          val s4: State = if (s3.status) evalAssertH(smt2, title, s3, sym, claim.posOpt, reporter) else s3
-          if (s4.status) {
-            ss = ss :+ s4
-            if (nextFresh < s4.nextFresh) {
-              nextFresh = s4.nextFresh
-            }
-          } else {
-            r = r :+ s4
-          }
-        }
-        ss = for (s3 <- ss) yield s3(nextFresh = nextFresh)
-        i = i + 1
-      }
-      return ss ++ r
-    }
-
     def evalDeduceSteps(s0: State, deduceStmt: AST.Stmt.DeduceSteps): ISZ[State] = {
       var p = (s0, HashSMap.empty[Z, StepProofContext])
       for (step <- deduceStmt.steps if p._1.status) {
@@ -3168,7 +3116,9 @@ import Util._
         case stmt: AST.Stmt.Block => return evalBlock(split, smt2, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.SpecBlock => return evalSpecBlock(split, state, stmt)
         case stmt: AST.Stmt.Match => return evalMatch(split, smt2, None(), rtCheck, state, stmt, reporter)
-        case stmt: AST.Stmt.Inv => return evalInv(state, stmt)
+        case stmt: AST.Stmt.Inv =>
+          val s1 = evalInv(F, "Invariant", smt2, rtCheck, state, stmt, reporter)
+          return ISZ(state(status = s1.status, nextFresh = s1.nextFresh))
         case stmt: AST.Stmt.DeduceSteps => return evalDeduceSteps(state, stmt)
         case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty => return evalDeduceSequent(state, stmt)
         case _: AST.Stmt.Object => return ISZ(state)
