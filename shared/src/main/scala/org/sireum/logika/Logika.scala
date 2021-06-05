@@ -1380,7 +1380,7 @@ import Util._
               ms1 = ls0
               oldIdMap = oldIdMap + (info.context :+ info.id) ~> sym
             }
-            ms1 = rewriteLocalVars(th, ms1, modLocals.keys, mposOpt, reporter)
+            ms1 = rewriteLocalVars(ms1, modLocals.keys, mposOpt, reporter)
             for (pair <- modLocals.entries) {
               val (info, (t, pos)) = pair
               val oldSym = oldIdMap.get(info.context :+ info.id).get
@@ -1430,7 +1430,7 @@ import Util._
             if (receiverOpt.nonEmpty) {
               rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "this")
             }
-            ms1 = rewriteLocalVars(th, ms1, rwLocals, modPosOpt, reporter)
+            ms1 = rewriteLocalVars(ms1, rwLocals, modPosOpt, reporter)
             currentReceiverOpt match {
               case Some(receiver) =>
                 ms1 = ms1.addClaim(State.Claim.Let.CurrentId(F, receiver, context.methodOpt.get.name, "this",
@@ -1570,7 +1570,7 @@ import Util._
 
         val logikaComp: Logika = {
           val l = logikaMethod(th, config, ctx, F, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
-            receiverPosOpt, contract.reads, contract.modifies, ISZ(), plugins)
+            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, contract.modifies, ISZ(), plugins)
           val mctx = l.context.methodOpt.get
           var objectVarInMap = mctx.objectVarInMap
           for (p <- mctx.objectVarMap(typeSubstMap).entries) {
@@ -1608,7 +1608,7 @@ import Util._
               val lcontext = context.methodOpt.get.name
               val p = idIntro(posOpt.get, s1, lcontext, "this", currentReceiverType, None())
               s1 = p._1
-              s1 = rewriteLocal(th, s1, lcontext, "this", posOpt, reporter)
+              s1 = rewriteLocal(s1, lcontext, "this", posOpt, reporter)
               Some(p._2)
             case _ => None()
           }
@@ -2140,7 +2140,7 @@ import Util._
 
   def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym,
                        idPosOpt: Option[Position], reporter: Reporter): State = {
-    val s1: State = if (decl) s0 else rewriteLocal(th, s0, lcontext, id, idPosOpt, reporter)
+    val s1: State = if (decl) s0 else rewriteLocal(s0, lcontext, id, idPosOpt, reporter)
     return s1(claims = s1.claims :+ State.Claim.Let.CurrentId(F, rhs, lcontext, id, idPosOpt))
   }
 
@@ -2378,7 +2378,7 @@ import Util._
     def addPatternVars(s0: State, lcontext: ISZ[String],
                        m: Map[String, (State.Value, AST.Typed, Position)]): (State, ISZ[State.Value]) = {
       val ids = m.keys
-      val s1 = rewriteLocals(th, s0, lcontext, ids)
+      val s1 = rewriteLocals(s0, lcontext, ids)
       var s2 = s1
       var bindings = ISZ[State.Value]()
       for (p <- m.entries) {
@@ -2421,7 +2421,7 @@ import Util._
           val pos = c.pattern.posOpt.get
           val (s7, sym) = s6.freshSym(AST.Typed.b, pos)
           val s8 = s7.addClaim(State.Claim.Let.And(sym, conds))
-          val s9 = rewriteLocals(th, s8, lcontext, m.keys)
+          val s9 = rewriteLocals(s8, lcontext, m.keys)
           val s10 = s9
           s1 = s1(nextFresh = s10.nextFresh).
             addClaim(State.Claim.And(for (i <- s1.claims.size until s10.claims.size) yield s10.claims(i)))
@@ -2859,7 +2859,7 @@ import Util._
             halt("TODO: rewrite Vars/fields as well") // TODO
           }
           val s0R: State = {
-            var srw = rewriteLocalVars(th, s0(nextFresh = s1.nextFresh), modLocalVars.keys, whileStmt.posOpt, reporter)
+            var srw = rewriteLocalVars(s0(nextFresh = s1.nextFresh), modLocalVars.keys, whileStmt.posOpt, reporter)
             for (p <- modLocalVars.entries) {
               val (res, (tipe, pos)) = p
               val (srw1, sym) = srw.freshSym(tipe, pos)
@@ -3002,44 +3002,6 @@ import Util._
       return evalBlock(sp, smt2, None(), rtCheck, s0, block.block, reporter)
     }
 
-//    def evalInv(s0: State, invStmt: AST.Stmt.Inv): ISZ[State] = {
-//      var r = ISZ[State]()
-//      var ss = ISZ(s0)
-//      var i = 0
-//      val isSingle = invStmt.claims.size == 1
-//      val id = invStmt.id.value
-//      var nextFresh: Z = -1
-//      val res = invStmt.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
-//      val name = res.owner :+ res.id
-//      for (claim <- invStmt.claims) {
-//        val sst = ss
-//        ss = ISZ[State]()
-//        for (s1 <- sst) {
-//          val title: String = if (isSingle) s"Invariant $id" else s"Invariant $id#$i"
-//          val receiverTypeOpt: Option[AST.Typed] = context.methodOpt match {
-//            case Some(cm) => cm.receiverTypeOpt
-//            case _ => None()
-//          }
-//          val pos = claim.posOpt.get
-//          val pfid = s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
-//          val (s2, v) = evalExtractPureMethod(this, smt2, s1, receiverTypeOpt, name, pfid, claim, reporter)
-//          val (s3, sym) = value2Sym(s2, v, pos)
-//          val s4: State = if (s3.status) evalAssertH(smt2, title, s3, sym, claim.posOpt, reporter) else s3
-//          if (s4.status) {
-//            ss = ss :+ s4
-//            if (nextFresh < s4.nextFresh) {
-//              nextFresh = s4.nextFresh
-//            }
-//          } else {
-//            r = r :+ s4
-//          }
-//        }
-//        ss = for (s3 <- ss) yield s3(nextFresh = nextFresh)
-//        i = i + 1
-//      }
-//      return ss ++ r
-//    }
-
     def evalInv(s0: State, invStmt: AST.Stmt.Inv): ISZ[State] = {
       var r = ISZ[State]()
       var ss = ISZ(s0)
@@ -3047,19 +3009,29 @@ import Util._
       val isSingle = invStmt.claims.size == 1
       val id = invStmt.id.value
       var nextFresh: Z = -1
+      val res = invStmt.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
+      val name = res.owner :+ res.id
       for (claim <- invStmt.claims) {
         val sst = ss
         ss = ISZ[State]()
         for (s1 <- sst) {
           val title: String = if (isSingle) s"Invariant $id" else s"Invariant $id#$i"
-          val s2 = evalAssert(smt2, rtCheck, title, s1, claim, claim.posOpt, reporter)._1
-          if (s2.status) {
-            ss = ss :+ s2
-            if (nextFresh < s2.nextFresh) {
-              nextFresh = s2.nextFresh
+          val receiverTypeOpt: Option[AST.Typed] = context.methodOpt match {
+            case Some(cm) => cm.receiverTypeOpt
+            case _ => None()
+          }
+          val pos = claim.posOpt.get
+          val pfid = s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
+          val (s2, v) = evalExtractPureMethod(this, smt2, s1, receiverTypeOpt, name, pfid, claim, reporter)
+          val (s3, sym) = value2Sym(s2, v, pos)
+          val s4: State = if (s3.status) evalAssertH(smt2, title, s3, sym, claim.posOpt, reporter) else s3
+          if (s4.status) {
+            ss = ss :+ s4
+            if (nextFresh < s4.nextFresh) {
+              nextFresh = s4.nextFresh
             }
           } else {
-            r = r :+ s2
+            r = r :+ s4
           }
         }
         ss = for (s3 <- ss) yield s3(nextFresh = nextFresh)
@@ -3353,7 +3325,7 @@ import Util._
     var r = ISZ[State]()
     for (s1 <- evalStmts(split, smt2, rOpt, rtCheck, s0, body.stmts, reporter)) {
       if (s1.status) {
-        r = r :+ rewriteLocalVars(th, s1, body.undecls, posOpt, reporter)
+        r = r :+ rewriteLocalVars(s1, body.undecls, posOpt, reporter)
       } else {
         r = r :+ s1
       }

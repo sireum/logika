@@ -32,9 +32,6 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.TypeInfo
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{Reporter, Split}
-import org.sireum.logika.State.Claim
-import org.sireum.logika.State.Claim.Let
-import org.sireum.logika.State.Claim.Let.Quant
 
 @record class ClaimSTs(var value: ISZ[ST]) {
   def add(st: ST): Unit = {
@@ -210,9 +207,9 @@ object Util {
 
 
   def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], inPfc: B, receiverTypeOpt: Option[AST.Typed],
-                   params: ISZ[(AST.Id, AST.Typed)], posOpt: Option[Position], reads: ISZ[AST.Exp.Ident],
+                   params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position], reads: ISZ[AST.Exp.Ident],
                    modifies: ISZ[AST.Exp.Ident], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin]): Logika = {
-    val mctx = Context.Method(name, receiverTypeOpt, params, reads, modifies, HashMap.empty, HashMap.empty,
+    val mctx = Context.Method(name, receiverTypeOpt, params, retType, reads, modifies, HashMap.empty, HashMap.empty,
       HashMap.empty, posOpt)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels)
     return Logika(th, config, ctx, inPfc, plugins)
@@ -279,7 +276,8 @@ object Util {
             case _ => halt("Infeasible")
           }
         }
-        val l = logikaMethod(th, config, mname, F, receiverTypeOpt, method.sig.paramIdTypes, method.posOpt, reads, modifies,
+        val l = logikaMethod(th, config, mname, F, receiverTypeOpt, method.sig.paramIdTypes,
+          method.sig.returnType.typedOpt.get, method.posOpt, reads, modifies,
           if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins)
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
@@ -403,8 +401,7 @@ object Util {
     return StateTransformer(CurrentIdPossCollector(lcontext, id)).transformState(Set.empty, s0).ctx.elements
   }
 
-  def rewriteLocal(th: TypeHierarchy, s0: State, lcontext: ISZ[String], id: String, posOpt: Option[Position],
-                   reporter: Reporter): State = {
+  def rewriteLocal(s0: State, lcontext: ISZ[String], id: String, posOpt: Option[Position], reporter: Reporter): State = {
     val poss = collectLocalPoss(s0, lcontext, id)
     if (poss.isEmpty) {
       reporter.error(posOpt, Logika.kind, s"Missing Modifies clause for $id")
@@ -417,7 +414,7 @@ object Util {
     return s2
   }
 
-  def rewriteLocals(th: TypeHierarchy, s0: State, lcontext: ISZ[String], ids: ISZ[String]): State = {
+  def rewriteLocals(s0: State, lcontext: ISZ[String], ids: ISZ[String]): State = {
     if (ids.isEmpty) {
       return s0
     }
@@ -435,7 +432,7 @@ object Util {
     return r.resultOpt.getOrElse(s1)
   }
 
-  def rewriteLocalVars(th: TypeHierarchy, state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar], posOpt: Option[Position], reporter: Reporter): State = {
+  def rewriteLocalVars(state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar], posOpt: Option[Position], reporter: Reporter): State = {
     if (localVars.isEmpty) {
       return state
     }
@@ -547,7 +544,7 @@ object Util {
       val (res, prefix, svs): (State.Value.Sym, Z, ISZ[(State, State.Value)]) = {
         val context = pf.context :+ pf.id
         val logika: Logika = logikaMethod(th, config, context, T, pf.receiverTypeOpt,
-          ops.ISZOps(paramIds).zip(funType.args), posOpt, ISZ(), ISZ(), ISZ(), plugins)
+          ops.ISZOps(paramIds).zip(funType.args), funType.ret, posOpt, ISZ(), ISZ(), ISZ(), plugins)
         val s0 = state(claims = ISZ())
         val (s1, r) = idIntro(posOpt.get, s0, context, "Res", funType.ret, posOpt)
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
@@ -581,8 +578,12 @@ object Util {
     return r
   }
 
-  @record class VarSubstitutor(val context: ISZ[String], var hasThis: B,
-                               var map: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)])
+  @record class VarSubstitutor(val context: ISZ[String],
+                               val receiverTypeOpt: Option[AST.Typed],
+                               var hasThis: B,
+                               var resultOpt: Option[(AST.Exp, AST.Exp.Ident)],
+                               var map: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)],
+                               var inputMap: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)])
     extends AST.MTransformer {
     def introIdent(o: AST.Exp, res: AST.ResolvedInfo, id: AST.Id, typedOpt: Option[AST.Typed]): MOption[AST.Exp] = {
       map.get(res) match {
@@ -594,6 +595,46 @@ object Util {
           return MSome(ident)
       }
     }
+
+    def introInputIdent(o: AST.Exp, res: AST.ResolvedInfo, id: AST.Id, typedOpt: Option[AST.Typed]): AST.MTransformer.PreResult[AST.Exp] = {
+      inputMap.get(res) match {
+        case Some((_, ident)) => return AST.MTransformer.PreResult(F, MSome(ident))
+        case _ =>
+          val inId = s"${id.value}.in"
+          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, inId)
+          val ident = AST.Exp.Ident(id(value = inId), AST.ResolvedAttr(id.attr.posOpt, Some(lres), typedOpt))
+          inputMap = inputMap + res ~> ((o, ident))
+          return AST.MTransformer.PreResult(F, MSome(ident))
+      }
+    }
+
+    override def preExpInput(o: AST.Exp.Input): AST.MTransformer.PreResult[AST.Exp] = {
+      o.exp match {
+        case exp: AST.Exp.Ident =>
+          exp.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Var => return introInputIdent(exp, res, exp.id, exp.typedOpt)
+            case res: AST.ResolvedInfo.LocalVar => return introInputIdent(exp, res, exp.id, exp.typedOpt)
+            case _ =>
+          }
+        case exp: AST.Exp.Select =>
+          exp.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Var if res.isInObject =>
+              return introInputIdent(exp, res, exp.id, exp.typedOpt)
+            case _ =>
+          }
+        case _ =>
+      }
+      halt("Non-simple input")
+    }
+
+    override def postExpResult(o: AST.Exp.Result): MOption[AST.Exp] = {
+      val id = AST.Id("return", AST.Attr(o.posOpt))
+      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+      val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), o.typedOpt))
+      resultOpt = Some((o, ident))
+      return MSome(ident)
+    }
+
     override def postExpIdent(o: AST.Exp.Ident): MOption[AST.Exp] = {
       o.attr.resOpt.get match {
         case res: AST.ResolvedInfo.Var =>
@@ -601,6 +642,10 @@ object Util {
             return introIdent(o, res, o.id, o.typedOpt)
           } else {
             hasThis = T
+            val id = AST.Id("this", AST.Attr(o.posOpt))
+            val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+            val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), receiverTypeOpt))
+            return MSome(AST.Exp.Select(Some(ident), o.id, o.targs, o.attr))
           }
         case res: AST.ResolvedInfo.LocalVar => return introIdent(o, res, o.id, o.typedOpt)
         case _ =>
@@ -610,7 +655,10 @@ object Util {
 
     override def postExpThis(o: AST.Exp.This): MOption[AST.Exp] = {
       hasThis = T
-      return super.postExpThis(o)
+      val id = AST.Id("this", AST.Attr(o.posOpt))
+      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+      val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), o.typedOpt))
+      return MSome(ident)
     }
 
     override def postExpSelect(o: AST.Exp.Select): MOption[AST.Exp] = {
@@ -628,7 +676,7 @@ object Util {
     val posOpt = exp.posOpt
     val tOpt = exp.typedOpt
     val t = tOpt.get
-    val vs = VarSubstitutor(owner :+ id, F, HashSMap.empty)
+    val vs = VarSubstitutor(owner :+ id, receiverTypeOpt, F, None(), HashSMap.empty, HashSMap.empty)
     val newExp = vs.transformExp(exp).getOrElse(exp)
     if (vs.hasThis || vs.map.nonEmpty) {
       var paramIds = ISZ[AST.Id]()
@@ -651,6 +699,24 @@ object Util {
         s0 = s1
         args = args :+ arg
       }
+      for (pair <- vs.inputMap.values) {
+        val (e, paramIdent) = pair
+        paramIds = paramIds :+ paramIdent.id
+        paramTypes = paramTypes :+ paramIdent.typedOpt.get
+        val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
+        s0 = s1
+        args = args :+ arg
+      }
+      vs.resultOpt match {
+        case Some((_, ident)) =>
+          paramIds = paramIds :+ ident.id
+          paramTypes = paramTypes :+ ident.typedOpt.get
+          val e = AST.Exp.Result(None(), AST.TypedAttr(posOpt, ident.typedOpt))
+          val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
+          s0 = s1
+          args = args :+ arg
+        case _ =>
+      }
       val (s2, pf) = strictPureMethod(logika.th, logika.config, logika.plugins, smt2, s0, None(),
         AST.Typed.Fun(T, F, paramTypes, t), owner, id, paramIds,
         AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter)
@@ -660,4 +726,6 @@ object Util {
       return logika.evalExp(Split.Disabled, smt2, T, state, newExp, reporter)(0)
     }
   }
+
+  @strictpure def strictPureClaimId(i: Z, pos: Position): String = s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
 }

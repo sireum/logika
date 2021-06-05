@@ -34,6 +34,7 @@ object Context {
   @datatype class Method(val name: ISZ[String],
                          val receiverTypeOpt: Option[AST.Typed],
                          val params: ISZ[(AST.Id, AST.Typed)],
+                         val retType: AST.Typed,
                          val reads: ISZ[AST.Exp.Ident],
                          val modifies: ISZ[AST.Exp.Ident],
                          val objectVarInMap: HashMap[ISZ[String], State.Value.Sym],
@@ -106,6 +107,20 @@ object Context {
     methodOpt match {
       case Some(m) => return m.name
       case _ => return ISZ()
+    }
+  }
+
+  @pure def receiverTypeOpt: Option[AST.Typed] = {
+    methodOpt match {
+      case Some(cm) => return cm.receiverTypeOpt
+      case _ => return None()
+    }
+  }
+
+  @pure def returnTypeOpt: Option[AST.Typed] = {
+    methodOpt match {
+      case Some(cm) => return Some(cm.retType)
+      case _ => return None()
     }
   }
 }
