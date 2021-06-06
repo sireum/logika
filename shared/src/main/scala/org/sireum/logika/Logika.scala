@@ -409,14 +409,19 @@ import Util._
     val (s1, v) = s0.freshSym(AST.Typed.b, pos)
     val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
     val claim = State.Claim.Prop(T, v)
-    val r = smt2.valid(config.logVc, config.logVcDirOpt, st"${context.implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
+    val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
+      context.implicitCheckTitlePosOpt match {
+        case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
+        case _ => (None(), posOpt, None())
+      }
+    val r = smt2.valid(config.logVc, config.logVcDirOpt, st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
       pos, s2.claims, claim, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s0
-      case Smt2Query.Result.Kind.Sat => error(Some(pos), st"${context.implicitCheckOpt}Possibly out of bound sequence indexing".render, reporter)
-      case Smt2Query.Result.Kind.Unknown => error(Some(pos), st"${context.implicitCheckOpt}Could not deduce that the sequence indexing is in bound".render, reporter)
-      case Smt2Query.Result.Kind.Timeout => error(Some(pos), st"${context.implicitCheckOpt}Timed out when deducing that the sequence indexing is in bound".render, reporter)
-      case Smt2Query.Result.Kind.Error => error(Some(pos), st"${context.implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound".render, reporter)
+      case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly out of bound sequence indexing$suffixOpt".render, reporter)
+      case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce that the sequence indexing is in bound$suffixOpt".render, reporter)
+      case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+      case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
     }
     return s2(status = F)
   }
@@ -660,18 +665,26 @@ import Util._
       }
 
       def checkNonZero(s0: State, op: String, value: State.Value, pos: Position): State = {
+        if (!rtCheck) {
+          return s0
+        }
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
         val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
+        val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
+          context.implicitCheckTitlePosOpt match {
+            case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
+            case _ => (None(), Some(pos), None())
+          }
         val r = smt2.valid(config.logVc, config.logVcDirOpt,
-          st"${context.implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
+          st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
         r.kind match {
           case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
-          case Smt2Query.Result.Kind.Sat => error(Some(pos), st"${context.implicitCheckOpt}Possibly zero second operand for ${exp.op}".render, reporter)
-          case Smt2Query.Result.Kind.Unknown => error(Some(pos), st"${context.implicitCheckOpt}Could not deduce non-zero second operand for ${exp.op}".render, reporter)
-          case Smt2Query.Result.Kind.Timeout => error(Some(pos), st"${context.implicitCheckOpt}Timed out when deducing non-zero second operand for ${exp.op}".render, reporter)
-          case Smt2Query.Result.Kind.Error => error(Some(pos), st"${context.implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}".render, reporter)
+          case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly zero second operand for ${exp.op}$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
         }
         return s1(status = F)
       }
@@ -1409,7 +1422,7 @@ import Util._
           }
         }
         val (s2, pf) = strictPureMethod(th, config, plugins, smt2, s1, receiverTypeOpt, funType, mres.owner, mres.id,
-          for (p <- info.sig.params) yield p.id, body, reporter)
+          for (p <- info.sig.params) yield p.id, body, reporter, context.implicitCheckTitlePosOpt)
         val (s3, re) = s2.freshSym(retType, pos)
         var args: ISZ[State.Value] = for (q <- paramArgs) yield q._4
         receiverOpt match {
@@ -1531,16 +1544,39 @@ import Util._
           }
 
           def evalEnsures(cs1: State, label: String, rep: Reporter): State = {
+            val claims: ISZ[AST.Exp] = for (ensure <- ensures) yield AST.Util.substExp(ensure, typeSubstMap)
+            def spEnsures(): Option[State] = {
+              val claim: AST.Exp = claimsIte(claims) match {
+                case Some(c) => c
+                case _ => return Some(cs1)
+              }
+              val erep = Reporter.create
+              val id = s"post${if (res.isInObject) '.' else '#'}"
+              val (cse0, v) = Util.evalExtractPureMethod(logikaComp, smt2, cs1, logikaComp.context.receiverTypeOpt,
+                res.owner :+ res.id, id, claim, erep)
+              if (!cse0.status) {
+                return None()
+              }
+              val title = st"${label}ost-condition of $resST".render
+              val (cse1, sym) = value2Sym(cse0, v, pos)
+              val cse2 = evalAssumeH(smt2, title, cse1, sym, posOpt, erep)
+              reporter.reports(erep.messages)
+              return Some(cse2)
+            }
+            //spEnsures() match {
+            //  case Some(s) => return s
+            //  case _ =>
+            //}
             var i = 0
-            var cse0 = cs1
-            for (ensure <- ensures if cse0.status) {
+            var cse3 = cs1
+            for (ensure <- claims if cse3.status) {
               val title: String =
                 if (ensures.size == 1) st"${label}ost-condition of $resST".render
                 else st"${label}ost-condition#$i of $resST".render
-              cse0 = logikaComp.evalAssume(smt2, F, title, cse0, AST.Util.substExp(ensure, typeSubstMap), posOpt, rep)._1
+              cse3 = logikaComp.evalAssume(smt2, F, title, cse3, ensure, posOpt, rep)._1
               i = i + 1
             }
-            return conjunctClaimSuffix(cs1, cse0)
+            return conjunctClaimSuffix(cs1, cse3)
           }
 
           val rep = Reporter.create
@@ -1571,7 +1607,9 @@ import Util._
 
         val logikaComp: Logika = {
           val l = logikaMethod(th, config, ctx, F, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
-            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, contract.modifies, ISZ(), plugins)
+            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, contract.modifies, ISZ(), plugins,
+            Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get))
+          )
           val mctx = l.context.methodOpt.get
           var objectVarInMap = mctx.objectVarInMap
           for (p <- mctx.objectVarMap(typeSubstMap).entries) {
@@ -1620,9 +1658,10 @@ import Util._
             s1 = s1.addClaim(State.Claim.Let.CurrentId(F, receiver, res.owner :+ res.id, "this", receiverPosOpt))
           case _ =>
         }
-        val invs: ISZ[Info.Inv] = if (res.owner.isEmpty) th.worksheetInvs else ISZ()
+        val invs: ISZ[Info.Inv] =
+          if (res.owner.isEmpty && info.strictPureBodyOpt.isEmpty) th.worksheetInvs else ISZ()
         s1 = {
-          val pis = logikaComp.evalInvs(F, "Pre-invariant", smt2, rtCheck, s1, invs, reporter)
+          val pis = logikaComp.evalInvs(posOpt, F, "Pre-invariant", smt2, rtCheck, s1, invs, reporter)
           s1(status = pis.status, nextFresh = pis.nextFresh)
         }
         contract match {
@@ -1716,7 +1755,7 @@ import Util._
         for (sv <- oldR) {
           val (s9, sym) = sv
           if (s9.status) {
-            val s10 = logikaComp.evalInvs(T, "Post-invariant", smt2, rtCheck, s9, invs, reporter)
+            val s10 = logikaComp.evalInvs(posOpt, T, "Post-invariant", smt2, rtCheck, s9, invs, reporter)
             if (s10.nextFresh > nextFresh) {
               nextFresh = s10.nextFresh
             }
@@ -2766,12 +2805,62 @@ import Util._
     return (F, s0.nextFresh, s0.claims, State.Claim.And(ISZ()))
   }
 
-  def evalInvs(isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State, invs: ISZ[Info.Inv], reporter: Reporter): State = {
-    var s1 = s0
-    for (inv <- invs if s1.status) {
-      s1 = evalInv(isAssume, title, smt2, rtCheck, s1, inv.ast, reporter)
+  @pure def claimsIte(claims: ISZ[AST.Exp]): Option[AST.Exp] = {
+    if (claims.isEmpty) {
+      return None()
     }
-    return s1
+    var claim = claims(claims.size - 1)
+    val bOpt: Option[AST.Typed] = Some(AST.Typed.b)
+    for (i <- claims.size - 2 to 0 by -1) {
+      val exp = claims(i)
+      claim = AST.Exp.If(exp, claim, AST.Exp.LitB(F, AST.Attr(claim.posOpt)), AST.TypedAttr(exp.posOpt, bOpt))
+    }
+    return Some(claim)
+  }
+
+  @memoize def invs2exp(invs: ISZ[Info.Inv]): Option[AST.Exp] = {
+    val claims: ISZ[AST.Exp] = for (inv <- invs; claim <- inv.ast.claims) yield claim
+    return claimsIte(claims)
+  }
+
+  def evalInvs(posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State,
+               invs: ISZ[Info.Inv], reporter: Reporter): State = {
+    val pos = posOpt.get
+    def spInv(): Option[State] = {
+      val claim: AST.Exp = invs2exp(invs) match {
+        case Some(exp) => exp
+        case _ => return Some(s0)
+      }
+      val res = invs(0).resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
+      val id = s"inv${if (res.isInObject) '.' else '#'}"
+      val rep = Reporter.create
+      val (s1, v) = Util.evalExtractPureMethod(this, smt2, s0, context.receiverTypeOpt, res.owner, id, claim, rep)
+      if (!s1.status) {
+        return None()
+      }
+      val (s2, sym) = value2Sym(s1, v, pos)
+      if (isAssume) {
+        val s3 = evalAssumeH(smt2, title, s2, sym, posOpt, rep)
+        reporter.reports(rep.messages)
+        return Some(s3)
+      } else {
+        val s3 = evalAssertH(smt2, title, s2, sym, posOpt, rep)
+        if (!s3.status) {
+          return None()
+        }
+        reporter.reports(rep.messages)
+        return Some(s3)
+      }
+    }
+    spInv() match {
+      case Some(s) => return s
+      case _ =>
+    }
+    var s4 = s0
+    for (inv <- invs if s4.status) {
+      s4 = evalInv(isAssume, title, smt2, rtCheck, s4, inv.ast, reporter)
+    }
+    return s4
   }
 
   def evalInv(isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State, invStmt: AST.Stmt.Inv, reporter: Reporter): State = {

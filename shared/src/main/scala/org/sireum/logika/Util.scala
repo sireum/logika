@@ -212,47 +212,21 @@ object Util {
 
   def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], inPfc: B, receiverTypeOpt: Option[AST.Typed],
                    params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position], reads: ISZ[AST.Exp.Ident],
-                   modifies: ISZ[AST.Exp.Ident], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin]): Logika = {
+                   modifies: ISZ[AST.Exp.Ident], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
+                   implicitContext: Option[(String, Position)]): Logika = {
     val mctx = Context.Method(name, receiverTypeOpt, params, retType, reads, modifies, HashMap.empty, HashMap.empty,
       HashMap.empty, posOpt)
-    val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels)
+    val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext)
     return Logika(th, config, ctx, inPfc, plugins)
   }
 
   def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, invs: ISZ[lang.symbol.Info.Inv], posOpt: Option[Position], reporter: Reporter): State = {
-    var s0 = state
-    for (inv <- invs) {
-      var i = 0
-      val id = inv.ast.id.value
-      val isSingle = inv.ast.claims.size == 1
-      val methodName: String =
-        if (logika.context.methodName.size == 1) logika.context.methodName(0)
-        else if (logika.context.methodOpt.get.receiverTypeOpt.isEmpty) st"${(logika.context.methodName, ".")}".render
-        else st"${(ops.ISZOps(logika.context.methodName).dropRight(1), ".")}#${logika.context.methodName(0)}".render
-      if (isPre) {
-        for (claim <- inv.ast.claims if s0.status) {
-          val title: String =
-            if (isSingle) s"Method $methodName pre-invariant $id"
-            else s"Method $methodName pre-invariant $id#$i"
-          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssume(smt2, T, title, s0,
-            claim, posOpt, reporter)._1
-          i = i + 1
-        }
-      } else {
-        for (claim <- inv.ast.claims if s0.status) {
-          val title: String =
-            if (isSingle) s"Method $methodName post-invariant $id"
-            else s"Method $methodName post-invariant $id#$i"
-          s0 = logika(context = logika.context(implicitCheckOpt = Some(s"$title: "))).evalAssert(smt2, T, title, s0,
-            claim, posOpt, reporter)._1
-          i = i + 1
-        }
-      }
-    }
-    val s0Ops = ops.ISZOps(s0.claims)
-    return s0(claims = s0Ops.slice(0, state.claims.size) :+ State.Claim.And(
-      s0Ops.slice(state.claims.size, s0.claims.size)
-    ))
+    val methodName: String =
+      if (logika.context.methodName.size == 1) logika.context.methodName(0)
+      else if (logika.context.methodOpt.get.receiverTypeOpt.isEmpty) st"${(logika.context.methodName, ".")}".render
+      else st"${(ops.ISZOps(logika.context.methodName).dropRight(1), ".")}#${logika.context.methodName(0)}".render
+    val title: String = if (isPre) s"Method $methodName pre-invariant" else s"Method $methodName post-invariant"
+    return logika.evalInvs(posOpt, isPre, title, smt2, T, state, invs, reporter)
   }
 
   def checkMethod(th: TypeHierarchy,
@@ -282,7 +256,7 @@ object Util {
         }
         val l = logikaMethod(th, config, mname, F, receiverTypeOpt, method.sig.paramIdTypes,
           method.sig.returnType.typedOpt.get, method.posOpt, reads, modifies,
-          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins)
+          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None())
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
         for (p <- mctx.objectVarMap(TypeChecker.emptySubstMap).entries) {
@@ -542,7 +516,8 @@ object Util {
 
   def strictPureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, state: State,
                        receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String], id: String,
-                       paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter): (State, State.ProofFun) = {
+                       paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
+                       implicitContextOpt: Option[(String, Position)]): (State, State.ProofFun) = {
     val pf = State.ProofFun(receiverTypeOpt, owner, id, for (id <- paramIds) yield id.value, funType.args, funType.ret)
     if (smt2.strictPureMethods.contains(pf)) {
       return (state, pf)
@@ -552,7 +527,7 @@ object Util {
       val (res, prefix, svs): (State.Value.Sym, Z, ISZ[(State, State.Value)]) = {
         val context = pf.context :+ pf.id
         val logika: Logika = logikaMethod(th, config, context, T, pf.receiverTypeOpt,
-          ops.ISZOps(paramIds).zip(funType.args), funType.ret, posOpt, ISZ(), ISZ(), ISZ(), plugins)
+          ops.ISZOps(paramIds).zip(funType.args), funType.ret, posOpt, ISZ(), ISZ(), ISZ(), plugins, implicitContextOpt)
         val s0 = state(claims = ISZ())
         val (s1, r) = idIntro(posOpt.get, s0, context, "Res", funType.ret, posOpt)
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
@@ -620,14 +595,14 @@ object Util {
       o.exp match {
         case exp: AST.Exp.Ident =>
           exp.attr.resOpt.get match {
-            case res: AST.ResolvedInfo.Var => return introInputIdent(exp, res, exp.id, exp.typedOpt)
-            case res: AST.ResolvedInfo.LocalVar => return introInputIdent(exp, res, exp.id, exp.typedOpt)
+            case res: AST.ResolvedInfo.Var => return introInputIdent(o, res, exp.id, exp.typedOpt)
+            case res: AST.ResolvedInfo.LocalVar => return introInputIdent(o, res, exp.id, exp.typedOpt)
             case _ =>
           }
         case exp: AST.Exp.Select =>
           exp.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Var if res.isInObject =>
-              return introInputIdent(exp, res, exp.id, exp.typedOpt)
+              return introInputIdent(o, res, exp.id, exp.typedOpt)
             case _ =>
           }
         case _ =>
@@ -727,7 +702,7 @@ object Util {
       }
       val (s2, pf) = strictPureMethod(logika.th, logika.config, logika.plugins, smt2, s0, None(),
         AST.Typed.Fun(T, F, paramTypes, t), owner, id, paramIds,
-        AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter)
+        AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter, logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)
       return (s3.addClaim(State.Claim.Let.ProofFunApply(sym, pf, args)), sym)
     } else {

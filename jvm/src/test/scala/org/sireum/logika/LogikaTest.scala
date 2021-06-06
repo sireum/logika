@@ -53,7 +53,7 @@ object LogikaTest {
 
   val config: Config =
     Config(
-      smt2Configs = ISZ(Z3Config(z3Exe), Cvc4Config(cvc4Exe)),
+      smt2Configs = ISZ(Cvc4Config(cvc4Exe), Z3Config(z3Exe)),
       sat = T,
       timeoutInMs = timeoutInMs,
       defaultLoopBound = 10,

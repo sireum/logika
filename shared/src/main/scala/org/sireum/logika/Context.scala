@@ -102,7 +102,7 @@ object Context {
 @datatype class Context(val typeParams: ISZ[AST.TypeParam],
                         val methodOpt: Option[Context.Method],
                         val caseLabels: ISZ[AST.Exp.LitString],
-                        val implicitCheckOpt: Option[String]) {
+                        val implicitCheckTitlePosOpt: Option[(String, Position)]) {
   @pure def methodName: ISZ[String] = {
     methodOpt match {
       case Some(m) => return m.name
