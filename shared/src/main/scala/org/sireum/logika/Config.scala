@@ -27,24 +27,24 @@ package org.sireum.logika
 
 import org.sireum._
 
-@datatype class Config(smt2Configs: ISZ[Smt2Config],
-                       sat: B,
-                       timeoutInMs: Z,
-                       defaultLoopBound: Z,
-                       loopBounds: HashMap[LoopId, Z],
-                       unroll: B,
-                       charBitWidth: Z,
-                       intBitWidth: Z,
-                       logPc: B,
-                       logRawPc: B,
-                       logVc: B,
-                       logVcDirOpt: Option[String],
-                       dontSplitPfq: B,
-                       splitAll: B,
-                       splitIf: B,
-                       splitMatch: B,
-                       splitContract: B,
-                       simplifiedQuery: B)
+@datatype class Config(val smt2Configs: ISZ[Smt2Config],
+                       val sat: B,
+                       val timeoutInMs: Z,
+                       val defaultLoopBound: Z,
+                       val loopBounds: HashMap[LoopId, Z],
+                       val unroll: B,
+                       val charBitWidth: Z,
+                       val intBitWidth: Z,
+                       val logPc: B,
+                       val logRawPc: B,
+                       val logVc: B,
+                       val logVcDirOpt: Option[String],
+                       val dontSplitPfq: B,
+                       val splitAll: B,
+                       val splitIf: B,
+                       val splitMatch: B,
+                       val splitContract: B,
+                       val simplifiedQuery: B)
 
 @datatype trait Smt2Config {
   def name: String
@@ -69,4 +69,4 @@ import org.sireum._
 }
 
 
-@datatype class LoopId(ids: ISZ[String])
+@datatype class LoopId(val ids: ISZ[String])
