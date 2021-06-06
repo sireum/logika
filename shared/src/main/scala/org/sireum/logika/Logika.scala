@@ -2452,7 +2452,7 @@ import Util._
         val stmtPos = stmt.posOpt.get
         if (smt2.sat(config.logVc, config.logVcDirOpt, s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]",
           stmtPos, s1.claims :+ State.Claim.And(for (p <- caseSyms) yield State.Claim.Prop(F, p._2)), reporter)) {
-          error(stmt.posOpt, "Inexhaustive pattern match", reporter)
+          error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
           r = r :+ s1(status = F)
         } else {
           var leafClaims = ISZ[(State.Claim, ISZ[State.Claim])]()
@@ -2484,13 +2484,13 @@ import Util._
               }
             } else {
               if (!shouldSplit) {
-                error(posOpt, "Infeasible pattern matching case", reporter)
+                warn(posOpt, "Infeasible pattern matching case", reporter)
               }
             }
           }
           if (leafClaims.isEmpty) {
             if (!possibleCases) {
-              error(stmt.posOpt, "Infeasible pattern matching cases", reporter)
+              warn(stmt.posOpt, "Infeasible pattern matching cases", reporter)
             }
             r = r :+ s1(status = F)
           }
