@@ -414,7 +414,7 @@ import Util._
         case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
         case _ => (None(), posOpt, None())
       }
-    val r = smt2.valid(config.logVc, config.logVcDirOpt, st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
+    val r = smt2.valid(T, config.logVc, config.logVcDirOpt, st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
       pos, s2.claims, claim, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s0
@@ -559,12 +559,12 @@ import Util._
               if (ti.ast.hasMin) {
                 val (s2, sym) = s1.freshSym(AST.Typed.b, pos)
                 val s3 = s2.addClaim(State.Claim.Let.Binary(sym, z2SubZVal(ti, ti.ast.min, pos), AST.Exp.BinaryOp.Le, value, t))
-                s1 = evalAssertH(smt2, s"Min range check for $t", s3, sym, e.posOpt, reporter)
+                s1 = evalAssertH(T, smt2, s"Min range check for $t", s3, sym, e.posOpt, reporter)
               }
               if (s1.status && ti.ast.hasMax) {
                 val (s4, sym) = s1.freshSym(AST.Typed.b, pos)
                 val s5 = s4.addClaim(State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Le, z2SubZVal(ti, ti.ast.max, pos), t))
-                s1 = evalAssertH(smt2, s"Max range check for $t", s5, sym, e.posOpt, reporter)
+                s1 = evalAssertH(T, smt2, s"Max range check for $t", s5, sym, e.posOpt, reporter)
               }
               return s1
             case _ =>
@@ -676,7 +676,7 @@ import Util._
             case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
             case _ => (None(), Some(pos), None())
           }
-        val r = smt2.valid(config.logVc, config.logVcDirOpt,
+        val r = smt2.valid(T, config.logVc, config.logVcDirOpt,
           st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
         r.kind match {
@@ -1545,28 +1545,6 @@ import Util._
 
           def evalEnsures(cs1: State, label: String, rep: Reporter): State = {
             val claims: ISZ[AST.Exp] = for (ensure <- ensures) yield AST.Util.substExp(ensure, typeSubstMap)
-            def spEnsures(): Option[State] = {
-              val claim: AST.Exp = claimsIte(claims) match {
-                case Some(c) => c
-                case _ => return Some(cs1)
-              }
-              val erep = Reporter.create
-              val id = s"post${if (res.isInObject) '.' else '#'}"
-              val (cse0, v) = Util.evalExtractPureMethod(logikaComp, smt2, cs1, logikaComp.context.receiverTypeOpt,
-                res.owner :+ res.id, id, claim, erep)
-              if (!cse0.status) {
-                return None()
-              }
-              val title = st"${label}ost-condition of $resST".render
-              val (cse1, sym) = value2Sym(cse0, v, pos)
-              val cse2 = evalAssumeH(smt2, title, cse1, sym, posOpt, erep)
-              reporter.reports(erep.messages)
-              return Some(cse2)
-            }
-            //spEnsures() match {
-            //  case Some(s) => return s
-            //  case _ =>
-            //}
             var i = 0
             var cse3 = cs1
             for (ensure <- claims if cse3.status) {
@@ -1868,9 +1846,9 @@ import Util._
           val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
-          val thenBranch = smt2.sat(config.logVc, config.logVcDirOpt, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+          val thenBranch = smt2.sat(T, config.logVc, config.logVcDirOpt, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
             pos, s1.claims :+ prop, reporter)
-          val elseBranch = smt2.sat(config.logVc, config.logVcDirOpt, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+          val elseBranch = smt2.sat(T, config.logVc, config.logVcDirOpt, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
             pos, s1.claims :+ prop, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
@@ -2109,12 +2087,12 @@ import Util._
     }
   }
 
-  def evalAssumeH(smt2: Smt2, title: String, s0: State, sym: State.Value.Sym, posOpt: Option[Position],
+  def evalAssumeH(reportQuery: B, smt2: Smt2, title: String, s0: State, sym: State.Value.Sym, posOpt: Option[Position],
                   reporter: Reporter): State = {
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
     if (config.sat) {
       val pos = posOpt.get
-      val sat = smt2.sat(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
+      val sat = smt2.sat(reportQuery, config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
       return s1(status = sat)
     } else {
       return s1
@@ -2128,15 +2106,15 @@ import Util._
       return value2Sym(s1, v, cond.posOpt.get)
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
-    return (evalAssumeH(smt2, title, s2, sym, posOpt, reporter), sym)
+    return (evalAssumeH(T, smt2, title, s2, sym, posOpt, reporter), sym)
   }
 
-  def evalAssertH(smt2: Smt2, title: String, s0: State, sym: State.Value.Sym, posOpt: Option[Position],
+  def evalAssertH(reportQuery: B, smt2: Smt2, title: String, s0: State, sym: State.Value.Sym, posOpt: Option[Position],
                   reporter: Reporter): State = {
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
-    val r = smt2.valid(config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos,
-      s0.claims, conclusion, reporter)
+    val r = smt2.valid(reportQuery, config.logVc, config.logVcDirOpt, s"$title at [${pos.beginLine}, ${pos.beginColumn}]",
+      pos, s0.claims, conclusion, reporter)
     r.kind match {
       case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
       case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
@@ -2154,7 +2132,7 @@ import Util._
       return value2Sym(s1, v, cond.posOpt.get)
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
-    return (evalAssertH(smt2, title, s2, sym, posOpt, reporter), sym)
+    return (evalAssertH(T, smt2, title, s2, sym, posOpt, reporter), sym)
   }
 
   def evalAssignExp(split: Split.Type, smt2: Smt2, rOpt: Option[State.Value.Sym], rtCheck: B, s0: State, ae: AST.AssignExp, reporter: Reporter): ISZ[State] = {
@@ -2489,7 +2467,7 @@ import Util._
           caseSyms = caseSyms :+ ((c, sym, m))
         }
         val stmtPos = stmt.posOpt.get
-        if (smt2.sat(config.logVc, config.logVcDirOpt, s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]",
+        if (smt2.sat(T, config.logVc, config.logVcDirOpt, s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]",
           stmtPos, s1.claims :+ State.Claim.And(for (p <- caseSyms) yield State.Claim.Prop(F, p._2)), reporter)) {
           error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
           r = r :+ s1(status = F)
@@ -2504,7 +2482,7 @@ import Util._
             val posOpt = c.pattern.posOpt
             val pos = posOpt.get
             val s10 = s1.addClaim(cond)
-            if (smt2.sat(config.logVc, config.logVcDirOpt, s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]",
+            if (smt2.sat(T, config.logVc, config.logVcDirOpt, s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]",
               pos, s10.claims, reporter)) {
               possibleCases = T
               val (s11, bindings) = addPatternVars(s10, lcontext, m)
@@ -2575,7 +2553,7 @@ import Util._
           val s2 = conjunctClaimSuffix(s0, s1c)
           val prop = State.Claim.Prop(T, cond)
           val thenClaims = s2.claims :+ prop
-          val thenSat = smt2.sat(config.logVc, config.logVcDirOpt, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+          val thenSat = smt2.sat(T, config.logVc, config.logVcDirOpt, s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
             pos, thenClaims, reporter)
           val s4s: ISZ[State] = if (thenSat) {
             val s3s = evalBody(split, smt2, rOpt, rtCheck, s2(claims = thenClaims), ifStmt.thenBody, ifStmt.posOpt, reporter)
@@ -2586,7 +2564,7 @@ import Util._
           val s4NextFresh = maxStatesNextFresh(s4s)
           val negProp = State.Claim.Prop(F, cond)
           val elseClaims = s2.claims :+ negProp
-          val elseSat = smt2.sat(config.logVc, config.logVcDirOpt, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+          val elseSat = smt2.sat(T, config.logVc, config.logVcDirOpt, s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
             pos, elseClaims, reporter)
           val s6s: ISZ[State] = if (elseSat) {
             val s5s = evalBody(split, smt2, rOpt, rtCheck, s2(claims = elseClaims, nextFresh = s4NextFresh), ifStmt.elseBody, ifStmt.posOpt, reporter)
@@ -2805,22 +2783,24 @@ import Util._
     return (F, s0.nextFresh, s0.claims, State.Claim.And(ISZ()))
   }
 
-  @pure def claimsIte(claims: ISZ[AST.Exp]): Option[AST.Exp] = {
+  @pure def claimsAnd(claims: ISZ[AST.Exp]): Option[AST.Exp] = {
     if (claims.isEmpty) {
       return None()
     }
     var claim = claims(claims.size - 1)
-    val bOpt: Option[AST.Typed] = Some(AST.Typed.b)
+    val typedOpt: Option[AST.Typed] = Some(AST.Typed.b)
+    val resOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd))
     for (i <- claims.size - 2 to 0 by -1) {
       val exp = claims(i)
-      claim = AST.Exp.If(exp, claim, AST.Exp.LitB(F, AST.Attr(claim.posOpt)), AST.TypedAttr(exp.posOpt, bOpt))
+      val attr = AST.ResolvedAttr(exp.posOpt, resOpt, typedOpt)
+      claim = AST.Exp.Binary(exp, AST.Exp.BinaryOp.CondAnd, claim, attr)
     }
     return Some(claim)
   }
 
   @memoize def invs2exp(invs: ISZ[Info.Inv]): Option[AST.Exp] = {
     val claims: ISZ[AST.Exp] = for (inv <- invs; claim <- inv.ast.claims) yield claim
-    return claimsIte(claims)
+    return claimsAnd(claims)
   }
 
   def evalInvs(posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State,
@@ -2840,11 +2820,11 @@ import Util._
       }
       val (s2, sym) = value2Sym(s1, v, pos)
       if (isAssume) {
-        val s3 = evalAssumeH(smt2, title, s2, sym, posOpt, rep)
+        val s3 = evalAssumeH(F, smt2, title, s2, sym, posOpt, rep)
         reporter.reports(rep.messages)
         return Some(s3)
       } else {
-        val s3 = evalAssertH(smt2, title, s2, sym, posOpt, rep)
+        val s3 = evalAssertH(F, smt2, title, s2, sym, posOpt, rep)
         if (!s3.status) {
           return None()
         }
@@ -3008,7 +2988,7 @@ import Util._
             val (s4, cond) = value2Sym(s3, v, pos)
             val prop = State.Claim.Prop(T, cond)
             val thenClaims = s4.claims :+ prop
-            val thenSat = smt2.sat(config.logVc, config.logVcDirOpt, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+            val thenSat = smt2.sat(T, config.logVc, config.logVcDirOpt, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
               pos, thenClaims, reporter)
             var nextFresh: Z = s4.nextFresh
             if (thenSat) {
@@ -3029,7 +3009,7 @@ import Util._
             }
             val negProp = State.Claim.Prop(F, cond)
             val elseClaims = s4.claims :+ negProp
-            val elseSat = smt2.sat(config.logVc, config.logVcDirOpt, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+            val elseSat = smt2.sat(T, config.logVc, config.logVcDirOpt, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
               pos, elseClaims, reporter)
             r = r :+ State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
           }
@@ -3062,7 +3042,7 @@ import Util._
               val s3 = conjunctClaimSuffix(current, s2w)
               val prop = State.Claim.Prop(T, cond)
               val thenClaims = s3.claims :+ prop
-              val thenSat = smt2.sat(config.logVc, config.logVcDirOpt, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+              val thenSat = smt2.sat(T, config.logVc, config.logVcDirOpt, s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]",
                 pos, thenClaims, reporter)
               for (s4 <- evalStmts(sp, smt2, None(), rtCheck, s3(claims = thenClaims), whileStmt.body.stmts, reporter)) {
                 val s6s: ISZ[State] = if (s4.status) {
@@ -3085,7 +3065,7 @@ import Util._
                 for (s6 <- s6s) {
                   val negProp = State.Claim.Prop(F, cond)
                   val elseClaims = s3.claims :+ negProp
-                  val elseSat = smt2.sat(config.logVc, config.logVcDirOpt, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
+                  val elseSat = smt2.sat(T, config.logVc, config.logVcDirOpt, s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]",
                     pos, elseClaims, reporter)
                   (thenSat, elseSat) match {
                     case (T, T) =>
@@ -3200,7 +3180,7 @@ import Util._
             s4 = s5.addClaim(State.Claim.Let.CurrentId(T, vSym, context.methodName, id, Some(pos)))
           }
           val (s6, condSym) = value2Sym(s4, cond, varPattern.pattern.posOpt.get)
-          evalAssertH(smt2, "Variable Pattern Matching", s6, condSym, varPattern.pattern.posOpt, reporter)
+          evalAssertH(T, smt2, "Variable Pattern Matching", s6, condSym, varPattern.pattern.posOpt, reporter)
         } else {
           s1
         }
@@ -3341,7 +3321,7 @@ import Util._
       val pos = exp.posOpt.get
       val (s2, sym) = value2Sym(s1, v, pos)
       val prop = State.Claim.Prop(T, sym)
-      val rvalid = smt2.valid(config.logVc, config.logVcDirOpt, s"$title$titleSuffix at [${pos.beginLine}, ${pos.beginColumn}]",
+      val rvalid = smt2.valid(T, config.logVc, config.logVcDirOpt, s"$title$titleSuffix at [${pos.beginLine}, ${pos.beginColumn}]",
         pos, s2.claims, prop, reporter)
       var ok = F
       rvalid.kind match {

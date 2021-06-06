@@ -450,8 +450,8 @@ object Smt2 {
     return st"|g:${(shorten(owner), ".")}.$id|"
   }
 
-  def sat(log: B, logDirOpt: Option[String], title: String, pos: message.Position, claims: ISZ[State.Claim],
-          reporter: Reporter): B = {
+  def sat(reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
+          claims: ISZ[State.Claim], reporter: Reporter): B = {
     val startTime = extension.Time.currentMillis
     val (r, smt2res) = checkSat(satQuery(claims, None(), reporter).render, 500)
     val res = smt2res(info = "", query =
@@ -464,7 +464,9 @@ object Smt2 {
           |;
           |${smt2res.query}""".render
     )
-    reporter.query(pos, extension.Time.currentMillis - startTime, res)
+    if (reportQuery) {
+      reporter.query(pos, extension.Time.currentMillis - startTime, res)
+    }
     if (log) {
       reporter.info(None(), Logika.kind, res.query)
     }
@@ -1044,8 +1046,8 @@ object Smt2 {
     for (cST <- State.Claim.claimsSTs(claims, defs)) yield
       st"${(for (line <- ops.StringOps(cST.render).split(c => c == '\n')) yield st"; $line", "\n")}"
 
-  def valid(log: B, logDirOpt: Option[String], title: String, pos: message.Position, premises: ISZ[State.Claim],
-            conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
+  def valid(reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
+            premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
     val startTime = extension.Time.currentMillis
     val (_, smt2res) = checkUnsat(satQuery(premises, Some(conclusion), reporter).render, timeoutInMs)
     val defs = ClaimDefs.empty
@@ -1061,7 +1063,9 @@ object Smt2 {
           |;
           |${smt2res.query}""".render
     )
-    reporter.query(pos, extension.Time.currentMillis - startTime, res)
+    if (reportQuery) {
+      reporter.query(pos, extension.Time.currentMillis - startTime, res)
+    }
     if (log) {
       reporter.info(None(), Logika.kind, res.query)
     }

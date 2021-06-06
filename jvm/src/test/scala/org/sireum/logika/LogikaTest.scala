@@ -150,59 +150,8 @@ class LogikaTest extends TestSuite {
 
       * - failingWorksheet(
         """import org.sireum._
-          |
-          |def foo[T](o: Option[T]): Unit = {
-          |  Contract(
-          |    Requires(o.isEmpty)
-          |  )
-          |  return o.get
-          |}""".stripMargin, "pre-condition org.sireum.Option#get")
-
-      * - failingWorksheet(
-        """import org.sireum._
-          |
-          |def foo(o: Option[Z], x: Z): Unit = {
-          |  Contract(
-          |    Requires(o == Some(x)),
-          |    Ensures(Res >= 0)
-          |  )
-          |  return o.get
-          |}""".stripMargin, "post-condition")
-
-      * - failingWorksheet(
-        """import org.sireum._
-          |import org.sireum.Z8._
-          |val a = z8"127" + z8"1"""".stripMargin, "Max range check")
-
-      * - failingWorksheet(
-        """import org.sireum._
-          |import org.sireum.Z8._
-          |val a = z8"-128" - z8"1"""".stripMargin, "Min range check")
-
-      * - failingWorksheet(
-        """import org.sireum._
           |val a = 0 +: ISZ(1, 2, 3)
           |assert(a(0) == 1)""".stripMargin, "Cannot deduce")
-
-      * - failingWorksheet(
-        """import org.sireum._
-          |ISZ(1, 2, 3) match {
-          |  case ISZ(x, y, _*) if x < y =>
-          |  case _ =>
-          |}""".stripMargin, "Infeasible")
-
-      * - failingWorksheet(
-        """import org.sireum._
-          |(Z.random, Z.random) match {
-          |  case (0, x) =>
-          |}""".stripMargin, "Inexhaustive")
-
-      * - failingWorksheet(
-        """import org.sireum._
-          |val b = B.random
-          |b match {
-          |  case true =>
-          |}""".stripMargin, "Inexhaustive")
 
       * - failingWorksheet(
         """import org.sireum._

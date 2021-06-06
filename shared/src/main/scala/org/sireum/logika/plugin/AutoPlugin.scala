@@ -134,7 +134,7 @@ import org.sireum.logika.Logika.Reporter
     val status: B = if (args.isEmpty && provenClaims.contains(step.claimDeBruijn)) {
       T
     } else if (stat) {
-      val r = smt2.valid(log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
+      val r = smt2.valid(T, log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
 
       def error(msg: String): B = {
         reporter.error(posOpt, Logika.kind, msg)
