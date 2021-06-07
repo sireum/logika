@@ -32,6 +32,7 @@ import LogikaTest._
 class LogikaRcTest extends SireumRcSpec {
 
   val failPrefix: Predef.String = "zfail$"
+  val failDemoSuffix: Predef.String = "-demo-fail.sc"
 
   def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = $internal.RC.text(Vector("example")) { (p, f) =>
     p.last.endsWith(".sc") && !p.last.startsWith("wip-")
@@ -44,13 +45,15 @@ class LogikaRcTest extends SireumRcSpec {
     val p = Os.path(path.mkString(Os.fileSep.value))
     Logika.checkScript(Some(p.string), content, c,
       th => Smt2Impl.create(config.smt2Configs, th, Smt2Impl.NoCache(), c.timeoutInMs, c.charBitWidth, c.intBitWidth,
-        c.simplifiedQuery, reporter), reporter, T, T, Logika.defaultPlugins, 0)
+        c.simplifiedQuery, reporter), reporter, !Os.isWin, T, Logika.defaultPlugins, 0)
     reporter.printMessages()
     val name = p.name.value
     if (name.startsWith(failPrefix)) {
       val j = name.indexOf('$', failPrefix.length)
       val key = name.substring(failPrefix.length, j)
       reporter.messages.elements.filter(m => !m.isInfo).exists(m => m.text.value.contains(key))
+    } else if (name.endsWith(failDemoSuffix)) {
+      reporter.hasIssue
     } else {
       !reporter.hasIssue
     }

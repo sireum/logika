@@ -83,7 +83,8 @@ object Context {
     }
   }
 
-  @datatype class InvokeMethodInfo(val sig: AST.MethodSig,
+  @datatype class InvokeMethodInfo(val isHelper: B,
+                                   val sig: AST.MethodSig,
                                    val contract: AST.MethodContract,
                                    val res: AST.ResolvedInfo.Method,
                                    val strictPureBodyOpt: Option[AST.AssignExp])

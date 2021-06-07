@@ -190,7 +190,7 @@ object Logika {
       }
       r = for (ts <- taskMap.values; t <- ts) yield t
       if (includeInit) {
-        r = r :+ Task.Stmts(th, config, initStmts, plugins)
+        r = Task.Stmts(th, config, initStmts, plugins) +: r
       }
       return r
     }
@@ -1304,10 +1304,10 @@ import Util._
       if (isInObject) {
         th.nameMap.get(owner :+ id) match {
           case Some(mi: lang.symbol.Info.Method) =>
-            return Context.InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
-              extractAssignExpOpt(mi))
+            return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.sig, mi.ast.contract,
+              extractResolvedInfo(mi.ast.attr), extractAssignExpOpt(mi))
           case Some(mi: lang.symbol.Info.ExtMethod) =>
-            return Context.InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), None())
+            return Context.InvokeMethodInfo(T, mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), None())
           case info => halt(s"Infeasible: $owner.$id => $info")
         }
       } else {
@@ -1315,12 +1315,12 @@ import Util._
           case Some(info: lang.symbol.TypeInfo.Adt) =>
             info.methods.get(id) match {
               case Some(mi) =>
-                return Context.InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
-                  extractAssignExpOpt(mi))
+                return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.sig, mi.ast.contract,
+                  extractResolvedInfo(mi.ast.attr), extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
-                    return Context.InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple.empty,
+                    return Context.InvokeMethodInfo(T, mi.ast.sig, AST.MethodContract.Simple.empty,
                       extractResolvedInfo(mi.ast.attr), None())
                   case _ => halt("Infeasible")
                 }
@@ -1328,12 +1328,12 @@ import Util._
           case Some(info: lang.symbol.TypeInfo.Sig) =>
             info.methods.get(id) match {
               case Some(mi) =>
-                return Context.InvokeMethodInfo(mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr),
-                  extractAssignExpOpt(mi))
+                return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.sig, mi.ast.contract,
+                  extractResolvedInfo(mi.ast.attr), extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
-                    return Context.InvokeMethodInfo(mi.ast.sig, AST.MethodContract.Simple.empty,
+                    return Context.InvokeMethodInfo(T, mi.ast.sig, AST.MethodContract.Simple.empty,
                       extractResolvedInfo(mi.ast.attr), None())
                   case _ => halt("Infeasible")
                 }
@@ -1636,8 +1636,20 @@ import Util._
             s1 = s1.addClaim(State.Claim.Let.CurrentId(F, receiver, res.owner :+ res.id, "this", receiverPosOpt))
           case _ =>
         }
-        val invs: ISZ[Info.Inv] =
-          if (res.owner.isEmpty && info.strictPureBodyOpt.isEmpty) th.worksheetInvs else ISZ()
+        val invs: ISZ[Info.Inv] = {
+          def invsH: ISZ[Info.Inv] = {
+            if (info.isHelper) {
+              return ISZ()
+            }
+            if (info.strictPureBodyOpt.isEmpty) {
+              if (res.owner.isEmpty) {
+                return th.worksheetInvs
+              }
+            }
+            return ISZ()
+          }
+          invsH
+        }
         s1 = {
           val pis = logikaComp.evalInvs(posOpt, F, "Pre-invariant", smt2, rtCheck, s1, invs, reporter)
           s1(status = pis.status, nextFresh = pis.nextFresh)
