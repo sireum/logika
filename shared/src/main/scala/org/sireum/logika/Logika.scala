@@ -113,14 +113,17 @@ object Logika {
 
   def checkStmts(initStmts: ISZ[AST.Stmt], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
-                 par: B, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z): Unit = {
+                 par: B, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z,
+                 skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
 
+    val noMethods = HashSet ++ skipMethods
+    val noTypes = HashSet ++ skipTypes
     var taskMap = HashSMap.empty[(Z, Z), ISZ[Task]]
     def rec(ownerPosOpt: Option[(Z, Z)], stmts: ISZ[AST.Stmt]): Unit = {
       var ownerTasks = ISZ[Task]()
       for (stmt <- stmts) {
         stmt match {
-          case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty =>
+          case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty && !noMethods.contains(stmt.sig.id.value) =>
             if (ownerPosOpt.nonEmpty) {
               ownerTasks = ownerTasks :+ Task.Method(par, th, config, stmt, plugins)
             } else {
@@ -132,13 +135,13 @@ object Logika {
               }
               taskMap = taskMap + ownerPos ~> (tasks :+ Task.Method(par, th, config, stmt, plugins))
             }
-          case stmt: AST.Stmt.Object =>
+          case stmt: AST.Stmt.Object if !noTypes.contains(stmt.id.value) =>
             val pos = stmt.posOpt.get
             rec(Some((pos.beginLine, pos.endLine)), stmt.stmts)
-          case stmt: AST.Stmt.Adt =>
+          case stmt: AST.Stmt.Adt if !noTypes.contains(stmt.id.value) =>
             val pos = stmt.posOpt.get
             rec(Some((pos.beginLine, pos.endLine)), stmt.stmts)
-          case stmt: AST.Stmt.Sig =>
+          case stmt: AST.Stmt.Sig if !noTypes.contains(stmt.id.value) =>
             val pos = stmt.posOpt.get
             rec(Some((pos.beginLine, pos.endLine)), stmt.stmts)
           case _ =>
@@ -223,7 +226,8 @@ object Logika {
 
   def checkScript(fileUriOpt: Option[String], input: String, config: Config,
                   smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
-                  par: B, hasLogika: B, plugins: ISZ[Plugin], line: Z): Unit = {
+                  par: B, hasLogika: B, plugins: ISZ[Plugin], line: Z,
+                  skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
       case Some(p) => !ops.StringOps(p).endsWith(".scala") && !ops.StringOps(p).endsWith(".slang")
@@ -259,7 +263,8 @@ object Logika {
 
           if (!reporter.hasError) {
             if (hasLogika) {
-              checkStmts(p.body.stmts, config, th, smt2f, reporter, par, plugins, verifyingStartTime, T, line)
+              checkStmts(p.body.stmts, config, th, smt2f, reporter, par, plugins, verifyingStartTime, T, line,
+                skipMethods, skipTypes)
             }
           } else {
             reporter.illFormed()
@@ -273,7 +278,8 @@ object Logika {
 
   def checkPrograms(sources: ISZ[(Option[String], String)], files: ISZ[String], config: Config,
                     th: TypeHierarchy, smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
-                    par: B, strictAliasing: B, sanityCheck: B, plugins: ISZ[Plugin], line: Z): Unit = {
+                    par: B, strictAliasing: B, sanityCheck: B, plugins: ISZ[Plugin], line: Z,
+                    skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val (rep, _, nameMap, typeMap) = extension.Cancel.cancellable(() =>
       lang.FrontEnd.parseProgramAndGloballyResolve(par, sources, th.nameMap, th.typeMap))
@@ -364,7 +370,8 @@ object Logika {
         case _ =>
       }
     }
-    checkStmts(initStmts, config, th4, smt2f, reporter, par, plugins, verifyingStartTime, F, line)
+    checkStmts(initStmts, config, th4, smt2f, reporter, par, plugins, verifyingStartTime, F, line, skipMethods,
+      skipTypes)
   }
 }
 
