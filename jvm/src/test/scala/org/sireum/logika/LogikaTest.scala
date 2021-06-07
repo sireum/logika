@@ -39,13 +39,13 @@ object LogikaTest {
 
   val z3Exe: String = Os.env("SIREUM_HOME") match {
     case Some(p) if Os.kind != Os.Kind.Unsupported =>
-      (Os.path(p) / "bin" / platform / "z3" / "bin" / (if (Os.isWin) "z3.exe" else "z3")).string
+      (Os.path(p) / "bin" / platform / "z3" / "bin" / (if (Os.isWin) "z3.exe" else "z3")).canon.string
     case _ => "z3"
   }
 
   val cvc4Exe: String = Os.env("SIREUM_HOME") match {
     case Some(p) if Os.kind != Os.Kind.Unsupported =>
-      (Os.path(p) / "bin" / platform / (if (Os.isWin) "cvc4.exe" else "cvc4")).string
+      (Os.path(p) / "bin" / platform / (if (Os.isWin) "cvc4.exe" else "cvc4")).canon.string
     case _ => "cvc4"
   }
 

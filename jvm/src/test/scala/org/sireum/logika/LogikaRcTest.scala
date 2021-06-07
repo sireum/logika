@@ -45,7 +45,7 @@ class LogikaRcTest extends SireumRcSpec {
     val p = Os.path(path.mkString(Os.fileSep.value))
     Logika.checkScript(Some(p.string), content, c,
       th => Smt2Impl.create(config.smt2Configs, th, Smt2Impl.NoCache(), c.timeoutInMs, c.charBitWidth, c.intBitWidth,
-        c.simplifiedQuery, reporter), reporter, !Os.isWin, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
+        c.simplifiedQuery, reporter), reporter, T, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     reporter.printMessages()
     val name = p.name.value
     if (name.startsWith(failPrefix)) {
