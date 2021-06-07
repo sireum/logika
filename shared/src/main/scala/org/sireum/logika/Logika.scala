@@ -111,19 +111,41 @@ object Logika {
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size")
   )
 
-  def checkStmts(initStmts: ISZ[AST.Stmt], config: Config, th: TypeHierarchy,
+  def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, reporter: Reporter,
                  par: B, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z,
                  skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
 
-    val noMethods = HashSet ++ skipMethods
-    val noTypes = HashSet ++ skipTypes
+    var noMethodIds = HashSet.empty[String]
+    var noMethodNames = HashSet.empty[String]
+    var noTypeIds = HashSet.empty[String]
+    var noTypeNames = HashSet.empty[String]
+    for (m <- skipMethods) {
+      if (ops.StringOps(m).contains(".")) {
+        noMethodNames = noMethodNames + m
+      } else {
+        noMethodIds = noMethodIds + m
+      }
+    }
+    for (t <- skipTypes) {
+      if (ops.StringOps(t).contains(".")) {
+        noTypeNames = noTypeNames + t
+      } else {
+        noTypeIds = noTypeIds + t
+      }
+    }
+    def noMethods(owner: ISZ[String], id: String): B = {
+      return noMethodIds.contains(id) || noMethodNames.contains(st"${(owner :+ id, ".")}".render)
+    }
+    def noTypes(owner: ISZ[String], id: String): B = {
+      return noTypeIds.contains(id) || noTypeNames.contains(st"${(owner :+ id, ".")}".render)
+    }
     var taskMap = HashSMap.empty[(Z, Z), ISZ[Task]]
-    def rec(ownerPosOpt: Option[(Z, Z)], stmts: ISZ[AST.Stmt]): Unit = {
+    def rec(ownerPosOpt: Option[(Z, Z)], owner: ISZ[String], stmts: ISZ[AST.Stmt]): Unit = {
       var ownerTasks = ISZ[Task]()
       for (stmt <- stmts) {
         stmt match {
-          case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty && !noMethods.contains(stmt.sig.id.value) =>
+          case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty && !noMethods(owner, stmt.sig.id.value) =>
             if (ownerPosOpt.nonEmpty) {
               ownerTasks = ownerTasks :+ Task.Method(par, th, config, stmt, plugins)
             } else {
@@ -135,15 +157,15 @@ object Logika {
               }
               taskMap = taskMap + ownerPos ~> (tasks :+ Task.Method(par, th, config, stmt, plugins))
             }
-          case stmt: AST.Stmt.Object if !noTypes.contains(stmt.id.value) =>
+          case stmt: AST.Stmt.Object if !noTypes(owner, stmt.id.value) =>
             val pos = stmt.posOpt.get
-            rec(Some((pos.beginLine, pos.endLine)), stmt.stmts)
-          case stmt: AST.Stmt.Adt if !noTypes.contains(stmt.id.value) =>
+            rec(Some((pos.beginLine, pos.endLine)), owner :+ stmt.id.value, stmt.stmts)
+          case stmt: AST.Stmt.Adt if !noTypes(owner, stmt.id.value) =>
             val pos = stmt.posOpt.get
-            rec(Some((pos.beginLine, pos.endLine)), stmt.stmts)
-          case stmt: AST.Stmt.Sig if !noTypes.contains(stmt.id.value) =>
+            rec(Some((pos.beginLine, pos.endLine)), owner :+ stmt.id.value, stmt.stmts)
+          case stmt: AST.Stmt.Sig if !noTypes(owner, stmt.id.value) =>
             val pos = stmt.posOpt.get
-            rec(Some((pos.beginLine, pos.endLine)), stmt.stmts)
+            rec(Some((pos.beginLine, pos.endLine)), owner :+ stmt.id.value, stmt.stmts)
           case _ =>
         }
       }
@@ -152,7 +174,10 @@ object Logika {
       }
     }
 
-    rec(None(), initStmts)
+    rec(None(), ISZ(), initStmts)
+    for (p <- typeStmts) {
+      rec(None(), p._1, ISZ(p._2))
+    }
 
     def findTasks(): ISZ[Task] = {
       def findMethodTasks(): ISZ[Task] = {
@@ -263,7 +288,7 @@ object Logika {
 
           if (!reporter.hasError) {
             if (hasLogika) {
-              checkStmts(p.body.stmts, config, th, smt2f, reporter, par, plugins, verifyingStartTime, T, line,
+              checkStmts(p.body.stmts, ISZ(), config, th, smt2f, reporter, par, plugins, verifyingStartTime, T, line,
                 skipMethods, skipTypes)
             }
           } else {
@@ -356,21 +381,21 @@ object Logika {
     val verifyingStartTime = extension.Time.currentMillis
     reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
 
-    var initStmts = ISZ[AST.Stmt]()
+    var typeStmts = ISZ[(ISZ[String], AST.Stmt)]()
     for (info <- th4.nameMap.values) {
       info match {
-        case info: Info.Object if shouldCheck(info.posOpt) => initStmts = initStmts :+ info.ast
+        case info: Info.Object if shouldCheck(info.posOpt) => typeStmts = typeStmts :+ ((info.owner, info.ast))
         case _ =>
       }
     }
     for (info <- th4.typeMap.values) {
       info match {
-        case info: TypeInfo.Adt if shouldCheck(info.posOpt) => initStmts = initStmts :+ info.ast
-        case info: TypeInfo.Sig if shouldCheck(info.posOpt) => initStmts = initStmts :+ info.ast
+        case info: TypeInfo.Adt if shouldCheck(info.posOpt) => typeStmts = typeStmts :+ ((info.owner, info.ast))
+        case info: TypeInfo.Sig if shouldCheck(info.posOpt) => typeStmts = typeStmts :+ ((info.owner, info.ast))
         case _ =>
       }
     }
-    checkStmts(initStmts, config, th4, smt2f, reporter, par, plugins, verifyingStartTime, F, line, skipMethods,
+    checkStmts(ISZ(), typeStmts, config, th4, smt2f, reporter, par, plugins, verifyingStartTime, F, line, skipMethods,
       skipTypes)
   }
 }
