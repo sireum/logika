@@ -47,7 +47,7 @@ object Task {
           case _ =>
         }
       }
-      return super.postTypedName(o)
+      return AST.MTransformer.PostResultTypedName
     }
   }
 

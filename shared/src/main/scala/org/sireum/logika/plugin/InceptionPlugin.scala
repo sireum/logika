@@ -48,7 +48,7 @@ object InceptionPlugin {
           }
         case _ =>
       }
-      return super.preTyped(o)
+      return AST.MTransformer.PreResultTypedTypeVar
     }
 
     override def preExpIdent(o: AST.Exp.Ident): AST.MTransformer.PreResult[AST.Exp] = {
@@ -57,13 +57,13 @@ object InceptionPlugin {
           return AST.MTransformer.PreResult(F, MSome(paramMap.get(res.id).get))
         case _ =>
       }
-      return super.preExpIdent(o)
+      return AST.MTransformer.PreResultExpIdent
     }
 
     override def preExpInvoke(o: AST.Exp.Invoke): AST.MTransformer.PreResult[AST.Exp] = {
       val res: AST.ResolvedInfo.LocalVar = o.ident.attr.resOpt.get match {
         case lv: AST.ResolvedInfo.LocalVar if paramMap.contains(lv.id) && lv.context == context => lv
-        case _ => return super.preExpInvoke(o)
+        case _ => return AST.MTransformer.PreResultExpInvoke
       }
       val arg = paramMap.get(res.id).get
       arg match {

@@ -26,7 +26,6 @@
 package org.sireum.logika.plugin
 
 import org.sireum._
-import org.sireum.lang.ast.{Exp, MTransformer}
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Reporter
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
@@ -34,16 +33,16 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 object PredNatDedPlugin {
 
   @record class LocalSubstitutor(map: HashMap[(ISZ[String], String), AST.Exp]) extends AST.MTransformer {
-    override def preExpIdent(o: Exp.Ident): MTransformer.PreResult[Exp] = {
+    override def preExpIdent(o: AST.Exp.Ident): AST.MTransformer.PreResult[AST.Exp] = {
       o.attr.resOpt.get match {
         case res: AST.ResolvedInfo.LocalVar =>
           map.get((res.context, res.id)) match {
-            case Some(exp) => return MTransformer.PreResult(F, MSome(exp))
+            case Some(exp) => return AST.MTransformer.PreResult(F, MSome(exp))
             case _ =>
           }
         case _ =>
       }
-      return super.preExpIdent(o)
+      return AST.MTransformer.PreResultExpIdent
     }
   }
 }

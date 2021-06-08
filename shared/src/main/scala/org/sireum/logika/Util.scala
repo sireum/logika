@@ -96,15 +96,15 @@ object Util {
 
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
       o match {
-        case o: State.Claim.Let.Binary if Smt2.imsOps.contains(o.op) => return super.preStateClaim(o)
-        case o: State.Claim.Let.CurrentId if o.declId => return super.preStateClaim(o)
+        case o: State.Claim.Let.Binary if Smt2.imsOps.contains(o.op) => return MStateTransformer.PreResultStateClaimProp
+        case o: State.Claim.Let.CurrentId if o.declId => return MStateTransformer.PreResultStateClaimProp
         case o: State.Claim.Let =>
           val key = o.sym.num
           val s = value.get(key).getOrElse(HashSet.empty) + o
           value = value + key ~> s
           return MStateTransformer.PreResult(F, MNone())
         case _ =>
-          return super.preStateClaim(o)
+          return MStateTransformer.PreResultStateClaimProp
       }
     }
   }
@@ -118,14 +118,14 @@ object Util {
 
     override def preStateValueSym(o: State.Value.Sym): MStateTransformer.PreResult[State.Value] = {
       syms = syms + o
-      return super.preStateValueSym(o)
+      return MStateTransformer.PreResultStateValueSym
     }
 
     override def preStateClaimLetCurrentId(o: State.Claim.Let.CurrentId): MStateTransformer.PreResult[State.Claim.Let] = {
       if (o.declId) {
         currentDeclIds = currentDeclIds :+ o
       }
-      return super.preStateClaimLetCurrentId(o)
+      return MStateTransformer.PreResultStateClaimLetCurrentId
     }
   }
 
@@ -633,7 +633,7 @@ object Util {
         case res: AST.ResolvedInfo.LocalVar => return introIdent(o, res, o.id, o.typedOpt)
         case _ =>
       }
-      return super.postExpIdent(o)
+      return AST.MTransformer.PostResultExpIdent
     }
 
     override def postExpThis(o: AST.Exp.This): MOption[AST.Exp] = {
@@ -650,7 +650,7 @@ object Util {
           return introIdent(o, res, o.id, o.typedOpt)
         case _ =>
       }
-      return super.postExpSelect(o)
+      return AST.MTransformer.PostResultExpSelect
     }
   }
 
