@@ -27,7 +27,7 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.lang.ast.Typed
+import org.sireum.lang.ast.{Exp, MTransformer}
 import org.sireum.message.Position
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.TypeInfo
@@ -713,22 +713,73 @@ object Util {
 
   @strictpure def strictPureClaimId(i: Z, pos: Position): String = s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
 
-  @record class UnsupportedFeatureDetector(val posOpt: Option[Position], val reporter: Reporter) extends AST.MTransformer {
-    override def postTypedFun(o: AST.Typed.Fun): MOption[AST.Typed] = {
-      if (reporter.messages.isEmpty) {
-        if (!o.isPureFun) {
-          reporter.warn(posOpt, Logika.kind, "Verification skipped due to impure function (currently unsupported)")
-        } else if (o.isByName) {
-          reporter.warn(posOpt, Logika.kind, "Verification skipped due to by-name parameter (currently unsupported)")
-        }
+  @record class UnsupportedFeatureDetector(val posOpt: Option[Position], val id: String, val reporter: Reporter) extends AST.MTransformer {
+    override def preExpQuantEach(o: AST.Exp.QuantEach): AST.MTransformer.PreResult[AST.Exp.Quant] = {
+      transformExp(o.seq)
+      for (p <- o.fun.params) {
+        transformExpFunParam(p)
       }
-      return AST.MTransformer.PostResultTypedName
+      transformAssignExp(o.fun.exp)
+      return AST.MTransformer.PreResultExpQuantEach(continu = F)
+    }
+
+    override def preExpQuantType(o: AST.Exp.QuantType): AST.MTransformer.PreResult[AST.Exp.Quant] = {
+      for (p <- o.fun.params) {
+        transformExpFunParam(p)
+      }
+      transformAssignExp(o.fun.exp)
+      return AST.MTransformer.PreResultExpQuantType(continu = F)
+    }
+
+    override def preExpQuantRange(o: AST.Exp.QuantRange): AST.MTransformer.PreResult[AST.Exp.Quant] = {
+      transformExp(o.lo)
+      transformExp(o.hi)
+      for (p <- o.fun.params) {
+        transformExpFunParam(p)
+      }
+      transformAssignExp(o.fun.exp)
+      return AST.MTransformer.PreResultExpQuantRange(continu = F)
+    }
+
+    override def postTypeFun(o: AST.Type.Fun): MOption[AST.Type] = {
+      val t = o.typedOpt.get.asInstanceOf[AST.Typed.Fun]
+      if (reporter.messages.isEmpty && !t.isPureFun) {
+        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $t")
+      }
+      return AST.MTransformer.PostResultTypeFun
+    }
+
+    override def postExpFun(o: AST.Exp.Fun): MOption[AST.Exp] = {
+      if (reporter.messages.isEmpty && !o.typedOpt.get.asInstanceOf[AST.Typed.Fun].isPureFun) {
+        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $o")
+      }
+      return AST.MTransformer.PostResultExpFun
+    }
+
+    override def postExpEta(o: AST.Exp.Eta): MOption[AST.Exp] = {
+      if (reporter.messages.isEmpty && !o.typedOpt.get.asInstanceOf[AST.Typed.Fun].isPureFun) {
+        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $o")
+      }
+      return AST.MTransformer.PostResultExpEta
     }
   }
 
   def detectUnsupportedFeatures(stmt: AST.Stmt.Method): ISZ[message.Message] = {
-    val ufd = UnsupportedFeatureDetector(stmt.sig.id.attr.posOpt, Reporter.create)
-    ufd.transformStmt(stmt)
+    val ufd = UnsupportedFeatureDetector(stmt.sig.id.attr.posOpt, stmt.sig.id.value, Reporter.create)
+    for (p <- stmt.sig.params) {
+      p.tipe match {
+        case t: AST.Type.Fun if t.isByName =>
+          ufd.reporter.warn(ufd.posOpt, Logika.kind, s"Verification of ${ufd.id} was skipped due to impure function (currently unsupported): ${t.typedOpt.get}")
+        case _ =>
+      }
+      ufd.transformParam(p)
+    }
+    ufd.transformMethodContract(stmt.contract)
+    ufd.transformType(stmt.sig.returnType)
+    stmt.bodyOpt match {
+      case Some(body) => ufd.transformBody(body)
+      case _ =>
+    }
     return ufd.reporter.messages
   }
 }
