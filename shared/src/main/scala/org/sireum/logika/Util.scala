@@ -27,6 +27,7 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.lang.ast.Typed
 import org.sireum.message.Position
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.TypeInfo
@@ -711,4 +712,23 @@ object Util {
   }
 
   @strictpure def strictPureClaimId(i: Z, pos: Position): String = s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
+
+  @record class UnsupportedFeatureDetector(val posOpt: Option[Position], val reporter: Reporter) extends AST.MTransformer {
+    override def postTypedFun(o: AST.Typed.Fun): MOption[AST.Typed] = {
+      if (reporter.messages.isEmpty) {
+        if (!o.isPureFun) {
+          reporter.warn(posOpt, Logika.kind, "Verification skipped due to impure function (currently unsupported)")
+        } else if (o.isByName) {
+          reporter.warn(posOpt, Logika.kind, "Verification skipped due to by-name parameter (currently unsupported)")
+        }
+      }
+      return AST.MTransformer.PostResultTypedName
+    }
+  }
+
+  def detectUnsupportedFeatures(stmt: AST.Stmt.Method): ISZ[message.Message] = {
+    val ufd = UnsupportedFeatureDetector(stmt.sig.id.attr.posOpt, Reporter.create)
+    ufd.transformStmt(stmt)
+    return ufd.reporter.messages
+  }
 }

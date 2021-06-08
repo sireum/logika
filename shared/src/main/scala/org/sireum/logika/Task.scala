@@ -80,6 +80,11 @@ object Task {
                          val method: AST.Stmt.Method,
                          val plugins: ISZ[Plugin]) extends Task {
     override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
+      val ms = Util.detectUnsupportedFeatures(method)
+      if (ms.nonEmpty) {
+        reporter.reports(ms)
+        return reporter.messages
+      }
       val itvc = IndexTypeVarCollector(HashSet.empty)
       itvc.transformStmt(method)
       val tvs = itvc.s.elements
