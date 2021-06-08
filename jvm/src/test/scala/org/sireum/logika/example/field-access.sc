@@ -4,9 +4,9 @@ import org.sireum._
 
 @record class Foo(var x: Z)
 
-@datatype class Bar(y: Z)
+@datatype class Bar(val y: Z)
 
-@record class Baz(foo: Foo, var bar: Bar, z: Z) {
+@record class Baz(val foo: Foo, var bar: Bar, val z: Z) {
   def incBar(): Unit = {
     Contract(
       Modifies(bar),

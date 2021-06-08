@@ -582,7 +582,6 @@ object Smt2 {
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
             |  (and
             |    ($itEqId ($sizeId z) ($zAddId ($sizeId x) $zOne))
-            |    ($itEqId ($lastIndexId z) (ite (= ($sizeId x) $zZero) $itMin ($itAddId ($lastIndexId x) $itOne)))
             |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                        (= ($atId z i) ($atId x i))))
             |    (= ($atId z ($lastIndexId z)) y)))""")
@@ -590,12 +589,6 @@ object Smt2 {
         st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
             |  (and
             |    (= ($sizeId z) ($zAddId ($sizeId x) ($sizeId y)))
-            |    (ite (= ($sizeId x) $zZero)
-            |      (=> (not (= ($sizeId y) $zZero)) (= ($lastIndexId z) ($lastIndexId y)))
-            |      (= ($lastIndexId z)
-            |        (ite (= ($sizeId y) $zZero)
-            |          ($lastIndexId x)
-            |          ($itAddId ($lastIndexId x) ($itSubId ($lastIndexId y) ($firstIndexId y))))))
             |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                            (= ($atId z i) ($atId x i))))
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
@@ -604,7 +597,6 @@ object Smt2 {
         st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
             |  (and
             |    (= ($sizeId z) ($zAddId ($sizeId y) 1))
-            |    ($itEqId ($lastIndexId z) (ite (= ($sizeId y) $zZero) $itMin ($itAddId ($lastIndexId y) $itOne)))
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId i $itOne)) ($atId y i))))
             |    (= ($atId z ($firstIndexId z)) x)))""")
@@ -845,25 +837,25 @@ object Smt2 {
         case (T, T) =>
           addTypeDecl(
             st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
-                 |(declare-fun $t2ZId ($tId) Z)
-                 |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
-                 |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
-                 |(define-fun $tLeId ((x $tId) (y $tId)) B (bvsle x y))
-                 |(define-fun $tLtId ((x $tId) (y $tId)) B (bvslt x y))
-                 |(define-fun $tGtId ((x $tId) (y $tId)) B (bvsgt x y))
-                 |(define-fun $tGeId ((x $tId) (y $tId)) B (bvsge x y))
-                 |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
-                 |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
-                 |(define-fun $tAddId ((x $tId) (y $tId)) $tId (bvadd x y))
-                 |(define-fun $tSubId ((x $tId) (y $tId)) $tId (bvsub x y))
-                 |(define-fun $tMulId ((x $tId) (y $tId)) $tId (bvmul x y))
-                 |(define-fun $tDivId ((x $tId) (y $tId)) $tId (bvsdiv x y))
-                 |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvsrem x y))
-                 |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
-                 |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvashr x y))
-                 |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
-                 |$tMaxOpt
-                 |$tMinOpt""")
+                |(declare-fun $t2ZId ($tId) Z)
+                |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
+                |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
+                |(define-fun $tLeId ((x $tId) (y $tId)) B (bvsle x y))
+                |(define-fun $tLtId ((x $tId) (y $tId)) B (bvslt x y))
+                |(define-fun $tGtId ((x $tId) (y $tId)) B (bvsgt x y))
+                |(define-fun $tGeId ((x $tId) (y $tId)) B (bvsge x y))
+                |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
+                |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
+                |(define-fun $tAddId ((x $tId) (y $tId)) $tId (bvadd x y))
+                |(define-fun $tSubId ((x $tId) (y $tId)) $tId (bvsub x y))
+                |(define-fun $tMulId ((x $tId) (y $tId)) $tId (bvmul x y))
+                |(define-fun $tDivId ((x $tId) (y $tId)) $tId (bvsdiv x y))
+                |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvsrem x y))
+                |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
+                |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvashr x y))
+                |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
+                |$tMaxOpt
+                |$tMinOpt""")
         case (F, T) =>
           addTypeDecl(
             st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))

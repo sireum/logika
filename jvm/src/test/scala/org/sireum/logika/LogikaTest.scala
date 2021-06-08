@@ -49,7 +49,7 @@ object LogikaTest {
     case _ => "cvc4"
   }
 
-  val timeoutInMs: Z = 5000
+  val timeoutInMs: Z = 2000
 
   val config: Config =
     Config(
@@ -65,6 +65,7 @@ object LogikaTest {
       logRawPc = F,
       logVc = F,
       logVcDirOpt = None(),
+      //logVcDirOpt = Some((Os.home / "Temp" / "worksheet").string),
       dontSplitPfq = F,
       splitAll = F,
       splitContract = F,
@@ -147,11 +148,6 @@ class LogikaTest extends TestSuite {
     }
 
     "Failing" - {
-
-      * - failingWorksheet(
-        """import org.sireum._
-          |val a = 0 +: ISZ(1, 2, 3)
-          |assert(a(0) == 1)""".stripMargin, "Cannot deduce")
 
       * - failingWorksheet(
         """import org.sireum._
