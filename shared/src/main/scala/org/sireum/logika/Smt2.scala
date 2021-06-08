@@ -1364,7 +1364,7 @@ object Smt2 {
       val syms: ISZ[State.Value.Sym] = for (ds <- lets.values if ds.size > 1 && usedSyms.contains(ds(0).sym)) yield ds(0).sym
       var decls: ISZ[ST] = for (sym <- syms) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})"
       for (cid <- uscdid.currentDeclIds) {
-        decls = decls :+ st"(|l:${cid.id}| ${typeId(cid.sym.tipe)})"
+        decls = decls :+ st"(${currentLocalId(cid)} ${typeId(cid.sym.tipe)})"
       }
       if (decls.nonEmpty) {
         r =
