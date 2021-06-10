@@ -270,7 +270,7 @@ object Util {
         var fieldVarInMap = mctx.fieldVarInMap
         mctx.receiverTypeOpt match {
           case Some(receiverType) =>
-            val (s0, thiz) = idIntro(method.posOpt.get, state, mname, "this", receiverType, method.sig.id.attr.posOpt)
+            val (s0, thiz) = idIntro(method.sig.id.attr.posOpt.get, state, mname, "this", receiverType, method.sig.id.attr.posOpt)
             state = s0
             for (p <- mctx.fieldVarMap(TypeChecker.emptySubstMap).entries) {
               val (id, (t, posOpt)) = p
@@ -293,7 +293,7 @@ object Util {
       }
       val statePreReqInvSize = state.claims.size
       if (logika.context.methodName.size == 1 && !method.isHelper) {
-        state = checkInv(T, state, logika, smt2, th.worksheetInvs, method.posOpt, reporter)
+        state = checkInv(T, state, logika, smt2, th.worksheetInvs, method.sig.id.attr.posOpt, reporter)
       }
       val stmts = method.bodyOpt.get.stmts
       val hasPreReqInv = state.claims.size != statePreReqInvSize
@@ -323,7 +323,7 @@ object Util {
         var s2 = s
         val statePreEnInvSize = state.claims.size
         if (logika.context.methodName.size == 1 && !method.isHelper) {
-          s2 = checkInv(F, s2, logika, smt2, th.worksheetInvs, method.posOpt, reporter)
+          s2 = checkInv(F, s2, logika, smt2, th.worksheetInvs, method.sig.id.attr.posOpt, reporter)
         }
         val hasPreEnInv = state.claims.size != statePreEnInvSize
         val statePreEnSize = state.claims.size

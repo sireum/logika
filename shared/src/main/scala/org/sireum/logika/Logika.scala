@@ -2867,46 +2867,53 @@ import Util._
       }
       val res = invs(0).resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
       val id = s"inv${if (res.isInObject) '.' else '#'}"
-      val rep = Reporter.create
-      val (s1, v) = Util.evalExtractPureMethod(this, smt2, s0, context.receiverTypeOpt, res.owner, id, claim, rep)
+      val (s1, v) = Util.evalExtractPureMethod(this, smt2, s0, context.receiverTypeOpt, res.owner, id, claim, reporter)
       if (!s1.status) {
         return None()
       }
       val (s2, sym) = value2Sym(s1, v, pos)
       if (isAssume) {
-        val s3 = evalAssumeH(F, smt2, title, s2, sym, posOpt, rep)
-        reporter.reports(rep.messages)
+        val s3 = evalAssumeH(T, smt2, title, s2, sym, posOpt, reporter)
         return Some(s3)
       } else {
-        val s3 = evalAssertH(F, smt2, title, s2, sym, posOpt, rep)
+        val s3 = evalAssertH(T, smt2, title, s2, sym, posOpt, reporter)
         if (!s3.status) {
           return None()
         }
-        reporter.reports(rep.messages)
         return Some(s3)
       }
     }
-    spInv() match {
+    val oldIgnore = reporter.ignore
+    reporter.setIgnore(T)
+    val sOpt = spInv()
+    reporter.setIgnore(oldIgnore)
+    sOpt match {
       case Some(s) => return s
       case _ =>
     }
     var s4 = s0
     for (inv <- invs if s4.status) {
-      s4 = evalInv(isAssume, title, smt2, rtCheck, s4, inv.ast, reporter)
+      s4 = evalInv(posOpt, isAssume, title, smt2, rtCheck, s4, inv.ast, reporter)
     }
     return s4
   }
 
-  def evalInv(isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State, invStmt: AST.Stmt.Inv, reporter: Reporter): State = {
+  def evalInv(posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State, invStmt: AST.Stmt.Inv, reporter: Reporter): State = {
     var s1 = s0
     var i = 0
     val isSingle = invStmt.claims.size == 1
     val id = invStmt.id.value
     for (claim <- invStmt.claims if s1.status) {
-      val titl: String = if (isSingle) s"$title $id" else s"$title $id#$i"
+      val (titl, pOpt): (String, Option[Position]) = if (posOpt.isEmpty) {
+        (if (isSingle) s"$title $id" else s"$title $id#$i", claim.posOpt)
+      } else {
+        val cpos = claim.posOpt.get
+        (if (isSingle) s"$title $id at [${cpos.beginLine}, ${cpos.beginColumn}]"
+        else s"$title $id#$i at [${cpos.beginLine}, ${cpos.beginColumn}]", posOpt)
+      }
       s1 =
-        if (isAssume) evalAssume(smt2, rtCheck, titl, s1, claim, claim.posOpt, reporter)._1
-        else evalAssert(smt2, rtCheck, titl, s1, claim, claim.posOpt, reporter)._1
+        if (isAssume) evalAssume(smt2, rtCheck, titl, s1, claim, pOpt, reporter)._1
+        else evalAssert(smt2, rtCheck, titl, s1, claim, pOpt, reporter)._1
       i = i + 1
     }
     return s1
@@ -3299,7 +3306,7 @@ import Util._
         case stmt: AST.Stmt.SpecBlock => return evalSpecBlock(split, state, stmt)
         case stmt: AST.Stmt.Match => return evalMatch(split, smt2, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.Inv =>
-          val s1 = evalInv(F, "Invariant", smt2, rtCheck, state, stmt, reporter)
+          val s1 = evalInv(None(), F, "Invariant", smt2, rtCheck, state, stmt, reporter)
           return ISZ(state(status = s1.status, nextFresh = s1.nextFresh))
         case stmt: AST.Stmt.DeduceSteps => return evalDeduceSteps(state, stmt)
         case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty => return evalDeduceSequent(state, stmt)
