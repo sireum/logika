@@ -10,7 +10,7 @@ import org.sireum._
     n * f(n - 1)
   }
 
-def factorial(n: Z): Z = {
+@pure def factorial(n: Z): Z = {
   Contract(
     Requires(n >= 0),
     Ensures(Res == f(n))
