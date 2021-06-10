@@ -37,7 +37,7 @@ import org.sireum.logika.Logika.Reporter
 object InceptionPlugin {
   @record class Substitutor(substMap: HashMap[String, AST.Typed],
                             context: QName,
-                            paramMap: HashMap[String, AST.Exp],
+                            paramMap: HashSMap[String, AST.Exp],
                             reporter: Reporter) extends AST.MTransformer {
     override def preTyped(o: AST.Typed): AST.MTransformer.PreResult[AST.Typed] = {
       o match {
@@ -70,7 +70,7 @@ object InceptionPlugin {
         case arg: AST.Exp.Fun =>
           arg.exp match {
             case argExp: AST.Stmt.Expr =>
-              var fParamMap = HashMap.empty[String, AST.Exp]
+              var fParamMap = HashSMap.empty[String, AST.Exp]
               for (pArg <- ops.ISZOps(arg.params).zip(o.args)) {
                 pArg._1.idOpt match {
                   case Some(id) => fParamMap = fParamMap + id.value ~> pArg._2
@@ -105,6 +105,9 @@ object InceptionPlugin {
 }
 
 @datatype class InceptionPlugin extends Plugin {
+
+  val name: String = "InceptionPlugin"
+
   @pure def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     val res: AST.ResolvedInfo.Method = just match {
       case just: AST.ProofAst.Step.Justification.Incept =>
@@ -152,22 +155,26 @@ object InceptionPlugin {
       val smOpt = TypeChecker.unifyFun(Logika.kind, logika.th, posOpt, TypeChecker.TypeRelation.Subtype, res.tpeOpt.get,
         mi.methodType.tpe, reporter)
       val ips = InceptionPlugin.Substitutor(smOpt.get, mi.name,
-        HashMap.empty[String, AST.Exp] ++ ops.ISZOps(res.paramNames).zip(args), Reporter.create)
+        HashSMap.empty[String, AST.Exp] ++ ops.ISZOps(res.paramNames).zip(args), Reporter.create)
+      var reqEvidence = ISZ[ST]()
       if (just.witnesses.isEmpty) {
-        var provenClaims = HashSet.empty[AST.Exp]
+        var provenClaims = HashMap.empty[AST.Exp, Z]
         for (spc <- spcMap.values) {
           spc match {
-            case spc: StepProofContext.Regular => provenClaims = provenClaims + spc.exp
+            case spc: StepProofContext.Regular => provenClaims = provenClaims + spc.exp ~> spc.stepNo
             case _ =>
           }
         }
         var ok = T
         for (require <- requires) {
           val req = ips.transformExp(require).getOrElseEager(require)
-          if (ips.reporter.messages.isEmpty && !provenClaims.contains(AST.Util.deBruijn(req))) {
-            val pos = require.posOpt.get
-            reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]")
+          val stepNoOpt = provenClaims.get(AST.Util.deBruijn(req))
+          val pos = require.posOpt.get
+          if (ips.reporter.messages.isEmpty && stepNoOpt.isEmpty) {
+            reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}]")
             ok = F
+          } else {
+            reqEvidence = reqEvidence :+ st"${Plugin.stepNoDesc(T, stepNoOpt.get)} satisfies ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}]"
           }
         }
         if (!ok || ips.reporter.messages.nonEmpty) {
@@ -175,11 +182,11 @@ object InceptionPlugin {
           return emptyResult
         }
       } else {
-        var witnesses = HashSet.empty[AST.Exp]
+        var witnesses = HashMap.empty[AST.Exp, Z]
         var ok = T
         for (w <- just.witnesses) {
           spcMap.get(w.value) match {
-            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + AST.Util.deBruijn(spc.exp)
+            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + AST.Util.deBruijn(spc.exp) ~> spc.stepNo
             case Some(_) =>
               reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step #${w.value} as an argument for inception")
               ok = F
@@ -197,10 +204,13 @@ object InceptionPlugin {
           return emptyResult
         }
         for (i <- 0 until rs.size) {
-          if (!witnesses.contains(AST.Util.deBruijn(rs(i)))) {
-            val pos = requires(i).posOpt.get
-            reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s pre-condition at [${pos.beginLine}, ${pos.beginColumn}]")
-            ok = F
+          val pos = requires(i).posOpt.get
+          witnesses.get(AST.Util.deBruijn(rs(i))) match {
+            case Some(stepNo) =>
+              reqEvidence = reqEvidence :+ st"${Plugin.stepNoDesc(T, stepNo)} satisfies ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}]"
+            case _ =>
+              reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}]")
+              ok = F
           }
         }
         if (!ok) {
@@ -212,11 +222,27 @@ object InceptionPlugin {
         reporter.reports(ips.reporter.messages)
         return emptyResult
       }
-      if (!(HashSet ++ (for (e <- es) yield AST.Util.deBruijn(e))).contains(step.claimDeBruijn)) {
-        reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from any of ${mi.methodRes.id}'s post-conditions".render)
+      val esMap = HashMap ++ (for (e <- es) yield (AST.Util.deBruijn(e), e.posOpt.get))
+      val ePosOpt = esMap.get(step.claimDeBruijn)
+      if (ePosOpt.isEmpty) {
+        reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from any of ${mi.methodRes.id}'s conclusions".render)
         return emptyResult
       }
       val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
+      if (status) {
+        val ePos = ePosOpt.get
+        val paramArgs: ISZ[ST] =
+          for (pair <- ips.paramMap.entries) yield st"* ${mi.methodRes.id}'s ${pair._1} is ${pair._2}"
+        reporter.inform(step.claim.posOpt.get, Logika.Reporter.Info.Kind.Verified,
+          st"""Accepted by inception because:
+              |${(for (re <- reqEvidence) yield st"* $re", "\n")}
+              |* The stated claim is guaranteed by ${mi.methodRes.id}'s conclusion at [${ePos.beginLine}, ${ePos.beginColumn}]
+              |
+              |where:
+              |${(paramArgs, "\n")}
+              |""".render
+        )
+      }
       return Plugin.Result(status, nextFresh, claims :+ claim)
     }
     just match {

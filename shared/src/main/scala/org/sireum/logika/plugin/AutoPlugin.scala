@@ -39,6 +39,8 @@ import org.sireum.logika.Logika.Reporter
 
   val iszzTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.z)))
 
+  val name: String = "AutoPlugin"
+
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Apply =>
@@ -129,11 +131,19 @@ import org.sireum.logika.Logika.Reporter
         val q = logika.evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
         ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
       }
-    val provenClaims = HashSet ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
-      AST.Util.deBruijn(spc.asInstanceOf[StepProofContext.Regular].exp))
-    val status: B = if (args.isEmpty && provenClaims.contains(step.claimDeBruijn)) {
-      T
-    } else if (stat) {
+    val provenClaims = HashMap ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
+      (AST.Util.deBruijn(spc.asInstanceOf[StepProofContext.Regular].exp), spc.asInstanceOf[StepProofContext.Regular].stepNo))
+    var status = args.isEmpty
+    if (status) {
+      val stepNoOpt = provenClaims.get(step.claimDeBruijn)
+      stepNoOpt match {
+        case Some(stepNo) =>
+          reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
+            st"Accepted by using ${Plugin.stepNoDesc(F, stepNo)}".render)
+        case _ => status = F
+      }
+    }
+    if (!status && stat) {
       val r = smt2.valid(T, log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
 
       def error(msg: String): B = {
@@ -141,15 +151,13 @@ import org.sireum.logika.Logika.Reporter
         return F
       }
 
-      r.kind match {
+      status = r.kind match {
         case Smt2Query.Result.Kind.Unsat => T
         case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step #${step.no.value}")
         case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step #${step.no.value}")
         case Smt2Query.Result.Kind.Timeout => error(s"Time out when deducing the claim of proof step #${step.no.value}")
         case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step #${step.no.value}")
       }
-    } else {
-      F
     }
     return Plugin.Result(status, nextFresh, claims)
   }

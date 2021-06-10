@@ -31,10 +31,18 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
 object Plugin {
-  @datatype class Result(val status: B, val nextFresh: Z, val claims: ISZ[State.Claim])
+  @datatype class Result(val status: B,
+                         val nextFresh: Z,
+                         val claims: ISZ[State.Claim])
+
+  @strictpure def stepNoDesc(cap: B, stepNo: Z): ST =
+    if (cap) if (stepNo < 0) st"The method's premise #${-stepNo}" else st"Proof step $stepNo"
+    else if (stepNo < 0) st"the method's premise #${-stepNo}" else st"proof step $stepNo"
 }
 
 @sig trait Plugin {
+  @pure def name: String
+
   @pure def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B
 
   def handle(logika: Logika,

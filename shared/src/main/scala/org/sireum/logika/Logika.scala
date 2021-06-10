@@ -43,10 +43,23 @@ object Logika {
     'Disabled
   }
 
+  object Reporter {
+    object Info {
+      @enum object Kind {
+        'Verified
+      }
+    }
+    def create: Reporter = {
+      return ReporterImpl(ISZ())
+    }
+  }
+
   @msig trait Reporter extends message.Reporter {
     def state(posOpt: Option[Position], s: State): Unit
 
     def query(pos: Position, time: Z, r: Smt2Query.Result): Unit
+
+    def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit
 
     def empty: Reporter
 
@@ -62,6 +75,9 @@ object Logika {
     }
 
     override def query(pos: Position, time: Z, r: Smt2Query.Result): Unit = {
+    }
+
+    override def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit = {
     }
 
     override def illFormed(): Unit = {
@@ -92,12 +108,6 @@ object Logika {
     override def combine(other: Reporter): Reporter = {
       _messages = _messages ++ other.messages
       return this
-    }
-  }
-
-  object Reporter {
-    def create: Reporter = {
-      return ReporterImpl(ISZ())
     }
   }
 

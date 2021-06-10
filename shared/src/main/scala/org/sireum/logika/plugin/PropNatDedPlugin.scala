@@ -32,6 +32,8 @@ import org.sireum.logika.Logika.Reporter
 
 @datatype class PropNatDedPlugin extends Plugin {
 
+  val name: String = "PropNatDedPlugin"
+
   val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("OrE", "ImplyI", "NegI", "BottomE", "PbC")
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification", "natded", "prop")
@@ -55,7 +57,6 @@ import org.sireum.logika.Logika.Reporter
                       state: State,
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
     @pure def isBuiltIn(exp: AST.Exp.Binary, kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == kind => return T
@@ -88,6 +89,7 @@ import org.sireum.logika.Logika.Reporter
     }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
     var args = ISZ[AST.Exp.LitZ]()
     for (arg <- just.args) {
       arg match {
@@ -187,6 +189,12 @@ import org.sireum.logika.Logika.Reporter
         }
     }
     val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
+    if (status) {
+      val desc = st"${res.id} (of ${(res.owner, ".")})".render
+      reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
+        st"""Accepted by using the $desc
+            |proof tactic implemented in the $name""".render)
+    }
     return Plugin.Result(status, nextFresh, claims :+ claim)
   }
 }

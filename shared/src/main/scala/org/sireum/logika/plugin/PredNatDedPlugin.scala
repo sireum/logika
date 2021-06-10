@@ -49,6 +49,8 @@ object PredNatDedPlugin {
 
 @datatype class PredNatDedPlugin extends Plugin {
 
+  val name: String = "PredNatDedPlugin"
+
   val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("AllI", "ExistsE")
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification", "natded", "pred")
@@ -70,9 +72,9 @@ object PredNatDedPlugin {
                       state: State,
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
     res.id match {
       case string"AllI" =>
         val quant: AST.Exp.QuantType = step.claim match {
@@ -176,6 +178,12 @@ object PredNatDedPlugin {
         }
     }
     val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
+    if (status) {
+      val desc = st"${res.id} (of ${(res.owner, ".")})".render
+      reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
+        st"""Accepted by using the $desc
+            |proof tactic implemented in the $name""".render)
+    }
     return Plugin.Result(status, nextFresh, claims :+ claim)
   }
 }
