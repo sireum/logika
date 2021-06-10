@@ -156,25 +156,31 @@ object InceptionPlugin {
         mi.methodType.tpe, reporter)
       val ips = InceptionPlugin.Substitutor(smOpt.get, mi.name,
         HashSMap.empty[String, AST.Exp] ++ ops.ISZOps(res.paramNames).zip(args), Reporter.create)
-      var reqEvidence = ISZ[ST]()
+      val ipsSubst: ST = st"[${(for (pair <- ips.paramMap.entries) yield st"${pair._2.prettyST} / ${pair._1}", ", ")}]"
+      var evidence = ISZ[ST]()
       if (just.witnesses.isEmpty) {
-        var provenClaims = HashMap.empty[AST.Exp, Z]
+        var provenClaims = HashMap.empty[AST.Exp, (Z, AST.Exp)]
         for (spc <- spcMap.values) {
           spc match {
-            case spc: StepProofContext.Regular => provenClaims = provenClaims + spc.exp ~> spc.stepNo
+            case spc: StepProofContext.Regular => provenClaims = provenClaims + AST.Util.deBruijn(spc.exp) ~> ((spc.stepNo, spc.exp))
             case _ =>
           }
         }
         var ok = T
         for (require <- requires) {
           val req = ips.transformExp(require).getOrElseEager(require)
-          val stepNoOpt = provenClaims.get(AST.Util.deBruijn(req))
+          val stepNoExpOpt = provenClaims.get(AST.Util.deBruijn(req))
           val pos = require.posOpt.get
-          if (ips.reporter.messages.isEmpty && stepNoOpt.isEmpty) {
+          if (ips.reporter.messages.isEmpty && stepNoExpOpt.isEmpty) {
             reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}]")
             ok = F
           } else {
-            reqEvidence = reqEvidence :+ st"${Plugin.stepNoDesc(T, stepNoOpt.get)} satisfies ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}]"
+            val (stepNo, exp) = stepNoExpOpt.get
+            evidence = evidence :+
+              st"""* ${Plugin.stepNoDesc(T, stepNo)} satisfies ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}], i.e.,
+                  |  ${exp.prettyST}
+                  |  ≈ $ipsSubst(${require.prettyST})
+                  |  = ${req.prettyST}"""
           }
         }
         if (!ok || ips.reporter.messages.nonEmpty) {
@@ -182,11 +188,11 @@ object InceptionPlugin {
           return emptyResult
         }
       } else {
-        var witnesses = HashMap.empty[AST.Exp, Z]
+        var witnesses = HashMap.empty[AST.Exp, (Z, AST.Exp)]
         var ok = T
         for (w <- just.witnesses) {
           spcMap.get(w.value) match {
-            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + AST.Util.deBruijn(spc.exp) ~> spc.stepNo
+            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + AST.Util.deBruijn(spc.exp) ~> ((spc.stepNo, spc.exp))
             case Some(_) =>
               reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step #${w.value} as an argument for inception")
               ok = F
@@ -205,9 +211,14 @@ object InceptionPlugin {
         }
         for (i <- 0 until rs.size) {
           val pos = requires(i).posOpt.get
-          witnesses.get(AST.Util.deBruijn(rs(i))) match {
-            case Some(stepNo) =>
-              reqEvidence = reqEvidence :+ st"${Plugin.stepNoDesc(T, stepNo)} satisfies ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}]"
+          val require = AST.Util.deBruijn(rs(i))
+          witnesses.get(require) match {
+            case Some((stepNo, exp)) =>
+              evidence = evidence :+
+                st"""* ${Plugin.stepNoDesc(T, stepNo)} satisfies ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}], i.e.,
+                    |  ${exp.prettyST}
+                    |  ≈ $ipsSubst(${requires(i).prettyST})
+                    |  = ${rs(i).prettyST}"""
             case _ =>
               reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}]")
               ok = F
@@ -217,29 +228,34 @@ object InceptionPlugin {
           return emptyResult
         }
       }
-      val es: ISZ[AST.Exp] = for (ensure <- ensures) yield ips.transformExp(ensure).getOrElseEager(ensure)
       if (ips.reporter.messages.nonEmpty) {
         reporter.reports(ips.reporter.messages)
         return emptyResult
       }
-      val esMap = HashMap ++ (for (e <- es) yield (AST.Util.deBruijn(e), e.posOpt.get))
-      val ePosOpt = esMap.get(step.claimDeBruijn)
-      if (ePosOpt.isEmpty) {
+      @pure def esMapEntry(ensure: AST.Exp): (AST.Exp, (Position, AST.Exp, AST.Exp)) = {
+        val tensure = ips.transformExp(ensure).getOrElseEager(ensure)
+        val dbensure = AST.Util.deBruijn(tensure)
+        return (dbensure, (ensure.posOpt.get, ensure, tensure))
+      }
+      val esMap = HashMap ++ (for (e <- ensures) yield esMapEntry(e))
+      val ePosExpTExpOpt = esMap.get(step.claimDeBruijn)
+      if (ePosExpTExpOpt.isEmpty) {
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from any of ${mi.methodRes.id}'s conclusions".render)
         return emptyResult
       }
       val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
       if (status) {
-        val ePos = ePosOpt.get
-        val paramArgs: ISZ[ST] =
-          for (pair <- ips.paramMap.entries) yield st"* ${mi.methodRes.id}'s ${pair._1} is ${pair._2}"
+        val (ePos, ensure, tensure) = ePosExpTExpOpt.get
+        evidence = evidence :+
+          st"""* The stated claim is guaranteed by ${mi.methodRes.id}'s conclusion at [${ePos.beginLine}, ${ePos.beginColumn}], i.e.,
+              |  ${step.claim.prettyST}
+              |  ≈ $ipsSubst(${ensure.prettyST})
+              |  = ${tensure.prettyST}
+              |"""
         reporter.inform(step.claim.posOpt.get, Logika.Reporter.Info.Kind.Verified,
           st"""Accepted by inception because:
-              |${(for (re <- reqEvidence) yield st"* $re", "\n")}
-              |* The stated claim is guaranteed by ${mi.methodRes.id}'s conclusion at [${ePos.beginLine}, ${ePos.beginColumn}]
               |
-              |where:
-              |${(paramArgs, "\n")}
+              |${(evidence, "\n\n")}
               |""".render
         )
       }
