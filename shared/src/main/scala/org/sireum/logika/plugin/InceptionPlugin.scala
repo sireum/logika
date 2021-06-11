@@ -127,7 +127,7 @@ object InceptionPlugin {
              smt2: Smt2,
              log: B,
              logDirOpt: Option[String],
-             spcMap: HashSMap[Z, StepProofContext],
+             spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,
              reporter: Reporter): Plugin.Result = {
@@ -159,7 +159,7 @@ object InceptionPlugin {
       val ipsSubst: ST = st"[${(for (pair <- ips.paramMap.entries) yield st"${pair._2.prettyST} / ${pair._1}", ", ")}]"
       var evidence = ISZ[ST]()
       if (just.witnesses.isEmpty) {
-        var provenClaims = HashMap.empty[AST.Exp, (Z, AST.Exp)]
+        var provenClaims = HashMap.empty[AST.Exp, (AST.ProofAst.StepId, AST.Exp)]
         for (spc <- spcMap.values) {
           spc match {
             case spc: StepProofContext.Regular => provenClaims = provenClaims + AST.Util.deBruijn(spc.exp) ~> ((spc.stepNo, spc.exp))
@@ -188,16 +188,16 @@ object InceptionPlugin {
           return emptyResult
         }
       } else {
-        var witnesses = HashMap.empty[AST.Exp, (Z, AST.Exp)]
+        var witnesses = HashMap.empty[AST.Exp, (AST.ProofAst.StepId, AST.Exp)]
         var ok = T
         for (w <- just.witnesses) {
-          spcMap.get(w.value) match {
+          spcMap.get(w) match {
             case Some(spc: StepProofContext.Regular) => witnesses = witnesses + AST.Util.deBruijn(spc.exp) ~> ((spc.stepNo, spc.exp))
             case Some(_) =>
-              reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step #${w.value} as an argument for inception")
+              reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step $w as an argument for inception")
               ok = F
             case _ =>
-              reporter.error(w.posOpt, Logika.kind, s"Could not find proof step #${w.value}")
+              reporter.error(w.posOpt, Logika.kind, s"Could not find proof step $w")
               ok = F
           }
         }
@@ -243,7 +243,7 @@ object InceptionPlugin {
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from any of ${mi.methodRes.id}'s conclusions".render)
         return emptyResult
       }
-      val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
+      val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.id.posOpt, reporter)
       if (status) {
         val (ePos, ensure, tensure) = ePosExpTExpOpt.get
         evidence = evidence :+

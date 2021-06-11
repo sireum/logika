@@ -56,79 +56,66 @@ import org.sireum.logika.Logika.Reporter
                       smt2: Smt2,
                       log: B,
                       logDirOpt: Option[String],
-                      spcMap: HashSMap[Z, StepProofContext],
+                      spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
-    var args = ISZ[AST.Exp.LitZ]()
-    var ok = T
-    def processArgs(id: String, justArgs: ISZ[AST.Exp]): Unit = {
-      for (arg <- justArgs) {
-        arg match {
-          case arg: AST.Exp.LitZ => args = args :+ arg
-          case arg =>
-            ok = F
-            reporter.error(arg.posOpt, Logika.kind, s"The $id justification only accepts an integer literal argument")
-        }
-      }
-    }
-    val (id, posOpt): (String, Option[Position]) = step.just match {
+    val (id, posOpt, argsOpt): (String, Option[Position], Option[ISZ[AST.ProofAst.StepId]]) = step.just match {
       case just: AST.ProofAst.Step.Justification.Apply =>
         val id = just.idString
-        processArgs(id, just.args)
-        (id, just.id.posOpt)
+        (id, just.id.posOpt, AST.Util.toStepIds(just.args, Logika.kind, reporter))
       case just: AST.ProofAst.Step.Justification.Incept =>
         val invokeId = just.invokeIdent.id.value
-        def err(arg: AST.Exp): Unit = {
-          ok = F
-          reporter.error(arg.posOpt, Logika.kind, s"Invalid argument for the $invokeId justification")
-        }
-        if (just.args.size === 1) {
+        val ao: Option[ISZ[AST.ProofAst.StepId]] = if (just.args.size === 1) {
           just.args(0) match {
             case arg: AST.Exp.Invoke if arg.typedOpt == iszzTypedOpt =>
               arg.attr.resOpt.get match {
-                case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor => processArgs(invokeId, arg.args)
-                case _ => err(arg)
+                case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
+                  AST.Util.toStepIds(arg.args, Logika.kind, reporter)
+                case _ =>
+                  AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
               }
-            case arg: AST.Exp.LitZ => args = args :+ arg
-            case arg => err(arg)
+            case arg: AST.Exp.LitStepId => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
+            case arg: AST.Exp.LitZ => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
+            case arg => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
           }
         } else {
-          processArgs(invokeId, just.args)
+          AST.Util.toStepIds(just.args, Logika.kind, reporter)
         }
-        (invokeId, just.invokeIdent.posOpt)
+        (invokeId, just.invokeIdent.posOpt, ao)
       case _ => halt("Infeasible")
     }
-    if (!ok) {
-      return Plugin.Result(F, state.nextFresh, ISZ())
+    if (argsOpt.isEmpty) {
+      return Plugin.Result(F, state.nextFresh, state.claims)
     }
 
     val pos = posOpt.get
+    val args = argsOpt.get
 
     val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) =
       if (args.isEmpty) {
-        val q = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
+        val q = logika.evalRegularStepClaim(smt2, state, step.claim, step.id.posOpt, reporter)
         ((q._1, q._2, state.claims ++ q._3, q._4), q._3 :+ q._4)
       } else {
         var s0 = state(claims = ISZ())
-        ok = T
+        var ok = T
         for (arg <- args) {
-          val stepNo = arg.value
+          val stepNo = arg
           spcMap.get(stepNo) match {
             case Some(spc: StepProofContext.Regular) =>
               s0 = s0.addClaim(State.Claim.And(spc.claims))
             case Some(_) =>
-              reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step #$stepNo as an argument for $id")
+              reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for $id")
               ok = F
             case _ =>
-              reporter.error(posOpt, Logika.kind, s"Could not find proof step #$stepNo")
+              reporter.error(posOpt, Logika.kind, s"Could not find proof step $stepNo")
               ok = F
           }
         }
         if (!ok) {
           return Plugin.Result(F, s0.nextFresh, s0.claims)
         }
-        val q = logika.evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
+        val q = logika.evalRegularStepClaim(smt2, s0, step.claim, step.id.posOpt, reporter)
         ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
       }
     val provenClaims = HashMap ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
@@ -153,10 +140,10 @@ import org.sireum.logika.Logika.Reporter
 
       status = r.kind match {
         case Smt2Query.Result.Kind.Unsat => T
-        case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step #${step.no.value}")
-        case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step #${step.no.value}")
-        case Smt2Query.Result.Kind.Timeout => error(s"Time out when deducing the claim of proof step #${step.no.value}")
-        case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step #${step.no.value}")
+        case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step ${step.id}")
+        case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step ${step.id}")
+        case Smt2Query.Result.Kind.Timeout => error(s"Time out when deducing the claim of proof step ${step.id}")
+        case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step ${step.id}")
       }
     }
     return Plugin.Result(status, nextFresh, claims)

@@ -33,7 +33,6 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Message, Position}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.plugin._
-import Util._
 import org.sireum.lang.tipe.TypeOutliner.ExpTypedSubst
 
 object Logika {
@@ -478,6 +477,7 @@ import Util._
       case e: AST.Exp.LitR => return State.Value.R(e.value, e.posOpt.get)
       case e: AST.Exp.LitString => return State.Value.String(e.value, e.posOpt.get)
       case e: AST.Exp.LitZ => return State.Value.Z(e.value, e.posOpt.get)
+      case e: AST.Exp.LitStepId => halt(s"Infeasible: $e")
     }
   }
 
@@ -2029,6 +2029,7 @@ import Util._
 
     def expH(s0: State): ISZ[(State, State.Value)] = {
       e match {
+        case lit: AST.Exp.LitStepId => return ISZ((s0(status = F), State.errorValue))
         case lit: AST.Lit => return ISZ((s0, evalLit(lit)))
         case lit: AST.Exp.StringInterpolate => return ISZ((s0, evalInterpolate(lit)))
         case e: AST.Exp.Ident => return evalIdent(e)
@@ -2725,9 +2726,9 @@ import Util._
   }
 
   def evalProofStep(smt2: Smt2,
-                    stateMap: (State, HashSMap[Z, StepProofContext]),
+                    stateMap: (State, HashSMap[AST.ProofAst.StepId, StepProofContext]),
                     step: AST.ProofAst.Step,
-                    reporter: Reporter): (State, HashSMap[Z, StepProofContext]) = {
+                    reporter: Reporter): (State, HashSMap[AST.ProofAst.StepId, StepProofContext]) = {
     @pure def extractClaims(steps: ISZ[AST.ProofAst.Step]): ISZ[AST.Exp] = {
       var r = ISZ[AST.Exp]()
       for (stp <- steps) {
@@ -2740,7 +2741,7 @@ import Util._
       }
       return r
     }
-    val stepNo = step.no.value
+    val stepNo = step.id
     var (s0, m) = stateMap
     step match {
       case step: AST.ProofAst.Step.Regular =>
@@ -2753,7 +2754,7 @@ import Util._
         reporter.error(step.just.posOpt, Logika.kind, "Could not recognize justification form")
         return (s0(status = F), m)
       case step: AST.ProofAst.Step.Assume =>
-        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
+        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, s0, step.claim, step.id.posOpt, reporter)
         return (s0(status = status, nextFresh = nextFresh, claims = (s0.claims ++ claims) :+ claim),
           m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.SubProof =>
@@ -2789,7 +2790,7 @@ import Util._
           reporter.error(step.claim.posOpt, Logika.kind, "The claim is not proven in the assertion's sub-proof")
           return (s0(status = F), stateMap._2)
         }
-        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, s0, step.claim, step.no.posOpt, reporter)
+        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, s0, step.claim, step.id.posOpt, reporter)
         return (s0(status = status, nextFresh = nextFresh, claims = (s0.claims ++ claims) :+ claim),
           m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.Let =>
@@ -3174,7 +3175,7 @@ import Util._
     }
 
     def evalDeduceSteps(s0: State, deduceStmt: AST.Stmt.DeduceSteps): ISZ[State] = {
-      var p = (s0, HashSMap.empty[Z, StepProofContext])
+      var p = (s0, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
       for (step <- deduceStmt.steps if p._1.status) {
         p = evalProofStep(smt2, p, step, reporter)
       }
@@ -3182,14 +3183,14 @@ import Util._
     }
 
     def evalDeduceSequent(s0: State, deduceStmt: AST.Stmt.DeduceSequent): ISZ[State] = {
-      @pure def premises(st: State, sequent: AST.Sequent): (State, HashSMap[Z, StepProofContext]) = {
-        var r = HashSMap.empty[Z, StepProofContext]
-        var no: Z = -1
+      @pure def premises(st: State, sequent: AST.Sequent): (State, HashSMap[AST.ProofAst.StepId, StepProofContext]) = {
+        var r = HashSMap.empty[AST.ProofAst.StepId, StepProofContext]
+        var id = AST.ProofAst.StepId.Num(-1, AST.Attr(None()))
         var st0 = st
         for (premise <- sequent.premises if st0.status) {
           val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, st0, premise, premise.posOpt, reporter)
-          r = r + no ~> StepProofContext.Regular(no, AST.Util.deBruijn(premise), claims :+ claim)
-          no = no - 1
+          r = r + id ~> StepProofContext.Regular(id(attr = AST.Attr(premise.posOpt)), AST.Util.deBruijn(premise), claims :+ claim)
+          id = id(no = id.no - 1)
           st0 = st0(status = status, nextFresh = nextFresh, claims = (st0.claims ++ claims) :+ claim)
         }
         return (st0, r)

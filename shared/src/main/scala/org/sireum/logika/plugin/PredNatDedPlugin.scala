@@ -68,7 +68,7 @@ object PredNatDedPlugin {
                       smt2: Smt2,
                       log: B,
                       logDirOpt: Option[String],
-                      spcMap: HashSMap[Z, StepProofContext],
+                      spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
@@ -84,8 +84,12 @@ object PredNatDedPlugin {
             reporter.error(step.claim.posOpt, Logika.kind, "Expecting a simple universal quantified type claim")
             return emptyResult
         }
-        val ISZ(subProofNo: AST.Exp.LitZ) = just.args
-        val (params, subProof): (ISZ[AST.ProofAst.Step.Let.Param], HashSet[AST.Exp]) = spcMap.get(subProofNo.value) match {
+        val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
+        if (argsOpt.isEmpty) {
+          return emptyResult
+        }
+        val ISZ(subProofNo) = argsOpt.get
+        val (params, subProof): (ISZ[AST.ProofAst.Step.Let.Param], HashSet[AST.Exp]) = spcMap.get(subProofNo) match {
           case Some(sp@StepProofContext.FreshSubProof(_, ps, _)) => (ps, HashSet ++ sp.claims)
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a parameterized let sub-proof step")
@@ -93,7 +97,7 @@ object PredNatDedPlugin {
         }
         val size = params.size
         if (quant.fun.params.size < params.size) {
-          reporter.error(step.no.posOpt, Logika.kind, s"Expecting at most ${quant.fun.params.size} fresh variables in sub-proof #${subProofNo.value}, but found ${params.size}")
+          reporter.error(step.id.posOpt, Logika.kind, s"Expecting at most ${quant.fun.params.size} fresh variables in sub-proof $subProofNo, but found ${params.size}")
           return emptyResult
         }
         var substMap = HashMap.empty[(ISZ[String], String), AST.Exp]
@@ -125,14 +129,18 @@ object PredNatDedPlugin {
           return emptyResult
         }
       case string"ExistsE" =>
-        val ISZ(existsP: AST.Exp.LitZ, subProofNo: AST.Exp.LitZ) = just.args
-        val quant: AST.Exp.QuantType = spcMap.get(existsP.value) match {
+        val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
+        if (argsOpt.isEmpty) {
+          return emptyResult
+        }
+        val ISZ(existsP, subProofNo) = argsOpt.get
+        val quant: AST.Exp.QuantType = spcMap.get(existsP) match {
           case Some(StepProofContext.Regular(_, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) => q
           case _ =>
             reporter.error(existsP.posOpt, Logika.kind, "Expecting a simple existential quantified type claim")
             return emptyResult
         }
-        val (params, assumption, subProof): (ISZ[AST.ProofAst.Step.Let.Param], AST.Exp, HashSet[AST.Exp]) = spcMap.get(subProofNo.value) match {
+        val (params, assumption, subProof): (ISZ[AST.ProofAst.Step.Let.Param], AST.Exp, HashSet[AST.Exp]) = spcMap.get(subProofNo) match {
           case Some(sp@StepProofContext.FreshAssumeSubProof(_, ps, ac, _)) => (ps, ac, HashSet ++ sp.claims)
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a parameterized let sub-proof assume step")
@@ -140,7 +148,7 @@ object PredNatDedPlugin {
         }
         val size = params.size
         if (quant.fun.params.size < params.size) {
-          reporter.error(step.no.posOpt, Logika.kind, s"Expecting at most ${quant.fun.params.size} fresh variables in sub-proof #${subProofNo.value}, but found ${params.size}")
+          reporter.error(step.id.posOpt, Logika.kind, s"Expecting at most ${quant.fun.params.size} fresh variables in sub-proof $subProofNo, but found ${params.size}")
           return emptyResult
         }
         var substMap = HashMap.empty[(ISZ[String], String), AST.Exp]
@@ -148,7 +156,7 @@ object PredNatDedPlugin {
           val (funParam, funArg) = p
           funParam.idOpt match {
             case Some(id) =>
-              substMap = substMap + ((quant.fun.context, id.value)) ~> AST.Exp.Ident(
+              substMap = substMap + (quant.fun.context, id.value) ~> AST.Exp.Ident(
                 funArg.id,
                 AST.ResolvedAttr(
                   funArg.id.attr.posOpt,
@@ -168,16 +176,16 @@ object PredNatDedPlugin {
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
         if (AST.Util.deBruijn(substClaim) != assumption) {
-          reporter.error(step.claim.posOpt, Logika.kind, s"Could not match the assumption in let sub-proof #${subProofNo.value}")
+          reporter.error(step.claim.posOpt, Logika.kind, s"Could not match the assumption in let sub-proof $subProofNo")
           return emptyResult
         }
         val stepClaim = step.claimDeBruijn
         if (!subProof.contains(stepClaim) && stepClaim != assumption) {
-          reporter.error(step.claim.posOpt, Logika.kind, s"Could not find the stated claim in let sub-proof #${subProofNo.value}")
+          reporter.error(step.claim.posOpt, Logika.kind, s"Could not find the stated claim in let sub-proof $subProofNo")
           return emptyResult
         }
     }
-    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
+    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.id.posOpt, reporter)
     if (status) {
       val desc = st"${res.id} (of ${(res.owner, ".")})".render
       reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,

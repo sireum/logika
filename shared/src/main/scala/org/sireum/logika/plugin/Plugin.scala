@@ -35,9 +35,13 @@ object Plugin {
                          val nextFresh: Z,
                          val claims: ISZ[State.Claim])
 
-  @strictpure def stepNoDesc(cap: B, stepNo: Z): ST =
-    if (cap) if (stepNo < 0) st"The method's premise #${-stepNo}" else st"Proof step $stepNo"
-    else if (stepNo < 0) st"the method's premise #${-stepNo}" else st"proof step $stepNo"
+  @strictpure def stepNoDesc(cap: B, stepId: AST.ProofAst.StepId): ST =
+    stepId match {
+      case stepId: AST.ProofAst.StepId.Num =>
+        if (cap) if (stepId.no < 0) st"The method's premise #${-stepId.no}" else st"Proof step $stepId"
+        else if (stepId.no < 0) st"the method's premise #${-stepId.no}" else st"proof step $stepId"
+      case _ => if (cap) st"Proof step $stepId" else st"proof step $stepId"
+    }
 }
 
 @sig trait Plugin {
@@ -49,7 +53,7 @@ object Plugin {
              smt2: Smt2,
              log: B,
              logDirOpt: Option[String],
-             spcMap: HashSMap[Z, StepProofContext],
+             spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,
              reporter: Reporter): Plugin.Result

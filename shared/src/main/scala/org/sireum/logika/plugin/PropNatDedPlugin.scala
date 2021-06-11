@@ -53,7 +53,7 @@ import org.sireum.logika.Logika.Reporter
                       smt2: Smt2,
                       log: B,
                       logDirOpt: Option[String],
-                      spcMap: HashSMap[Z, StepProofContext],
+                      spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
@@ -90,35 +90,30 @@ import org.sireum.logika.Logika.Reporter
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
-    var args = ISZ[AST.Exp.LitZ]()
-    for (arg <- just.args) {
-      arg match {
-        case arg: AST.Exp.LitZ => args = args :+ arg
-        case _ => reporter.error(arg.posOpt, Logika.kind, "Expecting a proof step number literal")
-      }
-    }
-    if (args.size != just.args.size) {
+    val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
+    if (argsOpt.isEmpty) {
       return emptyResult
     }
+    val args = argsOpt.get
     res.id match {
       case string"OrE" =>
         val ISZ(orClaimNo, leftSubProofNo, rightSubProofNo) = args
-        val orClaim: AST.Exp.Binary = spcMap.get(orClaimNo.value) match {
+        val orClaim: AST.Exp.Binary = spcMap.get(orClaimNo) match {
           case Some(StepProofContext.Regular(_, exp: AST.Exp.Binary, _)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) => exp
           case _ =>
             reporter.error(orClaimNo.posOpt, Logika.kind, s"Expecting a proof step with a disjunction binary expression claim")
             return emptyResult
         }
-        val leftSubProof: HashSet[AST.Exp] = spcMap.get(leftSubProofNo.value) match {
+        val leftSubProof: HashSet[AST.Exp] = spcMap.get(leftSubProofNo) match {
           case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == AST.Util.deBruijn(orClaim.left) => HashSet ++ sp.claims
           case _ =>
-            reporter.error(leftSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the left-operand of #${orClaimNo.value}'s claim")
+            reporter.error(leftSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the left-operand of $orClaimNo's claim")
             return emptyResult
         }
-        val rightSubProof: HashSet[AST.Exp] = spcMap.get(rightSubProofNo.value) match {
+        val rightSubProof: HashSet[AST.Exp] = spcMap.get(rightSubProofNo) match {
           case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == AST.Util.deBruijn(orClaim.right) => HashSet ++ sp.claims
           case _ =>
-            reporter.error(rightSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the right-operand of #${orClaimNo.value}'s claim")
+            reporter.error(rightSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the right-operand of $orClaimNo's claim")
             return emptyResult
         }
         val stepClaim = step.claimDeBruijn
@@ -127,7 +122,7 @@ import org.sireum.logika.Logika.Reporter
           stepClaim match {
             case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) && leftSubProof.contains(AST.Util.deBruijn(stepClaim.left)) && rightSubProof.contains(AST.Util.deBruijn(stepClaim.right)) =>
             case _ =>
-              reporter.error(step.no.posOpt, Logika.kind, s"Could not infer the stated claim from both sub-proofs #${leftSubProofNo.value} and #${rightSubProofNo.value} using ${just.invokeIdent.id.value}")
+              reporter.error(step.id.posOpt, Logika.kind, s"Could not infer the stated claim from both sub-proofs $leftSubProofNo and $rightSubProofNo using ${just.invokeIdent.id.value}")
               return emptyResult
           }
         }
@@ -139,14 +134,14 @@ import org.sireum.logika.Logika.Reporter
             return emptyResult
         }
         val ISZ(subProofNo) = args
-        val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo.value) match {
+        val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo) match {
           case Some(sp: StepProofContext.SubProof) if sp.assumption == AST.Util.deBruijn(claim.left) => HashSet ++ sp.claims + sp.assumption
           case _ =>
-            reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the antecedent of step #${step.no.value}'s claim")
+            reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the antecedent of step ${step.id}'s claim")
             return emptyResult
         }
         if (!subProof.contains(AST.Util.deBruijn(claim.right))) {
-          reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find the consequent of step #${step.no.value}'s claim in sub-proof #${subProofNo.value}")
+          reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find the consequent of step ${step.id}'s claim in sub-proof $subProofNo")
           return emptyResult
         }
       case string"NegI" =>
@@ -157,38 +152,38 @@ import org.sireum.logika.Logika.Reporter
             return emptyResult
         }
         val ISZ(subProofNo) = args
-        val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo.value) match {
+        val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo) match {
           case Some(sp: StepProofContext.SubProof) if sp.assumption == AST.Util.deBruijn(claim.exp) => sp.claims
           case _ =>
-            reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the operand of step #${step.no.value}'s claim")
+            reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the operand of step ${step.id}'s claim")
             return emptyResult
         }
         if (!ops.ISZOps(subProof).exists(isBottom _)) {
-          reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof #${subProofNo.value}")
+          reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof $subProofNo")
           return emptyResult
         }
       case string"BottomE" =>
         val ISZ(bottomNo) = args
-        spcMap.get(bottomNo.value) match {
+        spcMap.get(bottomNo) match {
           case Some(sp: StepProofContext.Regular) if isBottom(sp.exp) =>
           case _ =>
-            reporter.error(bottomNo.posOpt, Logika.kind, s"Expecting F as step #${bottomNo.value}'s claim")
+            reporter.error(bottomNo.posOpt, Logika.kind, s"Expecting F as step $bottomNo's claim")
             return emptyResult
         }
       case string"PbC" =>
         val ISZ(subProofNo) = args
-        val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo.value) match {
+        val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo) match {
           case Some(sp: StepProofContext.SubProof) if isUBuiltIn(sp.assumption, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => sp.claims
           case _ =>
-            reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the negation of step #${step.no.value}'s claim")
+            reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the negation of step ${step.id}'s claim")
             return emptyResult
         }
         if (!ops.ISZOps(subProof).exists(isBottom _)) {
-          reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof #${subProofNo.value}")
+          reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof $subProofNo")
           return emptyResult
         }
     }
-    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.no.posOpt, reporter)
+    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.id.posOpt, reporter)
     if (status) {
       val desc = st"${res.id} (of ${(res.owner, ".")})".render
       reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,

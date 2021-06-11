@@ -29,24 +29,24 @@ import org.sireum._
 import org.sireum.lang.{ast => AST}
 
 @datatype trait StepProofContext {
-  @pure def stepNo: Z
+  @pure def stepNo: AST.ProofAst.StepId
 }
 
 object StepProofContext {
 
-  @datatype class Regular(val stepNo: Z,
+  @datatype class Regular(val stepNo: AST.ProofAst.StepId,
                           val exp: AST.Exp,
                           val claims: ISZ[State.Claim]) extends StepProofContext
 
-  @datatype class SubProof(val stepNo: Z,
+  @datatype class SubProof(val stepNo: AST.ProofAst.StepId,
                            val assumption: AST.Exp,
                            val claims: ISZ[AST.Exp]) extends StepProofContext
 
-  @datatype class FreshSubProof(val stepNo: Z,
+  @datatype class FreshSubProof(val stepNo: AST.ProofAst.StepId,
                                 val params: ISZ[AST.ProofAst.Step.Let.Param],
                                 val claims: ISZ[AST.Exp]) extends StepProofContext
 
-  @datatype class FreshAssumeSubProof(val stepNo: Z,
+  @datatype class FreshAssumeSubProof(val stepNo: AST.ProofAst.StepId,
                                       val params: ISZ[AST.ProofAst.Step.Let.Param],
                                       val assumption: AST.Exp,
                                       val claims: ISZ[AST.Exp]) extends StepProofContext
