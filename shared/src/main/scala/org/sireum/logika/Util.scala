@@ -27,10 +27,9 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.lang.ast.{Exp, MTransformer}
 import org.sireum.message.Position
 import org.sireum.lang.{ast => AST}
-import org.sireum.lang.symbol.TypeInfo
+import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{Reporter, Split}
 
@@ -93,6 +92,100 @@ object ClaimDefs {
 }
 
 object Util {
+
+  @record class VarSubstitutor(val context: ISZ[String],
+                               val receiverTypeOpt: Option[AST.Typed],
+                               var hasThis: B,
+                               var resultOpt: Option[(AST.Exp, AST.Exp.Ident)],
+                               var map: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)],
+                               var inputMap: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)])
+    extends AST.MTransformer {
+    def introIdent(o: AST.Exp, res: AST.ResolvedInfo, id: AST.Id, typedOpt: Option[AST.Typed]): MOption[AST.Exp] = {
+      map.get(res) match {
+        case Some((_, ident)) => return MSome(ident)
+        case _ =>
+          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+          val ident = AST.Exp.Ident(id, AST.ResolvedAttr(id.attr.posOpt, Some(lres), typedOpt))
+          map = map + res ~> ((o, ident))
+          return MSome(ident)
+      }
+    }
+
+    def introInputIdent(o: AST.Exp, res: AST.ResolvedInfo, id: AST.Id, typedOpt: Option[AST.Typed]): AST.MTransformer.PreResult[AST.Exp] = {
+      inputMap.get(res) match {
+        case Some((_, ident)) => return AST.MTransformer.PreResult(F, MSome(ident))
+        case _ =>
+          val inId = s"${id.value}.in"
+          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, inId)
+          val ident = AST.Exp.Ident(id(value = inId), AST.ResolvedAttr(id.attr.posOpt, Some(lres), typedOpt))
+          inputMap = inputMap + res ~> ((o, ident))
+          return AST.MTransformer.PreResult(F, MSome(ident))
+      }
+    }
+
+    override def preExpInput(o: AST.Exp.Input): AST.MTransformer.PreResult[AST.Exp] = {
+      o.exp match {
+        case exp: AST.Exp.Ident =>
+          exp.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Var => return introInputIdent(o, res, exp.id, exp.typedOpt)
+            case res: AST.ResolvedInfo.LocalVar => return introInputIdent(o, res, exp.id, exp.typedOpt)
+            case _ =>
+          }
+        case exp: AST.Exp.Select =>
+          exp.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Var if res.isInObject =>
+              return introInputIdent(o, res, exp.id, exp.typedOpt)
+            case _ =>
+          }
+        case _ =>
+      }
+      halt("Non-simple input")
+    }
+
+    override def postExpResult(o: AST.Exp.Result): MOption[AST.Exp] = {
+      val id = AST.Id("return", AST.Attr(o.posOpt))
+      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+      val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), o.typedOpt))
+      resultOpt = Some((o, ident))
+      return MSome(ident)
+    }
+
+    override def postExpIdent(o: AST.Exp.Ident): MOption[AST.Exp] = {
+      o.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.Var =>
+          if (res.isInObject) {
+            return introIdent(o, res, o.id, o.typedOpt)
+          } else {
+            hasThis = T
+            val id = AST.Id("this", AST.Attr(o.posOpt))
+            val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+            val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), receiverTypeOpt))
+            return MSome(AST.Exp.Select(Some(ident), o.id, o.targs, o.attr))
+          }
+        case res: AST.ResolvedInfo.LocalVar => return introIdent(o, res, o.id, o.typedOpt)
+        case _ =>
+      }
+      return AST.MTransformer.PostResultExpIdent
+    }
+
+    override def postExpThis(o: AST.Exp.This): MOption[AST.Exp] = {
+      hasThis = T
+      val id = AST.Id("this", AST.Attr(o.posOpt))
+      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+      val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), o.typedOpt))
+      return MSome(ident)
+    }
+
+    override def postExpSelect(o: AST.Exp.Select): MOption[AST.Exp] = {
+      o.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.Var if res.isInObject =>
+          return introIdent(o, res, o.id, o.typedOpt)
+        case _ =>
+      }
+      return AST.MTransformer.PostResultExpSelect
+    }
+  }
+
   @record class LetCollector(var value: HashMap[Z, HashSet[State.Claim.Let]]) extends MStateTransformer {
 
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
@@ -221,13 +314,14 @@ object Util {
     return Logika(th, config, ctx, inPfc, plugins)
   }
 
-  def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, invs: ISZ[lang.symbol.Info.Inv], posOpt: Option[Position], reporter: Reporter): State = {
+  def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, invs: ISZ[lang.symbol.Info.Inv],
+               posOpt: Option[Position], substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     val methodName: String =
       if (logika.context.methodName.size == 1) logika.context.methodName(0)
       else if (logika.context.methodOpt.get.receiverTypeOpt.isEmpty) st"${(logika.context.methodName, ".")}".render
       else st"${(ops.ISZOps(logika.context.methodName).dropRight(1), ".")}#${logika.context.methodName(0)}".render
     val title: String = if (isPre) s"Method $methodName pre-invariant" else s"Method $methodName post-invariant"
-    return logika.evalInvs(posOpt, isPre, title, smt2, T, state, invs, reporter)
+    return logika.evalInvs(posOpt, isPre, title, smt2, T, state, invs, substMap, reporter)
   }
 
   def checkMethod(th: TypeHierarchy,
@@ -291,10 +385,9 @@ object Util {
         l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
           localInMap = localInMap))))
       }
+      val invs = retrieveInvs(th, res.owner, res.isInObject)
       val statePreReqInvSize = state.claims.size
-      if (logika.context.methodName.size == 1 && !method.isHelper) {
-        state = checkInv(T, state, logika, smt2, th.worksheetInvs, method.sig.id.attr.posOpt, reporter)
-      }
+      state = checkInv(T, state, logika, smt2, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
       val stmts = method.bodyOpt.get.stmts
       val hasPreReqInv = state.claims.size != statePreReqInvSize
       val statePreReqSize = state.claims.size
@@ -322,9 +415,7 @@ object Util {
       for (s <- ss) {
         var s2 = s
         val statePreEnInvSize = state.claims.size
-        if (logika.context.methodName.size == 1 && !method.isHelper) {
-          s2 = checkInv(F, s2, logika, smt2, th.worksheetInvs, method.sig.id.attr.posOpt, reporter)
-        }
+        s2 = checkInv(F, s2, logika, smt2, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
         val hasPreEnInv = state.claims.size != statePreEnInvSize
         val statePreEnSize = state.claims.size
         for (e <- ensures if s2.status) {
@@ -562,99 +653,6 @@ object Util {
     return r
   }
 
-  @record class VarSubstitutor(val context: ISZ[String],
-                               val receiverTypeOpt: Option[AST.Typed],
-                               var hasThis: B,
-                               var resultOpt: Option[(AST.Exp, AST.Exp.Ident)],
-                               var map: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)],
-                               var inputMap: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)])
-    extends AST.MTransformer {
-    def introIdent(o: AST.Exp, res: AST.ResolvedInfo, id: AST.Id, typedOpt: Option[AST.Typed]): MOption[AST.Exp] = {
-      map.get(res) match {
-        case Some((_, ident)) => return MSome(ident)
-        case _ =>
-          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
-          val ident = AST.Exp.Ident(id, AST.ResolvedAttr(id.attr.posOpt, Some(lres), typedOpt))
-          map = map + res ~> ((o, ident))
-          return MSome(ident)
-      }
-    }
-
-    def introInputIdent(o: AST.Exp, res: AST.ResolvedInfo, id: AST.Id, typedOpt: Option[AST.Typed]): AST.MTransformer.PreResult[AST.Exp] = {
-      inputMap.get(res) match {
-        case Some((_, ident)) => return AST.MTransformer.PreResult(F, MSome(ident))
-        case _ =>
-          val inId = s"${id.value}.in"
-          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, inId)
-          val ident = AST.Exp.Ident(id(value = inId), AST.ResolvedAttr(id.attr.posOpt, Some(lres), typedOpt))
-          inputMap = inputMap + res ~> ((o, ident))
-          return AST.MTransformer.PreResult(F, MSome(ident))
-      }
-    }
-
-    override def preExpInput(o: AST.Exp.Input): AST.MTransformer.PreResult[AST.Exp] = {
-      o.exp match {
-        case exp: AST.Exp.Ident =>
-          exp.attr.resOpt.get match {
-            case res: AST.ResolvedInfo.Var => return introInputIdent(o, res, exp.id, exp.typedOpt)
-            case res: AST.ResolvedInfo.LocalVar => return introInputIdent(o, res, exp.id, exp.typedOpt)
-            case _ =>
-          }
-        case exp: AST.Exp.Select =>
-          exp.attr.resOpt.get match {
-            case res: AST.ResolvedInfo.Var if res.isInObject =>
-              return introInputIdent(o, res, exp.id, exp.typedOpt)
-            case _ =>
-          }
-        case _ =>
-      }
-      halt("Non-simple input")
-    }
-
-    override def postExpResult(o: AST.Exp.Result): MOption[AST.Exp] = {
-      val id = AST.Id("return", AST.Attr(o.posOpt))
-      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
-      val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), o.typedOpt))
-      resultOpt = Some((o, ident))
-      return MSome(ident)
-    }
-
-    override def postExpIdent(o: AST.Exp.Ident): MOption[AST.Exp] = {
-      o.attr.resOpt.get match {
-        case res: AST.ResolvedInfo.Var =>
-          if (res.isInObject) {
-            return introIdent(o, res, o.id, o.typedOpt)
-          } else {
-            hasThis = T
-            val id = AST.Id("this", AST.Attr(o.posOpt))
-            val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
-            val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), receiverTypeOpt))
-            return MSome(AST.Exp.Select(Some(ident), o.id, o.targs, o.attr))
-          }
-        case res: AST.ResolvedInfo.LocalVar => return introIdent(o, res, o.id, o.typedOpt)
-        case _ =>
-      }
-      return AST.MTransformer.PostResultExpIdent
-    }
-
-    override def postExpThis(o: AST.Exp.This): MOption[AST.Exp] = {
-      hasThis = T
-      val id = AST.Id("this", AST.Attr(o.posOpt))
-      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
-      val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), o.typedOpt))
-      return MSome(ident)
-    }
-
-    override def postExpSelect(o: AST.Exp.Select): MOption[AST.Exp] = {
-      o.attr.resOpt.get match {
-        case res: AST.ResolvedInfo.Var if res.isInObject =>
-          return introIdent(o, res, o.id, o.typedOpt)
-        case _ =>
-      }
-      return AST.MTransformer.PostResultExpSelect
-    }
-  }
-
   def evalExtractPureMethod(logika: Logika, smt2: Smt2, state: State, receiverTypeOpt: Option[AST.Typed],
                             owner: ISZ[String], id: String, exp: AST.Exp, reporter: Reporter): (State, State.Value) = {
     val posOpt = exp.posOpt
@@ -781,5 +779,33 @@ object Util {
       case _ =>
     }
     return ufd.reporter.messages
+  }
+
+  def retrieveInvs(th: TypeHierarchy, context: ISZ[String], isObject: B): ISZ[Info.Inv] = {
+    var is = ISZ[Info.Inv]()
+    if (context.isEmpty) {
+      return th.worksheetInvs
+    }
+    if (isObject) {
+      for (stmt <- th.nameMap.get(context).get.asInstanceOf[Info.Object].ast.stmts) {
+        stmt match {
+          case stmt: AST.Stmt.Inv => is = is :+ th.nameMap.get(context :+ stmt.id.value).get.asInstanceOf[Info.Inv]
+          case _ =>
+        }
+      }
+    } else {
+      val (stmts, invs): (ISZ[AST.Stmt], HashMap[String, Info.Inv]) = th.typeMap.get(context).get match {
+        case info: TypeInfo.Adt => (info.ast.stmts, info.invariants)
+        case info: TypeInfo.Sig => (info.ast.stmts, info.invariants)
+        case info => halt(s"Infeasible: $info")
+      }
+      for (stmt <- stmts) {
+        stmt match {
+          case stmt: AST.Stmt.Inv => is = is :+ invs.get(stmt.id.value).get
+          case _ =>
+        }
+      }
+    }
+    return is
   }
 }

@@ -34,6 +34,7 @@ import org.sireum.message.{Message, Position}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.plugin._
 import Util._
+import org.sireum.lang.tipe.TypeOutliner.ExpTypedSubst
 
 object Logika {
 
@@ -1678,22 +1679,11 @@ import Util._
             s1 = s1.addClaim(State.Claim.Let.CurrentId(F, receiver, res.owner :+ res.id, "this", receiverPosOpt))
           case _ =>
         }
-        val invs: ISZ[Info.Inv] = {
-          def invsH: ISZ[Info.Inv] = {
-            if (info.isHelper) {
-              return ISZ()
-            }
-            if (info.strictPureBodyOpt.isEmpty) {
-              if (res.owner.isEmpty) {
-                return th.worksheetInvs
-              }
-            }
-            return ISZ()
-          }
-          invsH
-        }
+        val invs: ISZ[Info.Inv] =
+          if (info.isHelper || info.strictPureBodyOpt.nonEmpty) ISZ()
+          else Util.retrieveInvs(th, res.owner, res.isInObject)
         s1 = {
-          val pis = logikaComp.evalInvs(posOpt, F, "Pre-invariant", smt2, rtCheck, s1, invs, reporter)
+          val pis = logikaComp.evalInvs(posOpt, F, "Pre-invariant", smt2, rtCheck, s1, invs, typeSubstMap, reporter)
           s1(status = pis.status, nextFresh = pis.nextFresh)
         }
         contract match {
@@ -1787,7 +1777,7 @@ import Util._
         for (sv <- oldR) {
           val (s9, sym) = sv
           if (s9.status) {
-            val s10 = logikaComp.evalInvs(posOpt, T, "Post-invariant", smt2, rtCheck, s9, invs, reporter)
+            val s10 = logikaComp.evalInvs(posOpt, T, "Post-invariant", smt2, rtCheck, s9, invs, typeSubstMap, reporter)
             if (s10.nextFresh > nextFresh) {
               nextFresh = s10.nextFresh
             }
@@ -2852,16 +2842,22 @@ import Util._
     return Some(claim)
   }
 
-  @memoize def invs2exp(invs: ISZ[Info.Inv]): Option[AST.Exp] = {
-    val claims: ISZ[AST.Exp] = for (inv <- invs; claim <- inv.ast.claims) yield claim
-    return claimsAnd(claims)
+  @memoize def invs2exp(invs: ISZ[Info.Inv], substMap: HashMap[String, AST.Typed]): Option[AST.Exp] = {
+    if (substMap.nonEmpty) {
+      val ts = AST.Transformer(ExpTypedSubst(substMap))
+      val claims: ISZ[AST.Exp] = for (inv <- invs; claim <- inv.ast.claims) yield ts.transformExp(F, claim).resultOpt.getOrElse(claim)
+      return claimsAnd(claims)
+    } else {
+      val claims: ISZ[AST.Exp] = for (inv <- invs; claim <- inv.ast.claims) yield claim
+      return claimsAnd(claims)
+    }
   }
 
   def evalInvs(posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State,
-               invs: ISZ[Info.Inv], reporter: Reporter): State = {
+               invs: ISZ[Info.Inv], substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     val pos = posOpt.get
     def spInv(): Option[State] = {
-      val claim: AST.Exp = invs2exp(invs) match {
+      val claim: AST.Exp = invs2exp(invs, substMap) match {
         case Some(exp) => exp
         case _ => return Some(s0)
       }
