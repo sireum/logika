@@ -788,7 +788,35 @@ object State {
         }
 
         @pure override def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
-          return Some(st"${left.toST(defs)} $op ${right.toST(defs)}")
+          val l = AST.Exp.BinaryOp.precendenceLevel(op)
+          @pure def checkLevel(ds: ISZ[Claim.Def]): B = {
+            for (d <- ds) {
+              d match {
+                case d: Binary if AST.Exp.BinaryOp.precendenceLevel(d.op) >= l => return T
+                case _ =>
+              }
+            }
+            return F
+          }
+          var leftParen = F
+          left match {
+            case left: Value.Sym => defs.get(left.num) match {
+              case Some(defs) if checkLevel(defs) => leftParen = T
+              case _ =>
+            }
+            case _ =>
+          }
+          var rightParen = F
+          right match {
+            case right: Value.Sym => defs.get(right.num) match {
+              case Some(defs) if checkLevel(defs) => rightParen = T
+              case _ =>
+            }
+            case _ =>
+          }
+          val leftST: ST = if (leftParen) st"(${left.toST(defs)})" else st"${left.toST(defs)}"
+          val rightST: ST = if (rightParen) st"(${right.toST(defs)})" else st"${right.toST(defs)}"
+          return Some(st"$leftST $op $rightST")
         }
       }
 
