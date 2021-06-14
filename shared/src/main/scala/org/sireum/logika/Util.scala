@@ -93,6 +93,57 @@ object ClaimDefs {
 
 object Util {
 
+  @record class UnsupportedFeatureDetector(val posOpt: Option[Position], val id: String, val reporter: Reporter) extends AST.MTransformer {
+    override def preExpQuantEach(o: AST.Exp.QuantEach): AST.MTransformer.PreResult[AST.Exp.Quant] = {
+      transformExp(o.seq)
+      for (p <- o.fun.params) {
+        transformExpFunParam(p)
+      }
+      transformAssignExp(o.fun.exp)
+      return AST.MTransformer.PreResultExpQuantEach(continu = F)
+    }
+
+    override def preExpQuantType(o: AST.Exp.QuantType): AST.MTransformer.PreResult[AST.Exp.Quant] = {
+      for (p <- o.fun.params) {
+        transformExpFunParam(p)
+      }
+      transformAssignExp(o.fun.exp)
+      return AST.MTransformer.PreResultExpQuantType(continu = F)
+    }
+
+    override def preExpQuantRange(o: AST.Exp.QuantRange): AST.MTransformer.PreResult[AST.Exp.Quant] = {
+      transformExp(o.lo)
+      transformExp(o.hi)
+      for (p <- o.fun.params) {
+        transformExpFunParam(p)
+      }
+      transformAssignExp(o.fun.exp)
+      return AST.MTransformer.PreResultExpQuantRange(continu = F)
+    }
+
+    override def postTypeFun(o: AST.Type.Fun): MOption[AST.Type] = {
+      val t = o.typedOpt.get.asInstanceOf[AST.Typed.Fun]
+      if (reporter.messages.isEmpty && !t.isPureFun) {
+        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $t")
+      }
+      return AST.MTransformer.PostResultTypeFun
+    }
+
+    override def postExpFun(o: AST.Exp.Fun): MOption[AST.Exp] = {
+      if (reporter.messages.isEmpty && !o.typedOpt.get.asInstanceOf[AST.Typed.Fun].isPureFun) {
+        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $o")
+      }
+      return AST.MTransformer.PostResultExpFun
+    }
+
+    override def postExpEta(o: AST.Exp.Eta): MOption[AST.Exp] = {
+      if (reporter.messages.isEmpty && !o.typedOpt.get.asInstanceOf[AST.Typed.Fun].isPureFun) {
+        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $o")
+      }
+      return AST.MTransformer.PostResultExpEta
+    }
+  }
+
   @record class VarSubstitutor(val context: ISZ[String],
                                val receiverTypeOpt: Option[AST.Typed],
                                var hasThis: B,
@@ -264,6 +315,11 @@ object Util {
       }
     }
   }
+
+  val builtInTypeNames: HashSet[ISZ[String]] = HashSet ++ ISZ(
+    AST.Typed.bName, AST.Typed.zName, AST.Typed.cName, AST.Typed.stringName, AST.Typed.f32Name, AST.Typed.f64Name,
+    AST.Typed.rName, AST.Typed.stName, AST.Typed.isName, AST.Typed.msName
+  )
 
   def collectLetClaims(enabled: B, claims: ISZ[State.Claim]): HashMap[Z, ISZ[State.Claim.Let]] = {
     if (enabled) {
@@ -654,7 +710,8 @@ object Util {
   }
 
   def evalExtractPureMethod(logika: Logika, smt2: Smt2, state: State, receiverTypeOpt: Option[AST.Typed],
-                            owner: ISZ[String], id: String, exp: AST.Exp, reporter: Reporter): (State, State.Value) = {
+                            receiverOpt: Option[State.Value.Sym], owner: ISZ[String], id: String, exp: AST.Exp,
+                            reporter: Reporter): (State, State.Value) = {
     val posOpt = exp.posOpt
     val tOpt = exp.typedOpt
     val t = tOpt.get
@@ -666,12 +723,17 @@ object Util {
       var s0 = state
       var args = ISZ[State.Value]()
       if (vs.hasThis) {
-        paramIds = paramIds :+ AST.Id("this", AST.Attr(posOpt))
-        paramTypes = paramTypes :+ receiverTypeOpt.get
-        val e = AST.Exp.This(AST.TypedAttr(posOpt, receiverTypeOpt))
-        val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
-        s0 = s1
-        args = args :+ arg
+        receiverOpt match {
+          case Some(receiver) =>
+            args = args :+ receiver
+          case _ =>
+            paramIds = paramIds :+ AST.Id("this", AST.Attr(posOpt))
+            paramTypes = paramTypes :+ receiverTypeOpt.get
+            val e = AST.Exp.This(AST.TypedAttr(posOpt, receiverTypeOpt))
+            val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
+            s0 = s1
+            args = args :+ arg
+        }
       }
       for (pair <- vs.map.values) {
         val (e, paramIdent) = pair
@@ -710,57 +772,6 @@ object Util {
   }
 
   @strictpure def strictPureClaimId(i: Z, pos: Position): String = s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
-
-  @record class UnsupportedFeatureDetector(val posOpt: Option[Position], val id: String, val reporter: Reporter) extends AST.MTransformer {
-    override def preExpQuantEach(o: AST.Exp.QuantEach): AST.MTransformer.PreResult[AST.Exp.Quant] = {
-      transformExp(o.seq)
-      for (p <- o.fun.params) {
-        transformExpFunParam(p)
-      }
-      transformAssignExp(o.fun.exp)
-      return AST.MTransformer.PreResultExpQuantEach(continu = F)
-    }
-
-    override def preExpQuantType(o: AST.Exp.QuantType): AST.MTransformer.PreResult[AST.Exp.Quant] = {
-      for (p <- o.fun.params) {
-        transformExpFunParam(p)
-      }
-      transformAssignExp(o.fun.exp)
-      return AST.MTransformer.PreResultExpQuantType(continu = F)
-    }
-
-    override def preExpQuantRange(o: AST.Exp.QuantRange): AST.MTransformer.PreResult[AST.Exp.Quant] = {
-      transformExp(o.lo)
-      transformExp(o.hi)
-      for (p <- o.fun.params) {
-        transformExpFunParam(p)
-      }
-      transformAssignExp(o.fun.exp)
-      return AST.MTransformer.PreResultExpQuantRange(continu = F)
-    }
-
-    override def postTypeFun(o: AST.Type.Fun): MOption[AST.Type] = {
-      val t = o.typedOpt.get.asInstanceOf[AST.Typed.Fun]
-      if (reporter.messages.isEmpty && !t.isPureFun) {
-        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $t")
-      }
-      return AST.MTransformer.PostResultTypeFun
-    }
-
-    override def postExpFun(o: AST.Exp.Fun): MOption[AST.Exp] = {
-      if (reporter.messages.isEmpty && !o.typedOpt.get.asInstanceOf[AST.Typed.Fun].isPureFun) {
-        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $o")
-      }
-      return AST.MTransformer.PostResultExpFun
-    }
-
-    override def postExpEta(o: AST.Exp.Eta): MOption[AST.Exp] = {
-      if (reporter.messages.isEmpty && !o.typedOpt.get.asInstanceOf[AST.Typed.Fun].isPureFun) {
-        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $o")
-      }
-      return AST.MTransformer.PostResultExpEta
-    }
-  }
 
   def detectUnsupportedFeatures(stmt: AST.Stmt.Method): ISZ[message.Message] = {
     val ufd = UnsupportedFeatureDetector(stmt.sig.id.attr.posOpt, stmt.sig.id.value, Reporter.create)
@@ -807,5 +818,113 @@ object Util {
       }
     }
     return is
+  }
+
+  @pure def invOwnerId(invs: ISZ[Info.Inv], typeArgsOpt: Option[ISZ[AST.Typed]]): (ISZ[String], String) = {
+    val res = invs(0).resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
+    val tOpt: Option[ST] = typeArgsOpt match {
+      case Some(typeArgs) => Some(st"[${(typeArgs, ", ")}]")
+      case _ => None()
+    }
+    val id = st"inv${if (res.isInObject) '.' else '#'}$tOpt".render
+    return (res.owner, id)
+  }
+
+  def addInv(logika: Logika, smt2: Smt2, rtCheck: B, state: State, receiver: State.Value.Sym, pos: Position,
+             reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
+    def addTupleInv(s0: State, t: AST.Typed.Tuple): (State, ISZ[State.Value.Sym]) = {
+      var s1 = s0
+      var i = 1
+      var ss = ISZ[State.Value.Sym]()
+      for (arg <- t.args) {
+        val (s2, sym) = s1.freshSym(arg, pos)
+        val s3 = s2.addClaim(State.Claim.Let.FieldLookup(sym, receiver, s"_$i"))
+        val (s4, syms) = Util.addInv(logika, smt2, rtCheck, s3, sym, pos, reporter)
+        ss = ss ++ syms
+        s1 = s4
+        i = i + 1
+      }
+      return (s1, ss)
+    }
+    def addSubZInv(s0: State, v: State.Value.Sym, ti: TypeInfo.SubZ): (State, ISZ[State.Value.Sym]) = {
+      var s1 = s0
+      var ss = ISZ[State.Value.Sym]()
+      val t = ti.typedOpt.get
+      if (ti.ast.hasMin) {
+        val (s2, minCond) = s0.freshSym(t, pos)
+        s1 = s2.addClaim(State.Claim.Let.Binary(minCond, z2SubZVal(ti, ti.ast.min, pos),
+          AST.Exp.BinaryOp.Le, v, t))
+        ss = ss :+ minCond
+      }
+      if (ti.ast.hasMax) {
+        val (s3, maxCond) = s1.freshSym(t, pos)
+        s1 = s3.addClaim(State.Claim.Let.Binary(maxCond, v, AST.Exp.BinaryOp.Le,
+          z2SubZVal(ti, ti.ast.min, pos), t))
+        ss = ss :+ maxCond
+      }
+      return (s1, ss)
+    }
+    val t = receiver.tipe
+    val (ti, targs): (TypeInfo, ISZ[AST.Typed]) = t match {
+      case t: AST.Typed.Name =>
+        if (builtInTypeNames.contains(t.ids)) {
+          return (state, ISZ())
+        } else {
+          (logika.th.typeMap.get(t.ids).get, t.args)
+        }
+      case t: AST.Typed.Tuple => return addTupleInv(state, t)
+      case _: AST.Typed.Fun => return (state, ISZ())
+      case _ => halt(s"Infeasible: $t")
+    }
+    val ((owner, id), inv): ((ISZ[String], String), AST.Exp) = ti match {
+      case ti: TypeInfo.SubZ =>
+        return addSubZInv(state, receiver, ti)
+      case ti: TypeInfo.Adt =>
+        val is = ti.invariants.values
+        if (ti.invariants.isEmpty) {
+          return (state, ISZ())
+        }
+        val substMap = TypeChecker.buildTypeSubstMap(ti.owner, Some(pos), ti.ast.typeParams, targs, reporter).get
+        logika.invs2exp(is, substMap) match {
+          case Some(e) => (invOwnerId(is, Some(targs)), e)
+          case _ => return (state, ISZ())
+        }
+      case ti: TypeInfo.Sig =>
+        val is = ti.invariants.values
+        if (ti.invariants.isEmpty) {
+          return (state, ISZ())
+        }
+        val substMap = TypeChecker.buildTypeSubstMap(ti.owner, Some(pos), ti.ast.typeParams, targs, reporter).get
+        logika.invs2exp(is, substMap) match {
+          case Some(e) => (invOwnerId(is, Some(targs)), e)
+          case _ => return (state, ISZ())
+        }
+      case _ => halt(s"Infeasible: $ti")
+    }
+    val (s5, cond) = evalExtractPureMethod(logika, smt2, state, Some(receiver.tipe), Some(receiver), owner, id, inv, reporter)
+    val (s6, sym) = logika.value2Sym(s5, cond, pos)
+    return (s6, ISZ(sym))
+  }
+
+  @pure def z2SubZVal(ti: TypeInfo.SubZ, n: Z, pos: Position): State.Value = {
+    val t = ti.typedOpt.get.asInstanceOf[AST.Typed.Name]
+    if (ti.ast.isBitVector) {
+      ti.ast.bitWidth match {
+        case 8 => return State.Value.S8(conversions.Z.toS8(n), t, pos)
+        case 16 => return State.Value.S16(conversions.Z.toS16(n), t, pos)
+        case 32 => return State.Value.S32(conversions.Z.toS32(n), t, pos)
+        case 64 => return State.Value.S64(conversions.Z.toS64(n), t, pos)
+        case _ =>
+      }
+    } else {
+      ti.ast.bitWidth match {
+        case 8 => return State.Value.U8(conversions.Z.toU8(n), t, pos)
+        case 16 => return State.Value.U16(conversions.Z.toU16(n), t, pos)
+        case 32 => return State.Value.U32(conversions.Z.toU32(n), t, pos)
+        case 64 => return State.Value.U64(conversions.Z.toU64(n), t, pos)
+        case _ =>
+      }
+    }
+    return State.Value.Range(n, t, pos)
   }
 }

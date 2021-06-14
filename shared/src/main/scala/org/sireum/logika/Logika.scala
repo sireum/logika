@@ -483,32 +483,24 @@ import Util._
 
   def text2SubZVal(ti: TypeInfo.SubZ, text: String, pos: Position): State.Value = {
     val t = ti.typedOpt.get.asInstanceOf[AST.Typed.Name]
-    (ti.ast.isBitVector, ti.ast.bitWidth) match {
-      case (T, 8) => return State.Value.S8(S8(text).get, t, pos)
-      case (T, 16) => return State.Value.S16(S16(text).get, t, pos)
-      case (T, 32) => return State.Value.S32(S32(text).get, t, pos)
-      case (T, 64) => return State.Value.S64(S64(text).get, t, pos)
-      case (F, 8) => return State.Value.U8(U8(text).get, t, pos)
-      case (F, 16) => return State.Value.U16(U16(text).get, t, pos)
-      case (F, 32) => return State.Value.U32(U32(text).get, t, pos)
-      case (F, 64) => return State.Value.U64(U64(text).get, t, pos)
-      case (_, _) => return State.Value.Range(org.sireum.Z(text).get, t, pos)
+    if (ti.ast.isBitVector) {
+      ti.ast.bitWidth match {
+        case 8 => return State.Value.S8(org.sireum.S8(text).get, t, pos)
+        case 16 => return State.Value.S16(org.sireum.S16(text).get, t, pos)
+        case 32 => return State.Value.S32(org.sireum.S32(text).get, t, pos)
+        case 64 => return State.Value.S64(org.sireum.S64(text).get, t, pos)
+        case _ =>
+      }
+    } else {
+      ti.ast.bitWidth match {
+        case 8 => return State.Value.U8(org.sireum.U8(text).get, t, pos)
+        case 16 => return State.Value.U16(org.sireum.U16(text).get, t, pos)
+        case 32 => return State.Value.U32(org.sireum.U32(text).get, t, pos)
+        case 64 => return State.Value.U64(org.sireum.U64(text).get, t, pos)
+        case _ =>
+      }
     }
-  }
-
-  def z2SubZVal(ti: TypeInfo.SubZ, n: Z, pos: Position): State.Value = {
-    val t = ti.typedOpt.get.asInstanceOf[AST.Typed.Name]
-    (ti.ast.isBitVector, ti.ast.bitWidth) match {
-      case (T, 8) => return State.Value.S8(conversions.Z.toS8(n), t, pos)
-      case (T, 16) => return State.Value.S16(conversions.Z.toS16(n), t, pos)
-      case (T, 32) => return State.Value.S32(conversions.Z.toS32(n), t, pos)
-      case (T, 64) => return State.Value.S64(conversions.Z.toS64(n), t, pos)
-      case (F, 8) => return State.Value.U8(conversions.Z.toU8(n), t, pos)
-      case (F, 16) => return State.Value.U16(conversions.Z.toU16(n), t, pos)
-      case (F, 32) => return State.Value.U32(conversions.Z.toU32(n), t, pos)
-      case (F, 64) => return State.Value.U64(conversions.Z.toU64(n), t, pos)
-      case (_, _) => return State.Value.Range(n, t, pos)
-    }
+    return State.Value.Range(org.sireum.Z(text).get, t, pos)
   }
 
   def evalInterpolate(lit: AST.Exp.StringInterpolate): State.Value = {
@@ -570,7 +562,7 @@ import Util._
         @strictpure def fe(i: Z): AST.Exp = es(i)
 
         return for (p <- evalExps(split, smt2, rtCheck, state, es.size, fe _, reporter)) yield
-          ((p._1, for (v <- p._2) yield Some(v)))
+          (p._1, for (v <- p._2) yield Some(v))
       case Either.Right(nargs) =>
         @strictpure def feM(i: Z): AST.Exp = nargs(i).arg
 
@@ -912,26 +904,10 @@ import Util._
       @pure def random(tpe: AST.Typed): ISZ[(State, State.Value)] = {
         val s0 = state
         val (s1, sym) = s0.freshSym(tpe, pos)
-        var s2 = s1.addClaim(State.Claim.Def.Random(sym, pos))
-        tpe match {
-          case tpe: AST.Typed.Name =>
-            th.typeMap.get(tpe.ids).get match {
-              case ti: TypeInfo.SubZ =>
-                if (ti.ast.hasMin) {
-                  val (s3, minCond) = s2.freshSym(tpe, pos)
-                  s2 = s3.addClaims(ISZ(State.Claim.Let.Binary(minCond, z2SubZVal(ti, ti.ast.min, pos),
-                    AST.Exp.BinaryOp.Le, sym, tpe), State.Claim.Prop(T, minCond)))
-                }
-                if (ti.ast.hasMax) {
-                  val (s4, maxCond) = s2.freshSym(tpe, pos)
-                  s2 = s4.addClaims(ISZ(State.Claim.Let.Binary(maxCond, sym, AST.Exp.BinaryOp.Le,
-                    z2SubZVal(ti, ti.ast.min, pos), tpe), State.Claim.Prop(T, maxCond)))
-                }
-              case _ =>
-            }
-          case _ =>
-        }
-        return ISZ((s2, sym))
+        val s2 = s1.addClaim(State.Claim.Def.Random(sym, pos))
+        val (s3, ss) = Util.addInv(this, smt2, rtCheck, s2, sym, pos, reporter)
+        val s4 = s3.addClaims(for (s <- ss) yield State.Claim.Prop(T, s))
+        return ISZ((s4, sym))
       }
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random =>
@@ -1144,7 +1120,8 @@ import Util._
       val (s0, sym) = state.freshSym(AST.Typed.b, quant.attr.posOpt.get)
       var nextFresh = s0.nextFresh
       val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
-      for (p <- this (inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s0, quant.fun.exp, reporter)) {
+      val thisL = this
+      for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s0, quant.fun.exp, reporter)) {
         val (s1, v) = p
         val (s2, expSym) = value2Sym(s1, v, quant.fun.exp.asStmt.posOpt.get)
         if (s2.status) {
@@ -1188,7 +1165,8 @@ import Util._
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(quant.fun.context, qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
-          for (p <- this (inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
+          val thisL = this
+          for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
             val (s9, v) = p
             val (s10, expSym) = value2Sym(s9, v, quant.fun.exp.asStmt.posOpt.get)
             if (s10.status) {
@@ -1239,7 +1217,8 @@ import Util._
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(quant.fun.context, qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s6.nextFresh
-          for (p <- this (inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s6.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)) {
+          val thisL = this
+          for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s6.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)) {
             val (s7, v) = p
             val (s8, expSym) = value2Sym(s7, v, quant.fun.exp.asStmt.posOpt.get)
             if (s8.status) {
@@ -1299,7 +1278,8 @@ import Util._
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s11.nextFresh
-          for (p <- this (inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s11.addClaims(ISZ(nonEmptyProp, inBoundProp)), quant.fun.exp, reporter)) {
+          val thisL = this
+          for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s11.addClaims(ISZ(nonEmptyProp, inBoundProp)), quant.fun.exp, reporter)) {
             val (s12, v) = p
             val (s13, expSym) = value2Sym(s12, v, quant.fun.exp.asStmt.posOpt.get)
             if (s13.status) {
@@ -2029,7 +2009,7 @@ import Util._
 
     def expH(s0: State): ISZ[(State, State.Value)] = {
       e match {
-        case lit: AST.Exp.LitStepId => return ISZ((s0(status = F), State.errorValue))
+        case _: AST.Exp.LitStepId => return ISZ((s0(status = F), State.errorValue))
         case lit: AST.Lit => return ISZ((s0, evalLit(lit)))
         case lit: AST.Exp.StringInterpolate => return ISZ((s0, evalInterpolate(lit)))
         case e: AST.Exp.Ident => return evalIdent(e)
@@ -2862,9 +2842,12 @@ import Util._
         case Some(exp) => exp
         case _ => return Some(s0)
       }
-      val res = invs(0).resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
-      val id = s"inv${if (res.isInObject) '.' else '#'}"
-      val (s1, v) = Util.evalExtractPureMethod(this, smt2, s0, context.receiverTypeOpt, res.owner, id, claim, reporter)
+      val tOpt: Option[ISZ[AST.Typed]] = context.receiverTypeOpt match {
+        case Some(receiverType: AST.Typed.Name) if substMap.nonEmpty => Some(receiverType.args)
+        case _ => None()
+      }
+      val (owner, id) = Util.invOwnerId(invs, tOpt)
+      val (s1, v) = Util.evalExtractPureMethod(this, smt2, s0, context.receiverTypeOpt, None(), owner, id, claim, reporter)
       if (!s1.status) {
         return None()
       }

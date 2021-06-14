@@ -44,7 +44,7 @@ object Smt2Impl {
   }
 
   @pure def z3ArgF(timeoutInMs: Z): ISZ[String] = {
-    return ISZ("-smt2", s"-T:$timeoutInMs", "-in")
+    return ISZ("-smt2", s"-T:${(timeoutInMs / 1000) + 1}", s"-t:$timeoutInMs", "-in")
   }
 
   @pure def cvc4ArgF(timeoutInMs: Z): ISZ[String] = {
