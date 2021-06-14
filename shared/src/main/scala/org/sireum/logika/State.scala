@@ -48,15 +48,18 @@ import org.sireum.message.Position
   }
 
   @pure def addClaim(claim: State.Claim): State = {
-    return this (claims = this.claims :+ claim)
+    val thisL = this
+    return thisL(claims = this.claims :+ claim)
   }
 
   @pure def addClaims(claims: ISZ[State.Claim]): State = {
-    return this (claims = this.claims ++ claims)
+    val thisL = this
+    return thisL(claims = this.claims ++ claims)
   }
 
   @pure def fresh: (State, org.sireum.Z) = {
-    return (this (nextFresh = nextFresh + 1), nextFresh)
+    val thisL = this
+    return (thisL(nextFresh = nextFresh + 1), nextFresh)
   }
 
   @pure def freshSym(tipe: AST.Typed, pos: Position): (State, State.Value.Sym) = {
@@ -277,7 +280,7 @@ object State {
 
     @pure def toRawST: ST
 
-    def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit
+    def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit
 
     @pure def funs: ISZ[Fun] = {
       return ISZ()
@@ -322,7 +325,7 @@ object State {
         }
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+      override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         claimSTs.add(toRawST)
       }
 
@@ -336,7 +339,7 @@ object State {
         return if (isPos) value.toRawST else st"¬(${value.toRawST})"
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+      override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         value.toSTOpt(defs) match {
           case Some(r) =>
             if (isPos) {
@@ -369,7 +372,7 @@ object State {
       }
 
       @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
-        val claimSTs = ClaimSTs(ISZ())
+        val claimSTs = Util.ClaimSTs(ISZ())
         for (c <- claims) {
           c.toSTs(claimSTs, defs)
         }
@@ -390,7 +393,7 @@ object State {
         return for (c <- claims; t <- c.types) yield t
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+      override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         toST(defs) match {
           case Some(r) => claimSTs.add(r)
           case _ =>
@@ -410,7 +413,7 @@ object State {
       }
 
       @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
-        val claimSTs = ClaimSTs(ISZ())
+        val claimSTs = Util.ClaimSTs(ISZ())
         for (c <- claims) {
           c.toSTs(claimSTs, defs)
         }
@@ -437,7 +440,7 @@ object State {
         return for (c <- claims; t <- c.types) yield t
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+      override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         toST(defs) match {
           case Some(r) => claimSTs.add(r)
           case _ =>
@@ -459,13 +462,13 @@ object State {
       }
 
       @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST] = {
-        var claimSTs = ClaimSTs(ISZ())
+        var claimSTs = Util.ClaimSTs(ISZ())
         claims(claims.size - 1).toSTs(claimSTs, defs)
         if (claimSTs.value.isEmpty) {
           return None()
         }
         val conclusion = claimSTs.value(0)
-        claimSTs = ClaimSTs(ISZ())
+        claimSTs = Util.ClaimSTs(ISZ())
         for (i <- 0 until claims.size - 1) {
           claims(i).toSTs(claimSTs, defs)
         }
@@ -490,7 +493,7 @@ object State {
         return for (c <- claims; t <- c.types) yield t
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+      override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         toST(defs) match {
           case Some(r) => claimSTs.add(r)
           case _ =>
@@ -513,7 +516,7 @@ object State {
         return r
       }
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+      override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
         val condST = cond.toST(defs)
         val tSTOpt = And(tClaims).toST(defs)
         val fSTOpt = And(fClaims).toST(defs)
@@ -550,7 +553,7 @@ object State {
 
       @pure def toST(defs: HashMap[Z, ISZ[Claim.Def]]): Option[ST]
 
-      override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {}
+      override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {}
     }
 
     object Def {
@@ -632,7 +635,7 @@ object State {
           return Some(st"${(ids, ".")}")
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+        override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
           if (defs.get(sym.num).get != ISZ[Claim.Def](this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
@@ -648,7 +651,7 @@ object State {
           return Some(st"${(ids, ".")}@${possLines(poss)}#$num")
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+        override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
           if (defs.get(sym.num).get != ISZ[Claim.Def](this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
@@ -665,7 +668,7 @@ object State {
           return Some(st"$id")
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+        override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
           if (defs.get(sym.num).get != ISZ[Claim.Def](this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
@@ -686,7 +689,7 @@ object State {
           )
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+        override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
           if (defs.get(sym.num).get != ISZ[Claim.Def](this)) {
             claimSTs.add(st"${toST(defs)} == ${sym.toST(defs)}")
           }
@@ -702,7 +705,7 @@ object State {
           return Some(st"${value.toST(defs)}")
         }
 
-        override def toSTs(claimSTs: ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
+        override def toSTs(claimSTs: Util.ClaimSTs, defs: HashMap[Z, ISZ[Claim.Def]]): Unit = {
           if (defs.get(sym.num).get.size > 1) {
             claimSTs.add(st"${sym.toRawST} ≜ ${value.toST(defs)}")
           }
@@ -1007,11 +1010,11 @@ object State {
       }
     }
 
-    @pure def claimsSTs(claims: ISZ[Claim], defs: ClaimDefs): ISZ[ST] = {
+    @pure def claimsSTs(claims: ISZ[Claim], defs: Util.ClaimDefs): ISZ[ST] = {
       for (c <- claims) {
-        ClaimDefs.collectDefs(c, defs)
+        Util.ClaimDefs.collectDefs(c, defs)
       }
-      val claimSTs = ClaimSTs(ISZ())
+      val claimSTs = Util.ClaimSTs(ISZ())
       val m = defs.value
       for (c <- claims) {
         c.toSTs(claimSTs, m)

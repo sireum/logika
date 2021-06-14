@@ -33,65 +33,65 @@ import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{Reporter, Split}
 
-@record class ClaimSTs(var value: ISZ[ST]) {
-  def add(st: ST): Unit = {
-    value = value :+ st
-  }
-}
-
-@record class ClaimDefs(var value: HashMap[Z, ISZ[State.Claim.Def]]) {
-  def addDef(d: State.Claim.Def): Unit = {
-    value.get(d.sym.num) match {
-      case Some(s) => value = value + d.sym.num ~> (s :+ d)
-      case _ => value = value + d.sym.num ~> ISZ(d)
-    }
-  }
-
-  def hasDef(d: State.Claim.Def): B = {
-    return value.contains(d.sym.num)
-  }
-}
-
-object ClaimDefs {
-  @strictpure def empty: ClaimDefs = ClaimDefs(HashMap.empty)
-
-  def collectDefs(claim: State.Claim, defs: ClaimDefs): Unit = {
-    def rec(c: State.Claim): Unit = {
-      c match {
-        case c: State.Claim.Let.CurrentId =>
-          if (!defs.hasDef(c)) {
-            defs.addDef(c)
-          }
-        case c: State.Claim.Let.CurrentName =>
-          if (!defs.hasDef(c)) {
-            defs.addDef(c)
-          }
-        case c: State.Claim.Let.Id =>
-          if (!defs.hasDef(c)) {
-            defs.addDef(c)
-          }
-        case c: State.Claim.Let.Name =>
-          if (!defs.hasDef(c)) {
-            defs.addDef(c)
-          }
-        case c: State.Claim.Def => defs.addDef(c)
-        case _ =>
-      }
-      c match {
-        case c: State.Claim.Composite =>
-          for (cc <- c.claims) {
-            rec(cc)
-          }
-        case _ =>
-      }
-    }
-
-    rec(claim)
-  }
-
-}
-
 object Util {
+
+  @record class ClaimSTs(var value: ISZ[ST]) {
+    def add(st: ST): Unit = {
+      value = value :+ st
+    }
+  }
+
+  @record class ClaimDefs(var value: HashMap[Z, ISZ[State.Claim.Def]]) {
+    def addDef(d: State.Claim.Def): Unit = {
+      value.get(d.sym.num) match {
+        case Some(s) => value = value + d.sym.num ~> (s :+ d)
+        case _ => value = value + d.sym.num ~> ISZ(d)
+      }
+    }
+
+    def hasDef(d: State.Claim.Def): B = {
+      return value.contains(d.sym.num)
+    }
+  }
+
+  object ClaimDefs {
+    @strictpure def empty: ClaimDefs = ClaimDefs(HashMap.empty)
+
+    def collectDefs(claim: State.Claim, defs: ClaimDefs): Unit = {
+      def rec(c: State.Claim): Unit = {
+        c match {
+          case c: State.Claim.Let.CurrentId =>
+            if (!defs.hasDef(c)) {
+              defs.addDef(c)
+            }
+          case c: State.Claim.Let.CurrentName =>
+            if (!defs.hasDef(c)) {
+              defs.addDef(c)
+            }
+          case c: State.Claim.Let.Id =>
+            if (!defs.hasDef(c)) {
+              defs.addDef(c)
+            }
+          case c: State.Claim.Let.Name =>
+            if (!defs.hasDef(c)) {
+              defs.addDef(c)
+            }
+          case c: State.Claim.Def => defs.addDef(c)
+          case _ =>
+        }
+        c match {
+          case c: State.Claim.Composite =>
+            for (cc <- c.claims) {
+              rec(cc)
+            }
+          case _ =>
+        }
+      }
+
+      rec(claim)
+    }
+
+  }
 
   @record class UnsupportedFeatureDetector(val posOpt: Option[Position], val id: String, val reporter: Reporter) extends AST.MTransformer {
     override def preExpQuantEach(o: AST.Exp.QuantEach): AST.MTransformer.PreResult[AST.Exp.Quant] = {
