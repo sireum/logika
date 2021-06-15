@@ -5,9 +5,9 @@ import org.sireum._
   @spec var x: T = $
   @spec var y: Z = $
 
-//  @spec def yNonNegative = Invariant(
-//    y >= 0
-//  )
+  @spec def yNonNegative = Invariant(
+    y >= 0
+  )
 }
 
 @sig trait AParent extends AParent2[Z] {
@@ -19,29 +19,33 @@ import org.sireum._
 object B {
   var inc: Z = 1
 
-//  @spec def incPos = Invariant(
-//    inc > 0
-//  )
+  @spec def incPos = Invariant(
+    inc > 0
+  )
 
   def compute(a: A): Unit = {
     Contract(
       Modifies(a),
       Ensures(
-        a.x == In(a).x + 1 /* inc */,
+        (In(a).x >= 0) ->: (a.x > 0),
+        a.x == In(a).x + inc,
         a.y == In(a).y + a.x,
         a.z == In(a).z,
         a == In(a) // inferred
       )
     )
     Spec {
-      a.x = a.x + 1
+      a.x = a.x + inc
       a.y = a.y + a.x
     }
   }
 }
 
+import B._
+
 def foo(az: A): Unit = {
   Contract(
+    Requires(B.inc > 0), // temp
     Modifies(az),
     Ensures(
       az.x > In(az).x,

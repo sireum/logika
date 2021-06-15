@@ -413,9 +413,10 @@ object Util {
         for (p <- mctx.objectVarMap(TypeChecker.emptySubstMap).entries) {
           val (ids, t) = p
           val posOpt = th.nameMap.get(ids).get.posOpt
-          val (s, sym) = nameIntro(posOpt.get, state, ids, t, posOpt)
+          val (s0, sym) = nameIntro(posOpt.get, state, ids, t, posOpt)
+          val (s1, conds) = addInv(l, smt2, T, s0, sym, posOpt.get, reporter)
+          state = s1.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
           objectVarInMap = objectVarInMap + ids ~> sym
-          state = s
         }
         var fieldVarInMap = mctx.fieldVarInMap
         mctx.receiverTypeOpt match {
@@ -434,9 +435,10 @@ object Util {
         for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
           val (mname, id, t) = v
           val posOpt = id.attr.posOpt
-          val (s, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
+          val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
+          val (s1, conds) = addInv(l, smt2, T, s0, sym, posOpt.get, reporter)
+          state = s1.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
           localInMap = localInMap + id.value ~> sym
-          state = s
         }
         l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
           localInMap = localInMap))))
@@ -584,8 +586,9 @@ object Util {
     return current
   }
 
-  def rewriteObjectVars(th: TypeHierarchy, state: State, objectVars: HashSMap[AST.ResolvedInfo.Var, (AST.Typed, Position)],
-                        pos: Position, reporter: Reporter): State = {
+  def rewriteObjectVars(logika: Logika, smt2: Smt2, rtCheck: B, state: State,
+                        objectVars: HashSMap[AST.ResolvedInfo.Var, (AST.Typed, Position)], pos: Position,
+                        reporter: Reporter): State = {
     if (objectVars.isEmpty) {
       return state
     }
@@ -609,18 +612,19 @@ object Util {
       val (x, (t, namePos)) = p
       val name = x.owner :+ x.id
       val (s2, sym) = nameIntro(pos, current, name, t, Some(namePos))
-      current = s2
+      val (s3, conds) = addInv(logika, smt2, rtCheck, s2, sym, namePos, reporter)
+      current = s3.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
       val tipe = sym.tipe
-      if (!th.isMutable(tipe, T)) {
-        val (s3, cond) = current.freshSym(AST.Typed.b, pos)
-        current = s3.addClaims(ISZ(State.Claim.Let.Binary(cond, sym, AST.Exp.BinaryOp.Eq, rt.ctx.get(name).get, tipe),
+      if (!logika.th.isMutable(tipe, T)) {
+        val (s4, cond) = current.freshSym(AST.Typed.b, pos)
+        current = s4.addClaims(ISZ(State.Claim.Let.Binary(cond, sym, AST.Exp.BinaryOp.Eq, rt.ctx.get(name).get, tipe),
           State.Claim.Prop(T, cond)))
       } else if (AST.Util.isSeq(tipe)) {
-        val (s3, size1) = current.freshSym(AST.Typed.z, pos)
-        val (s4, size2) = s3.freshSym(AST.Typed.z, pos)
-        val (s5, cond) = s4.freshSym(AST.Typed.b, pos)
+        val (s4, size1) = current.freshSym(AST.Typed.z, pos)
+        val (s5, size2) = s4.freshSym(AST.Typed.z, pos)
+        val (s6, cond) = s5.freshSym(AST.Typed.b, pos)
         val o1 = rt.ctx.get(name).get
-        current = s5.addClaims(ISZ(
+        current = s6.addClaims(ISZ(
           State.Claim.Let.FieldLookup(size1, o1, "size"),
           State.Claim.Let.FieldLookup(size2, sym, "size"),
           State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
@@ -725,6 +729,9 @@ object Util {
       if (vs.hasThis) {
         receiverOpt match {
           case Some(receiver) =>
+            paramIds = paramIds :+ AST.Id("this", AST.Attr(posOpt))
+            paramTypes = paramTypes :+ receiverTypeOpt.get
+            s0 = s0.addClaim(State.Claim.Let.CurrentId(T, receiver, logika.context.methodName, "this", None()))
             args = args :+ receiver
           case _ =>
             paramIds = paramIds :+ AST.Id("this", AST.Attr(posOpt))
@@ -823,7 +830,7 @@ object Util {
   @pure def invOwnerId(invs: ISZ[Info.Inv], typeArgsOpt: Option[ISZ[AST.Typed]]): (ISZ[String], String) = {
     val res = invs(0).resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
     val tOpt: Option[ST] = typeArgsOpt match {
-      case Some(typeArgs) => Some(st"[${(typeArgs, ", ")}]")
+      case Some(typeArgs) if typeArgs.nonEmpty => Some(st"[${(typeArgs, ", ")}]")
       case _ => None()
     }
     val id = st"inv${if (res.isInObject) '.' else '#'}$tOpt".render
@@ -874,6 +881,7 @@ object Util {
         }
       case t: AST.Typed.Tuple => return addTupleInv(state, t)
       case _: AST.Typed.Fun => return (state, ISZ())
+      case _: AST.Typed.TypeVar => return (state, ISZ())
       case _ => halt(s"Infeasible: $t")
     }
     val ((owner, id), inv): ((ISZ[String], String), AST.Exp) = ti match {

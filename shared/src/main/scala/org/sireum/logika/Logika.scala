@@ -920,6 +920,8 @@ import Util._
           val mType = res.tpeOpt.get
           val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
           return evalInvoke(state, exp.receiverOpt, AST.Exp.Ident(exp.id, exp.attr), Either.Left(ISZ()), attr)
+        case res: AST.ResolvedInfo.Var if res.isInObject =>
+          return ISZ(evalIdentH(state, res, exp.typedOpt.get, exp.posOpt.get))
         case res => return evalSelectH(split, res, exp.receiverOpt, exp.id.value, exp.typedOpt.get, pos)
       }
     }
@@ -1473,7 +1475,7 @@ import Util._
             var ms1 = ms0
             val modObjectVars = contract.modifiedObjectVars
             val mpos = mposOpt.get
-            ms1 = rewriteObjectVars(th, ms1, modObjectVars, mpos, reporter)
+            ms1 = rewriteObjectVars(this, smt2, rtCheck, ms1, modObjectVars, mpos, reporter)
             var oldIdMap = HashMap.empty[ISZ[String], State.Value.Sym]
             for (pair <- modLocals.entries) {
               val (info, (t, _)) = pair
@@ -1486,24 +1488,26 @@ import Util._
               val (info, (t, pos)) = pair
               val oldSym = oldIdMap.get(info.context :+ info.id).get
               val (ls1, newSym) = idIntro(pos, ms1, info.context, info.id, t, Some(pos))
+              val (ls2, conds) = Util.addInv(this, smt2, rtCheck, ls1, newSym, pos, reporter)
+              val ls3 = ls2.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
               if (!th.isMutable(t, T)) {
-                val (ls2, cond) = ls1.freshSym(AST.Typed.b, pos)
-                val ls3 = ls2.addClaims(ISZ[State.Claim](
+                val (ls4, cond) = ls3.freshSym(AST.Typed.b, pos)
+                val ls5 = ls4.addClaims(ISZ[State.Claim](
                   State.Claim.Let.Binary(cond, newSym, AST.Exp.BinaryOp.Eq, oldSym, t),
                   State.Claim.Prop(T, cond)
                 ))
-                ms1 = ls3
+                ms1 = ls5
               } else if (AST.Util.isSeq(t)) {
-                val (ls4, size1) = ls1.freshSym(AST.Typed.z, pos)
-                val (ls5, size2) = ls4.freshSym(AST.Typed.z, pos)
-                val (ls6, cond) = ls5.freshSym(AST.Typed.b, pos)
-                val ls7 = ls6.addClaims(ISZ[State.Claim](
+                val (ls6, size1) = ls3.freshSym(AST.Typed.z, pos)
+                val (ls7, size2) = ls6.freshSym(AST.Typed.z, pos)
+                val (ls8, cond) = ls7.freshSym(AST.Typed.b, pos)
+                val ls9 = ls8.addClaims(ISZ[State.Claim](
                   State.Claim.Let.FieldLookup(size1, oldSym, "size"),
                   State.Claim.Let.FieldLookup(size2, newSym, "size"),
                   State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
                   State.Claim.Prop(T, cond)
                 ))
-                ms1 = ls7
+                ms1 = ls9
               }
             }
             if (isUnit) {
@@ -2448,8 +2452,10 @@ import Util._
       for (p <- m.entries) {
         val (id, (v, t, pos)) = p
         val (s3, x) = idIntro(pos, s2, lcontext, id, t, Some(pos))
-        val (s4, sym) = s3.freshSym(AST.Typed.b, pos)
-        s2 = s4.addClaim(State.Claim.Let.Binary(sym, x, "==", v, t))
+        val (s4, conds) = Util.addInv(this, smt2, rtCheck, s3, x, pos, reporter)
+        val s5 = s4.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
+        val (s6, sym) = s5.freshSym(AST.Typed.b, pos)
+        s2 = s6.addClaim(State.Claim.Let.Binary(sym, x, "==", v, t))
         bindings = bindings :+ sym
       }
       return (s2, bindings)
@@ -3211,23 +3217,25 @@ import Util._
       var nextFresh = state.nextFresh
       for (p <- evalAssignExpValue(split, smt2, varPattern.pattern.typedOpt.get, rtCheck, state, varPattern.init, reporter)) {
         val (s1, init) = p
-        val s7: State = if (s1.status) {
+        val s9: State = if (s1.status) {
           val (s2, sym) = value2Sym(s1, init, varPattern.init.asStmt.posOpt.get)
           val (s3, cond, m) = evalPattern(s2, sym, varPattern.pattern, reporter)
           var s4 = s3
           for (p <- m.entries) {
             val (id, (v, _, pos)) = p
             val (s5, vSym) = value2Sym(s4, v, pos)
-            s4 = s5.addClaim(State.Claim.Let.CurrentId(T, vSym, context.methodName, id, Some(pos)))
+            val (s6, conds) = Util.addInv(this, smt2, rtCheck, s5, vSym, pos, reporter)
+            val s7 = s6.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
+            s4 = s7.addClaim(State.Claim.Let.CurrentId(T, vSym, context.methodName, id, Some(pos)))
           }
-          val (s6, condSym) = value2Sym(s4, cond, varPattern.pattern.posOpt.get)
-          evalAssertH(T, smt2, "Variable Pattern Matching", s6, condSym, varPattern.pattern.posOpt, reporter)
+          val (s8, condSym) = value2Sym(s4, cond, varPattern.pattern.posOpt.get)
+          evalAssertH(T, smt2, "Variable Pattern Matching", s8, condSym, varPattern.pattern.posOpt, reporter)
         } else {
           s1
         }
-        r = r :+ s7
-        if (nextFresh < s7.nextFresh) {
-          nextFresh = s7.nextFresh
+        r = r :+ s9
+        if (nextFresh < s9.nextFresh) {
+          nextFresh = s9.nextFresh
         }
 
       }
