@@ -812,7 +812,7 @@ object Util {
         }
       }
     } else {
-      val (stmts, invs): (ISZ[AST.Stmt], HashMap[String, Info.Inv]) = th.typeMap.get(context).get match {
+      val (stmts, invs): (ISZ[AST.Stmt], HashSMap[String, Info.Inv]) = th.typeMap.get(context).get match {
         case info: TypeInfo.Adt => (info.ast.stmts, info.invariants)
         case info: TypeInfo.Sig => (info.ast.stmts, info.invariants)
         case info => halt(s"Infeasible: $info")
