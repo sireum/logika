@@ -424,8 +424,8 @@ object Util {
         }
         for (p <- objectNames.entries) {
           val (objectName, pos) = p
-          val (s0, cond) = addObjectInv(l, smt2, objectName, state, pos, reporter)
-          state = s0.addClaim(State.Claim.Prop(T, cond))
+          val (s0, conds) = addObjectInv(l, smt2, objectName, state, pos, reporter)
+          state = s0.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
         }
         var fieldVarInMap = mctx.fieldVarInMap
         mctx.receiverTypeOpt match {
@@ -847,13 +847,16 @@ object Util {
   }
 
   def addObjectInv(logika: Logika, smt2: Smt2, name: ISZ[String], state: State, pos: Position,
-                   reporter: Reporter): (State, State.Value.Sym) = {
+                   reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     val invs = logika.objectInvs(name)
+    if (invs.isEmpty) {
+      return (state, ISZ())
+    }
     val (owner, id) = invOwnerId(invs, None())
     val inv = logika.invs2exp(invs, HashMap.empty).get
     val (s0, v) = evalExtractPureMethod(logika, smt2, state, None(), None(), owner, id, inv, reporter)
     val (s1, sym) = logika.value2Sym(s0, v, pos)
-    return (s1, sym)
+    return (s1, ISZ(sym))
   }
 
   def addValueInv(logika: Logika, smt2: Smt2, rtCheck: B, state: State, receiver: State.Value.Sym, pos: Position,

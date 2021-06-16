@@ -2226,24 +2226,25 @@ import Util._
     val pos = namePosOpt.get
     val s3 = s2(claims = s2.claims :+ State.Claim.Let.CurrentName(rhs, ids, namePosOpt))
     val tipe = rhs.tipe
-    if (!th.isMutable(tipe, T)) {
+    val s7: State = if (!th.isMutable(tipe, T)) {
       val (s4, cond) = s3.freshSym(AST.Typed.b, pos)
-      return s4.addClaims(ISZ(State.Claim.Let.Binary(cond, rhs, AST.Exp.BinaryOp.Eq, rt.ctx.get(ids).get, tipe),
+      s4.addClaims(ISZ(State.Claim.Let.Binary(cond, rhs, AST.Exp.BinaryOp.Eq, rt.ctx.get(ids).get, tipe),
         State.Claim.Prop(T, cond)))
     } else if (AST.Util.isSeq(tipe)) {
       val (s4, size1) = s3.freshSym(AST.Typed.z, pos)
       val (s5, size2) = s4.freshSym(AST.Typed.z, pos)
       val (s6, cond) = s5.freshSym(AST.Typed.b, pos)
       val o1 = rt.ctx.get(ids).get
-      return s6.addClaims(ISZ(
+      s6.addClaims(ISZ(
         State.Claim.Let.FieldLookup(size1, o1, "size"),
         State.Claim.Let.FieldLookup(size2, rhs, "size"),
         State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
         State.Claim.Prop(T, cond)
       ))
     } else {
-      return s3
+      s3
     }
+    return s7
   }
 
   def evalAssignThisVarH(s0: State, id: String, rhs: State.Value, pos: Position, reporter: Reporter): State = {
@@ -2251,8 +2252,9 @@ import Util._
     val receiverType = context.methodOpt.get.receiverTypeOpt.get
     val (s1, o) = idIntro(pos, s0, lcontext, "this", receiverType, None())
     val (s2, newSym) = s1.freshSym(receiverType, pos)
-    return evalAssignLocalH(F, s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs)), lcontext, "this",
+    val s3 = evalAssignLocalH(F, s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs)), lcontext, "this",
       newSym, Some(pos), reporter)
+    return s3
   }
 
   def assignRec(split: Split.Type, smt2: Smt2, s0: State, lhs: AST.Exp, rhs: State.Value.Sym, reporter: Reporter): ISZ[State] = {

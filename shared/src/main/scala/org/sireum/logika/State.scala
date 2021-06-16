@@ -53,6 +53,9 @@ import org.sireum.message.Position
   }
 
   @pure def addClaims(claims: ISZ[State.Claim]): State = {
+    if (claims.isEmpty) {
+      return this
+    }
     val thisL = this
     return thisL(claims = this.claims ++ claims)
   }
