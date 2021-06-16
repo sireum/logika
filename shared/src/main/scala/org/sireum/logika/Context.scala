@@ -41,13 +41,26 @@ object Context {
                          val fieldVarInMap: HashMap[String, State.Value.Sym],
                          val localInMap: HashMap[String, State.Value.Sym],
                          val posOpt: Option[Position]) {
-    def objectVarMap(sm: HashMap[String, AST.Typed]): HashSMap[ISZ[String], AST.Typed] = {
-      var r = HashSMap.empty[ISZ[String], AST.Typed]
-      for (x <- reads ++ modifies) {
+    def modObjectVarMap(sm: HashMap[String, AST.Typed]): HashSMap[ISZ[String], (AST.Typed, Option[Position])] = {
+      var r = HashSMap.empty[ISZ[String], (AST.Typed, Option[Position])]
+      for (x <- modifies) {
         x.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Var if res.isInObject && !r.contains(res.owner :+ res.id) =>
             val ids = res.owner :+ res.id
-            r = r + ids ~> x.typedOpt.get.subst(sm)
+            r = r + ids ~> ((x.typedOpt.get.subst(sm), x.attr.posOpt))
+          case _ =>
+        }
+      }
+      return r
+    }
+
+    def readObjectVarMap(sm: HashMap[String, AST.Typed]): HashSMap[ISZ[String], (AST.Typed, Option[Position])] = {
+      var r = HashSMap.empty[ISZ[String], (AST.Typed, Option[Position])]
+      for (x <- reads) {
+        x.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.Var if res.isInObject && !r.contains(res.owner :+ res.id) =>
+            val ids = res.owner :+ res.id
+            r = r + ids ~> ((x.typedOpt.get.subst(sm), x.attr.posOpt))
           case _ =>
         }
       }

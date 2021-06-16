@@ -905,7 +905,7 @@ import Util._
         val s0 = state
         val (s1, sym) = s0.freshSym(tpe, pos)
         val s2 = s1.addClaim(State.Claim.Def.Random(sym, pos))
-        val (s3, ss) = Util.addInv(this, smt2, rtCheck, s2, sym, pos, reporter)
+        val (s3, ss) = Util.addValueInv(this, smt2, rtCheck, s2, sym, pos, reporter)
         val s4 = s3.addClaims(for (s <- ss) yield State.Claim.Prop(T, s))
         return ISZ((s4, sym))
       }
@@ -1488,7 +1488,7 @@ import Util._
               val (info, (t, pos)) = pair
               val oldSym = oldIdMap.get(info.context :+ info.id).get
               val (ls1, newSym) = idIntro(pos, ms1, info.context, info.id, t, Some(pos))
-              val (ls2, conds) = Util.addInv(this, smt2, rtCheck, ls1, newSym, pos, reporter)
+              val (ls2, conds) = Util.addValueInv(this, smt2, rtCheck, ls1, newSym, pos, reporter)
               val ls3 = ls2.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
               if (!th.isMutable(t, T)) {
                 val (ls4, cond) = ls3.freshSym(AST.Typed.b, pos)
@@ -1617,8 +1617,8 @@ import Util._
           )
           val mctx = l.context.methodOpt.get
           var objectVarInMap = mctx.objectVarInMap
-          for (p <- mctx.objectVarMap(typeSubstMap).entries) {
-            val (ids, t) = p
+          for (p <- mctx.modObjectVarMap(typeSubstMap).entries) {
+            val (ids, (t, _)) = p
             val (s4, sym) = nameIntro(pos, s1, ids, t, None())
             objectVarInMap = objectVarInMap + ids ~> sym
             s1 = s4
@@ -2452,7 +2452,7 @@ import Util._
       for (p <- m.entries) {
         val (id, (v, t, pos)) = p
         val (s3, x) = idIntro(pos, s2, lcontext, id, t, Some(pos))
-        val (s4, conds) = Util.addInv(this, smt2, rtCheck, s3, x, pos, reporter)
+        val (s4, conds) = Util.addValueInv(this, smt2, rtCheck, s3, x, pos, reporter)
         val s5 = s4.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
         val (s6, sym) = s5.freshSym(AST.Typed.b, pos)
         s2 = s6.addClaim(State.Claim.Let.Binary(sym, x, "==", v, t))
@@ -3224,7 +3224,7 @@ import Util._
           for (p <- m.entries) {
             val (id, (v, _, pos)) = p
             val (s5, vSym) = value2Sym(s4, v, pos)
-            val (s6, conds) = Util.addInv(this, smt2, rtCheck, s5, vSym, pos, reporter)
+            val (s6, conds) = Util.addValueInv(this, smt2, rtCheck, s5, vSym, pos, reporter)
             val s7 = s6.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
             s4 = s7.addClaim(State.Claim.Let.CurrentId(T, vSym, context.methodName, id, Some(pos)))
           }
@@ -3455,6 +3455,18 @@ import Util._
         r = r :+ rewriteLocalVars(s1, body.undecls, posOpt, reporter)
       } else {
         r = r :+ s1
+      }
+    }
+    return r
+  }
+
+  @memoize def objectInvs(name: ISZ[String]): ISZ[Info.Inv] = {
+    val info = th.nameMap.get(name).get.asInstanceOf[Info.Object]
+    var r = ISZ[Info.Inv]()
+    for (stmt <- info.ast.stmts) {
+      stmt match {
+        case stmt: AST.Stmt.Inv => r = r :+ th.nameMap.get(name :+ stmt.id.value).get.asInstanceOf[Info.Inv]
+        case _ =>
       }
     }
     return r

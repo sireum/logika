@@ -410,13 +410,22 @@ object Util {
           if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None())
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
-        for (p <- mctx.objectVarMap(TypeChecker.emptySubstMap).entries) {
-          val (ids, t) = p
-          val posOpt = th.nameMap.get(ids).get.posOpt
+        var objectNames = HashSMap.empty[ISZ[String], Position]
+        for (p <- (mctx.readObjectVarMap(TypeChecker.emptySubstMap) ++
+          mctx.modObjectVarMap(TypeChecker.emptySubstMap).entries).entries) {
+          val (ids, (t, posOpt)) = p
+          val pos = posOpt.get
+          val info = th.nameMap.get(ids).get.asInstanceOf[Info.Var]
+          objectNames = objectNames + info.owner ~> pos
           val (s0, sym) = nameIntro(posOpt.get, state, ids, t, posOpt)
-          val (s1, conds) = addInv(l, smt2, T, s0, sym, posOpt.get, reporter)
+          val (s1, conds) = addValueInv(l, smt2, T, s0, sym, pos, reporter)
           state = s1.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
           objectVarInMap = objectVarInMap + ids ~> sym
+        }
+        for (p <- objectNames.entries) {
+          val (objectName, pos) = p
+          val (s0, cond) = addObjectInv(l, smt2, objectName, state, pos, reporter)
+          state = s0.addClaim(State.Claim.Prop(T, cond))
         }
         var fieldVarInMap = mctx.fieldVarInMap
         mctx.receiverTypeOpt match {
@@ -436,7 +445,7 @@ object Util {
           val (mname, id, t) = v
           val posOpt = id.attr.posOpt
           val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
-          val (s1, conds) = addInv(l, smt2, T, s0, sym, posOpt.get, reporter)
+          val (s1, conds) = addValueInv(l, smt2, T, s0, sym, posOpt.get, reporter)
           state = s1.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
           localInMap = localInMap + id.value ~> sym
         }
@@ -612,7 +621,7 @@ object Util {
       val (x, (t, namePos)) = p
       val name = x.owner :+ x.id
       val (s2, sym) = nameIntro(pos, current, name, t, Some(namePos))
-      val (s3, conds) = addInv(logika, smt2, rtCheck, s2, sym, namePos, reporter)
+      val (s3, conds) = addValueInv(logika, smt2, rtCheck, s2, sym, namePos, reporter)
       current = s3.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
       val tipe = sym.tipe
       if (!logika.th.isMutable(tipe, T)) {
@@ -837,8 +846,18 @@ object Util {
     return (res.owner, id)
   }
 
-  def addInv(logika: Logika, smt2: Smt2, rtCheck: B, state: State, receiver: State.Value.Sym, pos: Position,
-             reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
+  def addObjectInv(logika: Logika, smt2: Smt2, name: ISZ[String], state: State, pos: Position,
+                   reporter: Reporter): (State, State.Value.Sym) = {
+    val invs = logika.objectInvs(name)
+    val (owner, id) = invOwnerId(invs, None())
+    val inv = logika.invs2exp(invs, HashMap.empty).get
+    val (s0, v) = evalExtractPureMethod(logika, smt2, state, None(), None(), owner, id, inv, reporter)
+    val (s1, sym) = logika.value2Sym(s0, v, pos)
+    return (s1, sym)
+  }
+
+  def addValueInv(logika: Logika, smt2: Smt2, rtCheck: B, state: State, receiver: State.Value.Sym, pos: Position,
+                  reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     def addTupleInv(s0: State, t: AST.Typed.Tuple): (State, ISZ[State.Value.Sym]) = {
       var s1 = s0
       var i = 1
@@ -846,7 +865,7 @@ object Util {
       for (arg <- t.args) {
         val (s2, sym) = s1.freshSym(arg, pos)
         val s3 = s2.addClaim(State.Claim.Let.FieldLookup(sym, receiver, s"_$i"))
-        val (s4, syms) = Util.addInv(logika, smt2, rtCheck, s3, sym, pos, reporter)
+        val (s4, syms) = Util.addValueInv(logika, smt2, rtCheck, s3, sym, pos, reporter)
         ss = ss ++ syms
         s1 = s4
         i = i + 1

@@ -45,7 +45,7 @@ import B._
 
 def foo(az: A): Unit = {
   Contract(
-    Requires(B.inc > 0), // temp
+    Reads(inc),
     Modifies(az),
     Ensures(
       az.x > In(az).x,
