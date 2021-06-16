@@ -619,10 +619,12 @@ import Util._
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
             val (s1, r) = nameIntro(pos, s0, res.owner :+ res.id, t, None())
-            return (s1, r)
+            val (s2, conds) = Util.addValueInv(this, smt2, rtCheck, s1, r, pos, reporter)
+            return (s2.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), r)
           } else {
             val (s1, r) = evalThisIdH(s0, res.id, t, pos)
-            return (s1, r)
+            val (s2, conds) = Util.addValueInv(this, smt2, rtCheck, s1, r, pos, reporter)
+            return (s2.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), r)
           }
         case _ => halt(s"TODO: $e") // TODO
       }
@@ -858,7 +860,9 @@ import Util._
           val (s0, o) = p
           if (s0.status) {
             val (s1, sym) = s0.freshSym(t, pos)
-            r = r :+ ((s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id)), sym))
+            val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id))
+            val (s3, conds) = Util.addValueInv(this, smt2, rtCheck, s2, sym, pos, reporter)
+            r = r :+ ((s3.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), sym))
           } else {
             r = r :+ ((s0, State.errorValue))
           }
@@ -870,13 +874,15 @@ import Util._
         return (state, State.Value.Enum(tipe.asInstanceOf[AST.Typed.Name], eres.owner, eres.name, eres.ordinal, pos))
       }
 
-      def evalTupleLit(tres: AST.ResolvedInfo.Tuple): ISZ[(State, State.Value)] = {
+      def evalTupleProjection(tres: AST.ResolvedInfo.Tuple): ISZ[(State, State.Value)] = {
         var r = ISZ[(State, State.Value)]()
         val (s0, sym) = state.freshSym(tipe, pos)
         for (p <- evalExp(split, smt2, rtCheck, s0, receiverOpt.get, reporter)) {
           val (s1, v) = p
           if (s1.status) {
-            r = r :+ ((s1.addClaim(State.Claim.Let.FieldLookup(sym, v, s"_${tres.index}")), sym))
+            val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, v, s"_${tres.index}"))
+            val (s3, conds) = Util.addValueInv(this, smt2, rtCheck, s2, sym, pos, reporter)
+            r = r :+ ((s3.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), sym))
           } else {
             r = r :+ ((s1, State.errorValue))
           }
@@ -894,7 +900,7 @@ import Util._
         case res: AST.ResolvedInfo.EnumElement => return ISZ(evalEnumElement(res))
         case res: AST.ResolvedInfo.Tuple =>
           assert(receiverOpt.nonEmpty)
-          return evalTupleLit(res)
+          return evalTupleProjection(res)
         case _ => halt(s"TODO: $e") // TODO
       }
     }
@@ -1066,8 +1072,11 @@ import Util._
         val (_, seq) = p0
         val (s1, i) = p1
         val s2 = checkSeqIndexing(smt2, rtCheck, s1, seq, i, exp.args(0).posOpt, reporter)
-        val (s3, v) = s2.freshSym(exp.typedOpt.get, exp.posOpt.get)
-        r = r :+ ((s3.addClaim(State.Claim.Let.SeqLookup(v, seq, i)), v))
+        val pos = exp.posOpt.get
+        val (s3, v) = s2.freshSym(exp.typedOpt.get, pos)
+        val s4 = s3.addClaim(State.Claim.Let.SeqLookup(v, seq, i))
+        val (s5, conds) = Util.addValueInv(this, smt2, rtCheck, s4, v, pos, reporter)
+        r = r :+ ((s5.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), v))
       }
       return r
     }
@@ -1200,11 +1209,6 @@ import Util._
     def evalQuantEachIndex(quant: AST.Exp.QuantEach, seqExp: AST.Exp): ISZ[(State, State.Value)] = {
       val qVarType = quant.attr.typedOpt.get
       val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
-      val sType: AST.Typed.Name = seqExp.typedOpt.get match {
-        case t: AST.Typed.Name => t
-        case t: AST.Typed.Method => t.tpe.ret.asInstanceOf[AST.Typed.Name]
-        case _ => halt("Infeasible")
-      }
       val s0 = state
       val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
       var r = ISZ[(State, State.Value)]()
@@ -1525,7 +1529,7 @@ import Util._
               val (p, t, arg, _) = q
               if (modLocals.contains(p)) {
                 val (ms2, v) = idIntro(arg.posOpt.get, ms1, p.context, p.id, t, None())
-                ms1 = singleState(assignRec(Split.Disabled, smt2, ms2, arg, v, reporter))
+                ms1 = singleState(assignRec(Split.Disabled, smt2, rtCheck, ms2, arg, v, reporter))
               }
             }
             var rwLocals: ISZ[AST.ResolvedInfo.LocalVar] = for (q <- paramArgs) yield q._1
@@ -1665,9 +1669,10 @@ import Util._
         }
         val invs: ISZ[Info.Inv] =
           if (info.isHelper || info.strictPureBodyOpt.nonEmpty) ISZ()
-          else Util.retrieveInvs(th, res.owner, res.isInObject)
+          else retrieveInvs(res.owner, res.isInObject)
         s1 = {
-          val pis = logikaComp.evalInvs(posOpt, F, "Pre-invariant", smt2, rtCheck, s1, invs, typeSubstMap, reporter)
+          val pis = Util.checkInvs(logikaComp, posOpt, F, "Pre-invariant", smt2, rtCheck, s1, context.receiverTypeOpt,
+            invs, typeSubstMap, reporter)
           s1(status = pis.status, nextFresh = pis.nextFresh)
         }
         contract match {
@@ -1761,7 +1766,8 @@ import Util._
         for (sv <- oldR) {
           val (s9, sym) = sv
           if (s9.status) {
-            val s10 = logikaComp.evalInvs(posOpt, T, "Post-invariant", smt2, rtCheck, s9, invs, typeSubstMap, reporter)
+            val s10 = Util.checkInvs(logikaComp, posOpt, T, "Post-invariant", smt2, rtCheck, s9, context.receiverTypeOpt,
+              invs, typeSubstMap, reporter)
             if (s10.nextFresh > nextFresh) {
               nextFresh = s10.nextFresh
             }
@@ -2212,8 +2218,8 @@ import Util._
     return s1(claims = s1.claims :+ State.Claim.Let.CurrentId(F, rhs, lcontext, id, idPosOpt))
   }
 
-  def evalAssignObjectVarH(s0: State, ids: ISZ[String], rhs: State.Value.Sym, namePosOpt: Option[Position],
-                           reporter: Reporter): State = {
+  def evalAssignObjectVarH(smt2: Smt2, rtCheck: B, s0: State, ids: ISZ[String], rhs: State.Value.Sym,
+                           namePosOpt: Option[Position], reporter: Reporter): State = {
     val poss = StateTransformer(CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
     if (poss.isEmpty) {
       reporter.error(namePosOpt, Logika.kind, s"Missing Modifies clause for ${(ids, ".")}.")
@@ -2244,7 +2250,31 @@ import Util._
     } else {
       s3
     }
-    return s7
+    val objectName = ops.ISZOps(ids).dropRight(1)
+    if (notInContext(objectName, T)) {
+      return Util.checkInvs(this, namePosOpt, F, "Invariant after an assignment", smt2, rtCheck, s7, None(),
+        retrieveInvs(objectName, T), TypeChecker.emptySubstMap, reporter)
+    } else {
+      return s7
+    }
+  }
+
+  def notInContext(name: ISZ[String], isInObject: B): B = {
+    context.methodOpt match {
+      case Some(cm) if cm.name.size > 1 =>
+        if (isInObject) {
+          if (context.receiverTypeOpt.nonEmpty) {
+            return T
+          }
+        } else {
+          if (context.receiverTypeOpt.isEmpty) {
+            return T
+          }
+        }
+        val mContext = ops.ISZOps(cm.name).dropRight(1)
+        return mContext != name
+      case _ => return name.nonEmpty
+    }
   }
 
   def evalAssignThisVarH(s0: State, id: String, rhs: State.Value, pos: Position, reporter: Reporter): State = {
@@ -2257,7 +2287,8 @@ import Util._
     return s3
   }
 
-  def assignRec(split: Split.Type, smt2: Smt2, s0: State, lhs: AST.Exp, rhs: State.Value.Sym, reporter: Reporter): ISZ[State] = {
+  def assignRec(split: Split.Type, smt2: Smt2, rtCheck: B, s0: State, lhs: AST.Exp, rhs: State.Value.Sym,
+                reporter: Reporter): ISZ[State] = {
     lhs match {
       case lhs: AST.Exp.Ident =>
         lhs.attr.resOpt.get match {
@@ -2265,7 +2296,7 @@ import Util._
             return ISZ(evalAssignLocalH(F, s0, res.context, res.id, rhs, lhs.posOpt, reporter))
           case res: AST.ResolvedInfo.Var =>
             if (res.isInObject) {
-              return ISZ(evalAssignObjectVarH(s0, res.owner :+ res.id, rhs, lhs.posOpt, reporter))
+              return ISZ(evalAssignObjectVarH(smt2, rtCheck, s0, res.owner :+ res.id, rhs, lhs.posOpt, reporter))
             } else {
               return ISZ(evalAssignThisVarH(s0, lhs.id.value, rhs, lhs.posOpt.get, reporter))
             }
@@ -2283,7 +2314,7 @@ import Util._
           val s3 = checkSeqIndexing(smt2, T, s2, a, i, lhs.args(0).posOpt, reporter)
           if (s3.status) {
             val (s4, newSym) = s3.freshSym(t, receiverPos)
-            r = r ++ assignRec(split, smt2, s4.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs)), receiver,
+            r = r ++ assignRec(split, smt2, rtCheck, s4.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs)), receiver,
               newSym, reporter)
           } else {
             r = r :+ s3
@@ -2300,8 +2331,8 @@ import Util._
           if (s1.status) {
             val (s2, newSym) = s1.freshSym(t, receiverPos)
             val id = lhs.id.value
-            r = r ++ assignRec(split, smt2, s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs)),
-              receiver, newSym, reporter)
+            val s3 = s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs))
+            r = r ++ assignRec(split, smt2, rtCheck, s3, receiver, newSym, reporter)
           } else {
             r = r :+ s1
           }
@@ -2842,50 +2873,6 @@ import Util._
     }
   }
 
-  def evalInvs(posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State,
-               invs: ISZ[Info.Inv], substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
-    val pos = posOpt.get
-    def spInv(): Option[State] = {
-      val claim: AST.Exp = invs2exp(invs, substMap) match {
-        case Some(exp) => exp
-        case _ => return Some(s0)
-      }
-      val tOpt: Option[ISZ[AST.Typed]] = context.receiverTypeOpt match {
-        case Some(receiverType: AST.Typed.Name) if substMap.nonEmpty => Some(receiverType.args)
-        case _ => None()
-      }
-      val (owner, id) = Util.invOwnerId(invs, tOpt)
-      val (s1, v) = Util.evalExtractPureMethod(this, smt2, s0, context.receiverTypeOpt, None(), owner, id, claim, reporter)
-      if (!s1.status) {
-        return None()
-      }
-      val (s2, sym) = value2Sym(s1, v, pos)
-      if (isAssume) {
-        val s3 = evalAssumeH(T, smt2, title, s2, sym, posOpt, reporter)
-        return Some(s3)
-      } else {
-        val s3 = evalAssertH(T, smt2, title, s2, sym, posOpt, reporter)
-        if (!s3.status) {
-          return None()
-        }
-        return Some(s3)
-      }
-    }
-    val oldIgnore = reporter.ignore
-    reporter.setIgnore(T)
-    val sOpt = spInv()
-    reporter.setIgnore(oldIgnore)
-    sOpt match {
-      case Some(s) => return s
-      case _ =>
-    }
-    var s4 = s0
-    for (inv <- invs if s4.status) {
-      s4 = evalInv(posOpt, isAssume, title, smt2, rtCheck, s4, inv.ast, reporter)
-    }
-    return s4
-  }
-
   def evalInv(posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State, invStmt: AST.Stmt.Inv, reporter: Reporter): State = {
     var s1 = s0
     var i = 0
@@ -2933,7 +2920,8 @@ import Util._
         val (s1, init) = p
         if (s1.status) {
           val (s2, sym) = value2Sym(s1, init, assignStmt.rhs.asStmt.posOpt.get)
-          r = r ++ (for (s3 <- assignRec(split, smt2, s2, assignStmt.lhs, sym, reporter)) yield conjunctClaimSuffix(s0, s3))
+          r = r ++ (for (s3 <- assignRec(split, smt2, rtCheck, s2, assignStmt.lhs, sym, reporter)) yield
+            conjunctClaimSuffix(s0, s3))
         } else {
           r = r :+ s1
         }
@@ -3462,16 +3450,33 @@ import Util._
     return r
   }
 
-  @memoize def objectInvs(name: ISZ[String]): ISZ[Info.Inv] = {
-    val info = th.nameMap.get(name).get.asInstanceOf[Info.Object]
-    var r = ISZ[Info.Inv]()
-    for (stmt <- info.ast.stmts) {
-      stmt match {
-        case stmt: AST.Stmt.Inv => r = r :+ th.nameMap.get(name :+ stmt.id.value).get.asInstanceOf[Info.Inv]
-        case _ =>
+  @memoize def retrieveInvs(context: ISZ[String], isObject: B): ISZ[Info.Inv] = {
+    if (context.isEmpty) {
+      return th.worksheetInvs
+    }
+    var is = ISZ[Info.Inv]()
+    if (isObject) {
+      val info = th.nameMap.get(context).get.asInstanceOf[Info.Object]
+      for (stmt <- info.ast.stmts) {
+        stmt match {
+          case stmt: AST.Stmt.Inv => is = is :+ th.nameMap.get(context :+ stmt.id.value).get.asInstanceOf[Info.Inv]
+          case _ =>
+        }
+      }
+    } else {
+      val (stmts, invs): (ISZ[AST.Stmt], HashSMap[String, Info.Inv]) = th.typeMap.get(context).get match {
+        case info: TypeInfo.Adt => (info.ast.stmts, info.invariants)
+        case info: TypeInfo.Sig => (info.ast.stmts, info.invariants)
+        case info => halt(s"Infeasible: $info")
+      }
+      for (stmt <- stmts) {
+        stmt match {
+          case stmt: AST.Stmt.Inv => is = is :+ invs.get(stmt.id.value).get
+          case _ =>
+        }
       }
     }
-    return r
+    return is
   }
 
   @pure def singleStateValue(ps: ISZ[(State, State.Value)]): (State, State.Value) = {

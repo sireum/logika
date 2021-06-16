@@ -377,7 +377,7 @@ object Util {
       else if (logika.context.methodOpt.get.receiverTypeOpt.isEmpty) st"${(logika.context.methodName, ".")}".render
       else st"${(ops.ISZOps(logika.context.methodName).dropRight(1), ".")}#${logika.context.methodName(0)}".render
     val title: String = if (isPre) s"Method $methodName pre-invariant" else s"Method $methodName post-invariant"
-    return logika.evalInvs(posOpt, isPre, title, smt2, T, state, invs, substMap, reporter)
+    return checkInvs(logika, posOpt, isPre, title, smt2, T, state, logika.context.receiverTypeOpt, invs, substMap, reporter)
   }
 
   def checkMethod(th: TypeHierarchy,
@@ -452,7 +452,7 @@ object Util {
         l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
           localInMap = localInMap))))
       }
-      val invs = retrieveInvs(th, res.owner, res.isInObject)
+      val invs = logika.retrieveInvs(res.owner, res.isInObject)
       val statePreReqInvSize = state.claims.size
       state = checkInv(T, state, logika, smt2, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
       val stmts = method.bodyOpt.get.stmts
@@ -808,34 +808,6 @@ object Util {
     return ufd.reporter.messages
   }
 
-  def retrieveInvs(th: TypeHierarchy, context: ISZ[String], isObject: B): ISZ[Info.Inv] = {
-    var is = ISZ[Info.Inv]()
-    if (context.isEmpty) {
-      return th.worksheetInvs
-    }
-    if (isObject) {
-      for (stmt <- th.nameMap.get(context).get.asInstanceOf[Info.Object].ast.stmts) {
-        stmt match {
-          case stmt: AST.Stmt.Inv => is = is :+ th.nameMap.get(context :+ stmt.id.value).get.asInstanceOf[Info.Inv]
-          case _ =>
-        }
-      }
-    } else {
-      val (stmts, invs): (ISZ[AST.Stmt], HashSMap[String, Info.Inv]) = th.typeMap.get(context).get match {
-        case info: TypeInfo.Adt => (info.ast.stmts, info.invariants)
-        case info: TypeInfo.Sig => (info.ast.stmts, info.invariants)
-        case info => halt(s"Infeasible: $info")
-      }
-      for (stmt <- stmts) {
-        stmt match {
-          case stmt: AST.Stmt.Inv => is = is :+ invs.get(stmt.id.value).get
-          case _ =>
-        }
-      }
-    }
-    return is
-  }
-
   @pure def invOwnerId(invs: ISZ[Info.Inv], typeArgsOpt: Option[ISZ[AST.Typed]]): (ISZ[String], String) = {
     val res = invs(0).resOpt.get.asInstanceOf[AST.ResolvedInfo.Inv]
     val tOpt: Option[ST] = typeArgsOpt match {
@@ -848,7 +820,7 @@ object Util {
 
   def addObjectInv(logika: Logika, smt2: Smt2, name: ISZ[String], state: State, pos: Position,
                    reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
-    val invs = logika.objectInvs(name)
+    val invs = logika.retrieveInvs(name, T)
     if (invs.isEmpty) {
       return (state, ISZ())
     }
@@ -956,5 +928,50 @@ object Util {
       }
     }
     return State.Value.Range(n, t, pos)
+  }
+
+  def checkInvs(logika: Logika, posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State,
+                receiverTypeOpt: Option[AST.Typed], invs: ISZ[Info.Inv], substMap: HashMap[String, AST.Typed],
+                reporter: Reporter): State = {
+    val pos = posOpt.get
+    def spInv(): Option[State] = {
+      val claim: AST.Exp = logika.invs2exp(invs, substMap) match {
+        case Some(exp) => exp
+        case _ => return Some(s0)
+      }
+      val tOpt: Option[ISZ[AST.Typed]] = receiverTypeOpt match {
+        case Some(receiverType: AST.Typed.Name) if substMap.nonEmpty => Some(receiverType.args)
+        case _ => None()
+      }
+      val (owner, id) = Util.invOwnerId(invs, tOpt)
+      val (s1, v) = evalExtractPureMethod(logika, smt2, s0, receiverTypeOpt, None(), owner, id, claim, reporter)
+      if (!s1.status) {
+        return None()
+      }
+      val (s2, sym) = logika.value2Sym(s1, v, pos)
+      if (isAssume) {
+        val s3 = logika.evalAssumeH(T, smt2, title, s2, sym, posOpt, reporter)
+        return Some(s3)
+      } else {
+        val s3 = logika.evalAssertH(T, smt2, title, s2, sym, posOpt, reporter)
+        if (!s3.status) {
+          return None()
+        }
+        return Some(s3)
+      }
+    }
+    val oldIgnore = reporter.ignore
+    reporter.setIgnore(T)
+    val sOpt = spInv()
+    reporter.setIgnore(oldIgnore)
+    sOpt match {
+      case Some(s) => return s
+      case _ =>
+    }
+    var s4 = s0
+    for (inv <- invs if s4.status) {
+      s4 = logika.evalInv(posOpt, isAssume, title, smt2, rtCheck, s4, inv.ast, reporter)
+    }
+    return s4
   }
 }
