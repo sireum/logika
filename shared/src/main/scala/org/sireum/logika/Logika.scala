@@ -38,15 +38,15 @@ import org.sireum.lang.tipe.TypeOutliner.ExpTypedSubst
 object Logika {
 
   @enum object Split {
-    'Default
-    'Enabled
-    'Disabled
+    "Default"
+    "Enabled"
+    "Disabled"
   }
 
   object Reporter {
     object Info {
       @enum object Kind {
-        'Verified
+        "Verified"
       }
     }
     def create: Reporter = {
@@ -413,11 +413,11 @@ object Logika {
 import Logika._
 import Util._
 
-@datatype class Logika(th: lang.tipe.TypeHierarchy,
-                       config: Config,
-                       context: Context,
-                       inPfc: B,
-                       plugins: ISZ[Plugin]) {
+@datatype class Logika(val th: lang.tipe.TypeHierarchy,
+                       val config: Config,
+                       val context: Context,
+                       val inPfc: B,
+                       val plugins: ISZ[Plugin]) {
 
   @pure def isBasic(smt2: Smt2, t: AST.Typed): B = {
     if (Smt2.basicTypes.contains(t)) {

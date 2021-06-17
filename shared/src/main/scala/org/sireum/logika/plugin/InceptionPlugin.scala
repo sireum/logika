@@ -35,10 +35,10 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
 object InceptionPlugin {
-  @record class Substitutor(substMap: HashMap[String, AST.Typed],
-                            context: QName,
-                            paramMap: HashSMap[String, AST.Exp],
-                            reporter: Reporter) extends AST.MTransformer {
+  @record class Substitutor(val substMap: HashMap[String, AST.Typed],
+                            val context: QName,
+                            val paramMap: HashSMap[String, AST.Exp],
+                            val reporter: Reporter) extends AST.MTransformer {
     override def preTyped(o: AST.Typed): AST.MTransformer.PreResult[AST.Typed] = {
       o match {
         case o: AST.Typed.TypeVar =>

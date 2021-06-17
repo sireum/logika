@@ -32,7 +32,7 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 
 object PredNatDedPlugin {
 
-  @record class LocalSubstitutor(map: HashMap[(ISZ[String], String), AST.Exp]) extends AST.MTransformer {
+  @record class LocalSubstitutor(val map: HashMap[(ISZ[String], String), AST.Exp]) extends AST.MTransformer {
     override def preExpIdent(o: AST.Exp.Ident): AST.MTransformer.PreResult[AST.Exp] = {
       o.attr.resOpt.get match {
         case res: AST.ResolvedInfo.LocalVar =>

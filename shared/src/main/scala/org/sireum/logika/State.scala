@@ -31,9 +31,9 @@ import org.sireum.lang.ast.Typed
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.Position
 
-@datatype class State(status: B,
-                      claims: ISZ[State.Claim],
-                      nextFresh: org.sireum.Z) {
+@datatype class State(val status: B,
+                      val claims: ISZ[State.Claim],
+                      val nextFresh: org.sireum.Z) {
 
   @pure def toST: ST = {
     val r =
@@ -96,9 +96,9 @@ object State {
 
   @datatype trait Fun
 
-  @datatype class IFun(tipe: AST.Typed.Name, id: String) extends Fun
+  @datatype class IFun(val tipe: AST.Typed.Name, val id: String) extends Fun
 
-  @datatype class OFun(name: ISZ[String]) extends Fun
+  @datatype class OFun(val name: ISZ[String]) extends Fun
 
 
   object Value {
@@ -113,7 +113,7 @@ object State {
       }
     }
 
-    @datatype class B(value: org.sireum.B, @hidden val pos: Position) extends Value {
+    @datatype class B(val value: org.sireum.B, @hidden val pos: Position) extends Value {
       @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.b
       }
@@ -127,7 +127,7 @@ object State {
       }
     }
 
-    @datatype class Z(value: org.sireum.Z, @hidden val pos: Position) extends Value {
+    @datatype class Z(val value: org.sireum.Z, @hidden val pos: Position) extends Value {
       @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.z
       }
@@ -137,7 +137,7 @@ object State {
       }
     }
 
-    @datatype class C(value: org.sireum.C, @hidden val pos: Position) extends Value {
+    @datatype class C(val value: org.sireum.C, @hidden val pos: Position) extends Value {
       @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.c
       }
@@ -147,7 +147,7 @@ object State {
       }
     }
 
-    @datatype class F32(value: org.sireum.F32, @hidden val pos: Position) extends Value {
+    @datatype class F32(val value: org.sireum.F32, @hidden val pos: Position) extends Value {
       @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.f32
       }
@@ -157,7 +157,7 @@ object State {
       }
     }
 
-    @datatype class F64(value: org.sireum.F64, @hidden val pos: Position) extends Value {
+    @datatype class F64(val value: org.sireum.F64, @hidden val pos: Position) extends Value {
       @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.f64
       }
@@ -167,7 +167,7 @@ object State {
       }
     }
 
-    @datatype class R(value: org.sireum.R, @hidden val pos: Position) extends Value {
+    @datatype class R(val value: org.sireum.R, @hidden val pos: Position) extends Value {
       @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.r
       }
@@ -177,7 +177,7 @@ object State {
       }
     }
 
-    @datatype class String(value: org.sireum.String, @hidden val pos: Position) extends Value {
+    @datatype class String(val value: org.sireum.String, @hidden val pos: Position) extends Value {
       @pure override def tipe: AST.Typed.Name = {
         return AST.Typed.string
       }
@@ -198,66 +198,66 @@ object State {
       @pure def valueString: org.sireum.String
     }
 
-    @datatype class Range(value: org.sireum.Z, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
+    @datatype class Range(val value: org.sireum.Z, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
       @pure override def valueString: org.sireum.String = {
         return value.string
       }
     }
 
-    @datatype class S8(value: org.sireum.S8, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
+    @datatype class S8(val value: org.sireum.S8, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
       @pure override def valueString: org.sireum.String = {
         return value.string
       }
     }
 
-    @datatype class S16(value: org.sireum.S16, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
+    @datatype class S16(val value: org.sireum.S16, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
       @pure override def valueString: org.sireum.String = {
         return value.string
       }
     }
 
-    @datatype class S32(value: org.sireum.S32, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
+    @datatype class S32(val value: org.sireum.S32, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
       @pure override def valueString: org.sireum.String = {
         return value.string
       }
     }
 
-    @datatype class S64(value: org.sireum.S64, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
+    @datatype class S64(val value: org.sireum.S64, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
       @pure override def valueString: org.sireum.String = {
         return value.string
       }
     }
 
-    @datatype class U8(value: org.sireum.U8, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
+    @datatype class U8(val value: org.sireum.U8, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
       @pure override def valueString: org.sireum.String = {
         return value.string
       }
     }
 
-    @datatype class U16(value: org.sireum.U16, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
+    @datatype class U16(val value: org.sireum.U16, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
       @pure override def valueString: org.sireum.String = {
         return value.string
       }
     }
 
-    @datatype class U32(value: org.sireum.U32, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
+    @datatype class U32(val value: org.sireum.U32, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
       @pure override def valueString: org.sireum.String = {
         return value.string
       }
     }
 
-    @datatype class U64(value: org.sireum.U64, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
+    @datatype class U64(val value: org.sireum.U64, val tipe: AST.Typed.Name, @hidden val pos: Position) extends SubZ {
       @pure override def valueString: org.sireum.String = {
         return value.string
       }
     }
 
-    @datatype class Enum(val tipe: AST.Typed.Name, owner: ISZ[org.sireum.String], id: org.sireum.String,
-                         ordinal: org.sireum.Z, @hidden val pos: Position) extends Value {
+    @datatype class Enum(val tipe: AST.Typed.Name, val owner: ISZ[org.sireum.String], val id: org.sireum.String,
+                         val ordinal: org.sireum.Z, @hidden val pos: Position) extends Value {
       @strictpure override def toRawST: ST = st"${(owner, ".")}.$id"
     }
 
-    @datatype class Sym(num: org.sireum.Z, @hidden val tipe: AST.Typed, @hidden val pos: Position) extends Value {
+    @datatype class Sym(val num: org.sireum.Z, @hidden val tipe: AST.Typed, @hidden val pos: Position) extends Value {
 
       @pure override def toRawST: ST = {
         return st"$symPrefix$num@[${pos.beginLine},${pos.beginColumn}]"
@@ -315,7 +315,7 @@ object State {
       @pure def claims: ISZ[Claim]
     }
 
-    @datatype class Label(label: String, pos: Position) extends Claim {
+    @datatype class Label(val label: String, val pos: Position) extends Claim {
       @pure override def toRawST: ST = {
         pos.uriOpt match {
           case Some(uri) =>
@@ -337,7 +337,7 @@ object State {
       }
     }
 
-    @datatype class Prop(isPos: B, value: Value.Sym) extends Claim {
+    @datatype class Prop(val isPos: B, val value: Value.Sym) extends Claim {
       @pure override def toRawST: ST = {
         return if (isPos) value.toRawST else st"¬(${value.toRawST})"
       }
@@ -505,9 +505,9 @@ object State {
       }
     }
 
-    @datatype class If(cond: Value.Sym,
-                       tClaims: ISZ[Claim],
-                       fClaims: ISZ[Claim]) extends Composite {
+    @datatype class If(val cond: Value.Sym,
+                       val tClaims: ISZ[Claim],
+                       val fClaims: ISZ[Claim]) extends Composite {
 
       @strictpure override def claims: ISZ[Claim] = tClaims ++ fClaims
 
@@ -561,7 +561,7 @@ object State {
 
     object Def {
 
-      @datatype class SeqLit(val sym: Value.Sym, args: ISZ[SeqLit.Arg]) extends Def {
+      @datatype class SeqLit(val sym: Value.Sym, val args: ISZ[SeqLit.Arg]) extends Def {
         @pure def tipe: AST.Typed.Name = {
           return sym.tipe.asInstanceOf[AST.Typed.Name]
         }
@@ -576,10 +576,10 @@ object State {
       }
 
       object SeqLit {
-        @datatype class Arg(index: Value, value: Value)
+        @datatype class Arg(val index: Value, val value: Value)
       }
 
-      @datatype class SeqStore(val sym: Value.Sym, seq: Value, index: Value, element: Value) extends Def {
+      @datatype class SeqStore(val sym: Value.Sym, val seq: Value, val index: Value, val element: Value) extends Def {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${seq.toRawST}(${index.toRawST} ~> ${element.toRawST})"
         }
@@ -589,7 +589,7 @@ object State {
         }
       }
 
-      @datatype class FieldStore(val sym: Value.Sym, adt: Value, id: String, value: Value) extends Def {
+      @datatype class FieldStore(val sym: Value.Sym, val adt: Value, val id: String, val value: Value) extends Def {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${adt.toRawST}($id = ${value.toRawST})"
         }
@@ -599,7 +599,7 @@ object State {
         }
       }
 
-      @datatype class AdtLit(val sym: Value.Sym, args: ISZ[Value]) extends Def {
+      @datatype class AdtLit(val sym: Value.Sym, val args: ISZ[Value]) extends Def {
         @pure def tipe: AST.Typed.Name = {
           return sym.tipe.asInstanceOf[AST.Typed.Name]
         }
@@ -613,7 +613,7 @@ object State {
         }
       }
 
-      @datatype class Random(val sym: Value.Sym, pos: Position) extends Def {
+      @datatype class Random(val sym: Value.Sym, val pos: Position) extends Def {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${sym.tipe}.random@[${pos.beginLine},${pos.beginColumn}]#${sym.num}"
         }
@@ -628,8 +628,8 @@ object State {
 
     object Let {
 
-      @datatype class CurrentName(val sym: Value.Sym, ids: ISZ[String],
-                                  @hidden defPosOpt: Option[Position]) extends Let {
+      @datatype class CurrentName(val sym: Value.Sym, val ids: ISZ[String],
+                                  @hidden val defPosOpt: Option[Position]) extends Let {
         @pure override def toRawST: ST = {
           return st"${(ids, ".")} == ${sym.toRawST}"
         }
@@ -645,7 +645,7 @@ object State {
         }
       }
 
-      @datatype class Name(val sym: Value.Sym, ids: ISZ[String], num: Z, poss: ISZ[Position]) extends Let {
+      @datatype class Name(val sym: Value.Sym, val ids: ISZ[String], val num: Z, val poss: ISZ[Position]) extends Let {
         @pure override def toRawST: ST = {
           return st"${(ids, ".")}@${possLines(poss)}#$num == ${sym.toRawST}"
         }
@@ -661,8 +661,8 @@ object State {
         }
       }
 
-      @datatype class CurrentId(declId: B, val sym: Value.Sym, context: ISZ[String], id: String,
-                                @hidden defPosOpt: Option[Position]) extends Let {
+      @datatype class CurrentId(val declId: B, val sym: Value.Sym, val context: ISZ[String], val id: String,
+                                @hidden val defPosOpt: Option[Position]) extends Let {
         @pure override def toRawST: ST = {
           return st"$id == ${sym.toRawST}"
         }
@@ -678,7 +678,7 @@ object State {
         }
      }
 
-      @datatype class Id(val sym: Value.Sym, context: ISZ[String], id: String, num: Z, poss: ISZ[Position]) extends Let {
+      @datatype class Id(val sym: Value.Sym, val context: ISZ[String], val id: String, val num: Z, val poss: ISZ[Position]) extends Let {
 
         @pure override def toRawST: ST = {
           return if (context.isEmpty) st"$id@${possLines(poss)}#$num == ${sym.toRawST}"
@@ -699,7 +699,7 @@ object State {
         }
       }
 
-      @datatype class Eq(val sym: Value.Sym, value: Value) extends Let {
+      @datatype class Eq(val sym: Value.Sym, val value: Value) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${value.toRawST}"
         }
@@ -715,7 +715,7 @@ object State {
         }
       }
 
-      @datatype class TypeTest(val sym: Value.Sym, isEq: B, value: Value, tipe: AST.Typed) extends Let {
+      @datatype class TypeTest(val sym: Value.Sym, val isEq: B, val value: Value, val tipe: AST.Typed) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ typeOf(${value.toRawST}) $testRel $tipe"
         }
@@ -735,7 +735,7 @@ object State {
 
         object Var {
 
-          @datatype class Id(context: ISZ[String], id: String, tipe: AST.Typed) extends Var {
+          @datatype class Id(val context: ISZ[String], val id: String, val tipe: AST.Typed) extends Var {
             @pure def toRawST: ST = {
               return st"$id: $tipe"
             }
@@ -745,7 +745,7 @@ object State {
             }
           }
 
-          @datatype class Sym(sym: Value.Sym) extends Var {
+          @datatype class Sym(val sym: Value.Sym) extends Var {
             @pure def toRawST: ST = {
               return sym.toRawST
             }
@@ -757,7 +757,7 @@ object State {
       }
 
       @datatype class Quant(val sym: Value.Sym,
-                            isAll: B, vars: ISZ[Quant.Var],
+                            val isAll: B, val vars: ISZ[Quant.Var],
                             val claims: ISZ[Claim]) extends Let with Composite {
         @pure override def toRawST: ST = {
           val r =
@@ -778,7 +778,7 @@ object State {
         }
       }
 
-      @datatype class Ite(val sym: Value.Sym, cond: Value, left: Value, right: Value) extends Let {
+      @datatype class Ite(val sym: Value.Sym, val cond: Value, val left: Value, val right: Value) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${cond.toRawST} ? ${left.toRawST} : ${right.toRawST}"
         }
@@ -788,7 +788,7 @@ object State {
         }
       }
 
-      @datatype class Binary(val sym: Value.Sym, left: Value, op: String, right: Value, tipe: AST.Typed) extends Let {
+      @datatype class Binary(val sym: Value.Sym, val left: Value, val op: String, val right: Value, val tipe: AST.Typed) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${left.toRawST} $op ${right.toRawST}"
         }
@@ -826,7 +826,7 @@ object State {
         }
       }
 
-      @datatype class Unary(val sym: Value.Sym, op: String, value: Value) extends Let {
+      @datatype class Unary(val sym: Value.Sym, val op: String, val value: Value) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ $op${value.toRawST}"
         }
@@ -836,7 +836,7 @@ object State {
         }
       }
 
-      @datatype class SeqLookup(val sym: Value.Sym, seq: Value, index: Value) extends Let {
+      @datatype class SeqLookup(val sym: Value.Sym, val seq: Value, val index: Value) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${seq.toRawST}(${index.toRawST})"
         }
@@ -846,7 +846,7 @@ object State {
         }
       }
 
-      @datatype class SeqInBound(val sym: Value.Sym, seq: Value, index: Value) extends Let {
+      @datatype class SeqInBound(val sym: Value.Sym, val seq: Value, val index: Value) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ inBound(${seq.toRawST}, ${index.toRawST})"
         }
@@ -856,7 +856,7 @@ object State {
         }
       }
 
-      @datatype class FieldLookup(val sym: Value.Sym, adt: Value, id: String) extends Let {
+      @datatype class FieldLookup(val sym: Value.Sym, val adt: Value, val id: String) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${adt.toRawST}.$id"
         }
@@ -866,7 +866,7 @@ object State {
         }
       }
 
-      @datatype class ProofFunApply(val sym: Value.Sym, pf: ProofFun, args: ISZ[Value]) extends Let {
+      @datatype class ProofFunApply(val sym: Value.Sym, val pf: ProofFun, val args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
           return if (pf.receiverTypeOpt.isEmpty)
             if (pf.context.isEmpty) st"${sym.toRawST} ≜ ${pf.id}(${(for (arg <- args) yield arg.toRawST, ", ")})"
@@ -884,7 +884,7 @@ object State {
 
       }
 
-      @datatype class Apply(val sym: Value.Sym, isLocal: B, context: ISZ[String], id: String, args: ISZ[Value]) extends Let {
+      @datatype class Apply(val sym: Value.Sym, val isLocal: B, val context: ISZ[String], val id: String, val args: ISZ[Value]) extends Let {
         @strictpure def name: ISZ[String] = context :+ id
 
         @pure override def toRawST: ST = {
@@ -900,7 +900,7 @@ object State {
         }
       }
 
-      @datatype class IApply(val sym: Value.Sym, o: Value, oTipe: AST.Typed.Name, id: String, args: ISZ[Value]) extends Let {
+      @datatype class IApply(val sym: Value.Sym, val o: Value, val oTipe: AST.Typed.Name, val id: String, val args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${o.toRawST}.$id(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
@@ -914,7 +914,7 @@ object State {
         }
       }
 
-      @datatype class TupleLit(val sym: Value.Sym, args: ISZ[Value]) extends Let {
+      @datatype class TupleLit(val sym: Value.Sym, val args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
           return if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
           else st"${sym.toRawST} ≜ (${(for (arg <- args) yield arg.toRawST, ", ")})"
@@ -932,7 +932,7 @@ object State {
         }
       }
 
-      @datatype class And(val sym: Value.Sym, args: ISZ[Value]) extends Let {
+      @datatype class And(val sym: Value.Sym, val args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
           return if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
           else if (args.size == 2) st"${sym.toRawST} ≜ ${args(0).toRawST} ∧ ${args(1).toRawST}"
@@ -958,7 +958,7 @@ object State {
         }
       }
 
-      @datatype class Or(val sym: Value.Sym, args: ISZ[Value]) extends Let {
+      @datatype class Or(val sym: Value.Sym, val args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
           return if (args.size == 1) st"${sym.toRawST} ≜ ${args(0).toRawST}"
           else if (args.size == 2) st"${sym.toRawST} ≜ ${args(0).toRawST} ∨ ${args(1).toRawST}"
@@ -984,7 +984,7 @@ object State {
         }
       }
 
-      @datatype class Imply(val sym: Value.Sym, args: ISZ[Value]) extends Let {
+      @datatype class Imply(val sym: Value.Sym, val args: ISZ[Value]) extends Let {
         @pure override def toRawST: ST = {
           return if (args.size == 2) st"${sym.toRawST} ≜ ${args(0).toRawST} → ${args(1).toRawST}"
           else st"${sym.toRawST} ≜ →(${(for (arg <- args) yield arg.toRawST, ", ")})"
@@ -1036,12 +1036,12 @@ object State {
 
   }
 
-  @datatype class ProofFun(receiverTypeOpt: Option[AST.Typed],
-                           context: ISZ[String],
-                           id: String,
-                           paramIds: ISZ[String],
-                           paramTypes: ISZ[AST.Typed],
-                           returnType: AST.Typed)
+  @datatype class ProofFun(val receiverTypeOpt: Option[AST.Typed],
+                           val context: ISZ[String],
+                           val id: String,
+                           val paramIds: ISZ[String],
+                           val paramTypes: ISZ[AST.Typed],
+                           val returnType: AST.Typed)
 
   val symPrefix: String = "α"
   val errorValue: Value.Sym = Value.Sym(0, AST.Typed.nothing, Position.none)

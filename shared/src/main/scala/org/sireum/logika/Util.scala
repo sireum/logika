@@ -274,7 +274,7 @@ object Util {
     }
   }
 
-  @datatype class CurrentIdPossCollector(context: ISZ[String], id: String) extends StateTransformer.PrePost[Set[Position]] {
+  @datatype class CurrentIdPossCollector(val context: ISZ[String], val id: String) extends StateTransformer.PrePost[Set[Position]] {
     override def preStateClaimLetCurrentId(ctx: Set[Position],
                                            o: State.Claim.Let.CurrentId): StateTransformer.PreResult[Set[Position], State.Claim.Let] = {
       return if (o.defPosOpt.nonEmpty && o.context == context && o.id == id) StateTransformer.PreResult(ctx + o.defPosOpt.get, T, None())
@@ -282,7 +282,7 @@ object Util {
     }
   }
 
-  @datatype class CurrentNamePossCollector(ids: ISZ[String]) extends StateTransformer.PrePost[ISZ[Position]] {
+  @datatype class CurrentNamePossCollector(val ids: ISZ[String]) extends StateTransformer.PrePost[ISZ[Position]] {
     override def preStateClaimLetCurrentName(ctx: ISZ[Position],
                                              o: State.Claim.Let.CurrentName): StateTransformer.PreResult[ISZ[Position], State.Claim.Let] = {
       return if (o.defPosOpt.nonEmpty && o.ids == ids) StateTransformer.PreResult(ctx :+ o.defPosOpt.get, T, None())
@@ -290,7 +290,7 @@ object Util {
     }
   }
 
-  @datatype class CurrentIdRewriter(map: HashMap[(ISZ[String], String), (ISZ[Position], Z)])
+  @datatype class CurrentIdRewriter(val map: HashMap[(ISZ[String], String), (ISZ[Position], Z)])
     extends StateTransformer.PrePost[B] {
 
     override def preStateClaimLetCurrentId(ctx: B,
@@ -304,7 +304,7 @@ object Util {
     }
   }
 
-  @datatype class CurrentNameRewriter(map: HashMap[ISZ[String], (ISZ[Position], Z)])
+  @datatype class CurrentNameRewriter(val map: HashMap[ISZ[String], (ISZ[Position], Z)])
     extends StateTransformer.PrePost[HashMap[ISZ[String], State.Value.Sym]] {
     override def preStateClaimLetCurrentName(ctx: HashMap[ISZ[String], State.Value.Sym],
                                              o: State.Claim.Let.CurrentName): StateTransformer.PreResult[HashMap[ISZ[String], State.Value.Sym], State.Claim.Let] = {

@@ -35,17 +35,17 @@ import Util._
 
 object Smt2 {
 
-  @datatype class SeqLit(t: AST.Typed.Name, size: Z)
+  @datatype class SeqLit(val t: AST.Typed.Name, val size: Z)
 
-  @datatype class AdtFieldInfo(isParam: B,
-                               isSpec: B,
-                               fieldId: String,
-                               fieldLookupId: ST,
-                               fieldStoreId: ST,
-                               fieldAdtType: ST,
-                               fieldType: AST.Typed)
+  @datatype class AdtFieldInfo(val isParam: B,
+                               val isSpec: B,
+                               val fieldId: String,
+                               val fieldLookupId: ST,
+                               val fieldStoreId: ST,
+                               val fieldAdtType: ST,
+                               val fieldType: AST.Typed)
 
-  @datatype class MemPrinter(defs: HashMap[Z, ISZ[State.Claim.Def]]) {
+  @datatype class MemPrinter(val defs: HashMap[Z, ISZ[State.Claim.Def]]) {
   }
 
   val topPrefix: String = "_"

@@ -32,14 +32,14 @@ object Smt2Query {
 
   object Result {
     @enum object Kind {
-      'Sat
-      'Unsat
-      'Unknown
-      'Timeout
-      'Error
+      "Sat"
+      "Unsat"
+      "Unknown"
+      "Timeout"
+      "Error"
     }
   }
 
-  @datatype class Result(kind: Result.Kind.Type, solverName: String, query: String, info: String, output: String, timeMillis: Z)
+  @datatype class Result(val kind: Result.Kind.Type, val solverName: String, val query: String, val info: String, val output: String, val timeMillis: Z)
 
 }
