@@ -99,46 +99,51 @@ import org.sireum.logika.Logika.Reporter
       val pos = posOpt.get
       val args = argsOpt.get
 
-      val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) =
-        if (args.isEmpty) {
-          val q = logika.evalRegularStepClaim(smt2, state, step.claim, step.id.posOpt, reporter)
-          ((q._1, q._2, state.claims ++ q._3, q._4), q._3 :+ q._4)
-        } else {
-          var s0 = state(claims = ISZ())
-          var ok = T
-          for (arg <- args) {
-            val stepNo = arg
-            spcMap.get(stepNo) match {
-              case Some(spc: StepProofContext.Regular) =>
-                s0 = s0.addClaim(State.Claim.And(spc.claims))
-              case Some(_) =>
-                reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for $id")
-                ok = F
-              case _ =>
-                reporter.error(posOpt, Logika.kind, s"Could not find proof step $stepNo")
-                ok = F
-            }
-          }
-          if (!ok) {
-            return Plugin.Result(F, s0.nextFresh, s0.claims)
-          }
-          val q = logika.evalRegularStepClaim(smt2, s0, step.claim, step.id.posOpt, reporter)
-          ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
-        }
-
       val provenClaims = HashMap ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
-        (AST.Util.deBruijn(spc.asInstanceOf[StepProofContext.Regular].exp), spc.asInstanceOf[StepProofContext.Regular].stepNo))
+        (AST.Util.deBruijn(spc.asInstanceOf[StepProofContext.Regular].exp), spc.asInstanceOf[StepProofContext.Regular]))
 
       var status = args.isEmpty
       if (status) {
-        val stepNoOpt = provenClaims.get(step.claimDeBruijn)
-        stepNoOpt match {
-          case Some(stepNo) =>
+        val spcOpt = provenClaims.get(step.claimDeBruijn)
+        spcOpt match {
+          case Some(spc) =>
+            val spcPos = spc.stepNo.posOpt.get
             reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
-              st"Accepted by using ${Plugin.stepNoDesc(F, stepNo)}".render)
+              st"""Accepted by using ${Plugin.stepNoDesc(F, spc.stepNo)} at [${spcPos.beginLine}, ${spcPos.beginColumn}], i.e.:
+                  |
+                  |${spc.exp}
+                  |""".render)
+            return Plugin.Result(T, state.nextFresh, spc.claims)
           case _ => status = F
         }
       }
+
+      val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) = if (args.isEmpty) {
+        val q = logika.evalRegularStepClaim(smt2, state, step.claim, step.id.posOpt, reporter)
+        ((q._1, q._2, state.claims ++ q._3, q._4), q._3 :+ q._4)
+      } else {
+        var s0 = state(claims = ISZ())
+        var ok = T
+        for (arg <- args) {
+          val stepNo = arg
+          spcMap.get(stepNo) match {
+            case Some(spc: StepProofContext.Regular) =>
+              s0 = s0.addClaim(State.Claim.And(spc.claims))
+            case Some(_) =>
+              reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for $id")
+              ok = F
+            case _ =>
+              reporter.error(posOpt, Logika.kind, s"Could not find proof step $stepNo")
+              ok = F
+          }
+        }
+        if (!ok) {
+          return Plugin.Result(F, s0.nextFresh, s0.claims)
+        }
+        val q = logika.evalRegularStepClaim(smt2, s0, step.claim, step.id.posOpt, reporter)
+        ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
+      }
+
       if (!status && stat) {
         val r = smt2.valid(T, log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
 
@@ -161,8 +166,12 @@ import org.sireum.logika.Logika.Reporter
       spcMap.get(num) match {
         case Some(spc: StepProofContext.Regular) =>
           if (AST.Util.deBruijn(spc.exp) == AST.Util.deBruijn(step.claim)) {
+            val spcPos = spc.stepNo.posOpt.get
             reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
-              st"Accepted by using ${Plugin.stepNoDesc(F, step.id)}".render)
+              st"""Accepted by using ${Plugin.stepNoDesc(F, spc.stepNo)} at [${spcPos.beginLine}, ${spcPos.beginColumn}], i.e.:
+                  |
+                  |${spc.exp}
+                  |""".render)
             return Plugin.Result(T, state.nextFresh, spc.claims)
           }
         case _ =>

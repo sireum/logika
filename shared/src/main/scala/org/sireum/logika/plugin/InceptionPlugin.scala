@@ -177,7 +177,7 @@ object InceptionPlugin {
           } else {
             val (stepNo, exp) = stepNoExpOpt.get
             evidence = evidence :+
-              st"""* ${Plugin.stepNoDesc(T, stepNo)} satisfies ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}], i.e.,
+              st"""* [Inferred] ${Plugin.stepNoDesc(T, stepNo)} satisfies ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}], i.e.,
                   |  ${exp.prettyST}
                   |  ≈ $ipsSubst(${require.prettyST})
                   |  = ${req.prettyST}"""
