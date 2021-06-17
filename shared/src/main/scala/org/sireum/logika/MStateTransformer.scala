@@ -34,8 +34,8 @@ import org.sireum._
 
 object MStateTransformer {
 
-  @record class PreResult[T](continu: B,
-                             resultOpt: MOption[T])
+  @record class PreResult[T](val continu: B,
+                             val resultOpt: MOption[T])
 
   val PreResultState: PreResult[State] = PreResult(T, MNone())
 

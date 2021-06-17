@@ -34,12 +34,12 @@ import org.sireum._
 
 object StateTransformer {
 
-  @datatype class PreResult[Context, T](ctx: Context,
-                                        continu: B,
-                                        resultOpt: Option[T])
+  @datatype class PreResult[Context, T](val ctx: Context,
+                                        val continu: B,
+                                        val resultOpt: Option[T])
 
-  @datatype class TPostResult[Context, T](ctx: Context,
-                                     resultOpt: Option[T])
+  @datatype class TPostResult[Context, T](val ctx: Context,
+                                          val resultOpt: Option[T])
 
   @sig trait PrePost[Context] {
 
@@ -1505,7 +1505,7 @@ object StateTransformer {
 
 import StateTransformer._
 
-@datatype class StateTransformer[Context](pp: PrePost[Context]) {
+@datatype class StateTransformer[Context](val pp: PrePost[Context]) {
 
   @pure def transformState(ctx: Context, o: State): TPostResult[Context, State] = {
     val preR: PreResult[Context, State] = pp.preState(ctx, o)
@@ -2001,7 +2001,6 @@ import StateTransformer._
       return TPostResult(postR.ctx, None())
     }
   }
-
 
   @pure def transformStateClaimDef(ctx: Context, o: State.Claim.Def): TPostResult[Context, State.Claim.Def] = {
     val preR: PreResult[Context, State.Claim.Def] = pp.preStateClaimDef(ctx, o)
