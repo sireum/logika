@@ -619,12 +619,10 @@ import Util._
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
             val (s1, r) = nameIntro(pos, s0, res.owner :+ res.id, t, None())
-            val (s2, conds) = Util.addValueInv(this, smt2, rtCheck, s1, r, pos, reporter)
-            return (s2.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), r)
+            return (Util.assumeValueInv(this, smt2, rtCheck, s1, r, pos, reporter), r)
           } else {
             val (s1, r) = evalThisIdH(s0, res.id, t, pos)
-            val (s2, conds) = Util.addValueInv(this, smt2, rtCheck, s1, r, pos, reporter)
-            return (s2.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), r)
+            return (Util.assumeValueInv(this, smt2, rtCheck, s1, r, pos, reporter), r)
           }
         case _ => halt(s"TODO: $e") // TODO
       }
@@ -861,8 +859,7 @@ import Util._
           if (s0.status) {
             val (s1, sym) = s0.freshSym(t, pos)
             val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id))
-            val (s3, conds) = Util.addValueInv(this, smt2, rtCheck, s2, sym, pos, reporter)
-            r = r :+ ((s3.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), sym))
+            r = r :+ ((Util.assumeValueInv(this, smt2, rtCheck, s2, sym, pos, reporter), sym))
           } else {
             r = r :+ ((s0, State.errorValue))
           }
@@ -881,8 +878,7 @@ import Util._
           val (s1, v) = p
           if (s1.status) {
             val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, v, s"_${tres.index}"))
-            val (s3, conds) = Util.addValueInv(this, smt2, rtCheck, s2, sym, pos, reporter)
-            r = r :+ ((s3.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), sym))
+            r = r :+ ((Util.assumeValueInv(this, smt2, rtCheck, s2, sym, pos, reporter), sym))
           } else {
             r = r :+ ((s1, State.errorValue))
           }
@@ -911,9 +907,7 @@ import Util._
         val s0 = state
         val (s1, sym) = s0.freshSym(tpe, pos)
         val s2 = s1.addClaim(State.Claim.Def.Random(sym, pos))
-        val (s3, ss) = Util.addValueInv(this, smt2, rtCheck, s2, sym, pos, reporter)
-        val s4 = s3.addClaims(for (s <- ss) yield State.Claim.Prop(T, s))
-        return ISZ((s4, sym))
+        return ISZ((Util.assumeValueInv(this, smt2, rtCheck, s2, sym, pos, reporter), sym))
       }
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random =>
@@ -1075,8 +1069,7 @@ import Util._
         val pos = exp.posOpt.get
         val (s3, v) = s2.freshSym(exp.typedOpt.get, pos)
         val s4 = s3.addClaim(State.Claim.Let.SeqLookup(v, seq, i))
-        val (s5, conds) = Util.addValueInv(this, smt2, rtCheck, s4, v, pos, reporter)
-        r = r :+ ((s5.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond)), v))
+        r = r :+ ((Util.assumeValueInv(this, smt2, rtCheck, s4, v, pos, reporter), v))
       }
       return r
     }
@@ -1129,17 +1122,32 @@ import Util._
     def evalQuantType(quant: AST.Exp.QuantType): (State, State.Value) = {
       var quantClaims = ISZ[State.Claim]()
       val (s0, sym) = state.freshSym(AST.Typed.b, quant.attr.posOpt.get)
-      var nextFresh = s0.nextFresh
+      val s1: State = {
+        var s2 = s0
+        for (p <- quant.fun.params) {
+          val id = p.idOpt.get
+          val res = AST.ResolvedInfo.LocalVar(quant.fun.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+          val pos = id.attr.posOpt.get
+          val (s3, v) = evalIdentH(s0, res, p.typedOpt.get, pos)
+          val (s4, sym) = value2Sym(s3, v, pos)
+          val (s5, conds) = Util.addValueInv(this, smt2, rtCheck, s4, sym, pos, reporter)
+          if (conds.nonEmpty) {
+            s2 = s5.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
+          }
+        }
+        conjunctClaimSuffix(s0, s2)
+      }
+      var nextFresh = s1.nextFresh
       val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
       val thisL = this
-      for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s0, quant.fun.exp, reporter)) {
-        val (s1, v) = p
-        val (s2, expSym) = value2Sym(s1, v, quant.fun.exp.asStmt.posOpt.get)
-        if (s2.status) {
-          quantClaims = quantClaims :+ State.Claim.And(ops.ISZOps(s2.claims).slice(s0.claims.size, s2.claims.size) :+ State.Claim.Prop(T, expSym))
+      for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s1, quant.fun.exp, reporter)) {
+        val (s8, v) = p
+        val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
+        if (s9.status) {
+          quantClaims = quantClaims :+ State.Claim.And(ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym))
         }
-        if (nextFresh < s2.nextFresh) {
-          nextFresh = s2.nextFresh
+        if (nextFresh < s9.nextFresh) {
+          nextFresh = s9.nextFresh
         }
       }
       val vars: ISZ[State.Claim.Let.Quant.Var] =
@@ -1147,9 +1155,14 @@ import Util._
       if (quantClaims.isEmpty) {
         return (s0(status = F), State.errorValue)
       }
-      val qcs: ISZ[State.Claim] =
+      val qcs: ISZ[State.Claim] = if (s0.claims.size != s1.claims.size) {
+        val p = s1.claims(s0.claims.size)
+        val c: State.Claim = if (quantClaims.size == 1) quantClaims(0) else State.Claim.And(quantClaims)
+        ISZ(if (quant.isForall) State.Claim.Imply(ISZ(p, c)) else State.Claim.And(ISZ(p, c)))
+      } else {
         if (quantClaims.size == 1) quantClaims(0).asInstanceOf[State.Claim.And].claims
         else ISZ(State.Claim.And(quantClaims))
+      }
       return (s0(nextFresh = nextFresh).addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, qcs)), sym)
     }
 
@@ -1281,30 +1294,39 @@ import Util._
           val s9 = s8.addClaim(State.Claim.Let.SeqLookup(select, seq, qvar))
           val s10 = s9.addClaim(State.Claim.Let.CurrentId(T, select, qVarRes.context, qVarRes.id, None()))
           val (s11, sym) = s10.freshSym(AST.Typed.b, quant.attr.posOpt.get)
+          val s12: State = {
+            val s13 = Util.assumeValueInv(this, smt2, rtCheck, s11, select, pos, reporter)
+            conjunctClaimSuffix(s11, s13)
+          }
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
           var quantClaims = ISZ[State.Claim]()
-          var nextFresh: Z = s11.nextFresh
+          var nextFresh: Z = s12.nextFresh
           val thisL = this
-          for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s11.addClaims(ISZ(nonEmptyProp, inBoundProp)), quant.fun.exp, reporter)) {
-            val (s12, v) = p
-            val (s13, expSym) = value2Sym(s12, v, quant.fun.exp.asStmt.posOpt.get)
-            if (s13.status) {
+          for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s12.addClaims(ISZ(nonEmptyProp, inBoundProp)), quant.fun.exp, reporter)) {
+            val (s15, v) = p
+            val (s16, expSym) = value2Sym(s15, v, quant.fun.exp.asStmt.posOpt.get)
+            if (s16.status) {
               val props: ISZ[State.Claim] = ISZ(nonEmptyProp, inBoundProp, State.Claim.Prop(T, expSym))
-              val s9ClaimsOps = ops.ISZOps(s13.claims)
-              val quantClaim = (s9ClaimsOps.slice(s1.claims.size, s11.claims.size) ++ s9ClaimsOps.slice(s11.claims.size + 2, s13.claims.size)) :+
+              val s9ClaimsOps = ops.ISZOps(s16.claims)
+              val quantClaim = (s9ClaimsOps.slice(s1.claims.size, s11.claims.size) ++ s9ClaimsOps.slice(s12.claims.size + 2, s16.claims.size)) :+
                 (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
               quantClaims = quantClaims :+ State.Claim.And(quantClaim)
             }
-            if (nextFresh < s13.nextFresh) {
-              nextFresh = s13.nextFresh
+            if (nextFresh < s16.nextFresh) {
+              nextFresh = s16.nextFresh
             }
           }
           if (quantClaims.isEmpty) {
             r = r :+ ((s0(status = F), State.errorValue))
           } else {
-            val qcs: ISZ[State.Claim] =
+            val qcs: ISZ[State.Claim] = if (s11.claims.size != s12.claims.size) {
+              val prem = s12.claims(s11.claims.size)
+              val c: State.Claim = if (quantClaims.size == 1) quantClaims(0) else State.Claim.And(quantClaims)
+              ISZ(if (quant.isForall) State.Claim.Imply(ISZ(prem, c)) else State.Claim.And(ISZ(prem, c)))
+            } else {
               if (quantClaims.size == 1) quantClaims(0).asInstanceOf[State.Claim.And].claims
               else ISZ(State.Claim.And(quantClaims))
+            }
             r = r :+ ((s0(nextFresh = nextFresh).addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, qcs)), sym))
           }
         } else {
@@ -1492,26 +1514,25 @@ import Util._
               val (info, (t, pos)) = pair
               val oldSym = oldIdMap.get(info.context :+ info.id).get
               val (ls1, newSym) = idIntro(pos, ms1, info.context, info.id, t, Some(pos))
-              val (ls2, conds) = Util.addValueInv(this, smt2, rtCheck, ls1, newSym, pos, reporter)
-              val ls3 = ls2.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
+              val ls2 = Util.assumeValueInv(this, smt2, rtCheck, ls1, newSym, pos, reporter)
               if (!th.isMutable(t, T)) {
-                val (ls4, cond) = ls3.freshSym(AST.Typed.b, pos)
-                val ls5 = ls4.addClaims(ISZ[State.Claim](
+                val (ls3, cond) = ls2.freshSym(AST.Typed.b, pos)
+                val ls4 = ls3.addClaims(ISZ[State.Claim](
                   State.Claim.Let.Binary(cond, newSym, AST.Exp.BinaryOp.Eq, oldSym, t),
                   State.Claim.Prop(T, cond)
                 ))
-                ms1 = ls5
+                ms1 = ls4
               } else if (AST.Util.isSeq(t)) {
-                val (ls6, size1) = ls3.freshSym(AST.Typed.z, pos)
-                val (ls7, size2) = ls6.freshSym(AST.Typed.z, pos)
-                val (ls8, cond) = ls7.freshSym(AST.Typed.b, pos)
-                val ls9 = ls8.addClaims(ISZ[State.Claim](
+                val (ls5, size1) = ls2.freshSym(AST.Typed.z, pos)
+                val (ls6, size2) = ls5.freshSym(AST.Typed.z, pos)
+                val (ls7, cond) = ls6.freshSym(AST.Typed.b, pos)
+                val ls8 = ls7.addClaims(ISZ[State.Claim](
                   State.Claim.Let.FieldLookup(size1, oldSym, "size"),
                   State.Claim.Let.FieldLookup(size2, newSym, "size"),
                   State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
                   State.Claim.Prop(T, cond)
                 ))
-                ms1 = ls9
+                ms1 = ls8
               }
             }
             if (isUnit) {
@@ -2252,7 +2273,7 @@ import Util._
     }
     val objectName = ops.ISZOps(ids).dropRight(1)
     if (notInContext(objectName, T)) {
-      return Util.checkInvs(this, namePosOpt, F, "Invariant after an assignment", smt2, rtCheck, s7, None(),
+      return Util.checkInvs(this, namePosOpt, F, "Invariant after an object field assignment", smt2, rtCheck, s7, None(),
         retrieveInvs(objectName, T), TypeChecker.emptySubstMap, reporter)
     } else {
       return s7
@@ -2332,7 +2353,19 @@ import Util._
             val (s2, newSym) = s1.freshSym(t, receiverPos)
             val id = lhs.id.value
             val s3 = s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs))
-            r = r ++ assignRec(split, smt2, rtCheck, s3, receiver, newSym, reporter)
+            if (notInContext(t.ids, F)) {
+              val typeParams: ISZ[AST.TypeParam] = th.typeMap.get(t.ids).get match {
+                case info: TypeInfo.Adt => info.ast.typeParams
+                case info: TypeInfo.Sig => info.ast.typeParams
+                case info => halt(s"Infeasible: $info")
+              }
+              val sm = TypeChecker.buildTypeSubstMap(t.ids, lhs.posOpt, typeParams, t.args, reporter).get
+              val s4 = Util.checkInvs(this, lhs.posOpt, F, "Invariant after an instance field assignment", smt2,
+                rtCheck, s3, Some(t), retrieveInvs(t.ids, T), sm, reporter)
+              r = r ++ assignRec(split, smt2, rtCheck, s4, receiver, newSym, reporter)
+            } else {
+              r = r ++ assignRec(split, smt2, rtCheck, s3, receiver, newSym, reporter)
+            }
           } else {
             r = r :+ s1
           }
@@ -2485,10 +2518,9 @@ import Util._
       for (p <- m.entries) {
         val (id, (v, t, pos)) = p
         val (s3, x) = idIntro(pos, s2, lcontext, id, t, Some(pos))
-        val (s4, conds) = Util.addValueInv(this, smt2, rtCheck, s3, x, pos, reporter)
-        val s5 = s4.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
-        val (s6, sym) = s5.freshSym(AST.Typed.b, pos)
-        s2 = s6.addClaim(State.Claim.Let.Binary(sym, x, "==", v, t))
+        val s4 = Util.assumeValueInv(this, smt2, rtCheck, s3, x, pos, reporter)
+        val (s5, sym) = s4.freshSym(AST.Typed.b, pos)
+        s2 = s5.addClaim(State.Claim.Let.Binary(sym, x, "==", v, t))
         bindings = bindings :+ sym
       }
       return (s2, bindings)
@@ -3168,7 +3200,7 @@ import Util._
         var st0 = st
         for (premise <- sequent.premises if st0.status) {
           val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, st0, premise, premise.posOpt, reporter)
-          r = r + id ~> StepProofContext.Regular(id(attr = AST.Attr(premise.posOpt)), AST.Util.deBruijn(premise), claims :+ claim)
+          r = r + id ~> StepProofContext.Regular(id(attr = AST.Attr(premise.posOpt)), premise, claims :+ claim)
           id = id(no = id.no - 1)
           st0 = st0(status = status, nextFresh = nextFresh, claims = (st0.claims ++ claims) :+ claim)
         }
@@ -3214,9 +3246,8 @@ import Util._
           for (p <- m.entries) {
             val (id, (v, _, pos)) = p
             val (s5, vSym) = value2Sym(s4, v, pos)
-            val (s6, conds) = Util.addValueInv(this, smt2, rtCheck, s5, vSym, pos, reporter)
-            val s7 = s6.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
-            s4 = s7.addClaim(State.Claim.Let.CurrentId(T, vSym, context.methodName, id, Some(pos)))
+            val s6 = Util.assumeValueInv(this, smt2, rtCheck, s5, vSym, pos, reporter)
+            s4 = s6.addClaim(State.Claim.Let.CurrentId(T, vSym, context.methodName, id, Some(pos)))
           }
           val (s8, condSym) = value2Sym(s4, cond, varPattern.pattern.posOpt.get)
           evalAssertH(T, smt2, "Variable Pattern Matching", s8, condSym, varPattern.pattern.posOpt, reporter)

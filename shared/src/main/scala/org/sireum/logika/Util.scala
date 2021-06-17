@@ -418,14 +418,12 @@ object Util {
           val info = th.nameMap.get(ids).get.asInstanceOf[Info.Var]
           objectNames = objectNames + info.owner ~> pos
           val (s0, sym) = nameIntro(posOpt.get, state, ids, t, posOpt)
-          val (s1, conds) = addValueInv(l, smt2, T, s0, sym, pos, reporter)
-          state = s1.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
+          state = assumeValueInv(l, smt2, T, s0, sym, pos, reporter)
           objectVarInMap = objectVarInMap + ids ~> sym
         }
         for (p <- objectNames.entries) {
           val (objectName, pos) = p
-          val (s0, conds) = addObjectInv(l, smt2, objectName, state, pos, reporter)
-          state = s0.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
+          state = assumeObjectInv(l, smt2, objectName, state, pos, reporter)
         }
         var fieldVarInMap = mctx.fieldVarInMap
         mctx.receiverTypeOpt match {
@@ -445,8 +443,7 @@ object Util {
           val (mname, id, t) = v
           val posOpt = id.attr.posOpt
           val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
-          val (s1, conds) = addValueInv(l, smt2, T, s0, sym, posOpt.get, reporter)
-          state = s1.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
+          state = assumeValueInv(l, smt2, T, s0, sym, posOpt.get, reporter)
           localInMap = localInMap + id.value ~> sym
         }
         l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
@@ -621,12 +618,11 @@ object Util {
       val (x, (t, namePos)) = p
       val name = x.owner :+ x.id
       val (s2, sym) = nameIntro(pos, current, name, t, Some(namePos))
-      val (s3, conds) = addValueInv(logika, smt2, rtCheck, s2, sym, namePos, reporter)
-      current = s3.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
+      current = assumeValueInv(logika, smt2, rtCheck, s2, sym, namePos, reporter)
       val tipe = sym.tipe
       if (!logika.th.isMutable(tipe, T)) {
-        val (s4, cond) = current.freshSym(AST.Typed.b, pos)
-        current = s4.addClaims(ISZ(State.Claim.Let.Binary(cond, sym, AST.Exp.BinaryOp.Eq, rt.ctx.get(name).get, tipe),
+        val (s3, cond) = current.freshSym(AST.Typed.b, pos)
+        current = s3.addClaims(ISZ(State.Claim.Let.Binary(cond, sym, AST.Exp.BinaryOp.Eq, rt.ctx.get(name).get, tipe),
           State.Claim.Prop(T, cond)))
       } else if (AST.Util.isSeq(tipe)) {
         val (s4, size1) = current.freshSym(AST.Typed.z, pos)
@@ -781,7 +777,12 @@ object Util {
         AST.Typed.Fun(T, F, paramTypes, t), owner, id, paramIds,
         AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter, logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)
-      return (s3.addClaim(State.Claim.Let.ProofFunApply(sym, pf, args)), sym)
+      val s4 = s3.addClaim(State.Claim.Let.ProofFunApply(sym, pf, args))
+      val s4ClaimsOps = ops.ISZOps(s4.claims)
+      val s5: State = if (vs.hasThis && receiverOpt.nonEmpty)
+        s4(claims = s4ClaimsOps.slice(0, state.claims.size) ++ s4ClaimsOps.slice(state.claims.size + 1, s4.claims.size))
+      else s4
+      return (s5, sym)
     } else {
       return logika.evalExp(Split.Disabled, smt2, T, state, newExp, reporter)(0)
     }
@@ -829,6 +830,12 @@ object Util {
     val (s0, v) = evalExtractPureMethod(logika, smt2, state, None(), None(), owner, id, inv, reporter)
     val (s1, sym) = logika.value2Sym(s0, v, pos)
     return (s1, ISZ(sym))
+  }
+
+  def assumeObjectInv(logika: Logika, smt2: Smt2, name: ISZ[String], state: State, pos: Position,
+                   reporter: Reporter): State = {
+    val (s0, conds) = addObjectInv(logika, smt2, name, state, pos, reporter)
+    return s0.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
   }
 
   def addValueInv(logika: Logika, smt2: Smt2, rtCheck: B, state: State, receiver: State.Value.Sym, pos: Position,
@@ -906,6 +913,12 @@ object Util {
     val (s5, cond) = evalExtractPureMethod(logika, smt2, state, Some(receiver.tipe), Some(receiver), owner, id, inv, reporter)
     val (s6, sym) = logika.value2Sym(s5, cond, pos)
     return (s6, ISZ(sym))
+  }
+
+  def assumeValueInv(logika: Logika, smt2: Smt2, rtCheck: B, state: State, receiver: State.Value.Sym, pos: Position,
+                  reporter: Reporter): State = {
+    val (s0, conds) = addValueInv(logika, smt2, rtCheck, state, receiver, pos, reporter)
+    return s0.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
   }
 
   @pure def z2SubZVal(ti: TypeInfo.SubZ, n: Z, pos: Position): State.Value = {
