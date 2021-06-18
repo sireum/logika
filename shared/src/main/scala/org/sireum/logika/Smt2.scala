@@ -72,15 +72,17 @@ object Smt2 {
   val stTrue: ST = st"true"
   val stFalse: ST = st"false"
 
-  val bvFormats: Map[Z, String] = Map.empty[Z, String] ++ ISZ[(Z, String)](
-    8 ~> "#x%02X",
-    16 ~> "#x%04X",
-    32 ~> "#x%08X",
-    64 ~> "#x%016X",
-  )
+  val bvFormats: Map[Z, String] = {
+    var m = Map.empty[Z, String]
+    m = m + 8 ~> "#x%02X"
+    m = m + 16 ~> "#x%04X"
+    m = m + 32 ~> "#x%08X"
+    m = m + 64 ~> "#x%016X"
+    m
+  }
 
   @strictpure def cST(charBitWidth: Z): ST =
-    st"""(define-sort C () (_ BitVec ${charBitWidth}))
+    st"""(define-sort C () (_ BitVec $charBitWidth))
         |(define-fun |C.unary_-| ((x C)) C (bvneg x))
         |(define-fun |C.unary_~| ((x C)) C (bvnot x))
         |(define-fun |C.<=| ((x C) (y C)) B (bvule x y))
