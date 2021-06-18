@@ -908,6 +908,7 @@ object Util {
           case Some(e) => (invOwnerId(is, Some(targs)), e)
           case _ => return (state, ISZ())
         }
+      case _: TypeInfo.Enum => return (state, ISZ())
       case _ => halt(s"Infeasible: $ti")
     }
     val (s5, cond) = evalExtractPureMethod(logika, smt2, state, Some(receiver.tipe), Some(receiver), owner, id, inv, reporter)
