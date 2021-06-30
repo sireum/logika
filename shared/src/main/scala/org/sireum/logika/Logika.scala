@@ -2585,7 +2585,7 @@ import Util._
               var claims = ISZ[State.Claim]()
               for (s12 <- evalBody(split, smt2, rOpt, rtCheck, s11.addClaim(State.Claim.And(for (b <- bindings) yield
                 State.Claim.Prop(T, b.asInstanceOf[State.Value.Sym]))), c.body, c.pattern.posOpt, reporter)) {
-                s1 = s1(nextFresh = s12.nextFresh)
+                s1 = s1(status = s1.status && s12.status, nextFresh = s12.nextFresh)
                 if (s12.status) {
                   claims = claims :+ State.Claim.And(
                     ops.ISZOps(s12.claims).slice(s1.claims.size + 1, s12.claims.size
