@@ -907,7 +907,7 @@ object Smt2 {
       val eqOp = typeOpId(t, "==")
       val neOp = typeOpId(t, "!=")
       val ordinalOp = typeOpId(t, "ordinal")
-      addTypeDecl(
+      addSort(
         st"""(declare-datatypes (($tid 0)) ((
             |  ${(for (element <- ti.elements.keys) yield st"(${typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})", " ")})))
             |(declare-fun $ordinalOp ($tid) Int)
@@ -916,12 +916,12 @@ object Smt2 {
       val elements: ISZ[ST] = for (element <- ti.elements.keys) yield enumId(owner, element)
       var ordinal = 0
       for (element <- elements) {
-        addTypeDecl(st"(declare-const $element $tid)")
-        addTypeDecl(st"(assert (= ($ordinalOp $element) $ordinal))")
+        addSort(st"(declare-const $element $tid)")
+        addSort(st"(assert (= ($ordinalOp $element) $ordinal))")
         ordinal = ordinal + 1
       }
       if (elements.size > 1) {
-        addTypeDecl(st"(assert (distinct ${(elements, " ")}))")
+        addSort(st"(assert (distinct ${(elements, " ")}))")
       }
     }
 
