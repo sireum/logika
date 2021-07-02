@@ -39,26 +39,11 @@ object cli {
     usage = "<option>* <slang-file>+",
     usageDescOpt = None(),
     opts = ISZ(
-      Opt(name = "line", longKey = "line", shortKey = None(),
-        tpe = Type.Num(None(), 0, Some(0), None()),
-        description = "Focus verification to the specified program line number"),
       Opt(name = "noRuntime", longKey = "no-runtime", shortKey = Some('r'),
         tpe = Type.Flag(F), description = "Do not use built-in runtime (use runtime in sourcepath)"),
-      Opt(name = "sat", longKey = "sat", shortKey = None(),
-        tpe = Type.Flag(F),
-        description = "Enable assumption satisfiability checking"),
-      Opt(name = "skipMethods", longKey = "skip-methods", shortKey = None(),
-        tpe = Type.Str(Some(','), None()),
-        description = "Skip checking methods with the specified fully-qualified names or identifiers"),
-      Opt(name = "skipTypes", longKey = "skip-types", shortKey = None(),
-        tpe = Type.Str(Some(','), None()),
-        description = "Skip checking traits, classes, and objects with the specified fully-qualified names or identifiers"),
       Opt(name = "sourcepath", longKey = "sourcepath", shortKey = Some('s'),
         tpe = Type.Path(T, None()),
         description = "Sourcepath of Slang .scala files"),
-      Opt(name = "unroll", longKey = "unroll", shortKey = None(),
-        tpe = Type.Flag(F),
-        description = "Enable loop unrolling when loop modifies clause is unspecified"),
     ),
     groups = ISZ(
       OptGroup(name = "Bit-width", opts = ISZ(
@@ -69,18 +54,36 @@ object cli {
           tpe = Type.Num(sep = None(), default = 0, min = None(), max = None()),
           description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)")
       )),
-      OptGroup(name = "SMT2", opts = ISZ(
-        Opt(name = "simplify", longKey = "simplify", shortKey = None(),
+      OptGroup(name = "Control", opts = ISZ(
+        Opt(name = "line", longKey = "line", shortKey = None(),
+          tpe = Type.Num(None(), 0, Some(0), None()),
+          description = "Focus verification to the specified program line number"),
+        Opt(name = "sat", longKey = "sat", shortKey = None(),
           tpe = Type.Flag(F),
-          description = "Simplify SMT2 query"
-        ),
-        Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
-          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc4", "z3")),
-          description = "Smt2 solver"
-        ),
-        Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
-          tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
-          description = "Timeout (seconds) for SMT2 solver"),
+          description = "Enable assumption satisfiability checking"),
+        Opt(name = "skipMethods", longKey = "skip-methods", shortKey = None(),
+          tpe = Type.Str(Some(','), None()),
+          description = "Skip checking methods with the specified fully-qualified names or identifiers"),
+        Opt(name = "skipTypes", longKey = "skip-types", shortKey = None(),
+          tpe = Type.Str(Some(','), None()),
+          description = "Skip checking traits, classes, and objects with the specified fully-qualified names or identifiers"),
+        Opt(name = "unroll", longKey = "unroll", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Enable loop unrolling when loop modifies clause is unspecified"),
+      )),
+      OptGroup(name = "Logging", opts = ISZ(
+        Opt(name = "logPc", longKey = "log-pc", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Display path conditions before each statement"),
+        Opt(name = "logRawPc", longKey = "log-raw-pc", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Display raw path conditions before each statement"),
+        Opt(name = "logVc", longKey = "log-vc", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Display all verification conditions"),
+        Opt(name = "logVcDir", longKey = "log-vc-dir", shortKey = None(),
+          tpe = Type.Path(F, None()),
+          description = "Write all verification conditions in a directory"),
       )),
       OptGroup(name = "Optimizations", opts = ISZ(
         Opt(name = "par", longKey = "par", shortKey = Some('p'),
@@ -107,20 +110,19 @@ object cli {
           tpe = Type.Flag(F),
           description = "Split on match expressions and statements"),
       )),
-      OptGroup(name = "Logging", opts = ISZ(
-        Opt(name = "logPc", longKey = "log-pc", shortKey = None(),
+      OptGroup(name = "SMT2", opts = ISZ(
+        Opt(name = "simplify", longKey = "simplify", shortKey = None(),
           tpe = Type.Flag(F),
-          description = "Display path conditions before each statement"),
-        Opt(name = "logRawPc", longKey = "log-raw-pc", shortKey = None(),
-          tpe = Type.Flag(F),
-          description = "Display raw path conditions before each statement"),
-        Opt(name = "logVc", longKey = "log-vc", shortKey = None(),
-          tpe = Type.Flag(F),
-          description = "Display all verification conditions"),
-        Opt(name = "logVcDir", longKey = "log-vc-dir", shortKey = None(),
-          tpe = Type.Path(F, None()),
-          description = "Write all verification conditions in a directory"),
-      ))
+          description = "Simplify SMT2 query"
+        ),
+        Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
+          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc4", "z3")),
+          description = "Smt2 solver"
+        ),
+        Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
+          tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
+          description = "Timeout (seconds) for SMT2 solver"),
+      )),
     )
   )
 
