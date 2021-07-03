@@ -183,7 +183,7 @@ object Smt2Impl {
       proc = proc.timeout(timeoutInMs * 5 / 4)
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
-      val pout: String = s"${pr.out}${pr.err}"
+      val pout: String = pr.out
       if (pout.size == 0) {
         err(pout, pr.exitCode)
       }
