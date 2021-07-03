@@ -183,38 +183,39 @@ object Smt2Impl {
       proc = proc.timeout(timeoutInMs * 5 / 4)
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
-      if (pr.out.size == 0) {
-        err(pr.out, pr.exitCode)
+      val pout: String = s"${pr.out}${pr.err}"
+      if (pout.size == 0) {
+        err(pout, pr.exitCode)
       }
       val duration = extension.Time.currentMillis - startTime
-      val out = ops.StringOps(pr.out).split(c => c == '\n' || c == '\r')
+      val out = ops.StringOps(pout).split(c => c == '\n' || c == '\r')
       val firstLine = out(0)
       val r: Smt2Query.Result = firstLine match {
         case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query,
           st"""; Result:    ${if (isSat) "Sat" else "Invalid"}
               |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pr.out, duration)
+              |; Arguments: ${(args, " ")}""".render, pout, duration)
         case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, query,
           st"""; Result:    ${if (isSat) "Unsat" else "Valid"}
               |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pr.out, duration)
+              |; Arguments: ${(args, " ")}""".render, pout, duration)
         case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, config.name, query,
           st"""; Result:    Timeout
               |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pr.out, duration)
+              |; Arguments: ${(args, " ")}""".render, pout, duration)
         case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, config.name, query,
           st"""; Result:    Don't Know
               |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pr.out, duration)
+              |; Arguments: ${(args, " ")}""".render, pout, duration)
         case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, query,
           st"""; Result:    Error
               |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pr.out, duration)
+              |; Arguments: ${(args, " ")}""".render, pout, duration)
       }
       //println(s"$exe Result (${r.kind}):")
       //println(r.output)
       if (r.kind == Smt2Query.Result.Kind.Error) {
-        err(pr.out, pr.exitCode)
+        err(pout, pr.exitCode)
       }
 
       return r
