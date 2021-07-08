@@ -317,7 +317,8 @@ object Logika {
                     skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val (rep, _, nameMap, typeMap) = extension.Cancel.cancellable(() =>
-      lang.FrontEnd.parseProgramAndGloballyResolve(par, sources, th.nameMap, th.typeMap))
+      lang.FrontEnd.parseProgramAndGloballyResolve(par, for (p <- sources) yield lang.FrontEnd.Input(p._2, p._1, 0),
+        th.nameMap, th.typeMap))
     reporter.reports(rep.messages)
     val typeCheckingStartTime = extension.Time.currentMillis
     reporter.timing(parsingDesc, typeCheckingStartTime - parsingStartTime)
