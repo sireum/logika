@@ -314,12 +314,12 @@ object Smt2 {
       st"""(assert (forall (${(params, " ")} (${v2ST(sym)} ${adtId(pf.returnType)}))
           |  (=>
           |    (= ${v2ST(sym)} ($id ${(paramIds, " ")}))
-          |    ${embeddedClaims(F, invClaims, None())}
+          |    ${embeddedClaims(F, invClaims, ISZ(), None())}
           |)))"""
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, declClaim)))
   }
 
-  def addStrictPureMethod(pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value)],
+  def addStrictPureMethod(pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value.Sym)],
                           res: State.Value.Sym, statePrefix: Z): Unit = {
     val id = proofFunId(pf)
     val context = pf.context :+ pf.id
@@ -342,7 +342,7 @@ object Smt2 {
     for (sv <- svs if sv._1.status) {
       val (s0, v) = sv
       val s0Claims = ops.ISZOps(s0.claims).slice(statePrefix, s0.claims.size)
-      ecs = ecs :+ embeddedClaims(T, s0Claims :+ State.Claim.Let.Eq(res, v), None())
+      ecs = ecs :+ embeddedClaims(T, s0Claims :+ State.Claim.Let.Eq(res, v), ISZ(v), None())
     }
 
     val resEq: ST = if (paramIds.isEmpty) st"(= $resId $id)" else st"(= $resId ($id ${(paramIds, " ")}))"
@@ -1281,7 +1281,7 @@ object Smt2 {
     }
   }
 
-  def embeddedClaims(isImply: B, claims: ISZ[State.Claim], letsOpt: Option[HashMap[Z, ISZ[State.Claim.Let]]]): ST = {
+  def embeddedClaims(isImply: B, claims: ISZ[State.Claim], initSyms: ISZ[State.Value.Sym], letsOpt: Option[HashMap[Z, ISZ[State.Claim.Let]]]): ST = {
     def collectSyms(c: State.Claim, acc: ISZ[State.Value.Sym]): ISZ[State.Value.Sym] = {
       c match {
         case c: State.Claim.Def => return acc :+ c.sym
@@ -1317,7 +1317,7 @@ object Smt2 {
     def raw: ST = {
       var lets = ISZ[State.Claim.Let]()
       var lsyms = ISZ[State.Value.Sym]()
-      var syms = ISZ[State.Value.Sym]()
+      var syms = initSyms
       var rest = ISZ[State.Claim]()
       for (i <- 0 until claims.size) {
         claims(i) match {
@@ -1411,7 +1411,7 @@ object Smt2 {
       case c: State.Claim.Let.TypeTest =>
         return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2st(c.value)}) ${typeHierarchyId(c.tipe)})"
       case c: State.Claim.Let.Quant =>
-        val body = embeddedClaims(c.isAll, c.claims, Some(lets))
+        val body = embeddedClaims(c.isAll, c.claims, ISZ(), Some(lets))
         return if (c.isAll)
           st"""(forall (${(for (x <- c.vars) yield qvar2ST(x), " ")})
               |  $body

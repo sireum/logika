@@ -681,7 +681,7 @@ object Util {
     } else {
       val posOpt = body.asStmt.posOpt
       val pos = posOpt.get
-      val (res, svs): (State.Value.Sym, ISZ[(State, State.Value)]) = {
+      val (res, svs, maxFresh): (State.Value.Sym, ISZ[(State, State.Value.Sym)], Z) = {
         val context = pf.context :+ pf.id
         val logika: Logika = logikaMethod(th, config, context,  pf.receiverTypeOpt,
           ops.ISZOps(paramIds).zip(funType.args), funType.ret, posOpt, ISZ(), ISZ(), ISZ(), plugins, implicitContextOpt)
@@ -701,12 +701,23 @@ object Util {
           }
         }
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
-        (r, logika.evalAssignExpValue(split, smt2, funType.ret, T, s0, body, reporter))
+        val svs = logika.evalAssignExpValue(split, smt2, funType.ret, T, s0, body, reporter)
+        var sss = ISZ[(State, State.Value.Sym)]()
+        var maxFresh: Z = -1
+        for (sv <- svs) {
+          val (s, v) = sv
+          val (s2, sym) = logika.value2Sym(s, v, pos)
+          sss = sss :+ ((s2, sym))
+          if (maxFresh < s2.nextFresh) {
+            maxFresh = s2.nextFresh
+          }
+        }
+        (r, sss, maxFresh)
       }
 
       smt2.addStrictPureMethod(pos, pf, svs, res, 0)
 
-      val s1 = state(nextFresh = maxStateValuesNextFresh(svs))
+      val s1 = state(nextFresh = maxFresh)
       if (config.sat) {
         val title: String = s"the derived proof function of $id"
         if (!smt2.sat(T, config.logVc, config.logVcDirOpt, title, pos, s1.claims, reporter)) {
