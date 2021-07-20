@@ -360,14 +360,14 @@ object Util {
   }
 
 
-  def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], inPfc: B, receiverTypeOpt: Option[AST.Typed],
+  def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], receiverTypeOpt: Option[AST.Typed],
                    params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position], reads: ISZ[AST.Exp.Ident],
                    modifies: ISZ[AST.Exp.Ident], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
                    implicitContext: Option[(String, Position)]): Logika = {
     val mctx = Context.Method(name, receiverTypeOpt, params, retType, reads, modifies, HashMap.empty, HashMap.empty,
       HashMap.empty, posOpt)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext)
-    return Logika(th, config, ctx, inPfc, plugins)
+    return Logika(th, config, ctx, plugins)
   }
 
   def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, invs: ISZ[lang.symbol.Info.Inv],
@@ -405,7 +405,7 @@ object Util {
             case _ => halt("Infeasible")
           }
         }
-        val l = logikaMethod(th, config, mname, F, receiverTypeOpt, method.sig.paramIdTypes,
+        val l = logikaMethod(th, config, mname, receiverTypeOpt, method.sig.paramIdTypes,
           method.sig.returnType.typedOpt.get, method.posOpt, reads, modifies,
           if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None())
         val mctx = l.context.methodOpt.get
@@ -680,19 +680,31 @@ object Util {
       return (state, pf)
     } else {
       val posOpt = body.asStmt.posOpt
-      smt2.strictPureMethodsUp(smt2.strictPureMethods + pf ~> ((st"", st"")))
-      val (res, prefix, svs): (State.Value.Sym, Z, ISZ[(State, State.Value)]) = {
+      val pos = posOpt.get
+      val (res, svs): (State.Value.Sym, ISZ[(State, State.Value)]) = {
         val context = pf.context :+ pf.id
-        val logika: Logika = logikaMethod(th, config, context, T, pf.receiverTypeOpt,
+        val logika: Logika = logikaMethod(th, config, context,  pf.receiverTypeOpt,
           ops.ISZOps(paramIds).zip(funType.args), funType.ret, posOpt, ISZ(), ISZ(), ISZ(), plugins, implicitContextOpt)
-        val s0 = state(claims = ISZ())
+        var s0 = state(claims = ISZ())
         val (s1, r) = idIntro(posOpt.get, s0, context, "Res", funType.ret, posOpt)
+        ;{
+          val s2 = assumeValueInv(logika, smt2, T, s1, r, pos, reporter)
+          smt2.addStrictPureMethodDecl(pf, r, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))
+          s0 = s1(nextFresh = s2.nextFresh)
+        }
+        for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes)) {
+          val (pid, pt) = pair
+          val (s0_1, pv) = idIntro(pos, s0, context, pid.value, pt, pid.attr.posOpt)
+          val s0_2 = assumeValueInv(logika, smt2, T, s0_1, pv, pos, reporter)
+          if (s0_2.claims.size > s0_1.claims.size) {
+            s0 = s0_2
+          }
+        }
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
-        (r, s0.claims.size, logika.evalAssignExpValue(split, smt2, funType.ret, T, s1, body, reporter))
+        (r, logika.evalAssignExpValue(split, smt2, funType.ret, T, s0, body, reporter))
       }
 
-      val pos = posOpt.get
-      smt2.addStrictPureMethod(pos, pf, svs, res, prefix)
+      smt2.addStrictPureMethod(pos, pf, svs, res, 0)
 
       val s1 = state(nextFresh = maxStateValuesNextFresh(svs))
       if (config.sat) {
@@ -859,13 +871,13 @@ object Util {
       var ss = ISZ[State.Value.Sym]()
       val t = ti.typedOpt.get
       if (ti.ast.hasMin) {
-        val (s2, minCond) = s0.freshSym(t, pos)
+        val (s2, minCond) = s0.freshSym(AST.Typed.b, pos)
         s1 = s2.addClaim(State.Claim.Let.Binary(minCond, z2SubZVal(ti, ti.ast.min, pos),
           AST.Exp.BinaryOp.Le, v, t))
         ss = ss :+ minCond
       }
       if (ti.ast.hasMax) {
-        val (s3, maxCond) = s1.freshSym(t, pos)
+        val (s3, maxCond) = s1.freshSym(AST.Typed.b, pos)
         s1 = s3.addClaim(State.Claim.Let.Binary(maxCond, v, AST.Exp.BinaryOp.Le,
           z2SubZVal(ti, ti.ast.min, pos), t))
         ss = ss :+ maxCond

@@ -56,7 +56,7 @@ object Task {
                         val stmts: ISZ[AST.Stmt],
                         val plugins: ISZ[Plugin]) extends Task {
     override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
-      val logika = Logika(th, config, Context.empty, F, plugins)
+      val logika = Logika(th, config, Context.empty, plugins)
       val itvc = IndexTypeVarCollector(HashSet.empty)
       for (stmt <- stmts) {
         itvc.transformStmt(stmt)

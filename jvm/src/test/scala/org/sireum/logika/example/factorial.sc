@@ -1,28 +1,28 @@
 // #Sireum #Logika
 import org.sireum._
 
-@strictpure def f(n: Z): Z =
-  if (n < 0) {
+@strictpure def f(num: Z): Z =
+  if (num < 0) {
     halt("Undefined")
-  } else if (n == 0) {
+  } else if (num == 0) {
     1
   } else {
-    n * f(n - 1)
+    num * f(num - 1)
   }
 
-@pure def factorial(n: Z): Z = {
+@pure def factorial(num: Z): Z = {
   Contract(
-    Requires(n >= 0),
-    Ensures(Res == f(n))
+    Requires(num >= 0),
+    Ensures(Res == f(num))
   )
   var r: Z = 1
   var i: Z = 0
-  while (i < n) {
+  while (i < num) {
     Invariant(
       Modifies(r, i),
       r == f(i),
       0 <= i,
-      i <= n
+      i <= num
     )
     i = i + 1
     r = r * i

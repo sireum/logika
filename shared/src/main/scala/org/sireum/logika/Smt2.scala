@@ -294,6 +294,31 @@ object Smt2 {
     return if (changed) Some(newClaims) else None()
   }
 
+  def addStrictPureMethodDecl(pf: State.ProofFun, sym: State.Value.Sym, invClaims: ISZ[State.Claim]): Unit = {
+    val id = proofFunId(pf)
+    val context = pf.context :+ pf.id
+    val thisId = currentLocalIdString(context, "this")
+    var paramTypes: ISZ[ST] = for (pt <- pf.paramTypes) yield typeId(pt)
+    var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(context, id)
+    var params: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
+    pf.receiverTypeOpt match {
+      case Some(receiverType) =>
+        val thisType = typeId(receiverType)
+        paramTypes = thisType +: paramTypes
+        paramIds = st"$thisId" +: paramIds
+        params = st"($thisId $thisType)" +: params
+      case _ =>
+    }
+    val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${typeId(pf.returnType)})"
+    val declClaim: ST = if (invClaims.size == 0) st"" else
+      st"""(assert (forall (${(params, " ")} (${v2ST(sym)} ${adtId(pf.returnType)}))
+          |  (=>
+          |    (= ${v2ST(sym)} ($id ${(paramIds, " ")}))
+          |    ${embeddedClaims(F, invClaims, None())}
+          |)))"""
+    strictPureMethodsUp(strictPureMethods + pf ~> ((decl, declClaim)))
+  }
+
   def addStrictPureMethod(pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value)],
                           res: State.Value.Sym, statePrefix: Z): Unit = {
     val id = proofFunId(pf)
@@ -311,45 +336,26 @@ object Smt2 {
         params = st"($thisId $thisType)" +: params
       case _ =>
     }
-    val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${typeId(pf.returnType)})"
+    val (decl, declClaim) = strictPureMethods.get(pf).get
 
-    var claimss = ISZ[ISZ[State.Claim]]()
-    for (sv <- svs) {
+    var ecs = ISZ[ST]()
+    for (sv <- svs if sv._1.status) {
       val (s0, v) = sv
       val s0Claims = ops.ISZOps(s0.claims).slice(statePrefix, s0.claims.size)
-      val acs: ISZ[State.Claim] = ISZ(State.Claim.Let.Eq(res, v))
-      v match {
-        case v: State.Value.Sym =>
-          if (s0.status) {
-            injectAdditionalClaims(v, s0Claims, acs) match {
-              case Some(ics) => claimss = claimss :+ ics
-              case _ => claimss = claimss :+ s0Claims
-            }
-          } else {
-            claimss = claimss :+ s0Claims
-          }
-        case _ =>
-          claimss = claimss :+ (s0Claims ++ acs)
-      }
-    }
-    val ecs: ISZ[ST] = {
-      val prefixClaims = State.Claim.And(ops.ISZOps(svs(0)._1.claims).slice(0, statePrefix))
-      if (prefixClaims.claims.size > 0) {
-        for (cs <- claimss) yield embeddedClaims(F, ISZ(State.Claim.Imply(ISZ(prefixClaims, State.Claim.And(cs)))), None())
-      } else {
-        for (cs <- claimss) yield embeddedClaims(F, ISZ(State.Claim.And(cs)), None())
-      }
+      ecs = ecs :+ embeddedClaims(T, s0Claims :+ State.Claim.Let.Eq(res, v), None())
     }
 
     val resEq: ST = if (paramIds.isEmpty) st"(= $resId $id)" else st"(= $resId ($id ${(paramIds, " ")}))"
 
     val claim: ST = if (ecs.size == 1)
-      st"""(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)})) (=>
+      st"""$declClaim
+          |(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)})) (=>
           |  $resEq
           |  ${ecs(0)}
           |)))"""
     else
-      st"""(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)})) (=>
+      st"""$declClaim
+          |(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)})) (=>
           |  $resEq
           |  (and
           |    ${(ecs, "\n")}
@@ -1342,7 +1348,7 @@ object Smt2 {
       val s = HashSSet.empty[State.Value.Sym] ++ syms -- lsyms
       if (s.nonEmpty) {
         body =
-          st"""(exists (${(for (sym <- s.elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})", " ")})
+          st"""(forall (${(for (sym <- s.elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})", " ")})
               |  $body)"""
       }
       return body
@@ -1381,7 +1387,7 @@ object Smt2 {
       }
       if (decls.nonEmpty) {
         r =
-          st"""(exists (${(decls, " ")})
+          st"""(forall (${(decls, " ")})
               |  $r)"""
       }
       return r

@@ -417,7 +417,6 @@ import Util._
 @datatype class Logika(val th: lang.tipe.TypeHierarchy,
                        val config: Config,
                        val context: Context,
-                       val inPfc: B,
                        val plugins: ISZ[Plugin]) {
 
   @pure def isBasic(smt2: Smt2, t: AST.Typed): B = {
@@ -1140,8 +1139,7 @@ import Util._
       }
       var nextFresh = s1.nextFresh
       val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
-      val thisL = this
-      for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s1, quant.fun.exp, reporter)) {
+      for (p <- evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s1, quant.fun.exp, reporter)) {
         val (s8, v) = p
         val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
         if (s9.status) {
@@ -1190,8 +1188,7 @@ import Util._
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(quant.fun.context, qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
-          val thisL = this
-          for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
+          for (p <- evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
             val (s9, v) = p
             val (s10, expSym) = value2Sym(s9, v, quant.fun.exp.asStmt.posOpt.get)
             if (s10.status) {
@@ -1237,8 +1234,7 @@ import Util._
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(quant.fun.context, qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s6.nextFresh
-          val thisL = this
-          for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s6.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)) {
+          for (p <- evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s6.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)) {
             val (s7, v) = p
             val (s8, expSym) = value2Sym(s7, v, quant.fun.exp.asStmt.posOpt.get)
             if (s8.status) {
@@ -1302,8 +1298,7 @@ import Util._
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s12.nextFresh
-          val thisL = this
-          for (p <- thisL(inPfc = T).evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s12.addClaims(ISZ(nonEmptyProp, inBoundProp)), quant.fun.exp, reporter)) {
+          for (p <- evalAssignExpValue(sp, smt2, AST.Typed.b, rtCheck, s12.addClaims(ISZ(nonEmptyProp, inBoundProp)), quant.fun.exp, reporter)) {
             val (s15, v) = p
             val (s16, expSym) = value2Sym(s15, v, quant.fun.exp.asStmt.posOpt.get)
             if (s16.status) {
@@ -1637,7 +1632,7 @@ import Util._
         }
 
         val logikaComp: Logika = {
-          val l = logikaMethod(th, config, ctx, F, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
+          val l = logikaMethod(th, config, ctx, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
             info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, contract.modifies, ISZ(), plugins,
             Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get))
           )
@@ -1749,7 +1744,7 @@ import Util._
                   val cs = ISZ[State.Claim](ccr.requiresClaim,
                     State.Claim.And(ops.ISZOps(ccr.state.claims).slice(root.claims.size, ccr.state.claims.size)))
                   val claims = ops.ISZOps(ccr.state.claims).slice(0, root.claims.size) :+
-                    (if (inPfc) State.Claim.Imply(cs) else State.Claim.And(cs))
+                    State.Claim.And(cs)
                   r = r :+ ((ccr.state(nextFresh = nextFresh, claims = claims), ccr.retVal))
                 }
               } else {
@@ -1919,14 +1914,14 @@ import Util._
                   val cs = ISZ[State.Claim](prop, State.Claim.And(ops.ISZOps(s3t.claims).
                     slice(s2.claims.size + 1, s3t.claims.size)))
                   val s3 = s3t(nextFresh = s4NextFresh, claims = ops.ISZOps(s3t.claims).slice(0, s2.claims.size) :+
-                    (if (inPfc) State.Claim.Imply(cs) else State.Claim.And(cs)))
+                    State.Claim.And(cs))
                   r = r :+ ((s3, tv))
                 }
                 for (s4v <- s4vs) {
                   val (s4t, ev) = s4v
                   val cs = ISZ[State.Claim](negProp, State.Claim.And(ops.ISZOps(s4t.claims).slice(s2.claims.size + 1, s4t.claims.size)))
                   val s4 = s4t(claims = ops.ISZOps(s4t.claims).slice(0, s2.claims.size) :+
-                    (if (inPfc) State.Claim.Imply(cs) else State.Claim.And(cs)))
+                    State.Claim.And(cs))
                   r = r :+ ((s4, ev))
                 }
               } else {
@@ -2676,13 +2671,13 @@ import Util._
                 for (s4t <- s4s) {
                   val cs = ISZ[State.Claim](prop, State.Claim.And(ops.ISZOps(s4t.claims).slice(s2.claims.size + 1, s4t.claims.size)))
                   val s4 = s4t(nextFresh = s6NextFresh, claims = ops.ISZOps(s4t.claims).slice(0, s2.claims.size) :+
-                    (if (inPfc) State.Claim.Imply(cs) else State.Claim.And(cs)))
+                    State.Claim.And(cs))
                   r = r :+ s4
                 }
                 for (s6t <- s6s) {
                   val cs = ISZ[State.Claim](negProp, State.Claim.And(ops.ISZOps(s6t.claims).slice(s2.claims.size + 1, s6t.claims.size)))
                   val s6 = s6t(claims = ops.ISZOps(s6t.claims).slice(0, s2.claims.size) :+
-                    (if (inPfc) State.Claim.Imply(cs) else State.Claim.And(cs)))
+                    State.Claim.And(cs))
                   r = r :+ s6
                 }
               } else {
@@ -3047,7 +3042,8 @@ import Util._
             for (p <- modLocalVars.entries) {
               val (res, (tipe, pos)) = p
               val (srw1, sym) = srw.freshSym(tipe, pos)
-              srw = srw1(claims = srw1.claims :+ State.Claim.Let.CurrentId(F, sym, res.context, res.id, Some(pos)))
+              val srw2 = assumeValueInv(this, smt2, rtCheck, srw1, sym, pos, reporter)
+              srw = srw2.addClaim(State.Claim.Let.CurrentId(F, sym, res.context, res.id, Some(pos)))
             }
             srw
           }
