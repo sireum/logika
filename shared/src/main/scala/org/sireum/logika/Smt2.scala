@@ -671,7 +671,7 @@ object Smt2 {
             )
           }
         }
-        if (children.isEmpty && t != AST.Typed.nothing) {
+        if (children.isEmpty && t != AST.Typed.nothing && t != AST.Typed.string) {
           reporter.warn(posOpt, Logika.kind, s"$t does not have any concrete implementation")
         }
         posetUp(poset.addChildren(t, children))
@@ -777,7 +777,9 @@ object Smt2 {
       }
       posetUp(poset.addNode(t))
       val tid = typeId(t)
-      addAdtDecl(st"(define-sort $tid () ADT)")
+      if (tid.render =!= "String") {
+        addAdtDecl(st"(define-sort $tid () ADT)")
+      }
       val tId = typeHierarchyId(t)
       addTypeHiearchyId(tId)
       addAdtDecl(st"(declare-const $tId Type)")
@@ -1178,9 +1180,26 @@ object Smt2 {
       case v: State.Value.R =>
         val text = s"${v.value}"
         return if (ops.StringOps(text).contains(".")) st"$text" else st"$text.0"
+      case v: State.Value.String =>
+        val cs: ISZ[String] = for (c <- conversions.String.toCis(v.value)) yield smt2c(c)
+        return st""""${(cs, "")}""""
       case _ =>
-        halt("TODO") // TODO
+        halt(s"TODO: $v") // TODO
     }
+  }
+
+  @pure def smt2c(c: C): String = {
+    c match {
+      case '\t' =>
+      case '\r' =>
+      case '\n' =>
+      case ' ' =>
+      case '"' => return "\"\""
+      case _ if ('\u0020' <= c && c <= '\u007E') || (c >= '\u0080') =>
+      case _ =>
+        halt(s"Unsupported character $c in string literal")
+    }
+    return c.string
   }
 
   @memoize def ids2ST(ids: ISZ[String]): ST = {
