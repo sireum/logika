@@ -771,11 +771,11 @@ object Smt2 {
           st"""(define-fun $eqId ((x!0 $tId) (x!1 $tId)) B
               |  (and
               |    (= (type-of x!0) (type-of x!1) $thId)
-              |    ${(for (q <- fieldInfos if q.isParam) yield st"(${if (q.fieldAdtType.render == "ADT") st"|ADT.==|" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
+              |    ${(for (q <- fieldInfos if q.isParam) yield st"(${if (q.fieldAdtType.render == "ADT") st"${typeOpId(q.fieldType, "==")}" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
         addTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       }
-      addTypeDecl(st"(assert (forall ((o1 $tId) (o2 $tId)) (=> (= o1 o2) ($eqId o1 o2))))")
+      addTypeDecl(st"(assert (forall ((o1 $tId) (o2 $tId)) (=> (= o1 o2) (sub-type (type-of o1) $thId) ($eqId o1 o2))))")
     }
 
     def addSig(t: AST.Typed.Name, ti: TypeInfo.Sig): Unit = {
@@ -817,7 +817,9 @@ object Smt2 {
               |    ${(for (p2 <- ops if p2._1 != opId) yield st"(= (${typeOpId(t, p2._1)} o2) (${typeOpId(t, p2._1)} o))", "\n")}
               |    (= $opId ($op o2) ($op o))))""")
       }
-      addTypeDecl(st"(assert (forall ((o1 $tid) (o2 $tid)) (=> (= o1 o2) ($eqId o1 o2))))")
+      if (t != AST.Typed.string) {
+        addTypeDecl(st"(assert (forall ((o1 $tid) (o2 $tid)) (=> (= o1 o2) (sub-type (type-of o1) $tId) ($eqId o1 o2))))")
+      }
     }
 
     def addSubZ(t: AST.Typed.Name, ti: TypeInfo.SubZ): Unit = {
