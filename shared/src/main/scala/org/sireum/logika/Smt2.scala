@@ -775,6 +775,7 @@ object Smt2 {
         )
         addTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       }
+      addTypeDecl(st"(assert (forall ((o1 $tId) (o2 $tId)) (=> (= o1 o2) ($eqId o1 o2))))")
     }
 
     def addSig(t: AST.Typed.Name, ti: TypeInfo.Sig): Unit = {
@@ -816,6 +817,7 @@ object Smt2 {
               |    ${(for (p2 <- ops if p2._1 != opId) yield st"(= (${typeOpId(t, p2._1)} o2) (${typeOpId(t, p2._1)} o))", "\n")}
               |    (= $opId ($op o2) ($op o))))""")
       }
+      addTypeDecl(st"(assert (forall ((o1 $tid) (o2 $tid)) (=> (= o1 o2) ($eqId o1 o2))))")
     }
 
     def addSubZ(t: AST.Typed.Name, ti: TypeInfo.SubZ): Unit = {
