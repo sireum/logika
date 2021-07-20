@@ -2244,7 +2244,7 @@ import Util._
                            namePosOpt: Option[Position], reporter: Reporter): State = {
     val poss = StateTransformer(CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
     if (poss.isEmpty) {
-      reporter.error(namePosOpt, Logika.kind, s"Missing Modifies clause for ${(ids, ".")}.")
+      reporter.error(namePosOpt, Logika.kind, st"Missing Modifies clause for ${(ids, ".")}.".render)
       return s0(status = F)
     }
     val (s1, num) = s0.fresh
