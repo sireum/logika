@@ -692,7 +692,7 @@ object Util {
           smt2.addStrictPureMethodDecl(pf, r, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))
           s0 = s1(nextFresh = s2.nextFresh)
         }
-        for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes)) {
+        for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes) if pair._1.value =!= "this") {
           val (pid, pt) = pair
           val (s0_1, pv) = idIntro(pos, s0, context, pid.value, pt, pid.attr.posOpt)
           val s0_2 = assumeValueInv(logika, smt2, T, s0_1, pv, pos, reporter)

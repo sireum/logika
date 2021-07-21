@@ -1010,7 +1010,13 @@ import Util._
                 }
               case _ =>
             }
-            r = r :+ ((s3.addClaim(State.Claim.Def.AdtLit(sym, args.toIS.map((vOpt: Option[State.Value]) => vOpt.get))), sym))
+            val s4 = s3.addClaim(State.Claim.Def.AdtLit(sym, args.toIS.map((vOpt: Option[State.Value]) => vOpt.get)))
+            val (s5, vs) = addValueInv(this, smt2, T, s4, sym, attr.posOpt.get, reporter)
+            var s6 = s5
+            for (v <- vs if s6.status) {
+              s6 = evalAssertH(T, smt2, st"Invariant on ${(ti.name, ".")} construction".render, s6, v, attr.posOpt, reporter)
+            }
+            r = r :+ ((s4(nextFresh = s6.nextFresh, status = s6.status), sym))
           } else {
             r = r :+ ((s2, State.errorValue))
           }
