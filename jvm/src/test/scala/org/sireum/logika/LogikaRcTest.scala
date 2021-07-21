@@ -40,7 +40,10 @@ class LogikaRcTest extends SireumRcSpec {
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
     val reporter = Logika.Reporter.create
-    val c = config
+    var c = config
+    if (path(path.size - 1) == "strictpure.sc") {
+      c = c(timeoutInMs = 5000)
+    }
     //val c = config(logVcDirOpt = Some((Os.home / "Temp" / path.last).string))
     val p = Os.path(path.mkString(Os.fileSep.value))
     Logika.checkScript(Some(p.string), content, c,
