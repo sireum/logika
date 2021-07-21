@@ -64,7 +64,7 @@ import org.sireum._
   val name: String = "cvc4"
 
   @pure def args(timeoutInMs: Z): ISZ[String] = {
-    return ISZ(s"--tlimit=$timeoutInMs", "--lang=smt2.6")
+    return ISZ(s"--tlimit=$timeoutInMs", "--lang=smt2.6", "--rlimit=1000000")
   }
 }
 
