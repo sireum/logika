@@ -184,12 +184,12 @@ object Smt2Impl {
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
       val pout: String = pr.out
-      if (pout.size == 0) {
+      if (pout.size == 0 && pr.exitCode != 0 && pr.exitCode != -101) {
         err(pout, pr.exitCode)
       }
       val duration = extension.Time.currentMillis - startTime
       val out = ops.StringOps(pout).split(c => c == '\n' || c == '\r')
-      val firstLine = out(0)
+      val firstLine: String = if (pr.exitCode == -101) "timeout" else out(0)
       val r: Smt2Query.Result = firstLine match {
         case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query,
           st"""; Result:    ${if (isSat) "Sat" else "Invalid"}
