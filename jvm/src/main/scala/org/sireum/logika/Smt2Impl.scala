@@ -180,7 +180,7 @@ object Smt2Impl {
         case _ =>
       }
       var proc = Os.proc(config.exe +: args).input(query).redirectErr
-      proc = proc.timeout(timeoutInMs * 5 / 4)
+      //proc = proc.timeout(timeoutInMs * 5 / 4)
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
       val pout: String = pr.out
