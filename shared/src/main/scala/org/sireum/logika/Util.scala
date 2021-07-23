@@ -671,11 +671,18 @@ object Util {
     conversions.Z.toU32(pos.offset),
     conversions.Z.toU32(1))
 
+  @pure def normType(t: AST.Typed): AST.Typed = {
+    t match {
+      case t: AST.Typed.Method if t.tpe.isByName => return t.tpe.ret
+      case _ => return t
+    }
+  }
+
   def strictPureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, state: State,
                        receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String], id: String,
                        paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
                        implicitContextOpt: Option[(String, Position)]): (State, State.ProofFun) = {
-    val pf = State.ProofFun(receiverTypeOpt, owner, id, for (id <- paramIds) yield id.value, funType.args, funType.ret)
+    val pf = State.ProofFun(receiverTypeOpt, owner, id, for (id <- paramIds) yield id.value, funType.args, Util.normType(funType.ret))
     if (smt2.strictPureMethods.contains(pf)) {
       return (state, pf)
     } else {
@@ -684,13 +691,14 @@ object Util {
       val (res, svs, maxFresh): (State.Value.Sym, ISZ[(State, State.Value.Sym)], Z) = {
         val context = pf.context :+ pf.id
         val logika: Logika = logikaMethod(th, config, context,  pf.receiverTypeOpt,
-          ops.ISZOps(paramIds).zip(funType.args), funType.ret, posOpt, ISZ(), ISZ(), ISZ(), plugins, implicitContextOpt)
+          ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(), plugins, implicitContextOpt)
         var s0 = state(claims = ISZ())
-        val (s1, r) = idIntro(posOpt.get, s0, context, "Res", funType.ret, posOpt)
-        ;{
-          val s2 = assumeValueInv(logika, smt2, T, s1, r, pos, reporter)
-          smt2.addStrictPureMethodDecl(pf, r, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))
-          s0 = s1(nextFresh = s2.nextFresh)
+        val r: State.Value.Sym = {
+          val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
+          val s2 = assumeValueInv(logika, smt2, T, s1, res, pos, reporter)
+          smt2.addStrictPureMethodDecl(pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))
+          s0 = s1(nextFresh = s2.nextFresh, status = s2.status)
+          res
         }
         for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes) if pair._1.value =!= "this") {
           val (pid, pt) = pair
@@ -698,10 +706,12 @@ object Util {
           val s0_2 = assumeValueInv(logika, smt2, T, s0_1, pv, pos, reporter)
           if (s0_2.claims.size > s0_1.claims.size) {
             s0 = s0_2
+          } else {
+            s0 = s0(nextFresh = s0_2.nextFresh)
           }
         }
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
-        val svs = logika.evalAssignExpValue(split, smt2, funType.ret, T, s0, body, reporter)
+        val svs = logika.evalAssignExpValue(split, smt2, pf.returnType, T, s0, body, reporter)
         var sss = ISZ[(State, State.Value.Sym)]()
         var maxFresh: Z = -1
         for (sv <- svs) {
@@ -712,7 +722,7 @@ object Util {
             maxFresh = s2.nextFresh
           }
         }
-        (r, sss, maxFresh)
+        (r, for (ss <- sss) yield (ss._1(nextFresh = maxFresh), ss._2), maxFresh)
       }
 
       smt2.addStrictPureMethod(pos, pf, svs, res, 0)

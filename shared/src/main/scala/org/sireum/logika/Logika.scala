@@ -1653,13 +1653,16 @@ import Util._
           var fieldVarInMap = mctx.fieldVarInMap
           mctx.receiverTypeOpt match {
             case Some(receiverType) =>
-              val (s5, thiz) = idIntro(mctx.posOpt.get, s1, mctx.name, "this", receiverType, mctx.posOpt)
-              s1 = s5
-              for (p <- mctx.fieldVarMap(typeSubstMap).entries) {
-                val (id, (t, posOpt)) = p
-                val (s6, sym) = s1.freshSym(t, posOpt.get)
-                s1 = s6.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
-                fieldVarInMap = fieldVarInMap + id ~> sym
+              val fieldVarMap = mctx.fieldVarMap(typeSubstMap)
+              if (fieldVarMap.nonEmpty) {
+                val (s5, thiz) = idIntro(mctx.posOpt.get, s1, mctx.name, "this", receiverType, mctx.posOpt)
+                s1 = s5
+                for (p <- mctx.fieldVarMap(typeSubstMap).entries) {
+                  val (id, (t, posOpt)) = p
+                  val (s6, sym) = s1.freshSym(t, posOpt.get)
+                  s1 = s6.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
+                  fieldVarInMap = fieldVarInMap + id ~> sym
+                }
               }
             case _ =>
           }

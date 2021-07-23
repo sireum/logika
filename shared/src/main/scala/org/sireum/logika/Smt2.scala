@@ -959,11 +959,12 @@ object Smt2 {
             |(define-fun $neOp ((x $tId) (y $tId)) B (not ($eqOp x y)))""")
     }
 
-    if (types.contains(tipe)) {
+    val t = Util.normType(tipe)
+    if (types.contains(t)) {
       return
     }
-    typesUp(types + tipe)
-    tipe match {
+    typesUp(types + t)
+    t match {
       case AST.Typed.z => sortsUp(sorts :+ Smt2.zST(intBitWidth))
       case AST.Typed.c => sortsUp(sorts :+ Smt2.cST(charBitWidth))
       case AST.Typed.f32 => sortsUp(sorts :+ Smt2.f32ST)
@@ -1263,7 +1264,11 @@ object Smt2 {
     }
   }
 
-  def embeddedClaims(isImply: B, claims: ISZ[State.Claim], initSyms: ISZ[State.Value.Sym], addClaimSTs: ISZ[ST], letsOpt: Option[HashMap[Z, ISZ[State.Claim.Let]]]): ST = {
+  def embeddedClaims(isImply: B,
+                     claims: ISZ[State.Claim],
+                     initSyms: ISZ[State.Value.Sym],
+                     addClaimSTs: ISZ[ST],
+                     letsOpt: Option[HashMap[Z, ISZ[State.Claim.Let]]]): ST = {
     def collectSyms(c: State.Claim, acc: ISZ[State.Value.Sym]): ISZ[State.Value.Sym] = {
       c match {
         case c: State.Claim.Def => return acc :+ c.sym
@@ -1295,13 +1300,42 @@ object Smt2 {
         case _: State.Claim.Prop => return acc
       }
     }
-
+    var lids = ISZ[State.Claim.Let.Id]()
+    def collectVars(c: State.Claim): Unit = {
+      c match {
+        case c: State.Claim.Let.Id =>
+          lids = lids :+ c
+        case c: State.Claim.If =>
+          for (tClaim <- c.tClaims) {
+            collectVars(tClaim)
+          }
+          for (fClaim <- c.fClaims) {
+            collectVars(fClaim)
+          }
+        case c: State.Claim.And =>
+          for (ac <- c.claims) {
+            collectVars(ac)
+          }
+        case c: State.Claim.Or =>
+          for (ac <- c.claims) {
+            collectVars(ac)
+          }
+        case c: State.Claim.Imply =>
+          for (ac <- c.claims) {
+            collectVars(ac)
+          }
+        case _: State.Claim.Def =>
+        case _: State.Claim.Label =>
+        case _: State.Claim.Prop =>
+      }
+    }
     def raw: ST = {
       var lets = ISZ[State.Claim.Let]()
       var lsyms = ISZ[State.Value.Sym]()
       var syms = initSyms
       var rest = ISZ[State.Claim]()
       for (i <- 0 until claims.size) {
+        collectVars(claims(i))
         claims(i) match {
           case claim: State.Claim.Let if i != claims.size - 1 => lsyms = lsyms :+ claim.sym; lets = lets :+ claim
           case claim: State.Claim.Def => syms = syms :+ claim.sym; rest = rest :+ claim
@@ -1329,8 +1363,11 @@ object Smt2 {
       }
       val s = HashSSet.empty[State.Value.Sym] ++ syms -- lsyms
       if (s.nonEmpty) {
+        val decls: ISZ[ST] =
+          (for (id <- lids) yield st"(${localId(id)} ${typeId(id.sym.tipe)})") ++
+            (for (sym <- s.elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})")
         body =
-          st"""(forall (${(for (sym <- s.elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})", " ")})
+          st"""(forall (${(decls, " ")})
               |  $body)"""
       }
       return body
@@ -1349,10 +1386,14 @@ object Smt2 {
       val sv2ST = Util.value2ST(this, lets)
       var simplifiedClaimSTs = ISZ[ST]()
       for (i <- 0 until (if (isImply) claims.size - 1 else claims.size)) {
+        collectVars(claims(i))
         c2ST(claims(i), sv2ST, lets) match {
           case Some(st) => simplifiedClaimSTs = simplifiedClaimSTs :+ st
           case _ =>
         }
+      }
+      if (isImply) {
+        collectVars(claims(claims.size - 1))
       }
       var r: ST =
         if (isImply) implySTH(simplifiedClaimSTs, c2ST(claims(claims.size - 1), sv2ST, lets))
@@ -1363,7 +1404,9 @@ object Smt2 {
       }
       val usedSyms = uscdid.syms
       val syms: ISZ[State.Value.Sym] = for (ds <- lets.values if ds.size > 1 && usedSyms.contains(ds(0).sym)) yield ds(0).sym
-      var decls: ISZ[ST] = for (sym <- syms) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})"
+      var decls: ISZ[ST] =
+        (for (id <- lids) yield st"(${localId(id)} ${typeId(id.sym.tipe)})") ++
+          (for (sym <- syms) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})")
       for (cid <- uscdid.currentDeclIds) {
         decls = decls :+ st"(${currentLocalId(cid)} ${typeId(cid.sym.tipe)})"
       }
@@ -1378,7 +1421,9 @@ object Smt2 {
     return if (simplifiedQuery) simplified else raw
   }
 
-  def l2RhsST(c: State.Claim.Let, v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]]): ST = {
+  def l2RhsST(c: State.Claim.Let,
+              v2st: State.Value => ST,
+              lets: HashMap[Z, ISZ[State.Claim.Let]]): ST = {
     c match {
       case c: State.Claim.Let.CurrentName =>
         return currentNameId(c)
@@ -1640,7 +1685,7 @@ object Smt2 {
   }
 
   def typeIdRaw(t: AST.Typed): ST = {
-    t match {
+    Util.normType(t) match {
       case t: AST.Typed.Name =>
         val ids: ISZ[String] = if (t.ids.size === 1) Smt2.topPrefix +: t.ids else t.ids
         if (t.args.isEmpty) {
@@ -1676,7 +1721,7 @@ object Smt2 {
   }
 
   @pure def typeId(t: AST.Typed): ST = {
-    t match {
+    Util.normType(t) match {
       case t: AST.Typed.Fun =>
         if (t.args.size === 1) {
           return st"(Array ${typeId(t.args(0))} ${typeId(t.ret)})"
