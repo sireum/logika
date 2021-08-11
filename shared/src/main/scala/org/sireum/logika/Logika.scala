@@ -327,7 +327,7 @@ object Logika {
       return
     }
     val th2 = extension.Cancel.cancellable(() =>
-      TypeHierarchy.build(th(nameMap = nameMap, typeMap = typeMap), reporter))
+      TypeHierarchy.build(F, th(nameMap = nameMap, typeMap = typeMap), reporter))
     if (reporter.hasError) {
       reporter.illFormed()
       return
