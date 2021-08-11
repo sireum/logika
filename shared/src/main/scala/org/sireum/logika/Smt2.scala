@@ -452,8 +452,8 @@ object Smt2 {
     return st"|g:${(shorten(owner), ".")}.$id|"
   }
 
-  def sat(reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
-          claims: ISZ[State.Claim], reporter: Reporter): B = {
+  def satResult(reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
+                claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
     val startTime = extension.Time.currentMillis
     val (r, smt2res) = checkSat(satQuery(claims, None(), reporter).render, 500)
     val res = smt2res(info = "", query =
@@ -480,7 +480,12 @@ object Smt2 {
         writeFile(logDir, filename, res.query)
       case _ =>
     }
-    return r
+    return (r, smt2res)
+  }
+
+  def sat(reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
+          claims: ISZ[State.Claim], reporter: Reporter): B = {
+    return satResult(reportQuery, log, logDirOpt, title, pos, claims, reporter)._1
   }
 
   def toVal(t: AST.Typed.Name, n: Z): ST = {
