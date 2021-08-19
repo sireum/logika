@@ -31,17 +31,6 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
-  @msig trait Cache {
-    def get(isSat: B, query: String, timeoutInMs: Z): Option[Smt2Query.Result]
-    def set(isSat: B, query: String, timeoutInMs: Z, result: Smt2Query.Result): Unit
-  }
-
-  @record class NoCache extends Cache {
-    def get(isSat: B, query: String, timeoutInMs: Z): Option[Smt2Query.Result] = {
-      return None()
-    }
-    def set(isSat: B, query: String, timeoutInMs: Z, result: Smt2Query.Result): Unit = {}
-  }
 
   @pure def z3ArgF(timeoutInMs: Z): ISZ[String] = {
     return ISZ("-smt2", s"-T:${(timeoutInMs / 1000) + 1}", s"-t:$timeoutInMs", "-in")
@@ -51,9 +40,9 @@ object Smt2Impl {
     return ISZ(s"--tlimit=$timeoutInMs", "--lang=smt2.6")
   }
 
-  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, cache: Smt2Impl.Cache, timeoutInMs: Z,
+  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z,
                          charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B, reporter: Logika.Reporter): Smt2 = {
-    val r = Smt2Impl(configs, typeHierarchy, cache, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery,
+    val r = Smt2Impl(configs, typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery,
       HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), HashMap.empty,
       HashSMap.empty, HashMap.empty, HashSSet.empty)
     r.addType(AST.Typed.z, reporter)
@@ -63,7 +52,6 @@ object Smt2Impl {
 
 @record class Smt2Impl(val configs: ISZ[Smt2Config],
                        val typeHierarchy: TypeHierarchy,
-                       val cache: Smt2Impl.Cache,
                        val timeoutInMs: Z,
                        val charBitWidth: Z,
                        val intBitWidth: Z,
@@ -148,17 +136,17 @@ object Smt2Impl {
     println(s"Wrote $f")
   }
 
-  def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
-    val r = checkQuery(T, query, timeoutInMs)
+  def checkSat(cache: Smt2.Cache, query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
+    val r = checkQuery(cache, T, query, timeoutInMs)
     return (r.kind != Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
-    val r = checkQuery(F, query, timeoutInMs)
+  def checkUnsat(cache: Smt2.Cache, query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
+    val r = checkQuery(cache, F, query, timeoutInMs)
     return (r.kind == Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkQuery(isSat: B, query: String, timeoutInMs: Z): Smt2Query.Result = {
+  def checkQuery(cache: Smt2.Cache, isSat: B, query: String, timeoutInMs: Z): Smt2Query.Result = {
     def checkQueryH(config: Smt2Config): Smt2Query.Result = {
       def err(out: String, exitCode: Z): Unit = {
         halt(

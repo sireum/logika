@@ -370,14 +370,15 @@ object Util {
     return Logika(th, config, ctx, plugins)
   }
 
-  def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, invs: ISZ[lang.symbol.Info.Inv],
+  def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, cache: Smt2.Cache, invs: ISZ[lang.symbol.Info.Inv],
                posOpt: Option[Position], substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     val methodName: String =
       if (logika.context.methodName.size == 1) logika.context.methodName(0)
       else if (logika.context.methodOpt.get.receiverTypeOpt.isEmpty) st"${(logika.context.methodName, ".")}".render
       else st"${(ops.ISZOps(logika.context.methodName).dropRight(1), ".")}#${logika.context.methodName(0)}".render
     val title: String = if (isPre) s"Method $methodName pre-invariant" else s"Method $methodName post-invariant"
-    return checkInvs(logika, posOpt, isPre, title, smt2, T, state, logika.context.receiverTypeOpt, invs, substMap, reporter)
+    return checkInvs(logika, posOpt, isPre, title, smt2, cache, T, state, logika.context.receiverTypeOpt, invs,
+      substMap, reporter)
   }
 
   def checkMethod(th: TypeHierarchy,
@@ -385,6 +386,7 @@ object Util {
                   method: AST.Stmt.Method,
                   config: Config,
                   smt2: Smt2,
+                  cache: Smt2.Cache,
                   reporter: Reporter): Unit = {
     def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
@@ -418,12 +420,12 @@ object Util {
           val info = th.nameMap.get(ids).get.asInstanceOf[Info.Var]
           objectNames = objectNames + info.owner ~> pos
           val (s0, sym) = nameIntro(posOpt.get, state, ids, t, posOpt)
-          state = assumeValueInv(l, smt2, T, s0, sym, pos, reporter)
+          state = assumeValueInv(l, smt2, cache, T, s0, sym, pos, reporter)
           objectVarInMap = objectVarInMap + ids ~> sym
         }
         for (p <- objectNames.entries) {
           val (objectName, pos) = p
-          state = assumeObjectInv(l, smt2, objectName, state, pos, reporter)
+          state = assumeObjectInv(l, smt2, cache, objectName, state, pos, reporter)
         }
         var fieldVarInMap = mctx.fieldVarInMap
         mctx.receiverTypeOpt match {
@@ -443,7 +445,7 @@ object Util {
           val (mname, id, t) = v
           val posOpt = id.attr.posOpt
           val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
-          state = assumeValueInv(l, smt2, T, s0, sym, posOpt.get, reporter)
+          state = assumeValueInv(l, smt2, cache, T, s0, sym, posOpt.get, reporter)
           localInMap = localInMap + id.value ~> sym
         }
         l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
@@ -451,12 +453,12 @@ object Util {
       }
       val invs = logika.retrieveInvs(res.owner, res.isInObject)
       val statePreReqInvSize = state.claims.size
-      state = checkInv(T, state, logika, smt2, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
+      state = checkInv(T, state, logika, smt2, cache, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
       val stmts = method.bodyOpt.get.stmts
       val hasPreReqInv = state.claims.size != statePreReqInvSize
       val statePreReqSize = state.claims.size
       for (r <- requires if state.status) {
-        state = logika.evalAssume(smt2, T, "Precondition", state, r, r.posOpt, reporter)._1
+        state = logika.evalAssume(smt2, cache, T, "Precondition", state, r, r.posOpt, reporter)._1
       }
       if (state.claims.size != statePreReqSize) {
         val stateOps = ops.ISZOps(state.claims)
@@ -472,18 +474,18 @@ object Util {
       }
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
         val body = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
-        logika.evalAssignExp(Split.Default, smt2, None(), T, state, body, reporter)
+        logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, body, reporter)
       } else {
-        logika.evalStmts(Split.Default, smt2, None(), T, state, stmts, reporter)
+        logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
       }
       for (s <- ss) {
         var s2 = s
         val statePreEnInvSize = state.claims.size
-        s2 = checkInv(F, s2, logika, smt2, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
+        s2 = checkInv(F, s2, logika, smt2, cache, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
         val hasPreEnInv = state.claims.size != statePreEnInvSize
         val statePreEnSize = state.claims.size
         for (e <- ensures if s2.status) {
-          s2 = logika.evalAssert(smt2, T, "Postcondition", s2, e, e.posOpt, reporter)._1
+          s2 = logika.evalAssert(smt2, cache, T, "Postcondition", s2, e, e.posOpt, reporter)._1
         }
         if (state.claims.size != statePreEnSize) {
           val stateOps = ops.ISZOps(state.claims)
@@ -592,7 +594,7 @@ object Util {
     return current
   }
 
-  def rewriteObjectVars(logika: Logika, smt2: Smt2, rtCheck: B, state: State,
+  def rewriteObjectVars(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State,
                         objectVars: HashSMap[AST.ResolvedInfo.Var, (AST.Typed, Position)], pos: Position,
                         reporter: Reporter): State = {
     if (objectVars.isEmpty) {
@@ -618,7 +620,7 @@ object Util {
       val (x, (t, namePos)) = p
       val name = x.owner :+ x.id
       val (s2, sym) = nameIntro(pos, current, name, t, Some(namePos))
-      current = assumeValueInv(logika, smt2, rtCheck, s2, sym, namePos, reporter)
+      current = assumeValueInv(logika, smt2, cache, rtCheck, s2, sym, namePos, reporter)
       val tipe = sym.tipe
       if (!logika.th.isMutable(tipe, T)) {
         val (s3, cond) = current.freshSym(AST.Typed.b, pos)
@@ -678,9 +680,9 @@ object Util {
     }
   }
 
-  def strictPureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, state: State,
-                       receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String], id: String,
-                       paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
+  def strictPureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, cache: Smt2.Cache,
+                       state: State, receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String],
+                       id: String, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
                        implicitContextOpt: Option[(String, Position)]): (State, State.ProofFun) = {
     val pf = State.ProofFun(receiverTypeOpt, owner, id, for (id <- paramIds) yield id.value, funType.args, Util.normType(funType.ret))
     if (smt2.strictPureMethods.contains(pf)) {
@@ -695,7 +697,7 @@ object Util {
         var s0 = state(claims = ISZ())
         val r: State.Value.Sym = {
           val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
-          val s2 = assumeValueInv(logika, smt2, T, s1, res, pos, reporter)
+          val s2 = assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
           smt2.addStrictPureMethodDecl(pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))
           s0 = s1(nextFresh = s2.nextFresh, status = s2.status)
           res
@@ -703,7 +705,7 @@ object Util {
         for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes) if pair._1.value =!= "this") {
           val (pid, pt) = pair
           val (s0_1, pv) = idIntro(pos, s0, context, pid.value, pt, pid.attr.posOpt)
-          val s0_2 = assumeValueInv(logika, smt2, T, s0_1, pv, pos, reporter)
+          val s0_2 = assumeValueInv(logika, smt2, cache, T, s0_1, pv, pos, reporter)
           if (s0_2.claims.size > s0_1.claims.size) {
             s0 = s0_2
           } else {
@@ -711,7 +713,7 @@ object Util {
           }
         }
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
-        val svs = logika.evalAssignExpValue(split, smt2, pf.returnType, T, s0, body, reporter)
+        val svs = logika.evalAssignExpValue(split, smt2, cache, pf.returnType, T, s0, body, reporter)
         var sss = ISZ[(State, State.Value.Sym)]()
         var maxFresh: Z = -1
         for (sv <- svs) {
@@ -730,7 +732,7 @@ object Util {
       val s1 = state(nextFresh = maxFresh)
       if (config.sat) {
         val title: String = s"the derived proof function of $id"
-        if (!smt2.sat(T, config.logVc, config.logVcDirOpt, title, pos, s1.claims, reporter)) {
+        if (!smt2.sat(cache, T, config.logVc, config.logVcDirOpt, title, pos, s1.claims, reporter)) {
           reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
         }
       }
@@ -751,7 +753,7 @@ object Util {
     return r
   }
 
-  def evalExtractPureMethod(logika: Logika, smt2: Smt2, state: State, receiverTypeOpt: Option[AST.Typed],
+  def evalExtractPureMethod(logika: Logika, smt2: Smt2, cache: Smt2.Cache, state: State, receiverTypeOpt: Option[AST.Typed],
                             receiverOpt: Option[State.Value.Sym], owner: ISZ[String], id: String, exp: AST.Exp,
                             reporter: Reporter): (State, State.Value) = {
     val posOpt = exp.posOpt
@@ -775,7 +777,7 @@ object Util {
             paramIds = paramIds :+ AST.Id("this", AST.Attr(posOpt))
             paramTypes = paramTypes :+ receiverTypeOpt.get
             val e = AST.Exp.This(AST.TypedAttr(posOpt, receiverTypeOpt))
-            val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
+            val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, cache, T, s0, e, reporter)
             s0 = s1
             args = args :+ arg
         }
@@ -784,7 +786,7 @@ object Util {
         val (e, paramIdent) = pair
         paramIds = paramIds :+ paramIdent.id
         paramTypes = paramTypes :+ paramIdent.typedOpt.get
-        val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
+        val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, cache, T, s0, e, reporter)
         s0 = s1
         args = args :+ arg
       }
@@ -792,7 +794,7 @@ object Util {
         val (e, paramIdent) = pair
         paramIds = paramIds :+ paramIdent.id
         paramTypes = paramTypes :+ paramIdent.typedOpt.get
-        val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
+        val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, cache, T, s0, e, reporter)
         s0 = s1
         args = args :+ arg
       }
@@ -801,12 +803,12 @@ object Util {
           paramIds = paramIds :+ ident.id
           paramTypes = paramTypes :+ ident.typedOpt.get
           val e = AST.Exp.Result(None(), AST.TypedAttr(posOpt, ident.typedOpt))
-          val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, T, s0, e, reporter)
+          val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, cache, T, s0, e, reporter)
           s0 = s1
           args = args :+ arg
         case _ =>
       }
-      val (s2, pf) = strictPureMethod(logika.th, logika.config, logika.plugins, smt2, s0, None(),
+      val (s2, pf) = strictPureMethod(logika.th, logika.config, logika.plugins, smt2, cache, s0, None(),
         AST.Typed.Fun(T, F, paramTypes, t), owner, id, paramIds,
         AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter, logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)
@@ -817,7 +819,7 @@ object Util {
       else s4
       return (s5, sym)
     } else {
-      return logika.evalExp(Split.Disabled, smt2, T, state, newExp, reporter)(0)
+      return logika.evalExp(Split.Disabled, smt2, cache, T, state, newExp, reporter)(0)
     }
   }
 
@@ -852,7 +854,7 @@ object Util {
     return (res.owner, id)
   }
 
-  def addObjectInv(logika: Logika, smt2: Smt2, name: ISZ[String], state: State, pos: Position,
+  def addObjectInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, name: ISZ[String], state: State, pos: Position,
                    reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     val invs = logika.retrieveInvs(name, T)
     if (invs.isEmpty) {
@@ -860,19 +862,19 @@ object Util {
     }
     val (owner, id) = invOwnerId(invs, None())
     val inv = logika.invs2exp(invs, HashMap.empty).get
-    val (s0, v) = evalExtractPureMethod(logika, smt2, state, None(), None(), owner, id, inv, reporter)
+    val (s0, v) = evalExtractPureMethod(logika, smt2, cache, state, None(), None(), owner, id, inv, reporter)
     val (s1, sym) = logika.value2Sym(s0, v, pos)
     return (s1, ISZ(sym))
   }
 
-  def assumeObjectInv(logika: Logika, smt2: Smt2, name: ISZ[String], state: State, pos: Position,
-                   reporter: Reporter): State = {
-    val (s0, conds) = addObjectInv(logika, smt2, name, state, pos, reporter)
+  def assumeObjectInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, name: ISZ[String], state: State, pos: Position,
+                      reporter: Reporter): State = {
+    val (s0, conds) = addObjectInv(logika, smt2, cache, name, state, pos, reporter)
     return s0.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
   }
 
-  def addValueInv(logika: Logika, smt2: Smt2, rtCheck: B, state: State, receiver: State.Value.Sym, pos: Position,
-                  reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
+  def addValueInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
+                  pos: Position, reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     def addTupleInv(s0: State, t: AST.Typed.Tuple): (State, ISZ[State.Value.Sym]) = {
       var s1 = s0
       var i = 1
@@ -880,7 +882,7 @@ object Util {
       for (arg <- t.args) {
         val (s2, sym) = s1.freshSym(arg, pos)
         val s3 = s2.addClaim(State.Claim.Let.FieldLookup(sym, receiver, s"_$i"))
-        val (s4, syms) = Util.addValueInv(logika, smt2, rtCheck, s3, sym, pos, reporter)
+        val (s4, syms) = Util.addValueInv(logika, smt2, cache, rtCheck, s3, sym, pos, reporter)
         ss = ss ++ syms
         s1 = s4
         i = i + 1
@@ -944,14 +946,14 @@ object Util {
       case _: TypeInfo.Enum => return (state, ISZ())
       case _ => halt(s"Infeasible: $ti")
     }
-    val (s5, cond) = evalExtractPureMethod(logika, smt2, state, Some(receiver.tipe), Some(receiver), owner, id, inv, reporter)
+    val (s5, cond) = evalExtractPureMethod(logika, smt2, cache, state, Some(receiver.tipe), Some(receiver), owner, id, inv, reporter)
     val (s6, sym) = logika.value2Sym(s5, cond, pos)
     return (s6, ISZ(sym))
   }
 
-  def assumeValueInv(logika: Logika, smt2: Smt2, rtCheck: B, state: State, receiver: State.Value.Sym, pos: Position,
-                  reporter: Reporter): State = {
-    val (s0, conds) = addValueInv(logika, smt2, rtCheck, state, receiver, pos, reporter)
+  def assumeValueInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
+                     pos: Position, reporter: Reporter): State = {
+    val (s0, conds) = addValueInv(logika, smt2, cache, rtCheck, state, receiver, pos, reporter)
     return s0.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
   }
 
@@ -977,9 +979,9 @@ object Util {
     return State.Value.Range(n, t, pos)
   }
 
-  def checkInvs(logika: Logika, posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, rtCheck: B, s0: State,
-                receiverTypeOpt: Option[AST.Typed], invs: ISZ[Info.Inv], substMap: HashMap[String, AST.Typed],
-                reporter: Reporter): State = {
+  def checkInvs(logika: Logika, posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Smt2.Cache,
+                rtCheck: B, s0: State, receiverTypeOpt: Option[AST.Typed], invs: ISZ[Info.Inv],
+                substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     val pos = posOpt.get
     def spInv(): Option[State] = {
       val claim: AST.Exp = logika.invs2exp(invs, substMap) match {
@@ -991,16 +993,16 @@ object Util {
         case _ => None()
       }
       val (owner, id) = Util.invOwnerId(invs, tOpt)
-      val (s1, v) = evalExtractPureMethod(logika, smt2, s0, receiverTypeOpt, None(), owner, id, claim, reporter)
+      val (s1, v) = evalExtractPureMethod(logika, smt2, cache, s0, receiverTypeOpt, None(), owner, id, claim, reporter)
       if (!s1.status) {
         return None()
       }
       val (s2, sym) = logika.value2Sym(s1, v, pos)
       if (isAssume) {
-        val s3 = logika.evalAssumeH(T, smt2, title, s2, sym, posOpt, reporter)
+        val s3 = logika.evalAssumeH(T, smt2, cache, title, s2, sym, posOpt, reporter)
         return Some(s3)
       } else {
-        val s3 = logika.evalAssertH(T, smt2, title, s2, sym, posOpt, reporter)
+        val s3 = logika.evalAssertH(T, smt2, cache, title, s2, sym, posOpt, reporter)
         if (!s3.status) {
           return None()
         }
@@ -1017,7 +1019,7 @@ object Util {
     }
     var s4 = s0
     for (inv <- invs if s4.status) {
-      s4 = logika.evalInv(posOpt, isAssume, title, smt2, rtCheck, s4, inv.ast, reporter)
+      s4 = logika.evalInv(posOpt, isAssume, title, smt2, cache, rtCheck, s4, inv.ast, reporter)
     }
     return s4
   }

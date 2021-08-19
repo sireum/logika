@@ -192,8 +192,8 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkScript(None(), input, config,
-      th => Smt2Impl.create(config.smt2Configs, th, Smt2Impl.NoCache(), config.timeoutInMs, config.charBitWidth,
-        config.intBitWidth, config.simplifiedQuery, reporter), reporter, F, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
+      th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.charBitWidth, config.intBitWidth, config.simplifiedQuery, reporter),
+      Smt2.NoCache(), reporter, F, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

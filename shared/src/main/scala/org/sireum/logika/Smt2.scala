@@ -34,6 +34,17 @@ import org.sireum.logika.Logika.Reporter
 import Util._
 
 object Smt2 {
+  @msig trait Cache {
+    def get(isSat: B, query: String, timeoutInMs: Z): Option[Smt2Query.Result]
+    def set(isSat: B, query: String, timeoutInMs: Z, result: Smt2Query.Result): Unit
+  }
+
+  @record class NoCache extends Cache {
+    def get(isSat: B, query: String, timeoutInMs: Z): Option[Smt2Query.Result] = {
+      return None()
+    }
+    def set(isSat: B, query: String, timeoutInMs: Z, result: Smt2Query.Result): Unit = {}
+  }
 
   @datatype class SeqLit(val t: AST.Typed.Name, val size: Z)
 
@@ -410,9 +421,9 @@ object Smt2 {
 
   def typeHierarchy: TypeHierarchy
 
-  def checkSat(query: String, timeoutInMs: Z): (B, Smt2Query.Result)
+  def checkSat(cache: Smt2.Cache, query: String, timeoutInMs: Z): (B, Smt2Query.Result)
 
-  def checkUnsat(query: String, timeoutInMs: Z): (B, Smt2Query.Result)
+  def checkUnsat(cache: Smt2.Cache, query: String, timeoutInMs: Z): (B, Smt2Query.Result)
 
   def formatVal(format: String, n: Z): ST
 
@@ -452,10 +463,10 @@ object Smt2 {
     return st"|g:${(shorten(owner), ".")}.$id|"
   }
 
-  def satResult(reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
+  def satResult(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
                 claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
     val startTime = extension.Time.currentMillis
-    val (r, smt2res) = checkSat(satQuery(claims, None(), reporter).render, 500)
+    val (r, smt2res) = checkSat(cache, satQuery(claims, None(), reporter).render, 500)
     val res = smt2res(info = "", query =
       st"""; Satisfiability check for $title
           |${smt2res.info}
@@ -483,9 +494,9 @@ object Smt2 {
     return (r, smt2res)
   }
 
-  def sat(reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
+  def sat(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
           claims: ISZ[State.Claim], reporter: Reporter): B = {
-    return satResult(reportQuery, log, logDirOpt, title, pos, claims, reporter)._1
+    return satResult(cache, reportQuery, log, logDirOpt, title, pos, claims, reporter)._1
   }
 
   def toVal(t: AST.Typed.Name, n: Z): ST = {
@@ -1058,10 +1069,10 @@ object Smt2 {
     for (cST <- State.Claim.claimsSTs(claims, defs)) yield
       st"${(for (line <- ops.StringOps(cST.render).split(c => c == '\n')) yield st"; $line", "\n")}"
 
-  def valid(reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
+  def valid(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
             premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
     val startTime = extension.Time.currentMillis
-    val (_, smt2res) = checkUnsat(satQuery(premises, Some(conclusion), reporter).render, timeoutInMs)
+    val (_, smt2res) = checkUnsat(cache, satQuery(premises, Some(conclusion), reporter).render, timeoutInMs)
     val defs = ClaimDefs.empty
     val res = smt2res(info = "", query =
       st"""; Validity Check for $title

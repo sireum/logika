@@ -125,6 +125,7 @@ object InceptionPlugin {
 
   def handle(logika: Logika,
              smt2: Smt2,
+             cache: Smt2.Cache,
              log: B,
              logDirOpt: Option[String],
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
@@ -243,7 +244,7 @@ object InceptionPlugin {
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from any of ${mi.methodRes.id}'s conclusions".render)
         return emptyResult
       }
-      val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.id.posOpt, reporter)
+      val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
       if (status) {
         val (ePos, ensure, tensure) = ePosExpTExpOpt.get
         evidence = evidence :+

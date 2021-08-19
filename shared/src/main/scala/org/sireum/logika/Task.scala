@@ -34,7 +34,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 
 @datatype trait Task {
-  def compute(smt2: Smt2, reporter: Reporter): ISZ[Message]
+  def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message]
 }
 
 object Task {
@@ -55,7 +55,7 @@ object Task {
                         val config: Config,
                         val stmts: ISZ[AST.Stmt],
                         val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
+    override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       val itvc = IndexTypeVarCollector(HashSet.empty)
       for (stmt <- stmts) {
@@ -64,7 +64,7 @@ object Task {
       for (tv <- itvc.s.elements) {
         smt2.addTypeVarIndex(tv)
       }
-      for (state <- logika.evalStmts(Logika.Split.Default, smt2, None(), T, State.create, stmts, reporter) if state.status) {
+      for (state <- logika.evalStmts(Logika.Split.Default, smt2, cache, None(), T, State.create, stmts, reporter) if state.status) {
         if (stmts.nonEmpty) {
           val lastPos = stmts(stmts.size - 1).posOpt.get
           logika.logPc(config.logPc, config.logRawPc, state, reporter, Some(Util.afterPos(lastPos)))
@@ -79,7 +79,7 @@ object Task {
                          val config: Config,
                          val method: AST.Stmt.Method,
                          val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, reporter: Reporter): ISZ[Message] = {
+    override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
       val ms = Util.detectUnsupportedFeatures(method)
       if (ms.nonEmpty) {
         reporter.reports(ms)
@@ -93,12 +93,12 @@ object Task {
         for (tv <- tvs) {
           csmt2.addTypeVarIndex(tv)
         }
-        Util.checkMethod(th, plugins, method, config, csmt2, reporter)
+        Util.checkMethod(th, plugins, method, config, csmt2, cache, reporter)
       } else {
         for (tv <- tvs) {
           smt2.addTypeVarIndex(tv)
         }
-        Util.checkMethod(th, plugins, method, config, smt2, reporter)
+        Util.checkMethod(th, plugins, method, config, smt2, cache, reporter)
       }
       return reporter.messages
     }

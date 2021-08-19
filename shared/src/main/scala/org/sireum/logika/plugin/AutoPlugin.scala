@@ -58,6 +58,7 @@ import org.sireum.logika.Logika.Reporter
 
   override def handle(logika: Logika,
                       smt2: Smt2,
+                      cache: Smt2.Cache,
                       log: B,
                       logDirOpt: Option[String],
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
@@ -119,7 +120,7 @@ import org.sireum.logika.Logika.Reporter
       }
 
       val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) = if (args.isEmpty) {
-        val q = logika.evalRegularStepClaim(smt2, state, step.claim, step.id.posOpt, reporter)
+        val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
         ((q._1, q._2, state.claims ++ q._3, q._4), q._3 :+ q._4)
       } else {
         var s0 = state(claims = ISZ())
@@ -140,12 +141,12 @@ import org.sireum.logika.Logika.Reporter
         if (!ok) {
           return Plugin.Result(F, s0.nextFresh, s0.claims)
         }
-        val q = logika.evalRegularStepClaim(smt2, s0, step.claim, step.id.posOpt, reporter)
+        val q = logika.evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
         ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
       }
 
       if (!status && stat) {
-        val r = smt2.valid(T, log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
+        val r = smt2.valid(cache, T, log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
 
         def error(msg: String): B = {
           reporter.error(posOpt, Logika.kind, msg)

@@ -66,6 +66,7 @@ object PredNatDedPlugin {
 
   override def handle(logika: Logika,
                       smt2: Smt2,
+                      cache: Smt2.Cache,
                       log: B,
                       logDirOpt: Option[String],
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
@@ -185,7 +186,7 @@ object PredNatDedPlugin {
           return emptyResult
         }
     }
-    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, state, step.claim, step.id.posOpt, reporter)
+    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
     if (status) {
       val desc = st"${res.id} (of ${(res.owner, ".")})".render
       reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,

@@ -51,6 +51,7 @@ object Plugin {
 
   def handle(logika: Logika,
              smt2: Smt2,
+             cache: Smt2.Cache,
              log: B,
              logDirOpt: Option[String],
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
