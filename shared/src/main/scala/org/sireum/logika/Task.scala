@@ -61,10 +61,11 @@ object Task {
       for (stmt <- stmts) {
         itvc.transformStmt(stmt)
       }
+      val csmt2 = smt2
       for (tv <- itvc.s.elements) {
-        smt2.addTypeVarIndex(tv)
+        csmt2.addTypeVarIndex(tv)
       }
-      for (state <- logika.evalStmts(Logika.Split.Default, smt2, cache, None(), T, State.create, stmts, reporter) if state.status) {
+      for (state <- logika.evalStmts(Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.status) {
         if (stmts.nonEmpty) {
           val lastPos = stmts(stmts.size - 1).posOpt.get
           logika.logPc(config.logPc, config.logRawPc, state, reporter, Some(Util.afterPos(lastPos)))
@@ -88,18 +89,11 @@ object Task {
       val itvc = IndexTypeVarCollector(HashSet.empty)
       itvc.transformStmt(method)
       val tvs = itvc.s.elements
-      if (!par && tvs.nonEmpty) {
-        val csmt2 = smt2
-        for (tv <- tvs) {
-          csmt2.addTypeVarIndex(tv)
-        }
-        Util.checkMethod(th, plugins, method, config, csmt2, cache, reporter)
-      } else {
-        for (tv <- tvs) {
-          smt2.addTypeVarIndex(tv)
-        }
-        Util.checkMethod(th, plugins, method, config, smt2, cache, reporter)
+      val csmt2 = smt2
+      for (tv <- tvs) {
+        csmt2.addTypeVarIndex(tv)
       }
+      Util.checkMethod(th, plugins, method, config, csmt2, cache, reporter)
       return reporter.messages
     }
   }
