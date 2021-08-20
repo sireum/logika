@@ -313,7 +313,7 @@ object Logika {
     extension.Cancel.cancellable(checkScriptH _)
   }
 
-  @pure def shouldCheck(fileSet: HashSet[String], line: Z, posOpt: Option[Position]): B = {
+  @pure def shouldCheck(fileSet: HashSSet[String], line: Z, posOpt: Option[Position]): B = {
     posOpt match {
       case Some(pos) => pos.uriOpt match {
         case Some(uri) if fileSet.contains(uri) =>
@@ -356,7 +356,7 @@ object Logika {
       reporter.illFormed()
       return
     }
-    val fileSet: HashSet[String] = HashSet ++ files
+    val fileSet: HashSSet[String] = HashSSet ++ files
     @pure def filterNameMap(map: lang.symbol.Resolver.NameMap): lang.symbol.Resolver.NameMap = {
       var r = HashMap.empty[QName, Info]
       for (info <- map.values) {
@@ -399,7 +399,7 @@ object Logika {
       skipMethods, skipTypes)
   }
 
-  def checkTypedPrograms(verifyingStartTime: Z, fileSet: HashSet[String], config: Config, th: TypeHierarchy,
+  def checkTypedPrograms(verifyingStartTime: Z, fileSet: HashSSet[String], config: Config, th: TypeHierarchy,
                          smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter, par: B,
                          plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     var typeStmts = ISZ[(ISZ[String], AST.Stmt)]()
