@@ -86,7 +86,7 @@ def platform: String = {
 def downloadMill(): Unit = {
   if (!mill.exists) {
     println("Downloading mill ...")
-    mill.downloadFrom("https://github.com/sireum/releases/releases/download/mill/mill")
+    mill.downloadFrom("https://github.com/sireum/rolling/releases/download/mill/standalone")
     mill.chmod("+x")
     println()
   }
