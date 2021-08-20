@@ -388,6 +388,10 @@ object Util {
                   smt2: Smt2,
                   cache: Smt2.Cache,
                   reporter: Reporter): Unit = {
+    val mconfig: Config = method.mcontract match {
+      case _: AST.MethodContract.Cases => config(checkInfeasiblePatternMatch = F)
+      case _ => config
+    }
     def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
       var state = State.create
@@ -407,7 +411,7 @@ object Util {
             case _ => halt("Infeasible")
           }
         }
-        val l = logikaMethod(th, config, mname, receiverTypeOpt, method.sig.paramIdTypes,
+        val l = logikaMethod(th, mconfig, mname, receiverTypeOpt, method.sig.paramIdTypes,
           method.sig.returnType.typedOpt.get, method.posOpt, reads, modifies,
           if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None())
         val mctx = l.context.methodOpt.get
@@ -500,7 +504,7 @@ object Util {
           ))
         }
         if (stmts.nonEmpty && s2.status) {
-          logika.logPc(config.logPc, config.logRawPc, s2, reporter,
+          logika.logPc(mconfig.logPc, mconfig.logRawPc, s2, reporter,
             Some(afterPos(stmts(stmts.size - 1).posOpt.get)))
         }
       }

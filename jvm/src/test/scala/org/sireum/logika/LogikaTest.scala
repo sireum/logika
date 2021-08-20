@@ -71,7 +71,8 @@ object LogikaTest {
       splitContract = F,
       splitIf = F,
       splitMatch = F,
-      simplifiedQuery = F)
+      simplifiedQuery = F,
+      checkInfeasiblePatternMatch = T)
 }
 
 import LogikaTest._

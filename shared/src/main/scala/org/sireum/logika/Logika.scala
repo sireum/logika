@@ -2615,7 +2615,7 @@ import Util._
                 leafClaims = leafClaims :+ ((cond, claims))
               }
             } else {
-              if (!shouldSplit) {
+              if (config.checkInfeasiblePatternMatch && !shouldSplit) {
                 warn(posOpt, "Infeasible pattern matching case", reporter)
               }
             }

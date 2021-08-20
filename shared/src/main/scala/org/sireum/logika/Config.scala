@@ -44,7 +44,8 @@ import org.sireum._
                        val splitIf: B,
                        val splitMatch: B,
                        val splitContract: B,
-                       val simplifiedQuery: B)
+                       val simplifiedQuery: B,
+                       val checkInfeasiblePatternMatch: B)
 
 @datatype trait Smt2Config {
   def name: String
