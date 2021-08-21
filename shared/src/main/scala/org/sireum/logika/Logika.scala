@@ -157,7 +157,14 @@ object Logika {
         stmt match {
           case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty && !noMethods(owner, stmt.sig.id.value) =>
             if (ownerPosOpt.nonEmpty) {
-              ownerTasks = ownerTasks :+ Task.Method(par, th, config, stmt, plugins)
+              stmt.mcontract match {
+                case contract: AST.MethodContract.Cases if contract.cases.size > 1 =>
+                  ownerTasks = ownerTasks ++
+                    (for (i <- 0 until contract.cases.size) yield Task.Method(par, th, config, stmt, i, plugins).
+                      asInstanceOf[Task])
+                case _ =>
+                  ownerTasks = ownerTasks :+ Task.Method(par, th, config, stmt, -1, plugins)
+              }
             } else {
               val pos = stmt.posOpt.get
               val ownerPos = (pos.beginLine, pos.beginColumn)
@@ -165,7 +172,14 @@ object Logika {
                 case Some(ts) => ts
                 case _ => ISZ()
               }
-              taskMap = taskMap + ownerPos ~> (tasks :+ Task.Method(par, th, config, stmt, plugins))
+              stmt.mcontract match {
+                case contract: AST.MethodContract.Cases if contract.cases.size > 1 =>
+                  taskMap = taskMap + ownerPos ~> (tasks ++
+                    (for (i <- 0 until contract.cases.size) yield Task.Method(par, th, config, stmt, i, plugins).
+                      asInstanceOf[Task]))
+                case _ =>
+                  taskMap = taskMap + ownerPos ~> (tasks :+ Task.Method(par, th, config, stmt, -1, plugins))
+              }
             }
           case stmt: AST.Stmt.Object if !noTypes(owner, stmt.id.value) =>
             val pos = stmt.posOpt.get

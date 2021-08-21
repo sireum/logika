@@ -384,14 +384,12 @@ object Util {
   def checkMethod(th: TypeHierarchy,
                   plugins: ISZ[plugin.Plugin],
                   method: AST.Stmt.Method,
+                  caseIndex: Z,
                   config: Config,
                   smt2: Smt2,
                   cache: Smt2.Cache,
                   reporter: Reporter): Unit = {
-    val mconfig: Config = method.mcontract match {
-      case _: AST.MethodContract.Cases => config(checkInfeasiblePatternMatch = F)
-      case _ => config
-    }
+    val mconfig: Config = if (caseIndex >= 0) config(checkInfeasiblePatternMatch = F) else config
     def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
                   modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
       var state = State.create
@@ -517,8 +515,13 @@ object Util {
         case contract: AST.MethodContract.Simple =>
           checkCase(None(), contract.reads, contract.requires, contract.modifies, contract.ensures)
         case contract: AST.MethodContract.Cases =>
-          for (c <- contract.cases) {
+          if (caseIndex >= 0) {
+            val c = contract.cases(caseIndex)
             checkCase(if (c.label.value === "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
+          } else {
+            for (c <- contract.cases) {
+              checkCase(if (c.label.value === "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
+            }
           }
       }
     }

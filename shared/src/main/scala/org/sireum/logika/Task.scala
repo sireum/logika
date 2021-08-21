@@ -79,6 +79,7 @@ object Task {
                          val th: TypeHierarchy,
                          val config: Config,
                          val method: AST.Stmt.Method,
+                         val caseIndex: Z,
                          val plugins: ISZ[Plugin]) extends Task {
     override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
       val ms = Util.detectUnsupportedFeatures(method)
@@ -93,7 +94,7 @@ object Task {
       for (tv <- tvs) {
         csmt2.addTypeVarIndex(tv)
       }
-      Util.checkMethod(th, plugins, method, config, csmt2, cache, reporter)
+      Util.checkMethod(th, plugins, method, caseIndex, config, csmt2, cache, reporter)
       return reporter.messages
     }
   }
