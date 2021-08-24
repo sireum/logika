@@ -3117,8 +3117,8 @@ import Util._
         whileStmt.invariants, reporter)) {
         if (s0w.status) {
           val s1 = conjunctClaimSuffix(s0, s0w)
-          val modLocalVars = whileStmt.modifiedLocalVars
-          if (whileStmt.modifiedObjectVars.nonEmpty || whileStmt.modifiedRecordVars.nonEmpty) {
+          val modLocalVars = whileStmt.contract.modifiedLocalVars
+          if (whileStmt.contract.modifiedObjectVars.nonEmpty || whileStmt.contract.modifiedRecordVars.nonEmpty) {
             halt("TODO: rewrite Vars/fields as well") // TODO
           }
           val s0R: State = {
