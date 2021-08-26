@@ -377,7 +377,7 @@ object Util {
       else if (logika.context.methodOpt.get.receiverTypeOpt.isEmpty) st"${(logika.context.methodName, ".")}".render
       else st"${(ops.ISZOps(logika.context.methodName).dropRight(1), ".")}#${logika.context.methodName(0)}".render
     val title: String = if (isPre) s"Method $methodName pre-invariant" else s"Method $methodName post-invariant"
-    return checkInvs(logika, posOpt, isPre, title, smt2, cache, T, state, logika.context.receiverTypeOpt, invs,
+    return checkInvs(logika, posOpt, isPre, title, smt2, cache, T, state, logika.context.receiverTypeOpt, None(), invs,
       substMap, reporter)
   }
 
@@ -987,7 +987,7 @@ object Util {
   }
 
   def checkInvs(logika: Logika, posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Smt2.Cache,
-                rtCheck: B, s0: State, receiverTypeOpt: Option[AST.Typed], invs: ISZ[Info.Inv],
+                rtCheck: B, s0: State, receiverTypeOpt: Option[AST.Typed], receiverOpt: Option[State.Value.Sym], invs: ISZ[Info.Inv],
                 substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     val pos = posOpt.get
     def spInv(): Option[State] = {
@@ -1000,7 +1000,7 @@ object Util {
         case _ => None()
       }
       val (owner, id) = Util.invOwnerId(invs, tOpt)
-      val (s1, v) = evalExtractPureMethod(logika, smt2, cache, s0, receiverTypeOpt, None(), owner, id, claim, reporter)
+      val (s1, v) = evalExtractPureMethod(logika, smt2, cache, s0, receiverTypeOpt, receiverOpt, owner, id, claim, reporter)
       if (!s1.status) {
         return None()
       }

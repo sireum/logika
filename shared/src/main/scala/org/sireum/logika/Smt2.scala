@@ -648,14 +648,12 @@ object Smt2 {
                t: AST.Typed.Name,
                tTypeParams: ISZ[AST.TypeParam],
                tId: ST,
-               parents: ISZ[AST.Typed.Name]): HashMap[String, AST.Typed] = {
+               parents: ISZ[AST.Typed.Name],
+               tsm: HashMap[String, AST.Typed]): Unit = {
       @pure def sortName(names: ISZ[ISZ[String]]): ISZ[ISZ[String]] = {
         return ops.ISZOps(names).sortWith((n1, n2) => st"${(n1, ".")}".render <= st"${(n2, ".")}".render)
       }
 
-      val rep = Reporter.create
-      val tsm = TypeChecker.buildTypeSubstMap(t.ids, None(), tTypeParams, t.args, rep).get
-      assert(!rep.hasMessage)
       for (parent <- parents) {
         addType(parent.subst(tsm), reporter)
       }
@@ -696,18 +694,18 @@ object Smt2 {
         posetUp(poset.addChildren(t, children))
         addTypeDecls(for (child <- children) yield st"(assert (sub-type ${typeHierarchyId(child)} $tId))")
       }
-      return tsm
     }
 
     def addAdt(t: AST.Typed.Name, ti: TypeInfo.Adt): Unit = {
+      val sm = TypeChecker.buildTypeSubstMap(t.ids, None(), ti.ast.typeParams, t.args, reporter).get
       for (arg <- t.args) {
-        addType(arg, reporter)
+        addType(arg.subst(sm), reporter)
       }
       for (v <- ti.vars.values) {
-        addType(v.typedOpt.get, reporter)
+        addType(v.typedOpt.get.subst(sm), reporter)
       }
       for (v <- ti.specVars.values) {
-        addType(v.typedOpt.get, reporter)
+        addType(v.typedOpt.get.subst(sm), reporter)
       }
       posetUp(poset.addNode(t))
       val tId = typeId(t)
@@ -718,7 +716,7 @@ object Smt2 {
       if (!ti.ast.isRoot) {
         addAdtDecl(st"(assert (forall ((x ${typeId(t)})) (= (sub-type (type-of x) $thId) (= (type-of x) $thId))))")
       }
-      val sm = addSub(ti.posOpt, ti.ast.isRoot, t, ti.ast.typeParams, thId, ti.parents)
+      addSub(ti.posOpt, ti.ast.isRoot, t, ti.ast.typeParams, thId, ti.parents, sm)
 
       @pure def fieldInfo(isParam: B, f: Info.Var): Smt2.AdtFieldInfo = {
         val ft = f.typedOpt.get.subst(sm)
@@ -795,8 +793,9 @@ object Smt2 {
     }
 
     def addSig(t: AST.Typed.Name, ti: TypeInfo.Sig): Unit = {
+      val sm = TypeChecker.buildTypeSubstMap(t.ids, None(), ti.ast.typeParams, t.args, reporter).get
       for (arg <- t.args) {
-        addType(arg, reporter)
+        addType(arg.subst(sm), reporter)
       }
       posetUp(poset.addNode(t))
       val tid = typeId(t)
@@ -810,12 +809,12 @@ object Smt2 {
       val neId = typeOpId(t, "!=")
       addAdtDecl(st"(declare-fun $eqId ($tid $tid) B)")
       addAdtDecl(st"(define-fun $neId ((o1 $tid) (o2 $tid)) B (not ($eqId o1 o2)))")
-      addSub(ti.posOpt, T, t, ti.ast.typeParams, tId, ti.parents)
+      addSub(ti.posOpt, T, t, ti.ast.typeParams, tId, ti.parents, sm)
       var ops = ISZ[(String, ST)]()
       for (info <- ti.specVars.values) {
         val opId = info.ast.id.value
         val op = typeOpId(t, opId)
-        val opT = info.typedOpt.get
+        val opT = info.typedOpt.get.subst(sm)
         addType(opT, reporter)
         val opTid = typeId(opT)
         addAdtDecl(st"(declare-fun $op ($tid) $opTid)")
@@ -865,7 +864,7 @@ object Smt2 {
         else None()
       (ti.ast.isSigned, ti.ast.isBitVector) match {
         case (T, T) =>
-          addTypeDecl(
+          addSort(
             st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
                 |(declare-fun $t2ZId ($tId) Z)
                 |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
@@ -887,7 +886,7 @@ object Smt2 {
                 |$tMaxOpt
                 |$tMinOpt""")
         case (F, T) =>
-          addTypeDecl(
+          addSort(
             st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
                 |(declare-fun $t2ZId ($tId) Z)
                 |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
@@ -909,7 +908,7 @@ object Smt2 {
                 |$tMaxOpt
                 |$tMinOpt""")
         case (_, _) =>
-          addTypeDecl(
+          addSort(
             st"""(define-sort $tId () Int)
                 |(define-fun $t2ZId ((n $tId)) Z n)
                 |(define-fun $tNegId ((x $tId)) $tId (- x))

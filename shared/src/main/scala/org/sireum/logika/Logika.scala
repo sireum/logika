@@ -1723,8 +1723,8 @@ import Util._
           if (info.isHelper || info.strictPureBodyOpt.nonEmpty) ISZ()
           else retrieveInvs(res.owner, res.isInObject)
         s1 = {
-          val pis = Util.checkInvs(logikaComp, posOpt, F, "Pre-invariant", smt2, cache, rtCheck, s1, context.receiverTypeOpt,
-            invs, typeSubstMap, reporter)
+          val pis = Util.checkInvs(logikaComp, posOpt, F, "Pre-invariant", smt2, cache, rtCheck, s1,
+            logikaComp.context.receiverTypeOpt, receiverOpt, invs, typeSubstMap, reporter)
           s1(status = pis.status, nextFresh = pis.nextFresh)
         }
         contract match {
@@ -1819,7 +1819,7 @@ import Util._
           val (s9, sym) = sv
           if (s9.status) {
             val s10 = Util.checkInvs(logikaComp, posOpt, T, "Post-invariant", smt2, cache, rtCheck, s9,
-              context.receiverTypeOpt, invs, typeSubstMap, reporter)
+              logikaComp.context.receiverTypeOpt, receiverOpt, invs, typeSubstMap, reporter)
             if (s10.nextFresh > nextFresh) {
               nextFresh = s10.nextFresh
             }
@@ -2306,8 +2306,8 @@ import Util._
     }
     val objectName = ops.ISZOps(ids).dropRight(1)
     if (notInContext(objectName, T)) {
-      return Util.checkInvs(this, namePosOpt, F, "Invariant after an object field assignment", smt2, cache, rtCheck, s7, None(),
-        retrieveInvs(objectName, T), TypeChecker.emptySubstMap, reporter)
+      return Util.checkInvs(this, namePosOpt, F, "Invariant after an object field assignment", smt2, cache, rtCheck, s7,
+        None(), None(), retrieveInvs(objectName, T), TypeChecker.emptySubstMap, reporter)
     } else {
       return s7
     }
@@ -2393,9 +2393,10 @@ import Util._
                 case info => halt(s"Infeasible: $info")
               }
               val sm = TypeChecker.buildTypeSubstMap(t.ids, lhs.posOpt, typeParams, t.args, reporter).get
-              val s4 = Util.checkInvs(this, lhs.posOpt, F, "Invariant after an instance field assignment", smt2, cache,
-                rtCheck, s3, Some(t), retrieveInvs(t.ids, T), sm, reporter)
-              r = r ++ assignRec(split, smt2, cache, rtCheck, s4, receiver, newSym, reporter)
+              val (s4, oSym) = value2Sym(s3, o, receiverPos)
+              val s5 = Util.checkInvs(this, lhs.posOpt, F, "Invariant after an instance field assignment", smt2, cache,
+                rtCheck, s4, Some(t), Some(oSym), retrieveInvs(t.ids, T), sm, reporter)
+              r = r ++ assignRec(split, smt2, cache, rtCheck, s5, receiver, newSym, reporter)
             } else {
               r = r ++ assignRec(split, smt2, cache, rtCheck, s3, receiver, newSym, reporter)
             }
@@ -3388,7 +3389,7 @@ import Util._
           if (stmt.modifies.nonEmpty) {
             return evalFor(state, stmt)
           } else {
-            halt("TODO") // TODO
+            halt(s"TODO: $stmt") // TODO
           }
         case stmt: AST.Stmt.Return =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
