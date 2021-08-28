@@ -196,8 +196,6 @@ object Smt2 {
 
 @msig trait Smt2 {
 
-  def configs: ISZ[Smt2Config]
-
   def timeoutInMs: Z
 
   def simplifiedQuery: B
@@ -205,6 +203,10 @@ object Smt2 {
   def charBitWidth: Z
 
   def intBitWidth: Z
+
+  def configs: ISZ[Smt2Config]
+
+  def configsUp(newConfigs: ISZ[Smt2Config]): Unit
 
   def types: HashSet[AST.Typed]
 

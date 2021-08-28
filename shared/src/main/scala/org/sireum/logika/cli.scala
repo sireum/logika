@@ -111,17 +111,30 @@ object cli {
           description = "Split on match expressions and statements"),
       )),
       OptGroup(name = "SMT2", opts = ISZ(
+        Opt(name = "cvc4RLimit", longKey = "cvc4-rlimit", shortKey = None(),
+          tpe = Type.Num(None(), 1000000, None(), None()),
+          description = "CVC4 rlimit"
+        ),
+        Opt(name = "cvc4Opts", longKey = "cvc4-opts", shortKey = None(),
+          tpe = Type.Str(Some(','), None()),
+          description = "Other CVC4 options"
+        ),
         Opt(name = "simplify", longKey = "simplify", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Simplify SMT2 query"
         ),
         Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
           tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc4", "z3")),
-          description = "Smt2 solver"
+          description = "SMT2 solver"
         ),
         Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
           tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
-          description = "Timeout (seconds) for SMT2 solver"),
+          description = "Timeout (seconds) for SMT2 solver"
+        ),
+        Opt(name = "z3Opts", longKey = "z3-opts", shortKey = None(),
+          tpe = Type.Str(Some(','), None()),
+          description = "Other Z3 options"
+        ),
       )),
     )
   )

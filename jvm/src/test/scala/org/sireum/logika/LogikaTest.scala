@@ -53,7 +53,7 @@ object LogikaTest {
 
   val config: Config =
     Config(
-      smt2Configs = ISZ(Cvc4Config(cvc4Exe), Z3Config(z3Exe)),
+      smt2Configs = ISZ(Cvc4Config(cvc4Exe, ISZ()), Z3Config(z3Exe, ISZ())),
       sat = T,
       timeoutInMs = timeoutInMs,
       defaultLoopBound = 10,
@@ -72,7 +72,8 @@ object LogikaTest {
       splitIf = F,
       splitMatch = F,
       simplifiedQuery = F,
-      checkInfeasiblePatternMatch = T)
+      checkInfeasiblePatternMatch = T,
+      cvc4RLimit = 1000000)
 }
 
 import LogikaTest._
@@ -193,7 +194,8 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkScript(None(), input, config,
-      th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.charBitWidth, config.intBitWidth, config.simplifiedQuery, reporter),
+      th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.cvc4RLimit, config.charBitWidth,
+        config.intBitWidth, config.simplifiedQuery, reporter),
       Smt2.NoCache(), reporter, F, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {

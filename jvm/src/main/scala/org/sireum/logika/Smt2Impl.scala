@@ -32,17 +32,9 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
 
-  @pure def z3ArgF(timeoutInMs: Z): ISZ[String] = {
-    return ISZ("-smt2", s"-T:${(timeoutInMs / 1000) + 1}", s"-t:$timeoutInMs", "-in")
-  }
-
-  @pure def cvc4ArgF(timeoutInMs: Z): ISZ[String] = {
-    return ISZ(s"--tlimit=$timeoutInMs", "--lang=smt2.6")
-  }
-
-  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z,
-                         charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B, reporter: Logika.Reporter): Smt2 = {
-    val r = Smt2Impl(configs, typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery,
+  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z, cvc4RLimit: Z,
+             charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B, reporter: Logika.Reporter): Smt2 = {
+    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery, cvc4RLimit, configs,
       HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), HashMap.empty,
       HashSMap.empty, HashMap.empty, HashSSet.empty)
     r.addType(AST.Typed.z, reporter)
@@ -50,12 +42,13 @@ object Smt2Impl {
   }
 }
 
-@record class Smt2Impl(val configs: ISZ[Smt2Config],
-                       val typeHierarchy: TypeHierarchy,
+@record class Smt2Impl(val typeHierarchy: TypeHierarchy,
                        val timeoutInMs: Z,
                        val charBitWidth: Z,
                        val intBitWidth: Z,
                        val simplifiedQuery: B,
+                       val cvc4RLimit: Z,
+                       var configs: ISZ[Smt2Config],
                        var types: HashSet[AST.Typed],
                        var poset: Poset[AST.Typed.Name],
                        var sorts: ISZ[ST],
@@ -68,6 +61,10 @@ object Smt2Impl {
                        var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)],
                        var filenameCount: HashMap[String, Z],
                        var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
+
+  def configsUp(newConfigs: ISZ[Smt2Config]): Unit = {
+    configs = newConfigs
+  }
 
  def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
     shortIds = newShortIds
@@ -161,6 +158,7 @@ object Smt2Impl {
       var args = config.args(timeoutInMs)
       config match {
         case _: Cvc4Config =>
+          args = args :+ s"--rlimit=$cvc4RLimit"
           if (!isSat) {
             args = args :+ "--full-saturate-quant"
           }
@@ -172,12 +170,12 @@ object Smt2Impl {
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
       val pout: String = pr.out
-      if (pout.size == 0 && pr.exitCode != 0 && pr.exitCode != -101) {
+      if (pout.size == 0 && pr.exitCode != 0 && pr.exitCode != -101 && pr.exitCode != -100) {
         err(pout, pr.exitCode)
       }
       val duration = extension.Time.currentMillis - startTime
       val out = ops.StringOps(pout).split((c: C) => c.isWhitespace)
-      val firstLine: String = if (pr.exitCode == -101) "timeout" else out(0)
+      val firstLine: String = if (pr.exitCode == -101 || pr.exitCode == -100) "timeout" else out(0)
       val r: Smt2Query.Result = firstLine match {
         case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query,
           st"""; Result:    ${if (isSat) "Sat" else "Invalid"}
