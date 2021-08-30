@@ -155,14 +155,9 @@ object Smt2Impl {
       }
       //println(s"$exe Query:")
       //println(query)
-      var args = config.args(timeoutInMs)
+      var args = config.args(isSat, timeoutInMs)
       config match {
-        case _: Cvc4Config =>
-          args = args :+ s"--rlimit=$cvc4RLimit"
-          if (!isSat) {
-            args = args :+ "--full-saturate-quant"
-          }
-          //args = args :+ (if (isSat) "--finite-model-find" else "--full-saturate-quant")
+        case _: Cvc4Config => args = args :+ s"--rlimit=$cvc4RLimit"
         case _ =>
       }
       var proc = Os.proc(config.exe +: args).input(query).redirectErr

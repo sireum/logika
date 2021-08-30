@@ -115,9 +115,13 @@ object cli {
           tpe = Type.Num(None(), 1000000, None(), None()),
           description = "CVC4 rlimit"
         ),
-        Opt(name = "cvc4Opts", longKey = "cvc4-opts", shortKey = None(),
-          tpe = Type.Str(Some(','), None()),
-          description = "Other CVC4 options"
+        Opt(name = "cvc4VOpts", longKey = "cvc4-vopts", shortKey = None(),
+          tpe = Type.Str(Some(','), Some("--full-saturate-quant")),
+          description = "Additional options for CVC4 validity checks"
+        ),
+        Opt(name = "cvc4SOpts", longKey = "cvc4-sopts", shortKey = None(),
+          tpe = Type.Str(Some(','), None() /*Some("--finite-model-find")*/),
+          description = "Additional options for CVC4 satisfiability checks"
         ),
         Opt(name = "simplify", longKey = "simplify", shortKey = None(),
           tpe = Type.Flag(F),
@@ -131,9 +135,13 @@ object cli {
           tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
           description = "Timeout (seconds) for SMT2 solver"
         ),
-        Opt(name = "z3Opts", longKey = "z3-opts", shortKey = None(),
+        Opt(name = "z3VOpts", longKey = "z3-vopts", shortKey = None(),
           tpe = Type.Str(Some(','), None()),
-          description = "Other Z3 options"
+          description = "Additional options for Z3 validity checks"
+        ),
+        Opt(name = "z3SOpts", longKey = "z3-sopts", shortKey = None(),
+          tpe = Type.Str(Some(','), None()),
+          description = "Additional options for Z3 satisfiability checks"
         ),
       )),
     )

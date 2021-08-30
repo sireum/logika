@@ -51,30 +51,32 @@ import org.sireum._
 @datatype trait Smt2Config {
   def name: String
   def exe: String
-  @pure def args(timeoutInMs: Z): ISZ[String]
-  @pure def updateOtherOpts(solverName: String, otherOpts: ISZ[String]): Smt2Config
+  def validOpts: ISZ[String]
+  def satOpts: ISZ[String]
+  @pure def args(isSat: B, timeoutInMs: Z): ISZ[String]
+  @pure def updateOtherOpts(solverName: String, isSat: B, opts: ISZ[String]): Smt2Config
 }
 
-@datatype class Z3Config(val exe: String, val otherOpts: ISZ[String]) extends Smt2Config {
+@datatype class Z3Config(val exe: String, val validOpts: ISZ[String], val satOpts: ISZ[String]) extends Smt2Config {
   val name: String = "z3"
 
-  @pure def args(timeoutInMs: Z): ISZ[String] = {
-    return ISZ[String]("-smt2", "-in", s"-t:$timeoutInMs") ++ otherOpts
+  @pure def args(isSat: B, timeoutInMs: Z): ISZ[String] = {
+    return ISZ[String]("-smt2", "-in", s"-t:$timeoutInMs") ++ (if (isSat) satOpts else validOpts)
   }
 
-  @strictpure def updateOtherOpts(solverName: String, newOtherOpts: ISZ[String]): Smt2Config =
-    if (name == solverName) Z3Config(exe, newOtherOpts) else this
+  @strictpure def updateOtherOpts(solverName: String, isSat: B, newOpts: ISZ[String]): Z3Config =
+    if (name == solverName) Z3Config(exe, if (isSat) validOpts else newOpts, if (isSat) newOpts else satOpts) else this
 }
 
-@datatype class Cvc4Config(val exe: String, val otherOpts: ISZ[String]) extends Smt2Config {
+@datatype class Cvc4Config(val exe: String, val validOpts: ISZ[String], val satOpts: ISZ[String]) extends Smt2Config {
   val name: String = "cvc4"
 
-  @pure def args(timeoutInMs: Z): ISZ[String] = {
-    return ISZ[String]("--lang=smt2.6", s"--tlimit=$timeoutInMs") ++ otherOpts
+  @pure def args(isSat: B, timeoutInMs: Z): ISZ[String] = {
+    return ISZ[String]("--lang=smt2.6", s"--tlimit=$timeoutInMs") ++ (if (isSat) satOpts else validOpts)
   }
 
-  @strictpure def updateOtherOpts(solverName: String, newOtherOpts: ISZ[String]): Smt2Config =
-    if (name == solverName) Cvc4Config(exe, newOtherOpts) else this
+  @strictpure def updateOtherOpts(solverName: String, isSat: B, newOpts: ISZ[String]): Cvc4Config =
+    if (name == solverName) Cvc4Config(exe, if (isSat) validOpts else newOpts, if (isSat) newOpts else satOpts) else this
 }
 
 
