@@ -565,11 +565,11 @@ import Util._
         val (s0, vs) = current
         for (p <- evalExp(split, smt2, cache, rtCheck, s0, e, reporter)) {
           val (s1, v) = p
+          if (nextFresh < s1.nextFresh) {
+            nextFresh = s1.nextFresh
+          }
           if (s1.status) {
             currents = currents :+ ((s1, vs :+ v))
-            if (nextFresh < s1.nextFresh) {
-              nextFresh = s1.nextFresh
-            }
           } else {
             done = done :+ ((s1, vs :+ v))
           }
@@ -1771,6 +1771,7 @@ import Util._
               var nextFresh: Z =
                 ops.ISZOps(okCcrs).foldLeft((nf: Z, ccr: Context.ContractCaseResult) =>
                   if (nf < ccr.state.nextFresh) ccr.state.nextFresh else nf, -1)
+              assert(nextFresh >= 0)
               if (!isUnit) {
                 nextFresh = nextFresh + 1
               }
@@ -1825,6 +1826,9 @@ import Util._
             }
             r = r :+ ((conjunctClaimSuffix(s9, s10), sym))
           } else {
+            if (s9.nextFresh > nextFresh) {
+              nextFresh = s9.nextFresh
+            }
             r = r :+ sv
           }
         }
@@ -1911,6 +1915,9 @@ import Util._
             nextFresh = s1.nextFresh
           }
         } else {
+          if (nextFresh < s0.nextFresh) {
+            nextFresh = s0.nextFresh
+          }
           r = r :+ ((s0, State.errorValue))
         }
       }
@@ -2150,19 +2157,26 @@ import Util._
       }
     }
 
-    def checkSplits(svs: ISZ[(State, State.Value)]): ISZ[(State, State.Value)] = {
-      assert(svs.size > 0)
-      var nextFresh: Z = -1
-      for (sv <- svs if nextFresh == -1) {
-        if (sv._1.status) {
+    def checkSplits(): ISZ[(State, State.Value)] = {
+      val svs = expH(state)
+      def check(): B = {
+        if (!(svs.size > 0)) {
+          return F
+        }
+        var nextFresh: Z = -1
+        for (sv <- svs if nextFresh == -1) {
           nextFresh = sv._1.nextFresh
         }
+        if (nextFresh < 0) {
+          return F
+        }
+        return svs.size == 1 || ops.ISZOps(svs).forall((p: (State, State.Value)) => !p._1.status || nextFresh == p._1.nextFresh)
       }
-      assert(svs.size == 1 || ops.ISZOps(svs).forall((p: (State, State.Value)) => !p._1.status || nextFresh == p._1.nextFresh))
+      assert(check())
       return svs
     }
 
-    return checkSplits(expH(state))
+    return checkSplits()
   }
 
   def value2Sym(s0: State, v: State.Value, pos: Position): (State, State.Value.Sym) = {
@@ -3419,14 +3433,20 @@ import Util._
 
     def checkSplits(): ISZ[State] = {
       val ss = evalStmtH()
-      assert(ss.size > 0)
-      var nextFresh: Z = -1
-      for (s <- ss if nextFresh == -1) {
-        if (s.status) {
+      def check(): B = {
+        if (!(ss.size > 0)) {
+          return F
+        }
+        var nextFresh: Z = -1
+        for (s <- ss if nextFresh == -1) {
           nextFresh = s.nextFresh
         }
+        if (nextFresh < 0) {
+          return F
+        }
+        return ss.size == 1 || ops.ISZOps(ss).forall((s: State) => !s.status || nextFresh == s.nextFresh)
       }
-      assert(ss.size == 1 || ops.ISZOps(ss).forall((s: State) => !s.status || nextFresh == s.nextFresh))
+      assert(check())
       return ss
     }
 
@@ -3606,15 +3626,11 @@ import Util._
   }
 
   @pure def maxStatesNextFresh(ss: ISZ[State]): Z = {
-    var r = ss(0).nextFresh
-    if (ss.size > 1) {
-      for (i <- 1 until ss.size) {
-        val nf = ss(i).nextFresh
-        if (r < nf) {
-          r = nf
-        }
-      }
+    var r: Z = -1
+    for (s <- ss if r < s.nextFresh) {
+      r = s.nextFresh
     }
+    assert(r >= 0)
     return r
   }
 

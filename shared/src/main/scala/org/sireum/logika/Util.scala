@@ -731,6 +731,7 @@ object Util {
             maxFresh = s2.nextFresh
           }
         }
+        assert(maxFresh >= 0)
         (r, for (ss <- sss) yield (ss._1(nextFresh = maxFresh), ss._2), maxFresh)
       }
 
