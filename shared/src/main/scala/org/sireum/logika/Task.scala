@@ -75,7 +75,7 @@ object Task {
     }
   }
 
-  @datatype class Method(val par: B,
+  @datatype class Method(val par: Z,
                          val th: TypeHierarchy,
                          val config: Config,
                          val method: AST.Stmt.Method,

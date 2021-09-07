@@ -196,7 +196,7 @@ class LogikaTest extends TestSuite {
     Logika.checkScript(None(), input, config,
       th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.cvc4RLimit, config.charBitWidth,
         config.intBitWidth, config.simplifiedQuery, reporter),
-      Smt2.NoCache(), reporter, F, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
+      Smt2.NoCache(), reporter, 1, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

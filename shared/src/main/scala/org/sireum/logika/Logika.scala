@@ -123,7 +123,7 @@ object Logika {
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
-                 par: B, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z,
+                 par: Z, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z,
                  skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
 
     var noMethodIds = HashSet.empty[String]
@@ -258,19 +258,15 @@ object Logika {
     }
 
     @pure def compute(task: Task): Reporter = {
-      val r = reporter.empty
-      val csmt2 = smt2
-      task.compute(csmt2, cache, r)
-      return r
-    }
-
-    if (par) {
-      combine(reporter, ops.ISZOps(tasks).mParMapFoldLeft[Reporter, Reporter](compute _, combine _, reporter.empty))
-    } else {
-      for (task <- tasks) {
-        extension.Cancel.cancellable(() => task.compute(smt2, cache, reporter))
+      return extension.Cancel.cancellable{() =>
+        val r = reporter.empty
+        val csmt2 = smt2
+        task.compute(csmt2, cache, r)
+        r
       }
     }
+
+    combine(reporter, ops.ISZOps(tasks).mParMapFoldLeftCores[Reporter, Reporter](compute _, combine _, reporter.empty, par))
     if (verifyingStartTime != 0) {
       reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
     }
@@ -278,7 +274,7 @@ object Logika {
 
   def checkScript(fileUriOpt: Option[String], input: String, config: Config,
                   smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
-                  par: B, hasLogika: B, plugins: ISZ[Plugin], line: Z,
+                  par: Z, hasLogika: B, plugins: ISZ[Plugin], line: Z,
                   skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
@@ -345,7 +341,7 @@ object Logika {
   }
 
   def checkPrograms(sources: ISZ[(Option[String], String)], files: ISZ[String], config: Config, th: TypeHierarchy,
-                    smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter, par: B,
+                    smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter, par: Z,
                     strictAliasing: B, sanityCheck: B, plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String],
                     skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
@@ -415,7 +411,7 @@ object Logika {
   }
 
   def checkTypedPrograms(verifyingStartTime: Z, fileSet: HashSSet[String], config: Config, th: TypeHierarchy,
-                         smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter, par: B,
+                         smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter, par: Z,
                          plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     var typeStmts = ISZ[(ISZ[String], AST.Stmt)]()
     for (info <- th.nameMap.values) {

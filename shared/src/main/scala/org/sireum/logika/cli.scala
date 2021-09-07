@@ -31,6 +31,10 @@ import org.sireum.cli.CliOpt._
 
 object cli {
 
+  val parOpt: Opt = Opt(name = "par", longKey = "par", shortKey = Some('p'),
+    tpe = Type.NumFlag(100, Some(1), Some(100)),
+    description = "Enable parallelization (with CPU cores percentage to use)")
+
   val logikaVerifier: Tool = Tool(
     name = "logikaVerifier",
     command = "verifier",
@@ -87,8 +91,8 @@ object cli {
       )),
       OptGroup(name = "Optimizations", opts = ISZ(
         Opt(name = "par", longKey = "par", shortKey = Some('p'),
-          tpe = Type.Flag(F),
-          description = "Enable parallelization"),
+          tpe = Type.NumFlag(100, Some(1), Some(100)),
+          description = "Enable parallelization (with CPU cores percentage to use)"),
         Opt(name = "ramFolder", longKey = "ram-folder", shortKey = None(),
           tpe = Type.Path(F, None()),
           description = "RAM folder to temporarily store various artifacts (e.g., SMT2 solvers)"),
