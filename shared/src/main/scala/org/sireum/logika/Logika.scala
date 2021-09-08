@@ -258,15 +258,15 @@ object Logika {
     }
 
     @pure def compute(task: Task): Reporter = {
-      return extension.Cancel.cancellable{() =>
-        val r = reporter.empty
-        val csmt2 = smt2
-        task.compute(csmt2, cache, r)
-        r
-      }
+      val r = reporter.empty
+      val csmt2 = smt2
+      task.compute(csmt2, cache, r)
+      return r
     }
 
-    combine(reporter, ops.ISZOps(tasks).mParMapFoldLeftCores[Reporter, Reporter](compute _, combine _, reporter.empty, par))
+    extension.Cancel.cancellable { () =>
+      combine(reporter, ops.ISZOps(tasks).mParMapFoldLeftCores[Reporter, Reporter](compute _, combine _, reporter.empty, par))
+    }
     if (verifyingStartTime != 0) {
       reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
     }
