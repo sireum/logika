@@ -35,6 +35,7 @@ import org.sireum._
                        val unroll: B,
                        val charBitWidth: Z,
                        val intBitWidth: Z,
+                       val useReal: B,
                        val logPc: B,
                        val logRawPc: B,
                        val logVc: B,

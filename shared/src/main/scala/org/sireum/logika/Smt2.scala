@@ -141,44 +141,9 @@ object Smt2 {
           |(define-fun |Z./| ((x Z) (y Z)) Z (bvsdiv x y))
           |(define-fun |Z.%| ((x Z) (y Z)) Z (bvsrem x y))"""
 
-  val f32ST: ST =
-    st"""(define-sort F32 () Float32)
-        |(define-const |F32.PInf| F32 (_ +oo 8 24))
-        |(define-const |F32.NInf| F32 (_ -oo 8 24))
-        |(define-const |F32.NaN| F32 (_ NaN 8 24))
-        |(define-fun |F32.unary_-| ((x F32)) F32 (fp.neg x))
-        |(define-fun |F32.<=| ((x F32) (y F32)) B (fp.leq x y))
-        |(define-fun |F32.<| ((x F32) (y F32)) B (fp.lt x y))
-        |(define-fun |F32.>| ((x F32) (y F32)) B (fp.gt x y))
-        |(define-fun |F32.>=| ((x F32) (y F32)) B (fp.geq x y))
-        |(define-fun |F32.==| ((x F32) (y F32)) B (fp.eq x y))
-        |(define-fun |F32.!=| ((x F32) (y F32)) B (not (fp.eq x y)))
-        |(define-fun |F32.+| ((x F32) (y F32)) F32 (fp.add RNE x y))
-        |(define-fun |F32.-| ((x F32) (y F32)) F32 (fp.sub RNE x y))
-        |(define-fun |F32.*| ((x F32) (y F32)) F32 (fp.mul RNE x y))
-        |(define-fun |F32./| ((x F32) (y F32)) F32 (fp.div RNE x y))
-        |(define-fun |F32.%| ((x F32) (y F32)) F32 (fp.rem x y))"""
-
-  val f64ST: ST =
-    st"""(define-sort F64 () Float64)
-        |(define-const |F64.PInf| F64 (_ +oo 11 53))
-        |(define-const |F64.NInf| F64 (_ -oo 11 53))
-        |(define-const |F64.NaN| F64 (_ NaN 11 53))
-        |(define-fun |F64.unary_-| ((x F64)) F64 (fp.neg x))
-        |(define-fun |F64.<=| ((x F64) (y F64)) B (fp.leq x y))
-        |(define-fun |F64.<| ((x F64) (y F64)) B (fp.lt x y))
-        |(define-fun |F64.>| ((x F64) (y F64)) B (fp.gt x y))
-        |(define-fun |F64.>=| ((x F64) (y F64)) B (fp.geq x y))
-        |(define-fun |F64.==| ((x F64) (y F64)) B (fp.eq x y))
-        |(define-fun |F64.!=| ((x F64) (y F64)) B (not (fp.eq x y)))
-        |(define-fun |F64.+| ((x F64) (y F64)) F64 (fp.add RNE x y))
-        |(define-fun |F64.-| ((x F64) (y F64)) F64 (fp.sub RNE x y))
-        |(define-fun |F64.*| ((x F64) (y F64)) F64 (fp.mul RNE x y))
-        |(define-fun |F64./| ((x F64) (y F64)) F64 (fp.div RNE x y))
-        |(define-fun |F64.%| ((x F64) (y F64)) F64 (fp.rem x y))"""
-
   val rST: ST =
     st"""(define-sort R () Real)
+        |(define-fun |R.unary_-| ((x R)) R (- x))
         |(define-fun |R.<=| ((x R) (y R)) B (<= x y))
         |(define-fun |R.<| ((x R) (y R)) B (< x y))
         |(define-fun |R.>| ((x R) (y R)) B (> x y))
@@ -196,13 +161,87 @@ object Smt2 {
 
 @msig trait Smt2 {
 
-  def timeoutInMs: Z
+  @strictpure def f32ST: ST = if (useReal) {
+    st"""(define-sort F32 () Real)
+        |(declare-const |F32.PInf| F32)
+        |(declare-const |F32.NInf| F32)
+        |(declare-const |F32.NaN| F32)
+        |(define-fun |F32.unary_-| ((x F32)) F32 (- x))
+        |(define-fun |F32.<=| ((x F32) (y F32)) B (<= x y))
+        |(define-fun |F32.<| ((x F32) (y F32)) B (< x y))
+        |(define-fun |F32.>| ((x F32) (y F32)) B (> x y))
+        |(define-fun |F32.>=| ((x F32) (y F32)) B (>= x y))
+        |(define-fun |F32.==| ((x F32) (y F32)) B (= x y))
+        |(define-fun |F32.!=| ((x F32) (y F32)) B (not (= x y)))
+        |(define-fun |F32.+| ((x F32) (y F32)) F32 (+ x y))
+        |(define-fun |F32.-| ((x F32) (y F32)) F32 (- x y))
+        |(define-fun |F32.*| ((x F32) (y F32)) F32 (* x y))
+        |(define-fun |F32./| ((x F32) (y F32)) F32 (/ x y))
+        |(declare-fun |F32.%| (F32 F32) F32)"""
+  } else {
+    st"""(define-sort F32 () Float32)
+        |(define-const |F32.PInf| F32 (_ +oo 8 24))
+        |(define-const |F32.NInf| F32 (_ -oo 8 24))
+        |(define-const |F32.NaN| F32 (_ NaN 8 24))
+        |(define-fun |F32.unary_-| ((x F32)) F32 (fp.neg x))
+        |(define-fun |F32.<=| ((x F32) (y F32)) B (fp.leq x y))
+        |(define-fun |F32.<| ((x F32) (y F32)) B (fp.lt x y))
+        |(define-fun |F32.>| ((x F32) (y F32)) B (fp.gt x y))
+        |(define-fun |F32.>=| ((x F32) (y F32)) B (fp.geq x y))
+        |(define-fun |F32.==| ((x F32) (y F32)) B (fp.eq x y))
+        |(define-fun |F32.!=| ((x F32) (y F32)) B (not (fp.eq x y)))
+        |(define-fun |F32.+| ((x F32) (y F32)) F32 (fp.add RNE x y))
+        |(define-fun |F32.-| ((x F32) (y F32)) F32 (fp.sub RNE x y))
+        |(define-fun |F32.*| ((x F32) (y F32)) F32 (fp.mul RNE x y))
+        |(define-fun |F32./| ((x F32) (y F32)) F32 (fp.div RNE x y))
+        |(define-fun |F32.%| ((x F32) (y F32)) F32 (fp.rem x y))"""
+  }
 
-  def simplifiedQuery: B
+  @strictpure def f64ST: ST = if (useReal) {
+    st"""(define-sort F64 () Real)
+        |(declare-const |F64.PInf| F64)
+        |(declare-const |F64.NInf| F64)
+        |(declare-const |F64.NaN| F64)
+        |(define-fun |F64.unary_-| ((x F64)) F64 (- x))
+        |(define-fun |F64.<=| ((x F64) (y F64)) B (<= x y))
+        |(define-fun |F64.<| ((x F64) (y F64)) B (< x y))
+        |(define-fun |F64.>| ((x F64) (y F64)) B (> x y))
+        |(define-fun |F64.>=| ((x F64) (y F64)) B (>= x y))
+        |(define-fun |F64.==| ((x F64) (y F64)) B (= x y))
+        |(define-fun |F64.!=| ((x F64) (y F64)) B (not (= x y)))
+        |(define-fun |F64.+| ((x F64) (y F64)) F64 (+ x y))
+        |(define-fun |F64.-| ((x F64) (y F64)) F64 (- x y))
+        |(define-fun |F64.*| ((x F64) (y F64)) F64 (* x y))
+        |(define-fun |F64./| ((x F64) (y F64)) F64 (/ x y))
+        |(declare-fun |F64.%| (F64 F64) F64)"""
+  } else {
+    st"""(define-sort F64 () Float64)
+        |(define-const |F64.PInf| F64 (_ +oo 11 53))
+        |(define-const |F64.NInf| F64 (_ -oo 11 53))
+        |(define-const |F64.NaN| F64 (_ NaN 11 53))
+        |(define-fun |F64.unary_-| ((x F64)) F64 (fp.neg x))
+        |(define-fun |F64.<=| ((x F64) (y F64)) B (fp.leq x y))
+        |(define-fun |F64.<| ((x F64) (y F64)) B (fp.lt x y))
+        |(define-fun |F64.>| ((x F64) (y F64)) B (fp.gt x y))
+        |(define-fun |F64.>=| ((x F64) (y F64)) B (fp.geq x y))
+        |(define-fun |F64.==| ((x F64) (y F64)) B (fp.eq x y))
+        |(define-fun |F64.!=| ((x F64) (y F64)) B (not (fp.eq x y)))
+        |(define-fun |F64.+| ((x F64) (y F64)) F64 (fp.add RNE x y))
+        |(define-fun |F64.-| ((x F64) (y F64)) F64 (fp.sub RNE x y))
+        |(define-fun |F64.*| ((x F64) (y F64)) F64 (fp.mul RNE x y))
+        |(define-fun |F64./| ((x F64) (y F64)) F64 (fp.div RNE x y))
+        |(define-fun |F64.%| ((x F64) (y F64)) F64 (fp.rem x y))"""
+  }
 
-  def charBitWidth: Z
+  @pure def timeoutInMs: Z
 
-  def intBitWidth: Z
+  @pure def simplifiedQuery: B
+
+  @pure def charBitWidth: Z
+
+  @pure def intBitWidth: Z
+
+  @pure def useReal: B
 
   def configs: ISZ[Smt2Config]
 
@@ -432,6 +471,8 @@ object Smt2 {
   def formatF32(value: F32): ST
 
   def formatF64(value: F64): ST
+
+  def formatR(value: R): ST
 
   @memoize def adtId(tipe: AST.Typed): ST = {
     @pure def isAdt(t: AST.Typed.Name): B = {
@@ -990,8 +1031,8 @@ object Smt2 {
     t match {
       case AST.Typed.z => sortsUp(sorts :+ Smt2.zST(intBitWidth))
       case AST.Typed.c => sortsUp(sorts :+ Smt2.cST(charBitWidth))
-      case AST.Typed.f32 => sortsUp(sorts :+ Smt2.f32ST)
-      case AST.Typed.f64 => sortsUp(sorts :+ Smt2.f64ST)
+      case AST.Typed.f32 => sortsUp(sorts :+ f32ST)
+      case AST.Typed.f64 => sortsUp(sorts :+ f64ST)
       case AST.Typed.r => sortsUp(sorts :+ Smt2.rST)
       case t: AST.Typed.Name =>
         if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
@@ -1189,9 +1230,7 @@ object Smt2 {
           case _ => halt("Infeasible")
         }
         return toVal(t, conversions.U32.toZ(conversions.C.toU32(v.value)))
-      case v: State.Value.R =>
-        val text = s"${v.value}"
-        return if (ops.StringOps(text).contains(".")) st"$text" else st"$text.0"
+      case v: State.Value.R => return formatR(v.value)
       case v: State.Value.String =>
         val cs: ISZ[String] = for (c <- conversions.String.toCis(v.value)) yield smt2c(c)
         return st""""${(cs, "")}""""

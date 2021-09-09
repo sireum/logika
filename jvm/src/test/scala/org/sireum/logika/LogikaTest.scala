@@ -61,6 +61,7 @@ object LogikaTest {
       unroll = T,
       charBitWidth = 32,
       intBitWidth = 0,
+      useReal = F,
       logPc = F,
       logRawPc = F,
       logVc = F,
@@ -195,7 +196,7 @@ class LogikaTest extends TestSuite {
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkScript(None(), input, config,
       th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.cvc4RLimit, config.charBitWidth,
-        config.intBitWidth, config.simplifiedQuery, reporter),
+        config.intBitWidth, config.useReal, config.simplifiedQuery, reporter),
       Smt2.NoCache(), reporter, 1, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {

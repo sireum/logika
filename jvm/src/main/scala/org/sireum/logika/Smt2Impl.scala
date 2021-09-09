@@ -33,10 +33,10 @@ import org.sireum.lang.tipe.TypeHierarchy
 object Smt2Impl {
 
   def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z, cvc4RLimit: Z,
-             charBitWidth: Z, intBitWidth: Z, simplifiedQuery: B, reporter: Logika.Reporter): Smt2 = {
-    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, simplifiedQuery, cvc4RLimit, configs,
-      HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), HashMap.empty,
-      HashSMap.empty, HashMap.empty, HashSSet.empty)
+             charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B, reporter: Logika.Reporter): Smt2 = {
+    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, cvc4RLimit,
+      configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
+      HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
     r.addType(AST.Typed.z, reporter)
     return r
   }
@@ -46,6 +46,7 @@ object Smt2Impl {
                        val timeoutInMs: Z,
                        val charBitWidth: Z,
                        val intBitWidth: Z,
+                       val useReal: B,
                        val simplifiedQuery: B,
                        val cvc4RLimit: Z,
                        var configs: ISZ[Smt2Config],
@@ -231,11 +232,15 @@ object Smt2Impl {
   }
 
   def formatF32(value: F32): ST = {
-    return Smt2Formatter.formatF32(value)
+    return Smt2Formatter.formatF32(useReal, value)
   }
 
   def formatF64(value: F64): ST = {
-    return Smt2Formatter.formatF64(value)
+    return Smt2Formatter.formatF64(useReal, value)
+  }
+
+  def formatR(value: R): ST = {
+    return Smt2Formatter.formatR(value)
   }
 }
 

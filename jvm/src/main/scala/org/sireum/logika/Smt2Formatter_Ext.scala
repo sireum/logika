@@ -31,7 +31,7 @@ object Smt2Formatter_Ext {
 
   def formatVal(format: String, n: Z): ST = st"${JString.format(format.value, n.toBigInt.bigInteger)}"
 
-  def formatF32(value: F32): ST = {
+  def formatF32(useReal: B, value: F32): ST = {
     val f = value.value
     if (JFloat.isNaN(f)) {
       return st"|F32.NaN|"
@@ -39,6 +39,8 @@ object Smt2Formatter_Ext {
       return st"|F32.PInf|"
     } else if (JFloat.POSITIVE_INFINITY == f) {
       return st"|F32.NInf|"
+    } else if (useReal) {
+      return formatR(new R(new java.math.BigDecimal(f)))
     } else {
       val bits = JFloat.floatToRawIntBits(f)
       val sign = if ((bits & 0x80000000) != 0) 1 else 0
@@ -50,7 +52,7 @@ object Smt2Formatter_Ext {
     }
   }
 
-  def formatF64(value: F64): ST = {
+  def formatF64(useReal: B, value: F64): ST = {
     val d = value.value
     if (JDouble.isNaN(d)) {
       return st"|F64.NaN|"
@@ -58,6 +60,8 @@ object Smt2Formatter_Ext {
       return st"|F64.PInf|"
     } else if (JDouble.POSITIVE_INFINITY == d) {
       return st"|F64.NInf|"
+    } else if (useReal) {
+      return formatR(new R(new java.math.BigDecimal(d)))
     } else {
       val bits = JDouble.doubleToRawLongBits(d)
       val sign = if ((bits & 0x8000000000000000L) != 0) 1 else 0
@@ -67,6 +71,12 @@ object Smt2Formatter_Ext {
       sb = "#x" + (0 until (13 - sb.length)).map(_ => '0').mkString + sb
       return st"(fp #b$sign $eb $sb)"
     }
+  }
+
+  def formatR(n: R): ST = {
+    val (isNeg, value) = if (n < new R(new java.math.BigDecimal(0))) (T, -n) else (F, n)
+    val r = if (value.toString.contains(".")) st"$value" else st"$value.0"
+    return if (isNeg) st"(- $r)" else r
   }
 
 }
