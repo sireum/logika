@@ -31,7 +31,8 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.message.Position
 
 object Context {
-  @datatype class Method(val name: ISZ[String],
+  @datatype class Method(val owner: ISZ[String],
+                         val id: String,
                          val receiverTypeOpt: Option[AST.Typed],
                          val params: ISZ[(AST.Id, AST.Typed)],
                          val retType: AST.Typed,
@@ -41,6 +42,11 @@ object Context {
                          val fieldVarInMap: HashMap[String, State.Value.Sym],
                          val localInMap: HashMap[String, State.Value.Sym],
                          val posOpt: Option[Position]) {
+
+    @strictpure def isInObject: B = receiverTypeOpt.isEmpty
+
+    @strictpure def name: ISZ[String] = owner :+ id
+
     def modObjectVarMap(sm: HashMap[String, AST.Typed]): HashSMap[ISZ[String], (AST.Typed, Option[Position])] = {
       var r = HashSMap.empty[ISZ[String], (AST.Typed, Option[Position])]
       for (x <- modifies) {
@@ -117,6 +123,14 @@ object Context {
                         val methodOpt: Option[Context.Method],
                         val caseLabels: ISZ[AST.Exp.LitString],
                         val implicitCheckTitlePosOpt: Option[(String, Position)]) {
+
+  @pure def owner: ISZ[String] = {
+    methodOpt match {
+      case Some(m) => return m.owner
+      case _ => return ISZ()
+    }
+  }
+
   @pure def methodName: ISZ[String] = {
     methodOpt match {
       case Some(m) => return m.name

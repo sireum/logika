@@ -943,7 +943,11 @@ import Util._
           val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
           return evalInvoke(state, exp.receiverOpt, AST.Exp.Ident(exp.id, exp.attr), Either.Left(ISZ()), attr)
         case res: AST.ResolvedInfo.Var if res.isInObject =>
-          return ISZ(evalIdentH(state, res, exp.typedOpt.get, exp.posOpt.get))
+          var s0 = state
+          if (res.owner != context.owner) {
+            s0 = assumeObjectInv(this, smt2, cache, res.owner, s0, exp.posOpt.get, reporter)
+          }
+          return ISZ(evalIdentH(s0, res, exp.typedOpt.get, exp.posOpt.get))
         case res => return evalSelectH(split, res, exp.receiverOpt, exp.id.value, exp.typedOpt.get, pos)
       }
     }
@@ -1660,7 +1664,7 @@ import Util._
         }
 
         val logikaComp: Logika = {
-          val l = logikaMethod(th, config, ctx, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
+          val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
             info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, contract.modifies, ISZ(), plugins,
             Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get))
           )

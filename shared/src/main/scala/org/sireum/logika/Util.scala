@@ -360,11 +360,11 @@ object Util {
   }
 
 
-  def logikaMethod(th: TypeHierarchy, config: Config, name: ISZ[String], receiverTypeOpt: Option[AST.Typed],
+  def logikaMethod(th: TypeHierarchy, config: Config, owner: ISZ[String], id: String, receiverTypeOpt: Option[AST.Typed],
                    params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position], reads: ISZ[AST.Exp.Ident],
                    modifies: ISZ[AST.Exp.Ident], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
                    implicitContext: Option[(String, Position)]): Logika = {
-    val mctx = Context.Method(name, receiverTypeOpt, params, retType, reads, modifies, HashMap.empty, HashMap.empty,
+    val mctx = Context.Method(owner, id, receiverTypeOpt, params, retType, reads, modifies, HashMap.empty, HashMap.empty,
       HashMap.empty, posOpt)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext)
     return Logika(th, config, ctx, plugins)
@@ -409,7 +409,7 @@ object Util {
             case _ => halt("Infeasible")
           }
         }
-        val l = logikaMethod(th, mconfig, mname, receiverTypeOpt, method.sig.paramIdTypes,
+        val l = logikaMethod(th, mconfig, res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes,
           method.sig.returnType.typedOpt.get, method.posOpt, reads, modifies,
           if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None())
         val mctx = l.context.methodOpt.get
@@ -699,7 +699,7 @@ object Util {
       val pos = posOpt.get
       val (res, svs, maxFresh): (State.Value.Sym, ISZ[(State, State.Value.Sym)], Z) = {
         val context = pf.context :+ pf.id
-        val logika: Logika = logikaMethod(th, config, context,  pf.receiverTypeOpt,
+        val logika: Logika = logikaMethod(th, config, pf.context, pf.id,  pf.receiverTypeOpt,
           ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(), plugins, implicitContextOpt)
         var s0 = state(claims = ISZ())
         val r: State.Value.Sym = {
