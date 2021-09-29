@@ -1,6 +1,6 @@
 // #Sireum #Logika
 import org.sireum._
 
-assert(1f * 1.5f < 2f)
-assert(1d * 1.5d < 2d)
-assert(r"1" * r"1.5" < r"2")
+assert(1f * 1.5f / 1.1f < 2f)
+assert(1d * 1.5d / 1.1d < 2d)
+assert(r"1" * r"1.5" / r"1.1" < r"2")

@@ -456,11 +456,15 @@ import Util._
   }
 
   def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
-    if (tipe == AST.Typed.z) {
-      return State.Value.Z(0, pos)
+    tipe match {
+      case AST.Typed.z => return State.Value.Z(0, pos)
+      case AST.Typed.f32 => return State.Value.F32(0f, pos)
+      case AST.Typed.f64 => return State.Value.F64(0d, pos)
+      case AST.Typed.r => return State.Value.R(org.sireum.R("0").get, pos)
+      case _ =>
+        val ti = th.typeMap.get(tipe.ids).get.asInstanceOf[TypeInfo.SubZ]
+        return z2SubZVal(ti, 0, pos)
     }
-    val ti = th.typeMap.get(tipe.ids).get.asInstanceOf[TypeInfo.SubZ]
-    return z2SubZVal(ti, 0, pos)
   }
 
   def checkSeqIndexing(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, seq: State.Value, i: State.Value,
