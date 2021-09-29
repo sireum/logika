@@ -57,6 +57,10 @@ object cli {
         Opt(name = "useReal", longKey = "use-real", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Use reals to approximate floating-point numbers"),
+        Opt(name = "fpRounding", longKey = "fp-rounding", shortKey = None(),
+          tpe = Type.Choice(name = "FPRoundingMode", sep = None(), elements = ISZ(
+            "NearestTiesToEven", "NearestTiesToAway", "TowardPositive", "TowardNegative", "TowardZero")),
+          description = "Use reals to approximate floating-point numbers"),
         Opt(name = "intBitWidth", longKey = "z-bitwidth", shortKey = None(),
           tpe = Type.Num(sep = None(), default = 0, min = None(), max = None()),
           description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)")

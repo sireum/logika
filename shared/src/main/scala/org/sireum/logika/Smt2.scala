@@ -161,6 +161,8 @@ object Smt2 {
 
 @msig trait Smt2 {
 
+  @pure def fpRoundingMode: String
+
   @strictpure def f32ST: ST = if (useReal) {
     st"""(define-sort F32 () Real)
         |(declare-const |F32.PInf| F32)
@@ -190,10 +192,10 @@ object Smt2 {
         |(define-fun |F32.>=| ((x F32) (y F32)) B (fp.geq x y))
         |(define-fun |F32.==| ((x F32) (y F32)) B (fp.eq x y))
         |(define-fun |F32.!=| ((x F32) (y F32)) B (not (fp.eq x y)))
-        |(define-fun |F32.+| ((x F32) (y F32)) F32 (fp.add RNE x y))
-        |(define-fun |F32.-| ((x F32) (y F32)) F32 (fp.sub RNE x y))
-        |(define-fun |F32.*| ((x F32) (y F32)) F32 (fp.mul RNE x y))
-        |(define-fun |F32./| ((x F32) (y F32)) F32 (fp.div RNE x y))
+        |(define-fun |F32.+| ((x F32) (y F32)) F32 (fp.add $fpRoundingMode x y))
+        |(define-fun |F32.-| ((x F32) (y F32)) F32 (fp.sub $fpRoundingMode x y))
+        |(define-fun |F32.*| ((x F32) (y F32)) F32 (fp.mul $fpRoundingMode x y))
+        |(define-fun |F32./| ((x F32) (y F32)) F32 (fp.div $fpRoundingMode x y))
         |(define-fun |F32.%| ((x F32) (y F32)) F32 (fp.rem x y))"""
   }
 
@@ -226,10 +228,10 @@ object Smt2 {
         |(define-fun |F64.>=| ((x F64) (y F64)) B (fp.geq x y))
         |(define-fun |F64.==| ((x F64) (y F64)) B (fp.eq x y))
         |(define-fun |F64.!=| ((x F64) (y F64)) B (not (fp.eq x y)))
-        |(define-fun |F64.+| ((x F64) (y F64)) F64 (fp.add RNE x y))
-        |(define-fun |F64.-| ((x F64) (y F64)) F64 (fp.sub RNE x y))
-        |(define-fun |F64.*| ((x F64) (y F64)) F64 (fp.mul RNE x y))
-        |(define-fun |F64./| ((x F64) (y F64)) F64 (fp.div RNE x y))
+        |(define-fun |F64.+| ((x F64) (y F64)) F64 (fp.add $fpRoundingMode x y))
+        |(define-fun |F64.-| ((x F64) (y F64)) F64 (fp.sub $fpRoundingMode x y))
+        |(define-fun |F64.*| ((x F64) (y F64)) F64 (fp.mul $fpRoundingMode x y))
+        |(define-fun |F64./| ((x F64) (y F64)) F64 (fp.div $fpRoundingMode x y))
         |(define-fun |F64.%| ((x F64) (y F64)) F64 (fp.rem x y))"""
   }
 

@@ -74,7 +74,9 @@ object LogikaTest {
       splitMatch = F,
       simplifiedQuery = F,
       checkInfeasiblePatternMatch = T,
-      cvc4RLimit = 1000000)
+      cvc4RLimit = 1000000,
+      fpRoundingMode = "RNE"
+    )
 }
 
 import LogikaTest._
@@ -195,8 +197,8 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkScript(None(), input, config,
-      th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.cvc4RLimit, config.charBitWidth,
-        config.intBitWidth, config.useReal, config.simplifiedQuery, reporter),
+      th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.cvc4RLimit, config.fpRoundingMode,
+        config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, reporter),
       Smt2.NoCache(), reporter, 1, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {

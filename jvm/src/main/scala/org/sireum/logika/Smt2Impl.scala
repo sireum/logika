@@ -33,10 +33,11 @@ import org.sireum.lang.tipe.TypeHierarchy
 object Smt2Impl {
 
   def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z, cvc4RLimit: Z,
-             charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B, reporter: Logika.Reporter): Smt2 = {
+             fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B,
+             reporter: Logika.Reporter): Smt2 = {
     val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, cvc4RLimit,
-      configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
-      HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
+      fpRoundingMode, configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
+      ISZ(), HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
     r.addType(AST.Typed.z, reporter)
     return r
   }
@@ -49,6 +50,7 @@ object Smt2Impl {
                        val useReal: B,
                        val simplifiedQuery: B,
                        val cvc4RLimit: Z,
+                       val fpRoundingMode: String,
                        var configs: ISZ[Smt2Config],
                        var types: HashSet[AST.Typed],
                        var poset: Poset[AST.Typed.Name],

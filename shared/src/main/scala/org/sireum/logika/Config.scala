@@ -47,7 +47,8 @@ import org.sireum._
                        val splitContract: B,
                        val simplifiedQuery: B,
                        val checkInfeasiblePatternMatch: B,
-                       val cvc4RLimit: Z)
+                       val cvc4RLimit: Z,
+                       val fpRoundingMode: String)
 
 @datatype trait Smt2Config {
   def name: String
