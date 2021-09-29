@@ -1013,11 +1013,11 @@ object Smt2 {
       val tId = typeId(t)
       val eqOp = typeOpId(t, "==")
       val neOp = typeOpId(t, "!=")
+      addSort(st"""(declare-datatypes (($tId 0)) (((${typeOpId(t, "new")} ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t, s"_$i")} ${adtId(t.args(i - 1))})", " ")}))))""")
       addTypeDecl(
-        st"""(declare-datatypes (($tId 0)) (((${typeOpId(t, "new")} ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t, s"_$i")} ${adtId(t.args(i - 1))})", " ")}))))
-            |(define-fun $eqOp ((x $tId) (y $tId)) B
+        st"""(define-fun $eqOp ((x $tId) (y $tId)) B
             |  (and
-            |    ${(for (i <- 1 to t.args.size) yield st"(${adtTypeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
+            |    ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
             |  )
             |)
             |(define-fun $neOp ((x $tId) (y $tId)) B (not ($eqOp x y)))""")
@@ -1174,15 +1174,16 @@ object Smt2 {
           |(define-fun |B.imply_:| ((x B) (y B)) B (=> x y))
           |(define-fun |B.->:| ((x B) (y B)) B (=> x y))
           |
-          |${(sorts, "\n\n")}
-          |
           |(declare-sort ADT 0)
           |(declare-sort Type 0)
           |(declare-fun type-of (ADT) Type)
           |(declare-fun sub-type (Type Type) Bool)
+          |
           |(assert (forall ((x Type)) (sub-type x x)))
           |(assert (forall ((x Type) (y Type) (z Type)) (=> (and (sub-type x y) (sub-type y z)) (sub-type x z))))
           |(assert (forall ((x Type) (y Type)) (=> (and (sub-type x y) (sub-type y x)) (= x y))))
+          |
+          |${(sorts, "\n\n")}
           |
           |${(adtDecls, "\n")}
           |
