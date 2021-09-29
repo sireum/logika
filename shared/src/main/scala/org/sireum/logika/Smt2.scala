@@ -733,7 +733,7 @@ object Smt2 {
             )
           }
         }
-        if (children.isEmpty && t != AST.Typed.nothing && t != AST.Typed.string) {
+        if (children.isEmpty && t != AST.Typed.nothing && t != AST.Typed.string && t != AST.Typed.st) {
           reporter.warn(posOpt, Logika.kind, s"$t does not have any concrete implementation")
         }
         posetUp(poset.addChildren(t, children))

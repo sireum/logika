@@ -528,6 +528,21 @@ import Util._
     return State.Value.Range(org.sireum.Z(text).get, t, pos)
   }
 
+  def evalStringInterpolate(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State,
+                            lit: AST.Exp.StringInterpolate, reporter: Reporter): ISZ[(State, State.Value)] = {
+    var r = ISZ[(State, State.Value)]()
+    val isST = lit.prefix === "st"
+    for (p <- evalExps(split, smt2, cache, rtCheck, state, lit.args.size, (n: Z) => lit.args(n), reporter)) {
+      val s0 = p._1
+      val pos = lit.posOpt.get
+      val (s1, v) = s0.freshSym(if (isST) AST.Typed.st else AST.Typed.string, pos)
+      r = r :+ ((s1, v))
+    }
+    val tOpt: String = if (isST) " template" else ""
+    reporter.warn(lit.posOpt, kind, s"String$tOpt interpolation is currently over-approximated to produce an unconstrained string$tOpt")
+    return r
+  }
+
   def evalInterpolate(lit: AST.Exp.StringInterpolate): State.Value = {
     lit.prefix match {
       case string"z" => return State.Value.Z(org.sireum.Z(lit.lits(0).value).get, lit.posOpt.get)
@@ -2084,7 +2099,13 @@ import Util._
       e match {
         case _: AST.Exp.LitStepId => return ISZ((s0(status = F), State.errorValue))
         case lit: AST.Lit => return ISZ((s0, evalLit(lit)))
-        case lit: AST.Exp.StringInterpolate => return ISZ((s0, evalInterpolate(lit)))
+        case lit: AST.Exp.StringInterpolate =>
+          lit.prefix match {
+            case string"s" => return evalStringInterpolate(split, smt2, cache, rtCheck, s0, lit, reporter)
+            case string"string" => return evalStringInterpolate(split, smt2, cache, rtCheck, s0, lit, reporter)
+            case string"st" => return evalStringInterpolate(split, smt2, cache, rtCheck, s0, lit, reporter)
+            case _ => return ISZ((s0, evalInterpolate(lit)))
+          }
         case e: AST.Exp.Ident => return evalIdent(e)
         case e: AST.Exp.Select => return evalSelect(e)
         case e: AST.Exp.Unary => return evalUnaryExp(e)
