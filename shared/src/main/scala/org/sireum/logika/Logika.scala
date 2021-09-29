@@ -953,9 +953,14 @@ import Util._
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random =>
           return random(exp.typedOpt.get)
-        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext && res.owner.size == 3
-          && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id == "random" =>
-          return random(res.tpeOpt.get.ret)
+        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext  =>
+          if (res.owner.size == 3 && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id === "random") {
+            return random(res.tpeOpt.get.ret)
+          } else {
+            val mType = res.tpeOpt.get
+            val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
+            return evalInvoke(state, None(), AST.Exp.Ident(exp.id, exp.attr), Either.Left(ISZ()), attr)
+          }
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName &&
           !Logika.builtInByNameMethods.contains((res.isInObject, res.owner, res.id)) =>
           val mType = res.tpeOpt.get
