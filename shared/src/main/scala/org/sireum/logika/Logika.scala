@@ -560,11 +560,43 @@ import Util._
     }
   }
 
-  def evalThisIdH(state: State, id: String, t: AST.Typed, pos: Position): (State, State.Value.Sym) = {
+  def evalConstantVar(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, info: Info.Var, reporter: Reporter): Option[(State, State.Value)] = {
+    if (!info.ast.isVal) {
+      return None()
+    }
+    AST.Util.constantInitOpt(info.ast.initOpt) match {
+      case Some(exp) =>
+        val r = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, exp, reporter)
+        assert(r.size === 1)
+        return Some(r(0))
+      case _ =>
+        return None()
+    }
+  }
+
+  def evalConstantVarInstance(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, owner: ISZ[String], id: String,  reporter: Reporter): Option[(State, State.Value)] = {
+    th.typeMap.get(owner) match {
+      case Some(info: TypeInfo.Adt) =>
+        info.vars.get(id) match {
+          case Some(info) => return evalConstantVar(smt2, cache, rtCheck, s0, info, reporter)
+          case _ =>
+        }
+      case _ =>
+    }
+    return None()
+  }
+
+
+  def evalThisIdH(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, id: String, t: AST.Typed, pos: Position, reporter: Reporter): (State, State.Value) = {
     val mc = context.methodOpt.get
-    val (s0, receiver) = idIntro(pos, state, mc.name, "this", mc.receiverTypeOpt.get, None())
-    val (s1, r) = s0.freshSym(t, pos)
-    return (s1.addClaim(State.Claim.Let.FieldLookup(r, receiver, id)), r)
+    val receiverType = mc.receiverTypeOpt.get.asInstanceOf[AST.Typed.Name]
+    evalConstantVarInstance(smt2, cache, rtCheck, state, receiverType.ids, id, reporter) match {
+      case Some(r@(_, _)) => return r
+      case _ =>
+        val (s0, receiver) = idIntro(pos, state, mc.name, "this", receiverType, None())
+        val (s1, r) = s0.freshSym(t, pos)
+        return (s1.addClaim(State.Claim.Let.FieldLookup(r, receiver, id)), r)
+    }
   }
 
   def evalExps(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, numOfExps: Z,
@@ -659,11 +691,25 @@ import Util._
           return (s1, r)
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
-            val (s1, r) = nameIntro(pos, s0, res.owner :+ res.id, t, None())
-            return (Util.assumeValueInv(this, smt2, cache, rtCheck, s1, r, pos, reporter), r)
+            th.nameMap.get(res.owner :+ res.id) match {
+              case Some(info: Info.Var) =>
+                evalConstantVar(smt2, cache, rtCheck, s0, info, reporter) match {
+                  case Some(r@(_, _)) => return r
+                  case _ =>
+                }
+              case _ =>
+            }
+            val s1: State = if (res.owner != context.owner) {
+              Util.assumeObjectInv(this, smt2, cache, res.owner, s0, pos, reporter)
+            } else {
+              s0
+            }
+            val (s2, r) = nameIntro(pos, s1, res.owner :+ res.id, t, None())
+            return (Util.assumeValueInv(this, smt2, cache, rtCheck, s2, r, pos, reporter), r)
           } else {
-            val (s1, r) = evalThisIdH(s0, res.id, t, pos)
-            return (Util.assumeValueInv(this, smt2, cache, rtCheck, s1, r, pos, reporter), r)
+            val (s1, r) = evalThisIdH(smt2, cache, rtCheck, s0, res.id, t, pos, reporter)
+            val (s2, sym) = value2Sym(s1, r, pos)
+            return (Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym)
           }
         case _ => halt(s"TODO: $e") // TODO
       }
@@ -897,12 +943,23 @@ import Util._
         var r = ISZ[(State, State.Value)]()
         for (p <- evalExp(sp, smt2, cache, rtCheck, state, receiverOpt.get, reporter)) {
           val (s0, o) = p
-          if (s0.status) {
-            val (s1, sym) = s0.freshSym(t, pos)
-            val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id))
-            r = r :+ ((Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym))
-          } else {
-            r = r :+ ((s0, State.errorValue))
+          var isConstant = F
+          o.tipe match {
+            case ot: AST.Typed.Name =>
+              evalConstantVarInstance(smt2, cache, rtCheck, s0, ot.ids, id, reporter) match {
+                case Some(sv@(_, _)) => r = r :+ sv; isConstant = T
+                case _ =>
+              }
+            case _ =>
+          }
+          if (!isConstant) {
+            if (s0.status) {
+              val (s1, sym) = s0.freshSym(t, pos)
+              val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id))
+              r = r :+ ((Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym))
+            } else {
+              r = r :+ ((s0, State.errorValue))
+            }
           }
         }
         return r
@@ -967,11 +1024,7 @@ import Util._
           val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
           return evalInvoke(state, exp.receiverOpt, AST.Exp.Ident(exp.id, exp.attr), Either.Left(ISZ()), attr)
         case res: AST.ResolvedInfo.Var if res.isInObject =>
-          var s0 = state
-          if (res.owner != context.owner) {
-            s0 = assumeObjectInv(this, smt2, cache, res.owner, s0, exp.posOpt.get, reporter)
-          }
-          return ISZ(evalIdentH(s0, res, exp.typedOpt.get, exp.posOpt.get))
+          return ISZ(evalIdentH(state, res, exp.typedOpt.get, exp.posOpt.get))
         case res => return evalSelectH(split, res, exp.receiverOpt, exp.id.value, exp.typedOpt.get, pos)
       }
     }
@@ -2454,7 +2507,7 @@ import Util._
 
   }
 
-  def evalPattern(s0: State, v: State.Value, pattern: AST.Pattern, reporter: Reporter): (State, State.Value, Map[String, (State.Value, AST.Typed, Position)]) = {
+  def evalPattern(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, v: State.Value, pattern: AST.Pattern, reporter: Reporter): (State, State.Value, Map[String, (State.Value, AST.Typed, Position)]) = {
     val posOpt = pattern.posOpt
     val pos = posOpt.get
     pattern match {
@@ -2510,7 +2563,7 @@ import Util._
               val sub = pattern.patterns(i)
               val subPos = sub.posOpt.get
               val (s5, sym) = s4.freshSym(et, subPos)
-              val (s6, cond, subM) = evalPattern(s5.addClaim(
+              val (s6, cond, subM) = evalPattern(smt2, cache, rtCheck, s5.addClaim(
                 State.Claim.Let.SeqLookup(sym, v, State.Value.Z(offset + i, subPos))), sym, sub, reporter)
               conds = conds :+ cond
               s4 = s6
@@ -2531,7 +2584,7 @@ import Util._
               val sub = p._2
               val (s4, sym) = s3.freshSym(ft, sub.posOpt.get)
               s3 = s4.addClaim(State.Claim.Let.FieldLookup(sym, o, f))
-              val (s5, cond, subM) = evalPattern(s3, sym, sub, reporter)
+              val (s5, cond, subM) = evalPattern(smt2, cache, rtCheck, s3, sym, sub, reporter)
               s3 = s5
               conds = conds :+ cond
               m = m ++ subM.entries
@@ -2547,7 +2600,7 @@ import Util._
             val sub = pattern.patterns(i - 1)
             val (s2, sym) = s1.freshSym(t.args(i - 1), sub.posOpt.get)
             val s3 = s2.addClaim(State.Claim.Let.FieldLookup(sym, v, s"_$i"))
-            val (s4, cond, subM) = evalPattern(s3, sym, sub, reporter)
+            val (s4, cond, subM) = evalPattern(smt2, cache, rtCheck, s3, sym, sub, reporter)
             s1 = s4
             conds = conds :+ cond
             m = m ++ subM.entries
@@ -2564,9 +2617,12 @@ import Util._
                 State.Value.B(res.id == "T", pos), AST.Typed.b)), cond, Map.empty)
             }
             val t = pattern.attr.typedOpt.get
-            val (s2, sym): (State, State.Value.Sym) =
-              if (res.isInObject) nameIntro(pos, s1, res.owner :+ res.id, t, None())
-              else evalThisIdH(s1, res.id, t, pos)
+            val (s2, sym): (State, State.Value) = if (res.isInObject) {
+              val p = nameIntro(pos, s1, res.owner :+ res.id, t, None())
+              (p._1, p._2)
+            } else {
+              evalThisIdH(smt2, cache, rtCheck, s1, res.id, t, pos, reporter)
+            }
             return (s2.addClaim(State.Claim.Let.Binary(cond, v, "==", sym, t)), cond, Map.empty)
           case res: AST.ResolvedInfo.EnumElement =>
             val t = pattern.attr.typedOpt.get.asInstanceOf[AST.Typed.Name]
@@ -2614,7 +2670,7 @@ import Util._
         }
         var s1 = s0
         for (c <- stmt.cases) {
-          val (s2, pcond, m) = evalPattern(s1, v, c.pattern, reporter)
+          val (s2, pcond, m) = evalPattern(smt2, cache, rtCheck, s1, v, c.pattern, reporter)
           val (s3, bindings) = addPatternVars(s2, lcontext, m)
           var conds = ISZ(pcond)
           val s6: State = c.condOpt match {
@@ -3368,7 +3424,7 @@ import Util._
         val (s1, init) = p
         val s9: State = if (s1.status) {
           val (s2, sym) = value2Sym(s1, init, varPattern.init.asStmt.posOpt.get)
-          val (s3, cond, m) = evalPattern(s2, sym, varPattern.pattern, reporter)
+          val (s3, cond, m) = evalPattern(smt2, cache, rtCheck, s2, sym, varPattern.pattern, reporter)
           var s4 = s3
           for (p <- m.entries) {
             val (id, (v, _, pos)) = p

@@ -864,14 +864,27 @@ object Util {
 
   def addObjectInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, name: ISZ[String], state: State, pos: Position,
                    reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
-    val invs = logika.retrieveInvs(name, T)
+    val l = logika(context = logika.context(methodOpt = Some(Context.Method(
+      owner = name,
+      id = "<init>",
+      receiverTypeOpt = None(),
+      params = ISZ(),
+      retType = AST.Typed.unit,
+      reads = ISZ(),
+      modifies = ISZ(),
+      objectVarInMap = HashMap.empty,
+      fieldVarInMap = HashMap.empty,
+      localInMap = HashMap.empty,
+      posOpt = None()
+    ))))
+    val invs = l.retrieveInvs(name, T)
     if (invs.isEmpty) {
       return (state, ISZ())
     }
     val (owner, id) = invOwnerId(invs, None())
-    val inv = logika.invs2exp(invs, HashMap.empty).get
-    val (s0, v) = evalExtractPureMethod(logika, smt2, cache, state, None(), None(), owner, id, inv, reporter)
-    val (s1, sym) = logika.value2Sym(s0, v, pos)
+    val inv = l.invs2exp(invs, HashMap.empty).get
+    val (s0, v) = evalExtractPureMethod(l, smt2, cache, state, None(), None(), owner, id, inv, reporter)
+    val (s1, sym) = l.value2Sym(s0, v, pos)
     return (s1, ISZ(sym))
   }
 
