@@ -512,9 +512,11 @@ object Smt2 {
                 claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
     val startTime = extension.Time.currentMillis
     val (r, smt2res) = checkSat(cache, satQuery(claims, None(), reporter).render, 500)
-    val res = smt2res(info = "", query =
+    val header =
       st"""; Satisfiability check for $title
-          |${smt2res.info}
+          |${smt2res.info}"""
+    val res = smt2res(info = header.render, query =
+      st"""$header
           |;
           |; Claims:
           |;
@@ -523,7 +525,7 @@ object Smt2 {
           |${smt2res.query}""".render
     )
     if (reportQuery) {
-      reporter.query(pos, extension.Time.currentMillis - startTime, res)
+      reporter.query(pos, title, extension.Time.currentMillis - startTime, res)
     }
     if (log) {
       reporter.info(None(), Logika.kind, res.query)
@@ -1118,9 +1120,11 @@ object Smt2 {
     val startTime = extension.Time.currentMillis
     val (_, smt2res) = checkUnsat(cache, satQuery(premises, Some(conclusion), reporter).render, timeoutInMs)
     val defs = ClaimDefs.empty
-    val res = smt2res(info = "", query =
+    val header =
       st"""; Validity Check for $title
-          |${smt2res.info}
+          |${smt2res.info}"""
+    val res = smt2res(info = header.render, query =
+      st"""$header
           |;
           |; Sequent:
           |;
@@ -1131,7 +1135,7 @@ object Smt2 {
           |${smt2res.query}""".render
     )
     if (reportQuery) {
-      reporter.query(pos, extension.Time.currentMillis - startTime, res)
+      reporter.query(pos, title, extension.Time.currentMillis - startTime, res)
     }
     if (log) {
       reporter.info(None(), Logika.kind, res.query)

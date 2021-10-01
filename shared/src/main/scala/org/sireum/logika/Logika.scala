@@ -57,7 +57,7 @@ object Logika {
   @msig trait Reporter extends message.Reporter {
     def state(posOpt: Option[Position], s: State): Unit
 
-    def query(pos: Position, time: Z, r: Smt2Query.Result): Unit
+    def query(pos: Position, title: String, time: Z, r: Smt2Query.Result): Unit
 
     def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit
 
@@ -74,7 +74,7 @@ object Logika {
     override def state(posOpt: Option[Position], s: State): Unit = {
     }
 
-    override def query(pos: Position, time: Z, r: Smt2Query.Result): Unit = {
+    override def query(pos: Position, title: String, time: Z, r: Smt2Query.Result): Unit = {
     }
 
     override def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit = {
