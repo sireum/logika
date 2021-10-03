@@ -160,7 +160,7 @@ object Smt2Impl {
       //println(query)
       var args = config.args(isSat, timeoutInMs)
       config match {
-        case _: Cvc4Config => args = args :+ s"--rlimit=$cvc4RLimit"
+        case _: CvcConfig => args = args :+ s"--rlimit=$cvc4RLimit"
         case _ =>
       }
       var proc = Os.proc(config.exe +: args).input(query).redirectErr

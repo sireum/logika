@@ -70,15 +70,15 @@ import org.sireum._
     if (name == solverName) Z3Config(exe, if (isSat) validOpts else newOpts, if (isSat) newOpts else satOpts) else this
 }
 
-@datatype class Cvc4Config(val exe: String, val validOpts: ISZ[String], val satOpts: ISZ[String]) extends Smt2Config {
+@datatype class CvcConfig(val exe: String, val validOpts: ISZ[String], val satOpts: ISZ[String]) extends Smt2Config {
   val name: String = "cvc4"
 
   @pure def args(isSat: B, timeoutInMs: Z): ISZ[String] = {
     return ISZ[String]("--lang=smt2.6", s"--tlimit=$timeoutInMs") ++ (if (isSat) satOpts else validOpts)
   }
 
-  @strictpure def updateOtherOpts(solverName: String, isSat: B, newOpts: ISZ[String]): Cvc4Config =
-    if (name == solverName) Cvc4Config(exe, if (isSat) validOpts else newOpts, if (isSat) newOpts else satOpts) else this
+  @strictpure def updateOtherOpts(solverName: String, isSat: B, newOpts: ISZ[String]): CvcConfig =
+    if (name == solverName) CvcConfig(exe, if (isSat) validOpts else newOpts, if (isSat) newOpts else satOpts) else this
 }
 
 

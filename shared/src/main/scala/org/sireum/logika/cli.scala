@@ -122,15 +122,15 @@ object cli {
           description = "Split on match expressions and statements"),
       )),
       OptGroup(name = "SMT2", opts = ISZ(
-        Opt(name = "cvc4RLimit", longKey = "cvc4-rlimit", shortKey = None(),
+        Opt(name = "cvcRLimit", longKey = "cvc-rlimit", shortKey = None(),
           tpe = Type.Num(None(), 1000000, None(), None()),
           description = "CVC4 rlimit"
         ),
-        Opt(name = "cvc4VOpts", longKey = "cvc4-vopts", shortKey = None(),
+        Opt(name = "cvcVOpts", longKey = "cvc-vopts", shortKey = None(),
           tpe = Type.Str(Some(','), Some("--full-saturate-quant")),
           description = "Additional options for CVC4 validity checks"
         ),
-        Opt(name = "cvc4SOpts", longKey = "cvc4-sopts", shortKey = None(),
+        Opt(name = "cvcSOpts", longKey = "cvc-sopts", shortKey = None(),
           tpe = Type.Str(Some(','), None() /*Some("--finite-model-find")*/),
           description = "Additional options for CVC4 satisfiability checks"
         ),
