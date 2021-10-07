@@ -1714,7 +1714,7 @@ import Util._
             return conjunctClaimSuffix(cs1, cse3)
           }
 
-          val rep = Reporter.create
+          val rep = reporter.empty
           val (label, cs1): (String, State) = labelOpt match {
             case Some(lbl) if lbl.value =!= "" =>
               (s"(${lbl.value}) p", cs0.addClaim(State.Claim.Label(lbl.value, lbl.posOpt.get)))
