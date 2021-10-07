@@ -568,8 +568,9 @@ import Util._
       case Some(exp) =>
         val r = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, exp, reporter)
         assert(r.size === 1)
-        smt2.addType(r(0)._2.tipe, reporter)
-        return Some(r(0))
+        val sv = r(0)
+        smt2.addType(sv._2.tipe, reporter)
+        return Some(sv)
       case _ =>
         return None()
     }
