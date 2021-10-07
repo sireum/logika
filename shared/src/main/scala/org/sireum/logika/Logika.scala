@@ -1960,10 +1960,33 @@ import Util._
               case Some(sm) =>
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
+
                 if (info.strictPureBodyOpt.nonEmpty) {
                   strictPure(s1, typeSubstMap, retType, receiverOpt, paramArgs)
                 } else {
-                  compositional(s1, typeSubstMap, retType, receiverOpt, paramArgs)
+                  var s2 = s1
+                  var oldVars = HashSMap.empty[String, State.Value.Sym]
+                  if (ctx == context.methodName) {
+                    for (paramArg <- paramArgs) {
+                      val id = paramArg._1.id
+                      val (s3, sym) = idIntro(pos, s2, ctx, paramArg._1.id, paramArg._2, None())
+                      oldVars = oldVars + id ~> sym
+                      s2 = s3
+                    }
+                    s2 = rewriteLocals(s2, ctx, oldVars.keys ++ (if (receiverOpt.isEmpty) ISZ[String]() else ISZ[String]("this")))
+                  }
+
+                  compositional(s2, typeSubstMap, retType, receiverOpt, paramArgs)
+
+                  if (oldVars.nonEmpty) {
+                    val rOld = r
+                    r = ISZ()
+                    for (sv <- rOld) {
+                      val s3 = sv._1.
+                        addClaims(for (p <- oldVars.entries) yield State.Claim.Let.CurrentId(T, p._2, ctx, p._1, posOpt))
+                      r = r :+ ((s3, sv._2))
+                    }
+                  }
                 }
               case _ =>
                 r = r :+ ((s1, State.errorValue))
