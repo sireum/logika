@@ -29,3 +29,7 @@ import org.sireum._
   }
   return r
 }
+
+def foo(): Unit = {
+  assert(factorial(5) == 120)
+}
