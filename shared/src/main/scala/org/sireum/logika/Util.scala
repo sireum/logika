@@ -923,7 +923,7 @@ object Util {
       if (ti.ast.hasMax) {
         val (s3, maxCond) = s1.freshSym(AST.Typed.b, pos)
         s1 = s3.addClaim(State.Claim.Let.Binary(maxCond, v, AST.Exp.BinaryOp.Le,
-          z2SubZVal(ti, ti.ast.min, pos), t))
+          z2SubZVal(ti, ti.ast.max, pos), t))
         ss = ss :+ maxCond
       }
       return (s1, ss)

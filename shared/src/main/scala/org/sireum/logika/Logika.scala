@@ -568,9 +568,7 @@ import Util._
       case Some(exp) =>
         val r = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, exp, reporter)
         assert(r.size === 1)
-        val sv = r(0)
-        smt2.addType(sv._2.tipe, reporter)
-        return Some(sv)
+        return Some(r(0))
       case _ =>
         return None()
     }
@@ -693,21 +691,22 @@ import Util._
           return (s1, r)
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
-            th.nameMap.get(res.owner :+ res.id) match {
-              case Some(info: Info.Var) =>
-                evalConstantVar(smt2, cache, rtCheck, s0, info, reporter) match {
-                  case Some(r@(_, _)) => return r
-                  case _ =>
-                }
-              case _ =>
+            def evalObjectVarH(): (State, State.Value.Sym) = {
+              th.nameMap.get(res.owner :+ res.id) match {
+                case Some(info: Info.Var) =>
+                  evalConstantVar(smt2, cache, rtCheck, s0, info, reporter) match {
+                    case Some((s1, v)) => return value2Sym(s1, v, pos)
+                    case _ =>
+                  }
+                case _ =>
+              }
+              return nameIntro(pos, s0, res.owner :+ res.id, t, None())
             }
-            val s1: State = if (res.owner != context.owner) {
-              Util.assumeObjectInv(this, smt2, cache, res.owner, s0, pos, reporter)
-            } else {
-              s0
-            }
-            val (s2, r) = nameIntro(pos, s1, res.owner :+ res.id, t, None())
-            return (Util.assumeValueInv(this, smt2, cache, rtCheck, s2, r, pos, reporter), r)
+            val (s2, v) = evalObjectVarH()
+            val s3: State =
+              if (res.owner == context.owner) s2
+              else Util.assumeObjectInv(this, smt2, cache, res.owner, s2, pos, reporter)
+            return (Util.assumeValueInv(this, smt2, cache, rtCheck, s3, v, pos, reporter), v)
           } else {
             val (s1, r) = evalThisIdH(smt2, cache, rtCheck, s0, res.id, t, pos, reporter)
             val (s2, sym) = value2Sym(s1, r, pos)
@@ -945,23 +944,24 @@ import Util._
         var r = ISZ[(State, State.Value)]()
         for (p <- evalExp(sp, smt2, cache, rtCheck, state, receiverOpt.get, reporter)) {
           val (s0, o) = p
-          var isConstant = F
-          o.tipe match {
-            case ot: AST.Typed.Name =>
-              evalConstantVarInstance(smt2, cache, rtCheck, s0, ot.ids, id, reporter) match {
-                case Some(sv@(_, _)) => r = r :+ sv; isConstant = T
-                case _ =>
-              }
-            case _ =>
-          }
-          if (!isConstant) {
-            if (s0.status) {
-              val (s1, sym) = s0.freshSym(t, pos)
-              val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id))
-              r = r :+ ((Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym))
-            } else {
-              r = r :+ ((s0, State.errorValue))
+          def evalFieldH(): (State, State.Value.Sym) = {
+            o.tipe match {
+              case ot: AST.Typed.Name =>
+                evalConstantVarInstance(smt2, cache, rtCheck, s0, ot.ids, id, reporter) match {
+                  case Some((s1, v)) => return value2Sym(s1, v, pos)
+                  case _ =>
+                }
+              case _ =>
             }
+            val (s1, sym) = s0.freshSym(t, pos)
+            val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id))
+            return (s2, sym)
+          }
+          val (s3, sym) = evalFieldH()
+          if (s3.status) {
+            r = r :+ ((Util.assumeValueInv(this, smt2, cache, rtCheck, s3, sym, pos, reporter), sym))
+          } else {
+            r = r :+ ((s0, State.errorValue))
           }
         }
         return r
@@ -3664,7 +3664,7 @@ import Util._
     val size = s0.claims.size
     val prefixClaims: ISZ[State.Claim] =
       for (i <- 0 until size) yield mergeClaimPrefix(sT.claims(i), sF.claims(i))
-    return State(s0.status, prefixClaims :+
+    return State(sT.status && sF.status, prefixClaims :+
       State.Claim.If(cond, ops.ISZOps(sT.claims).drop(size + 1),
         ops.ISZOps(sF.claims).drop(size + 1)), nextFresh)
   }
