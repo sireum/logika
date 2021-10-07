@@ -3369,10 +3369,23 @@ import Util._
 
     def evalDeduceSteps(s0: State, deduceStmt: AST.Stmt.DeduceSteps): ISZ[State] = {
       var p = (s0, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
+      var stepIds = ISZ[AST.ProofAst.StepId]()
       for (step <- deduceStmt.steps if p._1.status) {
         p = evalProofStep(smt2, cache, p, step, reporter)
+        step match {
+          case step: AST.ProofAst.Step.Regular if p._1.status => stepIds = stepIds :+ step.id
+          case _ =>
+        }
       }
-      return ISZ(p._1)
+      val m = p._2
+      var s1 = s0(nextFresh = p._1.nextFresh)
+      if (p._1.status) {
+        for (stepId <- stepIds) {
+          val spc = m.get(stepId).get.asInstanceOf[StepProofContext.Regular]
+          s1 = s1.addClaims(spc.claims)
+        }
+      }
+      return ISZ(s1)
     }
 
     def evalDeduceSequent(s0: State, deduceStmt: AST.Stmt.DeduceSequent): ISZ[State] = {
