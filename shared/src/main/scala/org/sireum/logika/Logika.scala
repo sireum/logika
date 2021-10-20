@@ -1170,7 +1170,12 @@ import Util._
     def evalSeqSelect(exp: AST.Exp.Invoke): ISZ[(State, State.Value)] = {
       var r = ISZ[(State, State.Value)]()
       val srcv: ISZ[(State, State.Value)] = exp.receiverOpt match {
-        case Some(rcv) => evalExp(split, smt2, cache, rtCheck, state, rcv , reporter)
+        case Some(rcv) =>
+          if (exp.ident.id.value === "apply") {
+            evalExp(split, smt2, cache, rtCheck, state, rcv , reporter)
+          } else {
+            evalSelect(AST.Exp.Select(exp.receiverOpt, exp.ident.id, exp.targs, exp.ident.attr))
+          }
         case _ => evalIdent(exp.ident)
       }
       for (p0 <- srcv; p1 <- evalExp(split, smt2, cache, rtCheck, p0._1, exp.args(0), reporter)) {
