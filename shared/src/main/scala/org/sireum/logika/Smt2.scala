@@ -644,7 +644,7 @@ object Smt2 {
       addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and (not ($zEqId ($sizeId x) 0)) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
       addSTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       if (etId.render === "ADT") {
-        addSTypeDecl(st"(assert (forall ((o $tId) (i $itId)) (sub-type (type-of ($atId o i)) ${typeHierarchyId(et)})))")
+        addSTypeDecl(st"(assert (forall ((o $tId) (i $itId)) (=> ($isInBoundId o i) (sub-type (type-of ($atId o i)) ${typeHierarchyId(et)}))))")
       }
       addSTypeDecl(
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
