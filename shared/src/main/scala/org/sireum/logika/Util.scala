@@ -629,11 +629,7 @@ object Util {
       val (s2, sym) = nameIntro(pos, current, name, t, Some(namePos))
       current = assumeValueInv(logika, smt2, cache, rtCheck, s2, sym, namePos, reporter)
       val tipe = sym.tipe
-      if (!logika.th.isMutable(tipe, T)) {
-        val (s3, cond) = current.freshSym(AST.Typed.b, pos)
-        current = s3.addClaims(ISZ(State.Claim.Let.Binary(cond, sym, AST.Exp.BinaryOp.Eq, rt.ctx.get(name).get, tipe),
-          State.Claim.Prop(T, cond)))
-      } else if (AST.Util.isSeq(tipe)) {
+      if (AST.Util.isSeq(tipe)) {
         val (s4, size1) = current.freshSym(AST.Typed.z, pos)
         val (s5, size2) = s4.freshSym(AST.Typed.z, pos)
         val (s6, cond) = s5.freshSym(AST.Typed.b, pos)

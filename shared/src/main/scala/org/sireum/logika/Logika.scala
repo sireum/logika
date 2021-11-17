@@ -1627,14 +1627,7 @@ import Util._
               val oldSym = oldIdMap.get(info.context :+ info.id).get
               val (ls1, newSym) = idIntro(pos, ms1, info.context, info.id, t, Some(pos))
               val ls2 = Util.assumeValueInv(this, smt2, cache, rtCheck, ls1, newSym, pos, reporter)
-              if (!th.isMutable(t, T)) {
-                val (ls3, cond) = ls2.freshSym(AST.Typed.b, pos)
-                val ls4 = ls3.addClaims(ISZ[State.Claim](
-                  State.Claim.Let.Binary(cond, newSym, AST.Exp.BinaryOp.Eq, oldSym, t),
-                  State.Claim.Prop(T, cond)
-                ))
-                ms1 = ls4
-              } else if (AST.Util.isSeq(t)) {
+              if (AST.Util.isSeq(t)) {
                 val (ls5, size1) = ls2.freshSym(AST.Typed.z, pos)
                 val (ls6, size2) = ls5.freshSym(AST.Typed.z, pos)
                 val (ls7, cond) = ls6.freshSym(AST.Typed.b, pos)
@@ -1645,6 +1638,8 @@ import Util._
                   State.Claim.Prop(T, cond)
                 ))
                 ms1 = ls8
+              } else {
+                ms1 = ls2
               }
             }
             if (isUnit) {
@@ -2413,11 +2408,7 @@ import Util._
     val pos = namePosOpt.get
     val s3 = s2(claims = s2.claims :+ State.Claim.Let.CurrentName(rhs, ids, namePosOpt))
     val tipe = rhs.tipe
-    val s7: State = if (!th.isMutable(tipe, T)) {
-      val (s4, cond) = s3.freshSym(AST.Typed.b, pos)
-      s4.addClaims(ISZ(State.Claim.Let.Binary(cond, rhs, AST.Exp.BinaryOp.Eq, rt.ctx.get(ids).get, tipe),
-        State.Claim.Prop(T, cond)))
-    } else if (AST.Util.isSeq(tipe)) {
+    val s7: State = if (AST.Util.isSeq(tipe)) {
       val (s4, size1) = s3.freshSym(AST.Typed.z, pos)
       val (s5, size2) = s4.freshSym(AST.Typed.z, pos)
       val (s6, cond) = s5.freshSym(AST.Typed.b, pos)
