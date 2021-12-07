@@ -1092,7 +1092,7 @@ object Util {
     var modVars = ISZ[String]()
     for (m <- modifies) {
       m.attr.resOpt.get match {
-        case res: AST.ResolvedInfo.Var if !res.isInObject && res.owner == owner => modVars = modVars :+ res.id
+        case res: AST.ResolvedInfo.Var if !res.isInObject => modVars = modVars :+ res.id
         case _ =>
       }
     }
