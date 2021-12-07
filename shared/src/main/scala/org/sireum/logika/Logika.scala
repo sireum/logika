@@ -1607,7 +1607,7 @@ import Util._
         def evalContractCase(logikaComp: Logika, currentReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
                              labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
                              ensures: ISZ[AST.Exp]): Context.ContractCaseResult = {
-          val modLocals = contract.modifiedLocalVars
+          val (receiverModified, modLocals) = contract.modifiedLocalVars(logikaComp.context.receiverLocalTypeOpt)
 
           def modVarsResult(ms0: State, mposOpt: Option[Position]): (State, State.Value) = {
             var ms1 = ms0
@@ -1665,7 +1665,7 @@ import Util._
               rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "Res")
             }
             if (receiverOpt.nonEmpty) {
-              rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "this")
+              rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this")
             }
             ms1 = rewriteLocalVars(ms1, rwLocals, modPosOpt, reporter)
             currentReceiverOpt match {
@@ -1735,11 +1735,13 @@ import Util._
             return Context.ContractCaseResult(T, cs6.addClaim(State.Claim.Let.And(rsym, requireSyms)),
               State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
           }
-          val cs7 = modVarsRewrite(cs5, posOpt)
+          val cs6 = evalAssignReceiver(
+            if (receiverModified) contract.modifies else ISZ(),
+            this, logikaComp, smt2, cache, rtCheck, cs5, invokeReceiverOpt, receiverOpt, typeSubstMap, reporter)
+          val cs7 = modVarsRewrite(cs6, posOpt)
           val (cs8, rsym) = cs7.freshSym(AST.Typed.b, pos)
           val cs9 = cs8.addClaim(State.Claim.Let.And(rsym, requireSyms))
-          return Context.ContractCaseResult(T, conjunctClaimSuffix(cs0, cs9), result, State.Claim.Prop(T, rsym),
-            rep.messages)
+          return Context.ContractCaseResult(T, conjunctClaimSuffix(cs0, cs9), result, State.Claim.Prop(T, rsym), rep.messages)
         }
 
         val logikaComp: Logika = {
@@ -3239,7 +3241,7 @@ import Util._
         whileStmt.invariants, reporter)) {
         if (s0w.status) {
           val s1 = conjunctClaimSuffix(s0, s0w)
-          val modLocalVars = whileStmt.contract.modifiedLocalVars
+          val modLocalVars = whileStmt.contract.modifiedLocalVars(context.receiverLocalTypeOpt)._2
           if (whileStmt.contract.modifiedObjectVars.nonEmpty || whileStmt.contract.modifiedRecordVars.nonEmpty) {
             halt("TODO: rewrite Vars/fields as well") // TODO
           }

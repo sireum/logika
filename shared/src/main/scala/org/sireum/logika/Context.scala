@@ -145,6 +145,14 @@ object Context {
     }
   }
 
+  @pure def receiverLocalTypeOpt: Option[(AST.ResolvedInfo.LocalVar, AST.Typed)] = {
+    methodOpt match {
+      case Some(cm) if cm.receiverTypeOpt.nonEmpty => return Some((AST.ResolvedInfo.LocalVar(cm.owner :+ cm.id,
+        AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), cm.receiverTypeOpt.get))
+      case _ => return None()
+    }
+  }
+
   @pure def returnTypeOpt: Option[AST.Typed] = {
     methodOpt match {
       case Some(cm) => return Some(cm.retType)

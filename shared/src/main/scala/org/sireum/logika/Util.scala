@@ -1040,4 +1040,100 @@ object Util {
     }
     return s4
   }
+
+  def evalAssignReceiver(modifies: ISZ[AST.Exp.Ident], logika: Logika, logikaComp: Logika, smt2: Smt2, cache: Smt2.Cache,
+                         rtCheck: B, state: State, receiverOpt: Option[AST.Exp], receiverSymOpt: Option[State.Value.Sym],
+                         typeSubstMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
+    def isLhs(exp: AST.Exp): B = {
+      exp match {
+        case exp: AST.Exp.Ident =>
+          exp.attr.resOpt.get match {
+            case _: AST.ResolvedInfo.LocalVar => return T
+            case _: AST.ResolvedInfo.Var => return T
+            case _ => return F
+          }
+        case exp: AST.Exp.Select =>
+          exp.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Var =>
+              if (res.isInObject) {
+                return T
+              } else {
+                return isLhs(exp.receiverOpt.get)
+              }
+            case _ => return F
+          }
+        case exp: AST.Exp.Invoke =>
+          exp.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Select =>
+              exp.receiverOpt match {
+                case Some(receiver) => return isLhs(receiver)
+                case _ => return T
+              }
+            case _ => return F
+          }
+        case _ => return F
+      }
+    }
+    if (modifies.isEmpty || receiverOpt.isEmpty) {
+      return state
+    }
+    val receiver = receiverOpt.get
+    if (!isLhs(receiver)) {
+      return state
+    }
+    val pos = receiver.posOpt.get
+    val (s0, sym) = idIntro(pos, state, logikaComp.context.methodName, "this", receiver.typedOpt.get, Some(pos))
+    val s1 = logika.assignRec(Split.Disabled, smt2, cache, rtCheck, s0, receiver, sym, reporter)(0)
+    val (s2, v) = logika.evalExp(Split.Disabled, smt2, cache, rtCheck, s1, receiver, reporter)(0)
+    val rsym = receiverSymOpt.get
+    val (s3, newRsym) = logika.value2Sym(s2, v, pos)
+    var s4 = s3
+    val owner = logikaComp.context.owner
+    var modVars = ISZ[String]()
+    for (m <- modifies) {
+      m.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.Var if !res.isInObject && res.owner == owner => modVars = modVars :+ res.id
+        case _ =>
+      }
+    }
+    def eqSpecVars(m: HashSMap[String, Info.SpecVar]): Unit = {
+      for (x <- m.values) {
+        val id = x.ast.id.value
+        val t = x.typedOpt.get.subst(typeSubstMap)
+        val (s5, xsym) = s4.freshSym(t, pos)
+        val (s6, newXsym) = s5.freshSym(t, pos)
+        val (s7, cond) = s6.freshSym(AST.Typed.b, pos)
+        s4 = s7.addClaims(ISZ(
+          State.Claim.Let.FieldLookup(newXsym, newRsym, id),
+          State.Claim.Let.FieldLookup(xsym, rsym, id),
+          State.Claim.Let.Binary(cond, newXsym, AST.Exp.BinaryOp.Eq, xsym, t),
+          State.Claim.Prop(T, cond)
+        ))
+      }
+    }
+    def eqVars(m: HashSMap[String, Info.Var]): Unit = {
+      for (x <- m.values) {
+        val id = x.ast.id.value
+        val t = x.typedOpt.get.subst(typeSubstMap)
+        val (s5, xsym) = s4.freshSym(t, pos)
+        val (s6, newXsym) = s5.freshSym(t, pos)
+        val (s7, cond) = s6.freshSym(AST.Typed.b, pos)
+        s4 = s7.addClaims(ISZ(
+          State.Claim.Let.FieldLookup(newXsym, newRsym, id),
+          State.Claim.Let.FieldLookup(xsym, rsym, id),
+          State.Claim.Let.Binary(cond, newXsym, AST.Exp.BinaryOp.Eq, xsym, t),
+          State.Claim.Prop(T, cond)
+        ))
+      }
+    }
+    logika.th.typeMap.get(owner).get match {
+      case info: TypeInfo.Sig =>
+        eqSpecVars(info.specVars -- modVars)
+      case info: TypeInfo.Adt =>
+        eqSpecVars(info.specVars -- modVars)
+        eqVars(info.vars -- modVars)
+      case _ =>
+    }
+    return s4
+  }
 }
