@@ -47,7 +47,7 @@ import org.sireum._
                        val splitContract: B,
                        val simplifiedQuery: B,
                        val checkInfeasiblePatternMatch: B,
-                       val cvc4RLimit: Z,
+                       val cvcRLimit: Z,
                        val fpRoundingMode: String)
 
 @datatype trait Smt2Config {
@@ -71,7 +71,7 @@ import org.sireum._
 }
 
 @datatype class CvcConfig(val exe: String, val validOpts: ISZ[String], val satOpts: ISZ[String]) extends Smt2Config {
-  val name: String = "cvc4"
+  val name: String = "cvc"
 
   @pure def args(isSat: B, timeoutInMs: Z): ISZ[String] = {
     return ISZ[String]("--lang=smt2.6", s"--tlimit=$timeoutInMs") ++ (if (isSat) satOpts else validOpts)

@@ -32,10 +32,10 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
 
-  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z, cvc4RLimit: Z,
+  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z, cvcRLimit: Z,
              fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B,
              reporter: Logika.Reporter): Smt2 = {
-    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, cvc4RLimit,
+    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, cvcRLimit,
       fpRoundingMode, configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
       ISZ(), HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
     r.addType(AST.Typed.z, reporter)
@@ -49,7 +49,7 @@ object Smt2Impl {
                        val intBitWidth: Z,
                        val useReal: B,
                        val simplifiedQuery: B,
-                       val cvc4RLimit: Z,
+                       val cvcRLimit: Z,
                        val fpRoundingMode: String,
                        var configs: ISZ[Smt2Config],
                        var types: HashSet[AST.Typed],
@@ -160,7 +160,7 @@ object Smt2Impl {
       //println(query)
       var args = config.args(isSat, timeoutInMs)
       config match {
-        case _: CvcConfig => args = args :+ s"--rlimit=$cvc4RLimit"
+        case _: CvcConfig => args = args :+ s"--rlimit=$cvcRLimit"
         case _ =>
       }
       var proc = Os.proc(config.exe +: args).input(query).redirectErr

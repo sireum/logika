@@ -124,22 +124,22 @@ object cli {
       OptGroup(name = "SMT2", opts = ISZ(
         Opt(name = "cvcRLimit", longKey = "cvc-rlimit", shortKey = None(),
           tpe = Type.Num(None(), 1000000, None(), None()),
-          description = "CVC4 rlimit"
+          description = "CVC rlimit"
         ),
         Opt(name = "cvcVOpts", longKey = "cvc-vopts", shortKey = None(),
           tpe = Type.Str(Some(','), Some("--full-saturate-quant")),
-          description = "Additional options for CVC4 validity checks"
+          description = "Additional options for CVC validity checks"
         ),
         Opt(name = "cvcSOpts", longKey = "cvc-sopts", shortKey = None(),
           tpe = Type.Str(Some(','), None() /*Some("--finite-model-find")*/),
-          description = "Additional options for CVC4 satisfiability checks"
+          description = "Additional options for CVC satisfiability checks"
         ),
         Opt(name = "simplify", longKey = "simplify", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Simplify SMT2 query"
         ),
         Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
-          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc4", "z3")),
+          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc", "z3")),
           description = "SMT2 solver"
         ),
         Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),

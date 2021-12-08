@@ -43,17 +43,17 @@ object LogikaTest {
     case _ => "z3"
   }
 
-  val cvc4Exe: String = Os.env("SIREUM_HOME") match {
+  val cvcExe: String = Os.env("SIREUM_HOME") match {
     case Some(p) if Os.kind != Os.Kind.Unsupported =>
-      (Os.path(p) / "bin" / platform / (if (Os.isWin) "cvc4.exe" else "cvc4")).canon.string
-    case _ => "cvc4"
+      (Os.path(p) / "bin" / platform / (if (Os.isWin) "cvc.exe" else "cvc")).canon.string
+    case _ => "cvc5"
   }
 
   val timeoutInMs: Z = 2000
 
   val config: Config =
     Config(
-      smt2Configs = ISZ(CvcConfig(cvc4Exe, ISZ("--full-saturate-quant"), ISZ()), Z3Config(z3Exe, ISZ(), ISZ())),
+      smt2Configs = ISZ(CvcConfig(cvcExe, ISZ("--full-saturate-quant"), ISZ()), Z3Config(z3Exe, ISZ(), ISZ())),
       sat = T,
       timeoutInMs = timeoutInMs,
       defaultLoopBound = 10,
@@ -74,7 +74,7 @@ object LogikaTest {
       splitMatch = F,
       simplifiedQuery = F,
       checkInfeasiblePatternMatch = T,
-      cvc4RLimit = 1000000,
+      cvcRLimit = 1000000,
       fpRoundingMode = "RNE"
     )
 }
@@ -197,7 +197,7 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkScript(None(), input, config,
-      th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.cvc4RLimit, config.fpRoundingMode,
+      th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.cvcRLimit, config.fpRoundingMode,
         config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, reporter),
       Smt2.NoCache(), reporter, 1, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
