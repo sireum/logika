@@ -2046,7 +2046,7 @@ import Util._
           val thenBranch = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
             s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
           val elseBranch = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-            s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
+            s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
               val (s2, re) = s1.freshSym(t, pos)
