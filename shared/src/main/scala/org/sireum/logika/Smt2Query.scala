@@ -40,6 +40,12 @@ object Smt2Query {
     }
   }
 
-  @datatype class Result(val kind: Result.Kind.Type, val solverName: String, val query: String, val info: String, val output: String, val timeMillis: Z)
+  @datatype class Result(val kind: Result.Kind.Type,
+                         val solverName: String,
+                         val query: String,
+                         val info: String,
+                         val output: String,
+                         val timeMillis: Z,
+                         val cached: B)
 
 }

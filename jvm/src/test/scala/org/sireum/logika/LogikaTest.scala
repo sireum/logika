@@ -75,7 +75,8 @@ object LogikaTest {
       simplifiedQuery = F,
       checkInfeasiblePatternMatch = T,
       cvcRLimit = 1000000,
-      fpRoundingMode = "RNE"
+      fpRoundingMode = "RNE",
+      caching = F
     )
 }
 

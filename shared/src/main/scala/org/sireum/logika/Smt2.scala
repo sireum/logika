@@ -35,15 +35,15 @@ import Util._
 
 object Smt2 {
   @msig trait Cache {
-    def get(isSat: B, query: String, timeoutInMs: Z): Option[Smt2Query.Result]
-    def set(isSat: B, query: String, timeoutInMs: Z, result: Smt2Query.Result): Unit
+    def get(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result]
+    def set(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit
   }
 
   @record class NoCache extends Cache {
-    def get(isSat: B, query: String, timeoutInMs: Z): Option[Smt2Query.Result] = {
+    def get(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result] = {
       return None()
     }
-    def set(isSat: B, query: String, timeoutInMs: Z, result: Smt2Query.Result): Unit = {}
+    def set(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit = {}
   }
 
   @datatype class SeqLit(val t: AST.Typed.Name, val size: Z)
@@ -246,8 +246,6 @@ object Smt2 {
   @pure def useReal: B
 
   def configs: ISZ[Smt2Config]
-
-  def configsUp(newConfigs: ISZ[Smt2Config]): Unit
 
   def types: HashSet[AST.Typed]
 

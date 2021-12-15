@@ -48,7 +48,8 @@ import org.sireum._
                        val simplifiedQuery: B,
                        val checkInfeasiblePatternMatch: B,
                        val cvcRLimit: Z,
-                       val fpRoundingMode: String)
+                       val fpRoundingMode: String,
+                       val caching: B)
 
 @datatype trait Smt2Config {
   def name: String

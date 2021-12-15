@@ -51,7 +51,7 @@ object Smt2Impl {
                        val simplifiedQuery: B,
                        val cvcRLimit: Z,
                        val fpRoundingMode: String,
-                       var configs: ISZ[Smt2Config],
+                       val configs: ISZ[Smt2Config],
                        var types: HashSet[AST.Typed],
                        var poset: Poset[AST.Typed.Name],
                        var sorts: ISZ[ST],
@@ -65,8 +65,20 @@ object Smt2Impl {
                        var filenameCount: HashMap[String, Z],
                        var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
 
-  def configsUp(newConfigs: ISZ[Smt2Config]): Unit = {
-    configs = newConfigs
+ val satArgs: ISZ[String] = {
+   var r = ISZ[String]()
+   for (config <- configs) {
+     r = (r :+ config.exe) ++ config.args(T, timeoutInMs)
+   }
+   r
+ }
+
+  val validArgs: ISZ[String] = {
+    var r = ISZ[String]()
+    for (config <- configs) {
+      r = (r :+ config.exe) ++ config.args(F, timeoutInMs)
+    }
+    r
   }
 
  def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
@@ -177,25 +189,25 @@ object Smt2Impl {
       val firstLine: String = if (isTimeout) "timeout" else out(0)
       val r: Smt2Query.Result = firstLine match {
         case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query,
-          st"""; Result:    ${if (isSat) "Sat" else "Invalid"}
-              |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration)
+          st"""; Result: ${if (isSat) "Sat" else "Invalid"}
+              |; Solver: ${config.exe}
+              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
         case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, query,
-          st"""; Result:    ${if (isSat) "Unsat" else "Valid"}
-              |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration)
+          st"""; Result: ${if (isSat) "Unsat" else "Valid"}
+              |; Solver: ${config.exe}
+              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
         case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, config.name, query,
-          st"""; Result:    Timeout
-              |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration)
+          st"""; Result: Timeout
+              |; Solver: ${config.exe}
+              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
         case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, config.name, query,
-          st"""; Result:    Don't Know
-              |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration)
+          st"""; Result: Don't Know
+              |; Solver: ${config.exe}
+              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
         case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, query,
-          st"""; Result:    Error
-              |; Solver:    ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration)
+          st"""; Result: Error
+              |; Solver: ${config.exe}
+              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
       }
       //println(s"$exe Result (${r.kind}):")
       //println(r.output)
@@ -221,12 +233,13 @@ object Smt2Impl {
       }
       return checkQueryH(configs(configs.size - 1))
     }
-    cache.get(isSat, query, timeoutInMs) match {
+    val args: ISZ[String] = if (isSat) satArgs else validArgs
+    cache.get(isSat, query, args) match {
       case Some(r) => return r
       case _ =>
     }
     val r = checkH()
-    cache.set(isSat, query, timeoutInMs, r)
+    cache.set(isSat, query, args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
     return r
   }
 
