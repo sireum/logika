@@ -243,8 +243,8 @@ object Smt2Impl {
     return r
   }
 
-  def formatVal(format: String, n: Z): ST = {
-    return Smt2Formatter.formatVal(format, n)
+  def formatVal(width: Z, n: Z): ST = {
+    return Smt2Formatter.formatVal(width, n)
   }
 
   def formatF32(value: F32): ST = {

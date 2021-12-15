@@ -83,15 +83,6 @@ object Smt2 {
   val stTrue: ST = st"true"
   val stFalse: ST = st"false"
 
-  val bvFormats: Map[Z, String] = {
-    var m = Map.empty[Z, String]
-    m = m + 8 ~> "#x%02X"
-    m = m + 16 ~> "#x%04X"
-    m = m + 32 ~> "#x%08X"
-    m = m + 64 ~> "#x%016X"
-    m
-  }
-
   @strictpure def cST(charBitWidth: Z): ST =
     st"""(define-sort C () (_ BitVec $charBitWidth))
         |(define-fun |C.unary_-| ((x C)) C (bvneg x))
@@ -466,7 +457,7 @@ object Smt2 {
 
   def checkUnsat(cache: Smt2.Cache, query: String, timeoutInMs: Z): (B, Smt2Query.Result)
 
-  def formatVal(format: String, n: Z): ST
+  def formatVal(width: Z, n: Z): ST
 
   def formatF32(value: F32): ST
 
@@ -551,8 +542,7 @@ object Smt2 {
       val ast = typeHierarchy.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.SubZ].ast
       if (!ast.isBitVector) intBitWidth else ast.bitWidth
     }
-    return if (bw == 0) if (n < 0) st"(- ${n * -1})" else st"$n"
-    else formatVal(Smt2.bvFormats.get(bw).get, n)
+    return formatVal(bw, n)
   }
 
   def addTypeVarIndex(t: AST.Typed.TypeVar): Unit = {

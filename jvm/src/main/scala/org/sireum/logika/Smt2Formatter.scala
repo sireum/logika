@@ -28,7 +28,7 @@ package org.sireum.logika
 import org.sireum._
 
 @ext object Smt2Formatter {
-  def formatVal(format: String, n: Z): ST = $
+  def formatVal(width: Z, n: Z): ST = $
   def formatF32(useReal: B, value: F32): ST = $
   def formatF64(useReal: B, value: F64): ST = $
   def formatR(n: R): ST = $

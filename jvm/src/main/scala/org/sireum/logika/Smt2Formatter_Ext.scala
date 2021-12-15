@@ -29,7 +29,18 @@ import java.lang.{String => JString, Float => JFloat, Double => JDouble, Integer
 
 object Smt2Formatter_Ext {
 
-  def formatVal(format: String, n: Z): ST = st"${JString.format(format.value, n.toBigInt.bigInteger)}"
+  def formatVal(width: Z, n: Z): ST = width.toInt match {
+    case 0 =>
+      var r = st"${n.toBigInt.abs}"
+      if (n < 0) {
+        r = st"(- $r)"
+      }
+      r
+    case 8 => st"${JString.format("#x%02X", n.toBigInt.toByte)}"
+    case 16 => st"${JString.format("#x%04X", n.toBigInt.toShort)}"
+    case 32 => st"${JString.format("#x%08X", n.toBigInt.toInt)}"
+    case 64 => st"${JString.format("#x%016X", n.toBigInt.toLong)}"
+  }
 
   def formatF32(useReal: B, value: F32): ST = {
     val f = value.value
