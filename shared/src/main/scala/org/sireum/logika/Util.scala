@@ -925,6 +925,7 @@ object Util {
       return (s1, ss)
     }
     val t = receiver.tipe
+    smt2.addType(t, reporter)
     val (ti, targs): (TypeInfo, ISZ[AST.Typed]) = t match {
       case t: AST.Typed.Name =>
         if (builtInTypeNames.contains(t.ids)) {
