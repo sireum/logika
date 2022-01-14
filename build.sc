@@ -26,7 +26,6 @@
 import $file.runtime.Runtime
 import $file.slang.Slang
 import $file.Logika
-import ammonite.ops.up
 
 object runtime extends mill.Module {
 
@@ -70,7 +69,7 @@ object slang extends mill.Module {
 
 object logika extends Logika.Module with runtime.testProvider {
 
-  final override def millSourcePath = super.millSourcePath / up
+  final override def millSourcePath = super.millSourcePath / os.up
   final override def frontEndObject = slang.frontend
 
 }
