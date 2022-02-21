@@ -833,6 +833,19 @@ import Util._
         return for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.right, reporter)) yield evalBasicH(p)
       }
 
+      def evalMapsTo(s0: State, v1: State.Value): ISZ[(State, State.Value)] = {
+        def evalMapsToH(p: (State, State.Value)): (State, State.Value) = {
+          val (s1, v2) = p
+          val rTipe = e.typedOpt.get
+          val pos = e.posOpt.get
+          val (s2, rExp) = s1.freshSym(rTipe, pos)
+          val s3 = s2.addClaim(State.Claim.Let.TupleLit(rExp, ISZ(v1, v2)))
+          return (s3, rExp)
+        }
+
+        return for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.right, reporter)) yield evalMapsToH(p)
+      }
+
       def evalCond(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value.Sym): ISZ[(State, State.Value)] = {
         val pos = exp.left.posOpt.get
         kind match {
@@ -914,7 +927,9 @@ import Util._
           for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.left, reporter)) {
             val (s1, v1) = p
             if (s1.status) {
-              if (isCond(kind)) {
+              if (kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo) {
+                r = r ++ evalMapsTo(s1, v1)
+              } else if (isCond(kind)) {
                 val (s2, left) = value2Sym(s1, v1, exp.left.posOpt.get)
                 r = r ++ evalCond(s2, kind, left)
               } else if (exp.op == "==" || exp.op == "!=" || isBasic(smt2, v1.tipe)) {
@@ -1186,6 +1201,34 @@ import Util._
         val (s3, v) = s2.freshSym(exp.typedOpt.get, pos)
         val s4 = s3.addClaim(State.Claim.Let.SeqLookup(v, seq, i))
         r = r :+ ((Util.assumeValueInv(this, smt2, cache, rtCheck, s4, v, pos, reporter), v))
+      }
+      return r
+    }
+
+    def evalSeqUpdate(exp: AST.Exp.Invoke): ISZ[(State, State.Value)] = {
+      var r = ISZ[(State, State.Value)]()
+      val srcv: ISZ[(State, State.Value)] = exp.receiverOpt match {
+        case Some(rcv) =>
+          if (exp.ident.id.value === "apply") {
+            evalExp(split, smt2, cache, rtCheck, state, rcv , reporter)
+          } else {
+            evalSelect(AST.Exp.Select(exp.receiverOpt, exp.ident.id, exp.targs, exp.ident.attr))
+          }
+        case _ => evalIdent(exp.ident)
+      }
+      for (p0 <- srcv; p1 <- evalExp(split, smt2, cache, rtCheck, p0._1, exp.args(0), reporter)) {
+        val (_, seq) = p0
+        val (s1, iv) = p1
+        val AST.Typed.Tuple(ISZ(iType, vType)) = iv.tipe
+        val pos = exp.posOpt.get
+        val (s2, i) = s1.freshSym(iType, pos)
+        val (s3, v) = s2.freshSym(vType, pos)
+        val (s4, newSeq) = s3.freshSym(seq.tipe, pos)
+        r = r :+ ((s4.addClaims(ISZ(
+          State.Claim.Let.FieldLookup(i, iv, "_1"),
+          State.Claim.Let.FieldLookup(v, iv, "_2"),
+          State.Claim.Def.SeqStore(newSeq, seq, i, v)
+        )), newSeq))
       }
       return r
     }
@@ -2202,6 +2245,7 @@ import Util._
             case res: AST.ResolvedInfo.Method =>
               res.mode match {
                 case AST.MethodMode.Select => return evalSeqSelect(e)
+                case AST.MethodMode.Store => return evalSeqUpdate(e)
                 case AST.MethodMode.Constructor =>
                   return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
                 case AST.MethodMode.Ext if res.id == "randomInt" && res.owner == AST.Typed.sireumName =>
@@ -2263,6 +2307,9 @@ import Util._
           }
           return evalQuantEach(e)
         case e: AST.Exp.This => return ISZ(evalThis(e))
+        case e: AST.Exp.ForYield =>
+          reporter.warn(e.posOpt, kind, s"Verification of for-comprehension is not yet supported")
+          return ISZ((s0(status = F), State.errorValue))
         case _ => halt(s"TODO: $e") // TODO
       }
     }
@@ -3230,9 +3277,8 @@ import Util._
         return (loop, done)
       }
 
-      halt("TODO") // TODO
-
-      //return r
+      reporter.warn(stmt.posOpt, kind, s"For-loop verification is not yet supported")
+      return ISZ(s0(status = F))
     }
 
     def evalWhile(s0: State, whileStmt: AST.Stmt.While): ISZ[State] = {
@@ -3522,11 +3568,10 @@ import Util._
           }
         case stmt: AST.Stmt.For =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-          if (stmt.modifies.nonEmpty) {
-            return evalFor(state, stmt)
-          } else {
-            halt(s"TODO: $stmt") // TODO
-          }
+//          if (stmt.modifies.isEmpty) {
+//            halt(s"TODO: $stmt") // TODO
+//          }
+          return evalFor(state, stmt)
         case stmt: AST.Stmt.Return =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalReturn(state, stmt)
