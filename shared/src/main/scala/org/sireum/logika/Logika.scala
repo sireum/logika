@@ -712,7 +712,9 @@ import Util._
             val (s2, sym) = value2Sym(s1, r, pos)
             return (Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym)
           }
-        case _ => halt(s"TODO: $e") // TODO
+        case _ =>
+          reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
+          return (s0(status = F), State.errorValue)
       }
     }
 
@@ -752,7 +754,8 @@ import Util._
 
           return for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.exp, reporter)) yield evalUnaryExpH(p)
         case _ =>
-          halt(s"TODO: $exp") // TODO
+          reporter.warn(e.posOpt, kind, s"Not currently supported: $exp")
+          return ISZ((s0(status = F), State.errorValue))
       }
     }
 
@@ -935,7 +938,8 @@ import Util._
               } else if (exp.op == "==" || exp.op == "!=" || isBasic(smt2, v1.tipe)) {
                 r = r ++ evalBasic(s1, kind, v1)
               } else {
-                halt(s"TODO: $e") // TODO
+                reporter.warn(e.posOpt, Logika.kind, s"Not currently supported: $e")
+                r = r :+ ((s1(status = F), State.errorValue))
               }
             } else {
               r = r :+ ((s1, State.errorValue))
@@ -949,7 +953,9 @@ import Util._
           val posOpt = exp.posOpt
           return evalInvoke(s0, Some(exp.left), AST.Exp.Ident(AST.Id(exp.op, AST.Attr(posOpt)), exp.attr),
             Either.Left(ISZ(exp.right)), exp.attr)
-        case _ => halt(s"TODO: $e") // TODO
+        case _ =>
+          reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
+          return ISZ((s0(status = F), State.errorValue))
       }
     }
 
@@ -1012,7 +1018,9 @@ import Util._
         case res: AST.ResolvedInfo.Tuple =>
           assert(receiverOpt.nonEmpty)
           return evalTupleProjection(res)
-        case _ => halt(s"TODO: $e") // TODO
+        case _ =>
+          reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
+          return ISZ((state(status = F), State.errorValue))
       }
     }
 
@@ -1274,7 +1282,9 @@ import Util._
               }
             case _ => halt(s"Infeasible: $exp")
           }
-        case _ => halt("TODO: non-simple input")
+        case _ =>
+          reporter.warn(e.posOpt, kind, s"Non-simple inputs are not currently supported: $input")
+          return (state(status = F), State.errorValue)
       }
     }
 
@@ -2269,7 +2279,8 @@ import Util._
               }
             case _ =>
           }
-          halt(s"TODO: $e") // TODO
+          reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
+          return ISZ((s0(status = F), State.errorValue))
         case e: AST.Exp.InvokeNamed =>
           e.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Method =>
@@ -2288,7 +2299,8 @@ import Util._
               }
             case _ =>
           }
-          halt(s"TODO: $e") // TODO
+          reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
+          return ISZ((s0(status = F), State.errorValue))
         case e: AST.Exp.Result => return ISZ(evalResult(e))
         case e: AST.Exp.Input => return ISZ(evalInput(e))
         case e: AST.Exp.QuantType => return ISZ(evalQuantType(e))
@@ -2307,10 +2319,9 @@ import Util._
           }
           return evalQuantEach(e)
         case e: AST.Exp.This => return ISZ(evalThis(e))
-        case e: AST.Exp.ForYield =>
-          reporter.warn(e.posOpt, kind, s"Verification of for-comprehension is not yet supported")
+        case _ =>
+          reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
           return ISZ((s0(status = F), State.errorValue))
-        case _ => halt(s"TODO: $e") // TODO
       }
     }
 
@@ -3017,7 +3028,9 @@ import Util._
           case AST.ResolvedInfo.BuiltIn.Kind.Halt =>
             val s0 = state(status = F)
             return ISZ((s0, State.errorValue))
-          case _ => halt(s"TODO: $stmt") // TODO
+          case _ =>
+            reporter.warn(e.posOpt, Logika.kind, s"Not currently supported: $stmt")
+            return ISZ((state(status = F), State.errorValue))
         }
       case _ =>
         return for (p <- evalExp(split, smt2, cache, rtCheck, state, e, reporter)) yield (conjunctClaimSuffix(state, p._1), p._2)
@@ -3113,7 +3126,9 @@ import Util._
         } else {
           return (s0, stateMap._2)
         }
-      case step: AST.ProofAst.Step.StructInduction => halt(s"TODO: $step")
+      case step: AST.ProofAst.Step.StructInduction =>
+        reporter.warn(step.id.posOpt, kind, s"Not currently supported: $step")
+        return (s0(status = F), HashSMap.empty)
     }
   }
 
@@ -3277,7 +3292,7 @@ import Util._
         return (loop, done)
       }
 
-      reporter.warn(stmt.posOpt, kind, s"For-loop verification is not yet supported")
+      reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
       return ISZ(s0(status = F))
     }
 
@@ -3544,7 +3559,9 @@ import Util._
             case res: AST.ResolvedInfo.LocalVar =>
               return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.attr.typedOpt.get,
                 stmt.id.attr.posOpt)
-            case _ => halt(s"TODO: $stmt") // TODO
+            case _ =>
+              reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
+              return ISZ(state(status = F))
           }
         case stmt: AST.Stmt.VarPattern =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
@@ -3568,9 +3585,10 @@ import Util._
           }
         case stmt: AST.Stmt.For =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-//          if (stmt.modifies.isEmpty) {
-//            halt(s"TODO: $stmt") // TODO
-//          }
+          if (stmt.modifies.isEmpty) {
+            reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
+            return ISZ(state(status = F))
+          }
           return evalFor(state, stmt)
         case stmt: AST.Stmt.Return =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
@@ -3594,7 +3612,8 @@ import Util._
         case _: AST.Stmt.Sig => return ISZ(state)
         case _: AST.Stmt.TypeAlias => return ISZ(state)
         case _ =>
-          halt(s"TODO: $stmt") // TODO
+          reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
+          return ISZ(state(status = F))
       }
     }
 
