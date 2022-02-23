@@ -582,6 +582,7 @@ object Smt2 {
       val itId = typeId(it)
       val etId = adtId(et)
       val atId = typeOpId(t, "at")
+      val atZId = typeOpId(t, "atZ")
       val sizeId = typeOpId(t, "size")
       val appendId = typeOpId(t, ":+")
       val appendsId = typeOpId(t, "++")
@@ -614,18 +615,21 @@ object Smt2 {
             val min = toVal(it, 0)
             addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
             addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($lastIndexId x) ($zSubId ($sizeId x) $zOne)))))")
+            addSTypeDecl(st"(define-fun $atZId ((x $tId) (y $itId)) $etId (select x y))")
             (min, toVal(it, 1))
           } else {
             val ti = typeHierarchy.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.SubZ]
             val min: ST = if (ti.ast.isZeroIndex) toVal(it, 0) else typeOpId(it, "Min")
             addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
             addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
+            addSTypeDecl(st"(declare-fun $atZId ($tId $itId) $etId)")
             (min, toVal(it, 1))
           }
         case it: AST.Typed.TypeVar =>
           val min = typeOpId(it, "Min")
           addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
           addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
+          addSTypeDecl(st"(declare-fun $atZId ($tId $itId) $etId)")
           (min, typeOpId(it, "1"))
         case _ => halt(s"Infeasible: $it")
       }
