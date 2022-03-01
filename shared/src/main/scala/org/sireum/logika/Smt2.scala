@@ -1428,7 +1428,7 @@ object Smt2 {
           (for (id <- lids.values) yield st"(${localId(id)} ${typeId(id.sym.tipe)})") ++
             (for (sym <- s.elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})")
         body =
-          st"""(forall (${(decls, " ")})
+          st"""(${if (isImply) "forall" else "exists"} (${(decls, " ")})
               |  $body)"""
       }
       return body
