@@ -333,7 +333,7 @@ object Util {
     }
   }
 
-  def value2ST(smt2: Smt2, lets: HashMap[Z, ISZ[State.Claim.Let]]): State.Value => ST = {
+  def value2ST(smt2: Smt2, lets: HashMap[Z, ISZ[State.Claim.Let]], declIds: HashSMap[String, ST]): State.Value => ST = {
     if (lets.isEmpty) {
       return smt2.v2ST _
     }
@@ -346,7 +346,7 @@ object Util {
             case Some(r) => return r
             case _ =>
               val r: ST = lets.get(v.num) match {
-                case Some(ls) if ls.size == 1 => smt2.l2RhsST(ls(0), sv2ST _, lets)
+                case Some(ls) if ls.size == 1 => smt2.l2RhsST(ls(0), sv2ST _, lets, declIds)
                 case _ => smt2.v2ST(v)
               }
               cache = cache + v.num ~> r
