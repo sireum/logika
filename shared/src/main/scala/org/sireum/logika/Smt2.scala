@@ -337,7 +337,16 @@ object Smt2 {
     return if (changed) Some(newClaims) else None()
   }
 
-  def addStrictPureMethodDecl(pf: State.ProofFun, sym: State.Value.Sym, invClaims: ISZ[State.Claim]): Unit = {
+  def addStrictPureMethodDecl(pf: State.ProofFun, sym: State.Value.Sym, invClaims: ISZ[State.Claim], reporter: Reporter): Unit = {
+    pf.receiverTypeOpt match {
+      case Some(rt) => addType(rt, reporter)
+      case _ =>
+    }
+    for (pt <- pf.paramTypes) {
+      addType(pt, reporter)
+    }
+    addType(pf.returnType, reporter)
+
     val id = proofFunId(pf)
     val context = pf.context :+ pf.id
     val thisId = currentLocalIdString(context, "this")
@@ -353,10 +362,11 @@ object Smt2 {
       case _ =>
     }
     val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${typeId(pf.returnType)})"
+    val app: ST = if (paramIds.isEmpty) id else st"($id ${(paramIds, " ")})"
     val declClaim: ST = if (invClaims.size == 0) st"" else
       st"""(assert (forall (${(params, " ")} (${v2ST(sym)} ${adtId(pf.returnType)}))
           |  (=>
-          |    (= ${v2ST(sym)} ($id ${(paramIds, " ")}))
+          |    (= ${v2ST(sym)} $app)
           |    ${embeddedClaims(F, invClaims, ISZ(), ISZ(), None(), HashSMap.empty)}
           |)))"""
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, declClaim)))
@@ -1055,7 +1065,7 @@ object Smt2 {
     }
   }
 
-  @memoize def seqLit2SmtDeclString(seqLit: Smt2.SeqLit): String = {
+  @memoize def seqLit2SmtDeclST(seqLit: Smt2.SeqLit): ST = {
     val t = seqLit.t
     val size = seqLit.size
     val it = t.args(0).asInstanceOf[AST.Typed.Name]
@@ -1075,7 +1085,7 @@ object Smt2 {
           |    (= ($sizeId x) $size)
           |    $lastIndexOpt
           |    ${(for (i <- 0 until size) yield st"(= ($atId x i$i) v$i)", "\n")}))"""
-    return r.render
+    return r
   }
 
   def satQuery(claims: ISZ[State.Claim], negClaimOpt: Option[State.Claim], reporter: Reporter): ST = {
@@ -1086,21 +1096,21 @@ object Smt2 {
       (for (c <- claims; p <- c2DeclST(c)) yield p)
     val lets = Util.collectLetClaims(simplifiedQuery, claims)
     val sv2ST = Util.value2ST(this, lets, decls)
-    var claimSmts = ISZ[String]()
+    var claimSmts = ISZ[ST]()
     for (c <- claims) {
       c2ST(c, sv2ST, lets, decls) match {
-        case Some(st) => claimSmts = claimSmts :+ st.render
+        case Some(st) => claimSmts = claimSmts :+ st
         case _ =>
       }
     }
     negClaimOpt match {
       case Some(negClaim) =>
-        claimSmts = claimSmts :+ st"(not ${c2ST(negClaim, sv2ST, lets, decls)})".render
+        claimSmts = claimSmts :+ st"(not ${c2ST(negClaim, sv2ST, lets, decls)})"
         decls = decls ++ c2DeclST(negClaim)
       case _ =>
     }
-    val seqLitDecls: ISZ[String] = for (seqLit <- seqLits.elements) yield seqLit2SmtDeclString(seqLit)
-    return query(seqLitDecls ++ (for (d <- decls.values) yield d.render), claimSmts)
+    val seqLitDecls: ISZ[ST] = for (seqLit <- seqLits.elements) yield seqLit2SmtDeclST(seqLit)
+    return query(seqLitDecls, decls.values, claimSmts)
   }
 
   @strictpure def toSTs(claims: ISZ[State.Claim], defs: ClaimDefs): ISZ[ST] =
@@ -1150,7 +1160,7 @@ object Smt2 {
     }
   }
 
-  def query(decls: ISZ[String], claims: ISZ[String]): ST = {
+  def query(funDecls: ISZ[ST], decls: ISZ[ST], claims: ISZ[ST]): ST = {
     var cs: ISZ[ST] = constraints
     if (typeHierarchyIds.size > 1) {
       cs = cs :+
@@ -1190,6 +1200,8 @@ object Smt2 {
           |${(typeDecls, "\n")}
           |
           |${(cs, "\n")}
+          |
+          |${(funDecls, "\n")}
           |
           |${(for (p <- strictPureMethods.values) yield p._1, "\n")}
           |

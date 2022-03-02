@@ -701,7 +701,7 @@ object Util {
         val r: State.Value.Sym = {
           val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
           val s2 = assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
-          smt2.addStrictPureMethodDecl(pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size))
+          smt2.addStrictPureMethodDecl(pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size), reporter)
           s0 = s1(nextFresh = s2.nextFresh, status = s2.status)
           res
         }
