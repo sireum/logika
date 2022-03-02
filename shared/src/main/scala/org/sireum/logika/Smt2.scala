@@ -1088,6 +1088,26 @@ object Smt2 {
     return r
   }
 
+  def collectLids(claims: ISZ[State.Claim]): HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id] = {
+    var r = HashSMap.empty[(ISZ[String], String, Z), State.Claim.Let.Id]
+    def collectLidsRec(cs: ISZ[State.Claim]): Unit = {
+      for (c <- cs) {
+        c match {
+          case c: State.Claim.Let.Id => r = r + (c.context, c.id, c.num) ~> c
+          case c: State.Claim.If => collectLidsRec(c.tClaims); collectLidsRec(c.fClaims)
+          case c: State.Claim.And => collectLidsRec(c.claims)
+          case c: State.Claim.Or => collectLidsRec(c.claims)
+          case c: State.Claim.Imply => collectLidsRec(c.claims)
+          case _: State.Claim.Def =>
+          case _: State.Claim.Label =>
+          case _: State.Claim.Prop =>
+        }
+      }
+    }
+    collectLidsRec(claims)
+    return r
+  }
+
   def satQuery(claims: ISZ[State.Claim], negClaimOpt: Option[State.Claim], reporter: Reporter): ST = {
     for (c <- claims; t <- c.types) {
       addType(t, reporter)
@@ -1095,17 +1115,18 @@ object Smt2 {
     var decls: HashSMap[String, ST] = HashSMap.empty[String, ST] ++
       (for (c <- claims; p <- c2DeclST(c)) yield p)
     val lets = Util.collectLetClaims(simplifiedQuery, claims)
-    val sv2ST = Util.value2ST(this, lets, decls)
+    val lids = collectLids(claims)
+    val sv2ST = Util.value2ST(this, lets, lids)
     var claimSmts = ISZ[ST]()
     for (c <- claims) {
-      c2ST(c, sv2ST, lets, decls) match {
+      c2ST(c, sv2ST, lets, lids) match {
         case Some(st) => claimSmts = claimSmts :+ st
         case _ =>
       }
     }
     negClaimOpt match {
       case Some(negClaim) =>
-        claimSmts = claimSmts :+ st"(not ${c2ST(negClaim, sv2ST, lets, decls)})"
+        claimSmts = claimSmts :+ st"(not ${c2ST(negClaim, sv2ST, lets, lids)})"
         decls = decls ++ c2DeclST(negClaim)
       case _ =>
     }
@@ -1264,8 +1285,17 @@ object Smt2 {
     return c.string
   }
 
+  @pure def escapeIdC(c: C): String = {
+    c match {
+      case '\\' => return "$backslash"
+      case _ => return c.string
+    }
+  }
+
+  @strictpure def escapeId(id: String): String = st"${(for (c <- conversions.String.toCis(id)) yield escapeIdC(c), "")}".render
+
   @memoize def ids2ST(ids: ISZ[String]): ST = {
-    return st"${(ids, ".")}"
+    return st"${(for (id <- ids) yield escapeId(id), ".")}"
   }
 
   def shorten(ids: ISZ[String]): ST = {
@@ -1307,12 +1337,12 @@ object Smt2 {
   }
 
   @pure def currentLocalIdString(context: ISZ[String], id: String): ST = {
-    return if (context.isEmpty) st"|l:$id|" else st"|l:$id:${(context, ".")}|"
+    return if (context.isEmpty) st"|l:${escapeId(id)}|" else st"|l:${escapeId(id)}:${ids2ST(context)}|"
   }
 
   def localId(c: State.Claim.Let.Id): ST = {
-    return if (c.context.isEmpty) st"|l:${c.id}@${State.Claim.possLines(c.poss)}#${c.num}|"
-    else st"|l:${c.id}:${(c.context, ".")}@${State.Claim.possLines(c.poss)}#${c.num}|"
+    return if (c.context.isEmpty) st"|l:${escapeId(c.id)}@${State.Claim.possLines(c.poss)}#${c.num}|"
+    else st"|l:${escapeId(c.id)}:${ids2ST(c.context)}@${State.Claim.possLines(c.poss)}#${c.num}|"
   }
 
   def nameId(c: State.Claim.Let.Name): ST = {
@@ -1327,11 +1357,11 @@ object Smt2 {
   }
 
   def enumId(owner: ISZ[String], id: String): ST = {
-    return st"|e:${(shorten(owner), ".")}.$id|"
+    return st"|e:${(shorten(owner), ".")}.${escapeId(id)}|"
   }
 
   def l2DeclST(c: State.Claim.Let,
-               declIds: HashSMap[String, ST]): ST = {
+               declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     c match {
       case c: State.Claim.Let.CurrentId if c.declId => return st"(${l2RhsST(c, v2ST _, HashMap.empty, declIds)} ${v2ST(c.sym)})"
       case _ => return st"(${v2ST(c.sym)} ${l2RhsST(c, v2ST _, HashMap.empty, declIds)})"
@@ -1343,7 +1373,7 @@ object Smt2 {
                      initSyms: ISZ[State.Value.Sym],
                      addClaimSTs: ISZ[ST],
                      letsOpt: Option[HashMap[Z, ISZ[State.Claim.Let]]],
-                     declIds: HashSMap[String, ST]): ST = {
+                     declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     def collectSyms(c: State.Claim, acc: ISZ[State.Value.Sym]): ISZ[State.Value.Sym] = {
       c match {
         case c: State.Claim.Def => return acc :+ c.sym
@@ -1375,44 +1405,14 @@ object Smt2 {
         case _: State.Claim.Prop => return acc
       }
     }
-    var lids = HashSMap.empty[(ISZ[String], String, Z), State.Claim.Let.Id]
-    def collectVars(c: State.Claim): Unit = {
-      c match {
-        case c: State.Claim.Let.Id =>
-          if (!declIds.contains(localId(c).render)) {
-            lids = lids + (c.context, c.id, c.num) ~> c
-          }
-        case c: State.Claim.If =>
-          for (tClaim <- c.tClaims) {
-            collectVars(tClaim)
-          }
-          for (fClaim <- c.fClaims) {
-            collectVars(fClaim)
-          }
-        case c: State.Claim.And =>
-          for (ac <- c.claims) {
-            collectVars(ac)
-          }
-        case c: State.Claim.Or =>
-          for (ac <- c.claims) {
-            collectVars(ac)
-          }
-        case c: State.Claim.Imply =>
-          for (ac <- c.claims) {
-            collectVars(ac)
-          }
-        case _: State.Claim.Def =>
-        case _: State.Claim.Label =>
-        case _: State.Claim.Prop =>
-      }
-    }
+    val lids = collectLids(claims) -- declIds.keys
     def raw: ST = {
       var lets = ISZ[State.Claim.Let]()
       var lsyms = ISZ[State.Value.Sym]()
       var syms = initSyms
       var rest = ISZ[State.Claim]()
+
       for (i <- 0 until claims.size) {
-        collectVars(claims(i))
         claims(i) match {
           case claim: State.Claim.Let if i != claims.size - 1 => lsyms = lsyms :+ claim.sym; lets = lets :+ claim
           case claim: State.Claim.Def => syms = syms :+ claim.sym; rest = rest :+ claim
@@ -1428,13 +1428,14 @@ object Smt2 {
         if (isImply) implyST(rest, addClaimSTs, v2ST _, HashMap.empty, declIds)
         else andST(rest, addClaimSTs, v2ST _, HashMap.empty, declIds)
       if (lets.nonEmpty) {
+        val newDeclIds = lids ++ declIds.entries
         body =
-          st"""(let (${l2DeclST(lets(lets.size - 1), declIds)})
+          st"""(let (${l2DeclST(lets(lets.size - 1), newDeclIds)})
               |  $body)"""
         for (i <- (lets.size - 2) to 0 by -1) {
           val let = lets(i)
           body =
-            st"""(let (${l2DeclST(let, declIds)})
+            st"""(let (${l2DeclST(let, newDeclIds)})
                 |$body)"""
         }
       }
@@ -1463,14 +1464,10 @@ object Smt2 {
       val sv2ST = Util.value2ST(this, lets, HashSMap.empty)
       var simplifiedClaimSTs = ISZ[ST]()
       for (i <- 0 until (if (isImply) claims.size - 1 else claims.size)) {
-        collectVars(claims(i))
         c2ST(claims(i), sv2ST, lets, declIds) match {
           case Some(st) => simplifiedClaimSTs = simplifiedClaimSTs :+ st
           case _ =>
         }
-      }
-      if (isImply) {
-        collectVars(claims(claims.size - 1))
       }
       var r: ST =
         if (isImply) implySTH(simplifiedClaimSTs, c2ST(claims(claims.size - 1), sv2ST, lets, declIds))
@@ -1501,7 +1498,7 @@ object Smt2 {
   def l2RhsST(c: State.Claim.Let,
               v2st: State.Value => ST,
               lets: HashMap[Z, ISZ[State.Claim.Let]],
-              declIds: HashSMap[String, ST]): ST = {
+              declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     c match {
       case c: State.Claim.Let.CurrentName =>
         return currentNameId(c)
@@ -1561,7 +1558,7 @@ object Smt2 {
     }
   }
 
-  def c2ST(c: State.Claim, v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]], declIds: HashSMap[String, ST]): Option[ST] = {
+  def c2ST(c: State.Claim, v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]], declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): Option[ST] = {
     c match {
       case c: State.Claim.Let =>
         c match {
@@ -1634,7 +1631,7 @@ object Smt2 {
   }
 
   def andST(cs: ISZ[State.Claim], addClaimSTs: ISZ[ST], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
-            declIds: HashSMap[String, ST]): ST = {
+            declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     var sts = ISZ[ST]()
     for (c <- cs) {
       c2ST(c, v2st, lets, declIds) match {
@@ -1660,7 +1657,7 @@ object Smt2 {
   }
 
   def orST(cs: ISZ[State.Claim], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
-           declIds: HashSMap[String, ST]): ST = {
+           declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     var sts = ISZ[ST]()
     for (c <- cs) {
       c2ST(c, v2st, lets, declIds) match {
@@ -1687,7 +1684,7 @@ object Smt2 {
   }
 
   def implyST(cs: ISZ[State.Claim], addClaimsSTs: ISZ[ST], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
-              declIds: HashSMap[String, ST]): ST = {
+              declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     var sts = ISZ[ST]()
     for (i <- 0 until cs.size) {
       c2ST(cs(i), v2st, lets, declIds) match {

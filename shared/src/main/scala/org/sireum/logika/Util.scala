@@ -333,7 +333,7 @@ object Util {
     }
   }
 
-  def value2ST(smt2: Smt2, lets: HashMap[Z, ISZ[State.Claim.Let]], declIds: HashSMap[String, ST]): State.Value => ST = {
+  def value2ST(smt2: Smt2, lets: HashMap[Z, ISZ[State.Claim.Let]], declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): State.Value => ST = {
     if (lets.isEmpty) {
       return smt2.v2ST _
     }
