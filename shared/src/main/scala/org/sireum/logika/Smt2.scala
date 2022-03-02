@@ -614,7 +614,7 @@ object Smt2 {
       val zSubId = typeOpId(AST.Typed.z, "-")
       val zGeId = typeOpId(AST.Typed.z, ">=")
       val zEqId = typeOpId(AST.Typed.z, "==")
-      addSTypeDecl(st"(define-sort $tId () (Array $itId $etId))")
+      addSort(st"(define-sort $tId () (Array $itId $etId))")
       addSTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
       addSTypeDecl(st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
       addSTypeDecl(st"(declare-fun $firstIndexId ($tId) $itId)")
@@ -1253,8 +1253,8 @@ object Smt2 {
   @pure def smt2c(c: C): String = {
     c match {
       case '\t' =>
-      case '\r' =>
-      case '\n' =>
+      case '\r' => return "\\r"
+      case '\n' => return "\\n"
       case ' ' =>
       case '"' => return "\"\""
       case _ if ('\u0020' <= c && c <= '\u007E') || (c >= '\u0080') =>
