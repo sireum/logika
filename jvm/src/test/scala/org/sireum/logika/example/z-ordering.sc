@@ -1,7 +1,7 @@
 // #Sireum #Logika
 
 import org.sireum._
-import org.sireum.justification.Auto
+import org.sireum.justification.{Auto, Lift}
 import org.sireum.justification.natded.prop.ImplyI
 
 @strictpure def isOrdered(seq: ZS): B = All(0 until seq.size - 1)(i => seq(i) <= seq(i + 1))
@@ -53,6 +53,17 @@ import org.sireum.justification.natded.prop.ImplyI
       6 #> isOrderedH(seq)                      by ordered2Lemma(seq) and 5,
     ),
     2 #> (isOrdered(seq) ->: isOrderedH(seq))   by ImplyI(4),
+    3 #> (isOrderedH(seq) == isOrdered(seq))    by Auto(ISZ(1, 2))
+    //@formatter:on
+  ))
+}
+
+
+@pure def orderedEqTheoremUsingLift(seq: ZS): Unit = {
+  Deduce(|- (isOrderedH(seq) == isOrdered(seq)) Proof(
+    //@formatter:off
+    1 #> (isOrderedH(seq) ->: isOrdered(seq))   by ordered1Lemma(seq),
+    2 #> (isOrdered(seq) -->: isOrderedH(seq))  by Lift(ordered2Lemma(seq)),
     3 #> (isOrderedH(seq) == isOrdered(seq))    by Auto(ISZ(1, 2))
     //@formatter:on
   ))
