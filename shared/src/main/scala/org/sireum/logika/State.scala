@@ -67,7 +67,7 @@ import org.sireum.message.Position
 
   @pure def freshSym(tipe: AST.Typed, pos: Position): (State, State.Value.Sym) = {
     val (newState, n) = fresh
-    return (newState, State.Value.Sym(n, tipe, pos))
+    return (newState, State.Value.sym(n, tipe, pos))
   }
 
 }
@@ -277,6 +277,9 @@ object State {
       }
     }
 
+    @pure def sym(num: org.sireum.Z, tipe: AST.Typed, pos: Position): Sym = {
+      return Sym(num, tipe, pos)
+    }
   }
 
   @datatype trait Claim {
@@ -1044,7 +1047,7 @@ object State {
                            val returnType: AST.Typed)
 
   val symPrefix: String = "α"
-  val errorValue: Value.Sym = Value.Sym(0, AST.Typed.nothing, Position.none)
+  val errorValue: Value.Sym = Value.sym(0, AST.Typed.nothing, Position.none)
   val stTrue: ST = st"T"
   val stFalse: ST = st"F"
 

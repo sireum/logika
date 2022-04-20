@@ -1037,7 +1037,7 @@ object Util {
     }
     var s4 = s0
     for (inv <- invs if s4.status) {
-      s4 = logika.evalInv(posOpt, isAssume, title, smt2, cache, rtCheck, s4, inv.ast, reporter)
+      s4 = logika.evalInv(posOpt, isAssume, title, smt2, cache, rtCheck, s4, inv.ast, substMap, reporter)
     }
     return s4
   }

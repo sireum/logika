@@ -3171,12 +3171,13 @@ import Util._
   }
 
   def evalInv(posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Smt2.Cache, rtCheck: B,
-              s0: State, invStmt: AST.Stmt.Inv, reporter: Reporter): State = {
+              s0: State, invStmt: AST.Stmt.Inv, substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     var s1 = s0
     var i = 0
     val isSingle = invStmt.claims.size == 1
     val id = invStmt.id.value
-    for (claim <- invStmt.claims if s1.status) {
+    for (c <- invStmt.claims if s1.status) {
+      val claim = AST.Util.substExp(c, substMap)
       val (titl, pOpt): (String, Option[Position]) = if (posOpt.isEmpty) {
         (if (isSingle) s"$title $id" else s"$title $id#$i", claim.posOpt)
       } else {
@@ -3620,7 +3621,7 @@ import Util._
         case stmt: AST.Stmt.SpecBlock => return evalSpecBlock(split, state, stmt)
         case stmt: AST.Stmt.Match => return evalMatch(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.Inv =>
-          val s1 = evalInv(None(), F, "Invariant", smt2, cache, rtCheck, state, stmt, reporter)
+          val s1 = evalInv(None(), F, "Invariant", smt2, cache, rtCheck, state, stmt, HashMap.empty, reporter)
           return ISZ(state(status = s1.status, nextFresh = s1.nextFresh))
         case stmt: AST.Stmt.DeduceSteps => return evalDeduceSteps(state, stmt)
         case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty => return evalDeduceSequent(state, stmt)
