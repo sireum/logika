@@ -680,7 +680,7 @@ object Smt2 {
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
             |    (= ($sizeId x) ($sizeId y))
-            |    ($itEqId ($lastIndexId x) ($lastIndexId y))
+            |    (=> (not (= 0 ($sizeId x))) ($itEqId ($lastIndexId x) ($lastIndexId y)))
             |    (forall ((i $itId)) (=> ($isInBoundId x i) (= (select x i) (select y i))))))""")
       addSTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       if (isAdtType(et)) {
