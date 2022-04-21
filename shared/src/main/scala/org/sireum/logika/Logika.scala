@@ -1657,7 +1657,7 @@ import Util._
           s1 = s3.addClaim(State.Claim.Let.CurrentId(F, sym, l.context, l.id, arg.posOpt))
         }
 
-        def evalContractCase(logikaComp: Logika, currentReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
+        def evalContractCase(logikaComp: Logika, callerReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
                              labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
                              ensures: ISZ[AST.Exp]): Context.ContractCaseResult = {
           val (receiverModified, modLocals) = contract.modifiedLocalVars(logikaComp.context.receiverLocalTypeOpt)
@@ -1721,7 +1721,7 @@ import Util._
               rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this")
             }
             ms1 = rewriteLocalVars(ms1, rwLocals, modPosOpt, reporter)
-            currentReceiverOpt match {
+            callerReceiverOpt match {
               case Some(receiver) =>
                 ms1 = ms1.addClaim(State.Claim.Let.CurrentId(F, receiver, context.methodOpt.get.name, "this",
                   context.methodOpt.get.posOpt))
@@ -1836,7 +1836,7 @@ import Util._
           l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
             localInMap = localInMap))))
         }
-        val currentReceiverOpt: Option[State.Value.Sym] = context.methodOpt match {
+        val callerReceiverOpt: Option[State.Value.Sym] = context.methodOpt match {
           case Some(m) => m.receiverTypeOpt match {
             case Some(currentReceiverType) =>
               val lcontext = context.methodOpt.get.name
@@ -1863,7 +1863,7 @@ import Util._
         }
         contract match {
           case contract: AST.MethodContract.Simple if s1.status =>
-            val ccr = evalContractCase(logikaComp, currentReceiverOpt, F, s1, None(), contract.requires, contract.ensures)
+            val ccr = evalContractCase(logikaComp, callerReceiverOpt, F, s1, None(), contract.requires, contract.ensures)
             reporter.reports(ccr.messages)
             r = r :+ ((ccr.state, ccr.retVal))
           case contract: AST.MethodContract.Cases if s1.status =>
@@ -1872,7 +1872,7 @@ import Util._
             var ccrs = ISZ[Context.ContractCaseResult]()
             var okCcrs = ISZ[Context.ContractCaseResult]()
             for (cas <- contract.cases) {
-              val ccr = evalContractCase(logikaComp, currentReceiverOpt, T, s1,
+              val ccr = evalContractCase(logikaComp, callerReceiverOpt, T, s1,
                 if (cas.label.value == "") None() else Some(cas.label), cas.requires, cas.ensures)
               ccrs = ccrs :+ ccr
               isPreOK = isPreOK || ccr.isPreOK
@@ -1953,12 +1953,18 @@ import Util._
         for (sv <- oldR) {
           val (s9, sym) = sv
           if (s9.status) {
-            val s10 = Util.checkInvs(logikaComp, posOpt, T, "Post-invariant", smt2, cache, rtCheck, s9,
-              logikaComp.context.receiverTypeOpt, receiverOpt, invs, typeSubstMap, reporter)
-            if (s10.nextFresh > nextFresh) {
-              nextFresh = s10.nextFresh
+            val (s12, rcvOpt): (State, Option[State.Value.Sym]) = receiverOpt match {
+              case Some(receiver) if invs.nonEmpty =>
+                val (s10, rcv) = idIntro(invs(0).posOpt.get, s9, logikaComp.context.methodName, "this", receiver.tipe, None())
+                (s10, Some(rcv))
+              case _ => (s9, receiverOpt)
             }
-            r = r :+ ((conjunctClaimSuffix(s9, s10), sym))
+            val s13 = Util.checkInvs(logikaComp, posOpt, T, "Post-invariant", smt2, cache, rtCheck, s12,
+              logikaComp.context.receiverTypeOpt, rcvOpt, invs, typeSubstMap, reporter)
+            if (s13.nextFresh > nextFresh) {
+              nextFresh = s13.nextFresh
+            }
+            r = r :+ ((conjunctClaimSuffix(s9, s13), sym))
           } else {
             if (s9.nextFresh > nextFresh) {
               nextFresh = s9.nextFresh
