@@ -262,36 +262,15 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Def.SeqLit =>
-          val r: PreResult[Context, State.Claim] = preStateClaimDefSeqLit(ctx, o) match {
+        case o: State.Claim.Let.AdtLit =>
+          val r: PreResult[Context, State.Claim] = preStateClaimLetAdtLit(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
            case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Def.SeqStore =>
-          val r: PreResult[Context, State.Claim] = preStateClaimDefSeqStore(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
-          }
-          return r
-        case o: State.Claim.Def.FieldStore =>
-          val r: PreResult[Context, State.Claim] = preStateClaimDefFieldStore(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
-          }
-          return r
-        case o: State.Claim.Def.AdtLit =>
-          val r: PreResult[Context, State.Claim] = preStateClaimDefAdtLit(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
-          }
-          return r
-        case o: State.Claim.Def.Random =>
-          val r: PreResult[Context, State.Claim] = preStateClaimDefRandom(ctx, o) match {
+        case o: State.Claim.Let.SeqLit =>
+          val r: PreResult[Context, State.Claim] = preStateClaimLetSeqLit(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
            case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
@@ -299,6 +278,27 @@ object StateTransformer {
           return r
         case o: State.Claim.Let.CurrentName =>
           val r: PreResult[Context, State.Claim] = preStateClaimLetCurrentName(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
+          }
+          return r
+        case o: State.Claim.Let.SeqStore =>
+          val r: PreResult[Context, State.Claim] = preStateClaimLetSeqStore(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
+          }
+          return r
+        case o: State.Claim.Let.FieldStore =>
+          val r: PreResult[Context, State.Claim] = preStateClaimLetFieldStore(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
+          }
+          return r
+        case o: State.Claim.Let.Random =>
+          val r: PreResult[Context, State.Claim] = preStateClaimLetRandom(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
            case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
@@ -464,183 +464,14 @@ object StateTransformer {
       return PreResult(ctx, T, None())
     }
 
-    @pure def preStateClaimDef(ctx: Context, o: State.Claim.Def): PreResult[Context, State.Claim.Def] = {
-      o match {
-        case o: State.Claim.Def.SeqLit => return preStateClaimDefSeqLit(ctx, o)
-        case o: State.Claim.Def.SeqStore => return preStateClaimDefSeqStore(ctx, o)
-        case o: State.Claim.Def.FieldStore => return preStateClaimDefFieldStore(ctx, o)
-        case o: State.Claim.Def.AdtLit => return preStateClaimDefAdtLit(ctx, o)
-        case o: State.Claim.Def.Random => return preStateClaimDefRandom(ctx, o)
-        case o: State.Claim.Let.CurrentName =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetCurrentName(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Name =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetName(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.CurrentId =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetCurrentId(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Id =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetId(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Eq =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetEq(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.TypeTest =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetTypeTest(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Quant =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetQuant(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Ite =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetIte(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Binary =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetBinary(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Unary =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetUnary(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.SeqLookup =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetSeqLookup(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.SeqInBound =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetSeqInBound(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.FieldLookup =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetFieldLookup(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.ProofFunApply =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetProofFunApply(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Apply =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetApply(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.IApply =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetIApply(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.TupleLit =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetTupleLit(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.And =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetAnd(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Or =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetOr(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Imply =>
-          val r: PreResult[Context, State.Claim.Def] = preStateClaimLetImply(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim.Def)) => PreResult(preCtx, continu, Some[State.Claim.Def](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim.Def]())
-          }
-          return r
-      }
-    }
-
-    @pure def preStateClaimDefSeqLit(ctx: Context, o: State.Claim.Def.SeqLit): PreResult[Context, State.Claim.Def] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateClaimDefSeqLitArg(ctx: Context, o: State.Claim.Def.SeqLit.Arg): PreResult[Context, State.Claim.Def.SeqLit.Arg] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateClaimDefSeqStore(ctx: Context, o: State.Claim.Def.SeqStore): PreResult[Context, State.Claim.Def] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateClaimDefFieldStore(ctx: Context, o: State.Claim.Def.FieldStore): PreResult[Context, State.Claim.Def] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateClaimDefAdtLit(ctx: Context, o: State.Claim.Def.AdtLit): PreResult[Context, State.Claim.Def] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateClaimDefRandom(ctx: Context, o: State.Claim.Def.Random): PreResult[Context, State.Claim.Def] = {
-      return PreResult(ctx, T, None())
-    }
-
     @pure def preStateClaimLet(ctx: Context, o: State.Claim.Let): PreResult[Context, State.Claim.Let] = {
       o match {
+        case o: State.Claim.Let.AdtLit => return preStateClaimLetAdtLit(ctx, o)
+        case o: State.Claim.Let.SeqLit => return preStateClaimLetSeqLit(ctx, o)
         case o: State.Claim.Let.CurrentName => return preStateClaimLetCurrentName(ctx, o)
+        case o: State.Claim.Let.SeqStore => return preStateClaimLetSeqStore(ctx, o)
+        case o: State.Claim.Let.FieldStore => return preStateClaimLetFieldStore(ctx, o)
+        case o: State.Claim.Let.Random => return preStateClaimLetRandom(ctx, o)
         case o: State.Claim.Let.Name => return preStateClaimLetName(ctx, o)
         case o: State.Claim.Let.CurrentId => return preStateClaimLetCurrentId(ctx, o)
         case o: State.Claim.Let.Id => return preStateClaimLetId(ctx, o)
@@ -663,7 +494,31 @@ object StateTransformer {
       }
     }
 
+    @pure def preStateClaimLetAdtLit(ctx: Context, o: State.Claim.Let.AdtLit): PreResult[Context, State.Claim.Let] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimLetSeqLit(ctx: Context, o: State.Claim.Let.SeqLit): PreResult[Context, State.Claim.Let] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimLetSeqLitArg(ctx: Context, o: State.Claim.Let.SeqLit.Arg): PreResult[Context, State.Claim.Let.SeqLit.Arg] = {
+      return PreResult(ctx, T, None())
+    }
+
     @pure def preStateClaimLetCurrentName(ctx: Context, o: State.Claim.Let.CurrentName): PreResult[Context, State.Claim.Let] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimLetSeqStore(ctx: Context, o: State.Claim.Let.SeqStore): PreResult[Context, State.Claim.Let] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimLetFieldStore(ctx: Context, o: State.Claim.Let.FieldStore): PreResult[Context, State.Claim.Let] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimLetRandom(ctx: Context, o: State.Claim.Let.Random): PreResult[Context, State.Claim.Let] = {
       return PreResult(ctx, T, None())
     }
 
@@ -981,36 +836,15 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Def.SeqLit =>
-          val r: TPostResult[Context, State.Claim] = postStateClaimDefSeqLit(ctx, o) match {
+        case o: State.Claim.Let.AdtLit =>
+          val r: TPostResult[Context, State.Claim] = postStateClaimLetAdtLit(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
            case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Def.SeqStore =>
-          val r: TPostResult[Context, State.Claim] = postStateClaimDefSeqStore(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
-          }
-          return r
-        case o: State.Claim.Def.FieldStore =>
-          val r: TPostResult[Context, State.Claim] = postStateClaimDefFieldStore(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
-          }
-          return r
-        case o: State.Claim.Def.AdtLit =>
-          val r: TPostResult[Context, State.Claim] = postStateClaimDefAdtLit(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
-          }
-          return r
-        case o: State.Claim.Def.Random =>
-          val r: TPostResult[Context, State.Claim] = postStateClaimDefRandom(ctx, o) match {
+        case o: State.Claim.Let.SeqLit =>
+          val r: TPostResult[Context, State.Claim] = postStateClaimLetSeqLit(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
            case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
@@ -1018,6 +852,27 @@ object StateTransformer {
           return r
         case o: State.Claim.Let.CurrentName =>
           val r: TPostResult[Context, State.Claim] = postStateClaimLetCurrentName(ctx, o) match {
+           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
+          }
+          return r
+        case o: State.Claim.Let.SeqStore =>
+          val r: TPostResult[Context, State.Claim] = postStateClaimLetSeqStore(ctx, o) match {
+           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
+          }
+          return r
+        case o: State.Claim.Let.FieldStore =>
+          val r: TPostResult[Context, State.Claim] = postStateClaimLetFieldStore(ctx, o) match {
+           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
+          }
+          return r
+        case o: State.Claim.Let.Random =>
+          val r: TPostResult[Context, State.Claim] = postStateClaimLetRandom(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
            case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
@@ -1183,183 +1038,14 @@ object StateTransformer {
       return TPostResult(ctx, None())
     }
 
-    @pure def postStateClaimDef(ctx: Context, o: State.Claim.Def): TPostResult[Context, State.Claim.Def] = {
-      o match {
-        case o: State.Claim.Def.SeqLit => return postStateClaimDefSeqLit(ctx, o)
-        case o: State.Claim.Def.SeqStore => return postStateClaimDefSeqStore(ctx, o)
-        case o: State.Claim.Def.FieldStore => return postStateClaimDefFieldStore(ctx, o)
-        case o: State.Claim.Def.AdtLit => return postStateClaimDefAdtLit(ctx, o)
-        case o: State.Claim.Def.Random => return postStateClaimDefRandom(ctx, o)
-        case o: State.Claim.Let.CurrentName =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetCurrentName(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Name =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetName(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.CurrentId =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetCurrentId(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Id =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetId(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Eq =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetEq(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.TypeTest =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetTypeTest(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Quant =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetQuant(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Ite =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetIte(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Binary =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetBinary(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Unary =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetUnary(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.SeqLookup =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetSeqLookup(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.SeqInBound =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetSeqInBound(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.FieldLookup =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetFieldLookup(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.ProofFunApply =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetProofFunApply(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Apply =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetApply(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.IApply =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetIApply(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.TupleLit =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetTupleLit(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.And =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetAnd(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Or =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetOr(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-        case o: State.Claim.Let.Imply =>
-          val r: TPostResult[Context, State.Claim.Def] = postStateClaimLetImply(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim.Def)) => TPostResult(postCtx, Some[State.Claim.Def](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim.Def")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim.Def]())
-          }
-          return r
-      }
-    }
-
-    @pure def postStateClaimDefSeqLit(ctx: Context, o: State.Claim.Def.SeqLit): TPostResult[Context, State.Claim.Def] = {
-      return TPostResult(ctx, None())
-    }
-
-    @pure def postStateClaimDefSeqLitArg(ctx: Context, o: State.Claim.Def.SeqLit.Arg): TPostResult[Context, State.Claim.Def.SeqLit.Arg] = {
-      return TPostResult(ctx, None())
-    }
-
-    @pure def postStateClaimDefSeqStore(ctx: Context, o: State.Claim.Def.SeqStore): TPostResult[Context, State.Claim.Def] = {
-      return TPostResult(ctx, None())
-    }
-
-    @pure def postStateClaimDefFieldStore(ctx: Context, o: State.Claim.Def.FieldStore): TPostResult[Context, State.Claim.Def] = {
-      return TPostResult(ctx, None())
-    }
-
-    @pure def postStateClaimDefAdtLit(ctx: Context, o: State.Claim.Def.AdtLit): TPostResult[Context, State.Claim.Def] = {
-      return TPostResult(ctx, None())
-    }
-
-    @pure def postStateClaimDefRandom(ctx: Context, o: State.Claim.Def.Random): TPostResult[Context, State.Claim.Def] = {
-      return TPostResult(ctx, None())
-    }
-
     @pure def postStateClaimLet(ctx: Context, o: State.Claim.Let): TPostResult[Context, State.Claim.Let] = {
       o match {
+        case o: State.Claim.Let.AdtLit => return postStateClaimLetAdtLit(ctx, o)
+        case o: State.Claim.Let.SeqLit => return postStateClaimLetSeqLit(ctx, o)
         case o: State.Claim.Let.CurrentName => return postStateClaimLetCurrentName(ctx, o)
+        case o: State.Claim.Let.SeqStore => return postStateClaimLetSeqStore(ctx, o)
+        case o: State.Claim.Let.FieldStore => return postStateClaimLetFieldStore(ctx, o)
+        case o: State.Claim.Let.Random => return postStateClaimLetRandom(ctx, o)
         case o: State.Claim.Let.Name => return postStateClaimLetName(ctx, o)
         case o: State.Claim.Let.CurrentId => return postStateClaimLetCurrentId(ctx, o)
         case o: State.Claim.Let.Id => return postStateClaimLetId(ctx, o)
@@ -1382,7 +1068,31 @@ object StateTransformer {
       }
     }
 
+    @pure def postStateClaimLetAdtLit(ctx: Context, o: State.Claim.Let.AdtLit): TPostResult[Context, State.Claim.Let] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateClaimLetSeqLit(ctx: Context, o: State.Claim.Let.SeqLit): TPostResult[Context, State.Claim.Let] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateClaimLetSeqLitArg(ctx: Context, o: State.Claim.Let.SeqLit.Arg): TPostResult[Context, State.Claim.Let.SeqLit.Arg] = {
+      return TPostResult(ctx, None())
+    }
+
     @pure def postStateClaimLetCurrentName(ctx: Context, o: State.Claim.Let.CurrentName): TPostResult[Context, State.Claim.Let] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateClaimLetSeqStore(ctx: Context, o: State.Claim.Let.SeqStore): TPostResult[Context, State.Claim.Let] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateClaimLetFieldStore(ctx: Context, o: State.Claim.Let.FieldStore): TPostResult[Context, State.Claim.Let] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateClaimLetRandom(ctx: Context, o: State.Claim.Let.Random): TPostResult[Context, State.Claim.Let] = {
       return TPostResult(ctx, None())
     }
 
@@ -1802,14 +1512,27 @@ import StateTransformer._
             TPostResult(r2.ctx, Some(o2(cond = r0.resultOpt.getOrElse(o2.cond), tClaims = r1.resultOpt.getOrElse(o2.tClaims), fClaims = r2.resultOpt.getOrElse(o2.fClaims))))
           else
             TPostResult(r2.ctx, None())
-        case o2: State.Claim.Def.SeqLit =>
+        case o2: State.Claim.Let.AdtLit =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Claim.Def.SeqLit.Arg]] = transformISZ(r0.ctx, o2.args, transformStateClaimDefSeqLitArg _)
+          val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
             TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
           else
             TPostResult(r1.ctx, None())
-        case o2: State.Claim.Def.SeqStore =>
+        case o2: State.Claim.Let.SeqLit =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          val r1: TPostResult[Context, IS[Z, State.Claim.Let.SeqLit.Arg]] = transformISZ(r0.ctx, o2.args, transformStateClaimLetSeqLitArg _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
+          else
+            TPostResult(r1.ctx, None())
+        case o2: State.Claim.Let.CurrentName =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: State.Claim.Let.SeqStore =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.seq)
           val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.index)
@@ -1818,7 +1541,7 @@ import StateTransformer._
             TPostResult(r3.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), seq = r1.resultOpt.getOrElse(o2.seq), index = r2.resultOpt.getOrElse(o2.index), element = r3.resultOpt.getOrElse(o2.element))))
           else
             TPostResult(r3.ctx, None())
-        case o2: State.Claim.Def.FieldStore =>
+        case o2: State.Claim.Let.FieldStore =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.adt)
           val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.value)
@@ -1826,20 +1549,7 @@ import StateTransformer._
             TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt), value = r2.resultOpt.getOrElse(o2.value))))
           else
             TPostResult(r2.ctx, None())
-        case o2: State.Claim.Def.AdtLit =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Def.Random =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.CurrentName =>
+        case o2: State.Claim.Let.Random =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           if (hasChanged || r0.resultOpt.nonEmpty)
             TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
@@ -2002,20 +1712,33 @@ import StateTransformer._
     }
   }
 
-  @pure def transformStateClaimDef(ctx: Context, o: State.Claim.Def): TPostResult[Context, State.Claim.Def] = {
-    val preR: PreResult[Context, State.Claim.Def] = pp.preStateClaimDef(ctx, o)
-    val r: TPostResult[Context, State.Claim.Def] = if (preR.continu) {
-      val o2: State.Claim.Def = preR.resultOpt.getOrElse(o)
+  @pure def transformStateClaimLet(ctx: Context, o: State.Claim.Let): TPostResult[Context, State.Claim.Let] = {
+    val preR: PreResult[Context, State.Claim.Let] = pp.preStateClaimLet(ctx, o)
+    val r: TPostResult[Context, State.Claim.Let] = if (preR.continu) {
+      val o2: State.Claim.Let = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val rOpt: TPostResult[Context, State.Claim.Def] = o2 match {
-        case o2: State.Claim.Def.SeqLit =>
+      val rOpt: TPostResult[Context, State.Claim.Let] = o2 match {
+        case o2: State.Claim.Let.AdtLit =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Claim.Def.SeqLit.Arg]] = transformISZ(r0.ctx, o2.args, transformStateClaimDefSeqLitArg _)
+          val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
             TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
           else
             TPostResult(r1.ctx, None())
-        case o2: State.Claim.Def.SeqStore =>
+        case o2: State.Claim.Let.SeqLit =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          val r1: TPostResult[Context, IS[Z, State.Claim.Let.SeqLit.Arg]] = transformISZ(r0.ctx, o2.args, transformStateClaimLetSeqLitArg _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
+          else
+            TPostResult(r1.ctx, None())
+        case o2: State.Claim.Let.CurrentName =>
+          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: State.Claim.Let.SeqStore =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.seq)
           val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.index)
@@ -2024,7 +1747,7 @@ import StateTransformer._
             TPostResult(r3.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), seq = r1.resultOpt.getOrElse(o2.seq), index = r2.resultOpt.getOrElse(o2.index), element = r3.resultOpt.getOrElse(o2.element))))
           else
             TPostResult(r3.ctx, None())
-        case o2: State.Claim.Def.FieldStore =>
+        case o2: State.Claim.Let.FieldStore =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.adt)
           val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.value)
@@ -2032,217 +1755,7 @@ import StateTransformer._
             TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt), value = r2.resultOpt.getOrElse(o2.value))))
           else
             TPostResult(r2.ctx, None())
-        case o2: State.Claim.Def.AdtLit =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Def.Random =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.CurrentName =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.Name =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.CurrentId =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.Id =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.Eq =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.value)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), value = r1.resultOpt.getOrElse(o2.value))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Let.TypeTest =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.value)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), value = r1.resultOpt.getOrElse(o2.value))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Let.Quant =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Claim.Let.Quant.Var]] = transformISZ(r0.ctx, o2.vars, transformStateClaimLetQuantVar _)
-          val r2: TPostResult[Context, IS[Z, State.Claim]] = transformISZ(r1.ctx, o2.claims, transformStateClaim _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), vars = r1.resultOpt.getOrElse(o2.vars), claims = r2.resultOpt.getOrElse(o2.claims))))
-          else
-            TPostResult(r2.ctx, None())
-        case o2: State.Claim.Let.Ite =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.cond)
-          val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.left)
-          val r3: TPostResult[Context, State.Value] = transformStateValue(r2.ctx, o2.right)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty || r3.resultOpt.nonEmpty)
-            TPostResult(r3.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), cond = r1.resultOpt.getOrElse(o2.cond), left = r2.resultOpt.getOrElse(o2.left), right = r3.resultOpt.getOrElse(o2.right))))
-          else
-            TPostResult(r3.ctx, None())
-        case o2: State.Claim.Let.Binary =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.left)
-          val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.right)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), left = r1.resultOpt.getOrElse(o2.left), right = r2.resultOpt.getOrElse(o2.right))))
-          else
-            TPostResult(r2.ctx, None())
-        case o2: State.Claim.Let.Unary =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.value)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), value = r1.resultOpt.getOrElse(o2.value))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Let.SeqLookup =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.seq)
-          val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.index)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), seq = r1.resultOpt.getOrElse(o2.seq), index = r2.resultOpt.getOrElse(o2.index))))
-          else
-            TPostResult(r2.ctx, None())
-        case o2: State.Claim.Let.SeqInBound =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.seq)
-          val r2: TPostResult[Context, State.Value] = transformStateValue(r1.ctx, o2.index)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), seq = r1.resultOpt.getOrElse(o2.seq), index = r2.resultOpt.getOrElse(o2.index))))
-          else
-            TPostResult(r2.ctx, None())
-        case o2: State.Claim.Let.FieldLookup =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.adt)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), adt = r1.resultOpt.getOrElse(o2.adt))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Let.ProofFunApply =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.ProofFun] = transformStateProofFun(r0.ctx, o2.pf)
-          val r2: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r1.ctx, o2.args, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), pf = r1.resultOpt.getOrElse(o2.pf), args = r2.resultOpt.getOrElse(o2.args))))
-          else
-            TPostResult(r2.ctx, None())
-        case o2: State.Claim.Let.Apply =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Let.IApply =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.o)
-          val r2: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r1.ctx, o2.args, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty || r2.resultOpt.nonEmpty)
-            TPostResult(r2.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), o = r1.resultOpt.getOrElse(o2.o), args = r2.resultOpt.getOrElse(o2.args))))
-          else
-            TPostResult(r2.ctx, None())
-        case o2: State.Claim.Let.TupleLit =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Let.And =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Let.Or =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
-          else
-            TPostResult(r1.ctx, None())
-        case o2: State.Claim.Let.Imply =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          val r1: TPostResult[Context, IS[Z, State.Value]] = transformISZ(r0.ctx, o2.args, transformStateValue _)
-          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
-          else
-            TPostResult(r1.ctx, None())
-      }
-      rOpt
-    } else if (preR.resultOpt.nonEmpty) {
-      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
-    } else {
-      TPostResult(preR.ctx, None())
-    }
-    val hasChanged: B = r.resultOpt.nonEmpty
-    val o2: State.Claim.Def = r.resultOpt.getOrElse(o)
-    val postR: TPostResult[Context, State.Claim.Def] = pp.postStateClaimDef(r.ctx, o2)
-    if (postR.resultOpt.nonEmpty) {
-      return postR
-    } else if (hasChanged) {
-      return TPostResult(postR.ctx, Some(o2))
-    } else {
-      return TPostResult(postR.ctx, None())
-    }
-  }
-
-  @pure def transformStateClaimDefSeqLitArg(ctx: Context, o: State.Claim.Def.SeqLit.Arg): TPostResult[Context, State.Claim.Def.SeqLit.Arg] = {
-    val preR: PreResult[Context, State.Claim.Def.SeqLit.Arg] = pp.preStateClaimDefSeqLitArg(ctx, o)
-    val r: TPostResult[Context, State.Claim.Def.SeqLit.Arg] = if (preR.continu) {
-      val o2: State.Claim.Def.SeqLit.Arg = preR.resultOpt.getOrElse(o)
-      val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, State.Value] = transformStateValue(preR.ctx, o2.index)
-      val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.value)
-      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-        TPostResult(r1.ctx, Some(o2(index = r0.resultOpt.getOrElse(o2.index), value = r1.resultOpt.getOrElse(o2.value))))
-      else
-        TPostResult(r1.ctx, None())
-    } else if (preR.resultOpt.nonEmpty) {
-      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
-    } else {
-      TPostResult(preR.ctx, None())
-    }
-    val hasChanged: B = r.resultOpt.nonEmpty
-    val o2: State.Claim.Def.SeqLit.Arg = r.resultOpt.getOrElse(o)
-    val postR: TPostResult[Context, State.Claim.Def.SeqLit.Arg] = pp.postStateClaimDefSeqLitArg(r.ctx, o2)
-    if (postR.resultOpt.nonEmpty) {
-      return postR
-    } else if (hasChanged) {
-      return TPostResult(postR.ctx, Some(o2))
-    } else {
-      return TPostResult(postR.ctx, None())
-    }
-  }
-
-  @pure def transformStateClaimLet(ctx: Context, o: State.Claim.Let): TPostResult[Context, State.Claim.Let] = {
-    val preR: PreResult[Context, State.Claim.Let] = pp.preStateClaimLet(ctx, o)
-    val r: TPostResult[Context, State.Claim.Let] = if (preR.continu) {
-      val o2: State.Claim.Let = preR.resultOpt.getOrElse(o)
-      val hasChanged: B = preR.resultOpt.nonEmpty
-      val rOpt: TPostResult[Context, State.Claim.Let] = o2 match {
-        case o2: State.Claim.Let.CurrentName =>
+        case o2: State.Claim.Let.Random =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           if (hasChanged || r0.resultOpt.nonEmpty)
             TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
@@ -2396,6 +1909,34 @@ import StateTransformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: State.Claim.Let = r.resultOpt.getOrElse(o)
     val postR: TPostResult[Context, State.Claim.Let] = pp.postStateClaimLet(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformStateClaimLetSeqLitArg(ctx: Context, o: State.Claim.Let.SeqLit.Arg): TPostResult[Context, State.Claim.Let.SeqLit.Arg] = {
+    val preR: PreResult[Context, State.Claim.Let.SeqLit.Arg] = pp.preStateClaimLetSeqLitArg(ctx, o)
+    val r: TPostResult[Context, State.Claim.Let.SeqLit.Arg] = if (preR.continu) {
+      val o2: State.Claim.Let.SeqLit.Arg = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: TPostResult[Context, State.Value] = transformStateValue(preR.ctx, o2.index)
+      val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.value)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(index = r0.resultOpt.getOrElse(o2.index), value = r1.resultOpt.getOrElse(o2.value))))
+      else
+        TPostResult(r1.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: State.Claim.Let.SeqLit.Arg = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, State.Claim.Let.SeqLit.Arg] = pp.postStateClaimLetSeqLitArg(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {

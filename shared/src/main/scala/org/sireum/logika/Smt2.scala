@@ -56,7 +56,7 @@ object Smt2 {
                                val fieldAdtType: ST,
                                val fieldType: AST.Typed)
 
-  @datatype class MemPrinter(val defs: HashMap[Z, ISZ[State.Claim.Def]]) {
+  @datatype class MemPrinter(val defs: HashMap[Z, ISZ[State.Claim.Let]]) {
   }
 
   val topPrefix: String = "_"
@@ -324,7 +324,7 @@ object Smt2 {
             changed = T
           }
         case c: State.Claim.Prop => newClaims = newClaims :+ c
-        case c: State.Claim.Def =>
+        case c: State.Claim.Let =>
           if (c.sym.num == v.num) {
             newClaims = newClaims :+ State.Claim.And(c +: additionalClaims)
             changed = T
@@ -367,7 +367,7 @@ object Smt2 {
       st"""(assert (forall (${(params, " ")} (${v2ST(sym)} ${adtId(pf.returnType)}))
           |  (=>
           |    (= ${v2ST(sym)} $app)
-          |    ${embeddedClaims(F, invClaims, ISZ(), ISZ(), None(), HashSMap.empty)}
+          |    ${embeddedClaims(F, invClaims, ISZ(), None(), HashSMap.empty)}
           |)))"""
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, declClaim)))
   }
@@ -392,21 +392,24 @@ object Smt2 {
     val (decl, declClaim) = strictPureMethods.get(pf).get
 
     var ecs = ISZ[ST]()
+    val resEq: ST = if (paramIds.isEmpty) st"(= $resId $id)" else st"(= $resId ($id ${(paramIds, " ")}))"
     for (sv <- svs if sv._1.status) {
       val (s0, v) = sv
       val s1 = s0.addClaim(State.Claim.Let.CurrentId(F, v, context, "Res", None()))
       val claims = ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)
-      val resEq: ST = if (paramIds.isEmpty) st"(= $resId $id)" else st"(= $resId ($id ${(paramIds, " ")}))"
-      ecs = ecs :+ embeddedClaims(T, claims, ISZ(v), ISZ(resEq), None(), HashSMap.empty)
+      ecs = ecs :+ embeddedClaims(F, claims, ISZ(v), None(), HashSMap.empty)
     }
 
     val claim: ST = {
-      val ecSTs: ISZ[ST] = for (ec <- ecs) yield
-        st"""(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)}))
-            |  $ec
-            |))"""
       st"""$declClaim
-          |${(ecSTs, "\n")}"""
+          |(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)}))
+          |  (=>
+          |    $resEq
+          |    (or
+          |      ${(ecs, "\n")}
+          |    )
+          |  )
+          |))"""
     }
 
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, claim)))
@@ -671,11 +674,16 @@ object Smt2 {
             |                            (= ($atId z ($itAddId i $itOne)) ($atId y i))))
             |    (= ($atId z ($firstIndexId z)) x)))""")
       addSTypeDecl(
-        st"""(define-fun $upId ((x $tId) (y $itId) (z $etId) (x2 $tId)) B
-            |  (and
-            |    (= ($sizeId x2) ($sizeId x))
-            |    ($itEqId ($lastIndexId x2) ($lastIndexId x))
-            |    (= x2 (store x y z))))""")
+        st"""(declare-fun $upId ($tId $itId $etId) $tId)
+            |(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
+            |  (=>
+            |    (= x2 ($upId x y z))
+            |    (and
+            |      (= ($sizeId x2) ($sizeId x))
+            |      ($itEqId ($lastIndexId x2) ($lastIndexId x))
+            |      (=> ($isInBoundId x y) (= x2 (store x y z))))
+            |  )
+            |))""")
       addSTypeDecl(
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
@@ -811,25 +819,38 @@ object Smt2 {
             addTypeDecl(st"(assert (forall ((o $tId)) (sub-type (type-of (${q.fieldLookupId} o)) ${typeHierarchyId(q.fieldType)})))")
           }
         }
+        var hasParam = F
         for (q <- fieldInfos) {
+          if (q.isParam) {
+            hasParam = T
+          }
           val upOp = typeOpId(t, s"${q.fieldId}_=")
           val feqs: ISZ[ST] = for (q2 <- fieldInfos) yield
             if (q2.fieldId == q.fieldId) st"(= (${q2.fieldLookupId} x!2) x!1)"
             else st"(= (${q2.fieldLookupId} x!2) (${q2.fieldLookupId} x!0))"
           addTypeDecl(
-            st"""(define-fun $upOp ((x!0 $tId) (x!1 ${q.fieldAdtType}) (x!2 $tId)) B
-                |  (and
-                |    (= (type-of x!2) (type-of x!0))
-                |    ${(feqs, "\n")}
+            st"""(declare-fun $upOp ($tId ${q.fieldAdtType}) $tId)
+                |(assert (forall ((x!0 $tId) (x!1 ${q.fieldAdtType}) (x!2 $tId))
+                |  (=>
+                |    (= x!2 ($upOp x!0 x!1))
+                |    (and
+                |      (= (type-of x!2) (type-of x!0))
+                |      ${(feqs, "\n")}
+                |    )
                 |  )
-                |)"""
+                |))"""
           )
         }
         addTypeDecl(
-          st"""(define-fun $newId (${(for (q <- fieldInfos if q.isParam) yield st"(${q.fieldId} ${q.fieldAdtType})", " ")} (x!0 $tId)) B
-              |  (and
-              |    (= (type-of x!0) $thId)
-              |    ${(for (q <- fieldInfos if q.isParam) yield st"(= (${q.fieldLookupId} x!0) ${q.fieldId})", "\n")}))""")
+          st"""(declare-fun $newId (${(for (q <- fieldInfos if q.isParam) yield q.fieldAdtType, " ")}) $tId)
+              |(assert (forall (${(for (q <- fieldInfos if q.isParam) yield st"(${q.fieldId} ${q.fieldAdtType})", " ")} (x!0 $tId))
+              |  (=>
+              |    (= x!0 ${if (hasParam) st"($newId ${(for (q <- fieldInfos if q.isParam) yield q.fieldId, " ")})" else newId})
+              |    (and
+              |      (= (type-of x!0) $thId)
+              |      ${(for (q <- fieldInfos if q.isParam) yield st"(= (${q.fieldLookupId} x!0) ${q.fieldId})", "\n")})
+              |  )
+              |))""")
         addTypeDecl(
           st"""(define-fun $eqId ((x!0 $tId) (x!1 $tId)) B
               |  (and
@@ -1077,14 +1098,24 @@ object Smt2 {
     val atId = typeOpId(t, "at")
     val sizeId = typeOpId(t, "size")
     val itEqId = typeOpId(it, "==")
+    val inBoundId = typeOpId(t, "isInBound")
     val lastIndexOpt: Option[ST] =
       if (size != 0) Some(st"($itEqId (${typeOpId(t, "lastIndex")} x) ${toVal(it, size - 1)})") else None()
+    val distinctOpt: Option[ST] =
+      if (size > 1) Some(st"(distinct ${(for (i <- 0 until size) yield st"i$i", " ")})")
+      else None()
     val r =
-      st"""(define-fun $seqLitId (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId)) B
-          |  (and
-          |    (= ($sizeId x) $size)
-          |    $lastIndexOpt
-          |    ${(for (i <- 0 until size) yield st"(= ($atId x i$i) v$i)", "\n")}))"""
+      st"""(declare-fun $seqLitId (${(for (i <- 0 until size) yield st"$itId $etId", " ")}) $tId)
+          |(assert (forall (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId))
+          |  (=>
+          |    $distinctOpt
+          |    (= x ${if (size == 0) seqLitId else st"($seqLitId ${(for (i <- 0 until size) yield st"i$i v$i", " ")})"})
+          |    (and
+          |      (= ($sizeId x) $size)
+          |      $lastIndexOpt
+          |      ${(for (i <- 0 until size) yield st"(=> ($inBoundId x i$i) (= ($atId x i$i) v$i))", "\n")})
+          |  )
+          |))"""
     return r
   }
 
@@ -1098,7 +1129,7 @@ object Smt2 {
           case c: State.Claim.And => collectLidsRec(c.claims)
           case c: State.Claim.Or => collectLidsRec(c.claims)
           case c: State.Claim.Imply => collectLidsRec(c.claims)
-          case _: State.Claim.Def =>
+          case _: State.Claim.Let =>
           case _: State.Claim.Label =>
           case _: State.Claim.Prop =>
         }
@@ -1371,12 +1402,11 @@ object Smt2 {
   def embeddedClaims(isImply: B,
                      claims: ISZ[State.Claim],
                      initSyms: ISZ[State.Value.Sym],
-                     addClaimSTs: ISZ[ST],
                      letsOpt: Option[HashMap[Z, ISZ[State.Claim.Let]]],
                      declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     def collectSyms(c: State.Claim, acc: ISZ[State.Value.Sym]): ISZ[State.Value.Sym] = {
       c match {
-        case c: State.Claim.Def => return acc :+ c.sym
+        case c: State.Claim.Let => return acc :+ c.sym
         case c: State.Claim.And =>
           var r = acc
           for (ca <- c.claims) {
@@ -1415,7 +1445,7 @@ object Smt2 {
       for (i <- 0 until claims.size) {
         claims(i) match {
           case claim: State.Claim.Let if i != claims.size - 1 => lsyms = lsyms :+ claim.sym; lets = lets :+ claim
-          case claim: State.Claim.Def => syms = syms :+ claim.sym; rest = rest :+ claim
+          case claim: State.Claim.Let => syms = syms :+ claim.sym; rest = rest :+ claim
           case claim: State.Claim.If => syms = collectSyms(claim, syms); rest = rest :+ claim
           case claim: State.Claim.And => syms = collectSyms(claim, syms); rest = rest :+ claim
           case claim: State.Claim.Or => syms = collectSyms(claim, syms); rest = rest :+ claim
@@ -1425,8 +1455,8 @@ object Smt2 {
         }
       }
       var body: ST =
-        if (isImply) implyST(rest, addClaimSTs, v2ST _, HashMap.empty, declIds)
-        else andST(rest, addClaimSTs, v2ST _, HashMap.empty, declIds)
+        if (isImply) implyST(rest, v2ST _, HashMap.empty, declIds)
+        else andST(rest, v2ST _, HashMap.empty, declIds)
       if (lets.nonEmpty) {
         val newDeclIds = lids ++ declIds.entries
         body =
@@ -1500,6 +1530,16 @@ object Smt2 {
               lets: HashMap[Z, ISZ[State.Claim.Let]],
               declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     c match {
+      case c: State.Claim.Let.SeqStore =>
+        return st"(${typeOpId(c.seq.tipe, "up")} ${v2st(c.seq)} ${v2st(c.index)} ${v2st(c.element)})"
+      case c: State.Claim.Let.FieldStore =>
+        return st"(${typeOpId(c.adt.tipe, s"${c.id}_=")} ${v2st(c.adt)} ${v2st(c.value)})"
+      case c: State.Claim.Let.SeqLit =>
+        val newId = typeOpId(c.sym.tipe, s"new.${c.args.size}")
+        return if (c.args.isEmpty) newId else st"($newId ${(for (arg <- c.args) yield st"${v2st(arg.index)} ${v2st(arg.value)}", " ")})"
+      case c: State.Claim.Let.AdtLit =>
+        val newId = typeOpId(c.sym.tipe, "new")
+        return if (c.args.isEmpty) newId else st"($newId ${(for (arg <- c.args) yield v2st(arg), " ")})"
       case c: State.Claim.Let.CurrentName =>
         return currentNameId(c)
       case c: State.Claim.Let.Name =>
@@ -1513,7 +1553,7 @@ object Smt2 {
       case c: State.Claim.Let.TypeTest =>
         return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2st(c.value)}) ${typeHierarchyId(c.tipe)})"
       case c: State.Claim.Let.Quant =>
-        val body = embeddedClaims(c.isAll, c.claims, ISZ(), ISZ(), Some(lets), declIds)
+        val body = embeddedClaims(c.isAll, c.claims, ISZ(), Some(lets), declIds)
         return if (c.isAll)
           st"""(forall (${(for (x <- c.vars) yield qvar2ST(x), " ")})
               |  $body
@@ -1555,11 +1595,15 @@ object Smt2 {
         return st"(select ${if (c.isLocal) currentLocalIdString(c.context, c.id) else currentNameIdString(c.context :+ c.id)} $args)"
       case c: State.Claim.Let.IApply =>
         halt("TODO") // TODO
+      case _: State.Claim.Let.Random =>
+        halt("Infeasible")
     }
   }
 
   def c2ST(c: State.Claim, v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]], declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): Option[ST] = {
     c match {
+      case _: State.Claim.Let.Random =>
+        return None()
       case c: State.Claim.Let =>
         c match {
           case c: State.Claim.Let.CurrentId if c.declId =>
@@ -1590,30 +1634,20 @@ object Smt2 {
           case _ => l2RhsST(c, v2st, lets, declIds)
         }
         return Some(st"(= ${v2st(c.sym)} $rhs)")
-      case c: State.Claim.Def.SeqLit =>
-        return Some(st"(${typeOpId(c.sym.tipe, s"new.${c.args.size}")} ${(for (arg <- c.args) yield st"${v2st(arg.index)} ${v2st(arg.value)}", " ")} ${v2st(c.sym)})")
-      case c: State.Claim.Def.SeqStore =>
-        return Some(st"(${typeOpId(c.seq.tipe, "up")} ${v2st(c.seq)} ${v2st(c.index)} ${v2st(c.element)} ${v2st(c.sym)})")
-      case c: State.Claim.Def.FieldStore =>
-        return Some(st"(${typeOpId(c.adt.tipe, s"${c.id}_=")} ${v2st(c.adt)} ${v2st(c.value)} ${v2st(c.sym)})")
-      case c: State.Claim.Def.AdtLit =>
-        return Some(st"(${typeOpId(c.sym.tipe, "new")} ${(for (arg <- c.args) yield v2st(arg), " ")} ${v2st(c.sym)})")
       case c: State.Claim.Prop =>
         return Some(if (c.isPos) v2st(c.value) else st"(not ${v2st(c.value)})")
       case _: State.Claim.Label =>
         return None()
-      case _: State.Claim.Def.Random =>
-        return None()
       case c: State.Claim.If =>
         return Some(
           st"""(ite ${v2st(c.cond)}
-              |  ${andST(c.tClaims, ISZ(), v2st, lets, declIds)}
-              |  ${andST(c.fClaims, ISZ(), v2st, lets, declIds)}
+              |  ${andST(c.tClaims, v2st, lets, declIds)}
+              |  ${andST(c.fClaims, v2st, lets, declIds)}
               |)"""
         )
-      case c: State.Claim.And => return Some(andST(c.claims, ISZ(), v2st, lets, declIds))
+      case c: State.Claim.And => return Some(andST(c.claims, v2st, lets, declIds))
       case c: State.Claim.Or => return Some(orST(c.claims, v2st, lets, declIds))
-      case c: State.Claim.Imply => return Some(implyST(c.claims, ISZ(), v2st, lets, declIds))
+      case c: State.Claim.Imply => return Some(implyST(c.claims, v2st, lets, declIds))
     }
   }
 
@@ -1630,7 +1664,7 @@ object Smt2 {
     }
   }
 
-  def andST(cs: ISZ[State.Claim], addClaimSTs: ISZ[ST], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
+  def andST(cs: ISZ[State.Claim], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
             declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     var sts = ISZ[ST]()
     for (c <- cs) {
@@ -1639,7 +1673,6 @@ object Smt2 {
         case _ =>
       }
     }
-    sts = sts ++ addClaimSTs
     return andSTH(sts)
   }
 
@@ -1683,7 +1716,7 @@ object Smt2 {
     }
   }
 
-  def implyST(cs: ISZ[State.Claim], addClaimsSTs: ISZ[ST], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
+  def implyST(cs: ISZ[State.Claim], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
               declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     var sts = ISZ[ST]()
     for (i <- 0 until cs.size) {
@@ -1692,7 +1725,6 @@ object Smt2 {
         case _ =>
       }
     }
-    sts = sts ++ addClaimsSTs
     if (sts.isEmpty) {
       return implySTH(ISZ(), None())
     } else if (sts.size === 1) {
@@ -1712,7 +1744,7 @@ object Smt2 {
       }
       return r
     }
-    def def2DeclST(cDef: State.Claim.Def): ISZ[(String, ST)] = {
+    def def2DeclST(cDef: State.Claim.Let): ISZ[(String, ST)] = {
       val symST = v2ST(cDef.sym)
       return ISZ[(String, ST)](symST.render ~> st"(declare-const $symST ${typeId(cDef.sym.tipe)})")
     }
@@ -1758,7 +1790,7 @@ object Smt2 {
         val ns = n.render
         r = r :+ ns ~> declareConst(n, c.sym.tipe)
         return r
-      case c: State.Claim.Def => return def2DeclST(c)
+      case c: State.Claim.Let => return def2DeclST(c)
     }
   }
 

@@ -165,33 +165,33 @@ object MStateTransformer {
 
   val PostResultStateClaimIf: MOption[State.Claim.Composite] = MNone()
 
-  val PreResultStateClaimDefSeqLit: PreResult[State.Claim.Def] = PreResult(T, MNone())
+  val PreResultStateClaimLetAdtLit: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
-  val PostResultStateClaimDefSeqLit: MOption[State.Claim.Def] = MNone()
+  val PostResultStateClaimLetAdtLit: MOption[State.Claim.Let] = MNone()
 
-  val PreResultStateClaimDefSeqLitArg: PreResult[State.Claim.Def.SeqLit.Arg] = PreResult(T, MNone())
+  val PreResultStateClaimLetSeqLit: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
-  val PostResultStateClaimDefSeqLitArg: MOption[State.Claim.Def.SeqLit.Arg] = MNone()
+  val PostResultStateClaimLetSeqLit: MOption[State.Claim.Let] = MNone()
 
-  val PreResultStateClaimDefSeqStore: PreResult[State.Claim.Def] = PreResult(T, MNone())
+  val PreResultStateClaimLetSeqLitArg: PreResult[State.Claim.Let.SeqLit.Arg] = PreResult(T, MNone())
 
-  val PostResultStateClaimDefSeqStore: MOption[State.Claim.Def] = MNone()
-
-  val PreResultStateClaimDefFieldStore: PreResult[State.Claim.Def] = PreResult(T, MNone())
-
-  val PostResultStateClaimDefFieldStore: MOption[State.Claim.Def] = MNone()
-
-  val PreResultStateClaimDefAdtLit: PreResult[State.Claim.Def] = PreResult(T, MNone())
-
-  val PostResultStateClaimDefAdtLit: MOption[State.Claim.Def] = MNone()
-
-  val PreResultStateClaimDefRandom: PreResult[State.Claim.Def] = PreResult(T, MNone())
-
-  val PostResultStateClaimDefRandom: MOption[State.Claim.Def] = MNone()
+  val PostResultStateClaimLetSeqLitArg: MOption[State.Claim.Let.SeqLit.Arg] = MNone()
 
   val PreResultStateClaimLetCurrentName: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
   val PostResultStateClaimLetCurrentName: MOption[State.Claim.Let] = MNone()
+
+  val PreResultStateClaimLetSeqStore: PreResult[State.Claim.Let] = PreResult(T, MNone())
+
+  val PostResultStateClaimLetSeqStore: MOption[State.Claim.Let] = MNone()
+
+  val PreResultStateClaimLetFieldStore: PreResult[State.Claim.Let] = PreResult(T, MNone())
+
+  val PostResultStateClaimLetFieldStore: MOption[State.Claim.Let] = MNone()
+
+  val PreResultStateClaimLetRandom: PreResult[State.Claim.Let] = PreResult(T, MNone())
+
+  val PostResultStateClaimLetRandom: MOption[State.Claim.Let] = MNone()
 
   val PreResultStateClaimLetName: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
@@ -506,36 +506,15 @@ import MStateTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
-      case o: State.Claim.Def.SeqLit =>
-        val r: PreResult[State.Claim] = preStateClaimDefSeqLit(o) match {
+      case o: State.Claim.Let.AdtLit =>
+        val r: PreResult[State.Claim] = preStateClaimLetAdtLit(o) match {
          case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
-      case o: State.Claim.Def.SeqStore =>
-        val r: PreResult[State.Claim] = preStateClaimDefSeqStore(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
-        }
-        return r
-      case o: State.Claim.Def.FieldStore =>
-        val r: PreResult[State.Claim] = preStateClaimDefFieldStore(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
-        }
-        return r
-      case o: State.Claim.Def.AdtLit =>
-        val r: PreResult[State.Claim] = preStateClaimDefAdtLit(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
-        }
-        return r
-      case o: State.Claim.Def.Random =>
-        val r: PreResult[State.Claim] = preStateClaimDefRandom(o) match {
+      case o: State.Claim.Let.SeqLit =>
+        val r: PreResult[State.Claim] = preStateClaimLetSeqLit(o) match {
          case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
@@ -543,6 +522,27 @@ import MStateTransformer._
         return r
       case o: State.Claim.Let.CurrentName =>
         val r: PreResult[State.Claim] = preStateClaimLetCurrentName(o) match {
+         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
+        }
+        return r
+      case o: State.Claim.Let.SeqStore =>
+        val r: PreResult[State.Claim] = preStateClaimLetSeqStore(o) match {
+         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
+        }
+        return r
+      case o: State.Claim.Let.FieldStore =>
+        val r: PreResult[State.Claim] = preStateClaimLetFieldStore(o) match {
+         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
+        }
+        return r
+      case o: State.Claim.Let.Random =>
+        val r: PreResult[State.Claim] = preStateClaimLetRandom(o) match {
          case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
@@ -708,183 +708,14 @@ import MStateTransformer._
     return PreResultStateClaimIf
   }
 
-  def preStateClaimDef(o: State.Claim.Def): PreResult[State.Claim.Def] = {
-    o match {
-      case o: State.Claim.Def.SeqLit => return preStateClaimDefSeqLit(o)
-      case o: State.Claim.Def.SeqStore => return preStateClaimDefSeqStore(o)
-      case o: State.Claim.Def.FieldStore => return preStateClaimDefFieldStore(o)
-      case o: State.Claim.Def.AdtLit => return preStateClaimDefAdtLit(o)
-      case o: State.Claim.Def.Random => return preStateClaimDefRandom(o)
-      case o: State.Claim.Let.CurrentName =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetCurrentName(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Name =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetName(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.CurrentId =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetCurrentId(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Id =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetId(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Eq =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetEq(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.TypeTest =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetTypeTest(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Quant =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetQuant(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Ite =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetIte(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Binary =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetBinary(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Unary =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetUnary(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.SeqLookup =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetSeqLookup(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.SeqInBound =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetSeqInBound(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.FieldLookup =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetFieldLookup(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.ProofFunApply =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetProofFunApply(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Apply =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetApply(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.IApply =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetIApply(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.TupleLit =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetTupleLit(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.And =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetAnd(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Or =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetOr(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-      case o: State.Claim.Let.Imply =>
-        val r: PreResult[State.Claim.Def] = preStateClaimLetImply(o) match {
-         case PreResult(continu, MSome(r: State.Claim.Def)) => PreResult(continu, MSome[State.Claim.Def](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim.Def")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim.Def]())
-        }
-        return r
-    }
-  }
-
-  def preStateClaimDefSeqLit(o: State.Claim.Def.SeqLit): PreResult[State.Claim.Def] = {
-    return PreResultStateClaimDefSeqLit
-  }
-
-  def preStateClaimDefSeqLitArg(o: State.Claim.Def.SeqLit.Arg): PreResult[State.Claim.Def.SeqLit.Arg] = {
-    return PreResultStateClaimDefSeqLitArg
-  }
-
-  def preStateClaimDefSeqStore(o: State.Claim.Def.SeqStore): PreResult[State.Claim.Def] = {
-    return PreResultStateClaimDefSeqStore
-  }
-
-  def preStateClaimDefFieldStore(o: State.Claim.Def.FieldStore): PreResult[State.Claim.Def] = {
-    return PreResultStateClaimDefFieldStore
-  }
-
-  def preStateClaimDefAdtLit(o: State.Claim.Def.AdtLit): PreResult[State.Claim.Def] = {
-    return PreResultStateClaimDefAdtLit
-  }
-
-  def preStateClaimDefRandom(o: State.Claim.Def.Random): PreResult[State.Claim.Def] = {
-    return PreResultStateClaimDefRandom
-  }
-
   def preStateClaimLet(o: State.Claim.Let): PreResult[State.Claim.Let] = {
     o match {
+      case o: State.Claim.Let.AdtLit => return preStateClaimLetAdtLit(o)
+      case o: State.Claim.Let.SeqLit => return preStateClaimLetSeqLit(o)
       case o: State.Claim.Let.CurrentName => return preStateClaimLetCurrentName(o)
+      case o: State.Claim.Let.SeqStore => return preStateClaimLetSeqStore(o)
+      case o: State.Claim.Let.FieldStore => return preStateClaimLetFieldStore(o)
+      case o: State.Claim.Let.Random => return preStateClaimLetRandom(o)
       case o: State.Claim.Let.Name => return preStateClaimLetName(o)
       case o: State.Claim.Let.CurrentId => return preStateClaimLetCurrentId(o)
       case o: State.Claim.Let.Id => return preStateClaimLetId(o)
@@ -907,8 +738,32 @@ import MStateTransformer._
     }
   }
 
+  def preStateClaimLetAdtLit(o: State.Claim.Let.AdtLit): PreResult[State.Claim.Let] = {
+    return PreResultStateClaimLetAdtLit
+  }
+
+  def preStateClaimLetSeqLit(o: State.Claim.Let.SeqLit): PreResult[State.Claim.Let] = {
+    return PreResultStateClaimLetSeqLit
+  }
+
+  def preStateClaimLetSeqLitArg(o: State.Claim.Let.SeqLit.Arg): PreResult[State.Claim.Let.SeqLit.Arg] = {
+    return PreResultStateClaimLetSeqLitArg
+  }
+
   def preStateClaimLetCurrentName(o: State.Claim.Let.CurrentName): PreResult[State.Claim.Let] = {
     return PreResultStateClaimLetCurrentName
+  }
+
+  def preStateClaimLetSeqStore(o: State.Claim.Let.SeqStore): PreResult[State.Claim.Let] = {
+    return PreResultStateClaimLetSeqStore
+  }
+
+  def preStateClaimLetFieldStore(o: State.Claim.Let.FieldStore): PreResult[State.Claim.Let] = {
+    return PreResultStateClaimLetFieldStore
+  }
+
+  def preStateClaimLetRandom(o: State.Claim.Let.Random): PreResult[State.Claim.Let] = {
+    return PreResultStateClaimLetRandom
   }
 
   def preStateClaimLetName(o: State.Claim.Let.Name): PreResult[State.Claim.Let] = {
@@ -1225,36 +1080,15 @@ import MStateTransformer._
          case _ => MNone[State.Claim]()
         }
         return r
-      case o: State.Claim.Def.SeqLit =>
-        val r: MOption[State.Claim] = postStateClaimDefSeqLit(o) match {
+      case o: State.Claim.Let.AdtLit =>
+        val r: MOption[State.Claim] = postStateClaimLetAdtLit(o) match {
          case MSome(result: State.Claim) => MSome[State.Claim](result)
          case MSome(_) => halt("Can only produce object of type State.Claim")
          case _ => MNone[State.Claim]()
         }
         return r
-      case o: State.Claim.Def.SeqStore =>
-        val r: MOption[State.Claim] = postStateClaimDefSeqStore(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
-         case _ => MNone[State.Claim]()
-        }
-        return r
-      case o: State.Claim.Def.FieldStore =>
-        val r: MOption[State.Claim] = postStateClaimDefFieldStore(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
-         case _ => MNone[State.Claim]()
-        }
-        return r
-      case o: State.Claim.Def.AdtLit =>
-        val r: MOption[State.Claim] = postStateClaimDefAdtLit(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
-         case _ => MNone[State.Claim]()
-        }
-        return r
-      case o: State.Claim.Def.Random =>
-        val r: MOption[State.Claim] = postStateClaimDefRandom(o) match {
+      case o: State.Claim.Let.SeqLit =>
+        val r: MOption[State.Claim] = postStateClaimLetSeqLit(o) match {
          case MSome(result: State.Claim) => MSome[State.Claim](result)
          case MSome(_) => halt("Can only produce object of type State.Claim")
          case _ => MNone[State.Claim]()
@@ -1262,6 +1096,27 @@ import MStateTransformer._
         return r
       case o: State.Claim.Let.CurrentName =>
         val r: MOption[State.Claim] = postStateClaimLetCurrentName(o) match {
+         case MSome(result: State.Claim) => MSome[State.Claim](result)
+         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case _ => MNone[State.Claim]()
+        }
+        return r
+      case o: State.Claim.Let.SeqStore =>
+        val r: MOption[State.Claim] = postStateClaimLetSeqStore(o) match {
+         case MSome(result: State.Claim) => MSome[State.Claim](result)
+         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case _ => MNone[State.Claim]()
+        }
+        return r
+      case o: State.Claim.Let.FieldStore =>
+        val r: MOption[State.Claim] = postStateClaimLetFieldStore(o) match {
+         case MSome(result: State.Claim) => MSome[State.Claim](result)
+         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case _ => MNone[State.Claim]()
+        }
+        return r
+      case o: State.Claim.Let.Random =>
+        val r: MOption[State.Claim] = postStateClaimLetRandom(o) match {
          case MSome(result: State.Claim) => MSome[State.Claim](result)
          case MSome(_) => halt("Can only produce object of type State.Claim")
          case _ => MNone[State.Claim]()
@@ -1427,183 +1282,14 @@ import MStateTransformer._
     return PostResultStateClaimIf
   }
 
-  def postStateClaimDef(o: State.Claim.Def): MOption[State.Claim.Def] = {
-    o match {
-      case o: State.Claim.Def.SeqLit => return postStateClaimDefSeqLit(o)
-      case o: State.Claim.Def.SeqStore => return postStateClaimDefSeqStore(o)
-      case o: State.Claim.Def.FieldStore => return postStateClaimDefFieldStore(o)
-      case o: State.Claim.Def.AdtLit => return postStateClaimDefAdtLit(o)
-      case o: State.Claim.Def.Random => return postStateClaimDefRandom(o)
-      case o: State.Claim.Let.CurrentName =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetCurrentName(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Name =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetName(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.CurrentId =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetCurrentId(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Id =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetId(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Eq =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetEq(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.TypeTest =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetTypeTest(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Quant =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetQuant(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Ite =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetIte(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Binary =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetBinary(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Unary =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetUnary(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.SeqLookup =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetSeqLookup(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.SeqInBound =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetSeqInBound(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.FieldLookup =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetFieldLookup(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.ProofFunApply =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetProofFunApply(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Apply =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetApply(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.IApply =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetIApply(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.TupleLit =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetTupleLit(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.And =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetAnd(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Or =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetOr(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-      case o: State.Claim.Let.Imply =>
-        val r: MOption[State.Claim.Def] = postStateClaimLetImply(o) match {
-         case MSome(result: State.Claim.Def) => MSome[State.Claim.Def](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim.Def")
-         case _ => MNone[State.Claim.Def]()
-        }
-        return r
-    }
-  }
-
-  def postStateClaimDefSeqLit(o: State.Claim.Def.SeqLit): MOption[State.Claim.Def] = {
-    return PostResultStateClaimDefSeqLit
-  }
-
-  def postStateClaimDefSeqLitArg(o: State.Claim.Def.SeqLit.Arg): MOption[State.Claim.Def.SeqLit.Arg] = {
-    return PostResultStateClaimDefSeqLitArg
-  }
-
-  def postStateClaimDefSeqStore(o: State.Claim.Def.SeqStore): MOption[State.Claim.Def] = {
-    return PostResultStateClaimDefSeqStore
-  }
-
-  def postStateClaimDefFieldStore(o: State.Claim.Def.FieldStore): MOption[State.Claim.Def] = {
-    return PostResultStateClaimDefFieldStore
-  }
-
-  def postStateClaimDefAdtLit(o: State.Claim.Def.AdtLit): MOption[State.Claim.Def] = {
-    return PostResultStateClaimDefAdtLit
-  }
-
-  def postStateClaimDefRandom(o: State.Claim.Def.Random): MOption[State.Claim.Def] = {
-    return PostResultStateClaimDefRandom
-  }
-
   def postStateClaimLet(o: State.Claim.Let): MOption[State.Claim.Let] = {
     o match {
+      case o: State.Claim.Let.AdtLit => return postStateClaimLetAdtLit(o)
+      case o: State.Claim.Let.SeqLit => return postStateClaimLetSeqLit(o)
       case o: State.Claim.Let.CurrentName => return postStateClaimLetCurrentName(o)
+      case o: State.Claim.Let.SeqStore => return postStateClaimLetSeqStore(o)
+      case o: State.Claim.Let.FieldStore => return postStateClaimLetFieldStore(o)
+      case o: State.Claim.Let.Random => return postStateClaimLetRandom(o)
       case o: State.Claim.Let.Name => return postStateClaimLetName(o)
       case o: State.Claim.Let.CurrentId => return postStateClaimLetCurrentId(o)
       case o: State.Claim.Let.Id => return postStateClaimLetId(o)
@@ -1626,8 +1312,32 @@ import MStateTransformer._
     }
   }
 
+  def postStateClaimLetAdtLit(o: State.Claim.Let.AdtLit): MOption[State.Claim.Let] = {
+    return PostResultStateClaimLetAdtLit
+  }
+
+  def postStateClaimLetSeqLit(o: State.Claim.Let.SeqLit): MOption[State.Claim.Let] = {
+    return PostResultStateClaimLetSeqLit
+  }
+
+  def postStateClaimLetSeqLitArg(o: State.Claim.Let.SeqLit.Arg): MOption[State.Claim.Let.SeqLit.Arg] = {
+    return PostResultStateClaimLetSeqLitArg
+  }
+
   def postStateClaimLetCurrentName(o: State.Claim.Let.CurrentName): MOption[State.Claim.Let] = {
     return PostResultStateClaimLetCurrentName
+  }
+
+  def postStateClaimLetSeqStore(o: State.Claim.Let.SeqStore): MOption[State.Claim.Let] = {
+    return PostResultStateClaimLetSeqStore
+  }
+
+  def postStateClaimLetFieldStore(o: State.Claim.Let.FieldStore): MOption[State.Claim.Let] = {
+    return PostResultStateClaimLetFieldStore
+  }
+
+  def postStateClaimLetRandom(o: State.Claim.Let.Random): MOption[State.Claim.Let] = {
+    return PostResultStateClaimLetRandom
   }
 
   def postStateClaimLetName(o: State.Claim.Let.Name): MOption[State.Claim.Let] = {
@@ -2020,14 +1730,27 @@ import MStateTransformer._
             MSome(o2(cond = r0.getOrElse(o2.cond), tClaims = r1.getOrElse(o2.tClaims), fClaims = r2.getOrElse(o2.fClaims)))
           else
             MNone()
-        case o2: State.Claim.Def.SeqLit =>
+        case o2: State.Claim.Let.AdtLit =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Claim.Def.SeqLit.Arg]] = transformISZ(o2.args, transformStateClaimDefSeqLitArg _)
+          val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
             MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
           else
             MNone()
-        case o2: State.Claim.Def.SeqStore =>
+        case o2: State.Claim.Let.SeqLit =>
+          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
+          val r1: MOption[IS[Z, State.Claim.Let.SeqLit.Arg]] = transformISZ(o2.args, transformStateClaimLetSeqLitArg _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
+          else
+            MNone()
+        case o2: State.Claim.Let.CurrentName =>
+          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(sym = r0.getOrElse(o2.sym)))
+          else
+            MNone()
+        case o2: State.Claim.Let.SeqStore =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           val r1: MOption[State.Value] = transformStateValue(o2.seq)
           val r2: MOption[State.Value] = transformStateValue(o2.index)
@@ -2036,7 +1759,7 @@ import MStateTransformer._
             MSome(o2(sym = r0.getOrElse(o2.sym), seq = r1.getOrElse(o2.seq), index = r2.getOrElse(o2.index), element = r3.getOrElse(o2.element)))
           else
             MNone()
-        case o2: State.Claim.Def.FieldStore =>
+        case o2: State.Claim.Let.FieldStore =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           val r1: MOption[State.Value] = transformStateValue(o2.adt)
           val r2: MOption[State.Value] = transformStateValue(o2.value)
@@ -2044,20 +1767,7 @@ import MStateTransformer._
             MSome(o2(sym = r0.getOrElse(o2.sym), adt = r1.getOrElse(o2.adt), value = r2.getOrElse(o2.value)))
           else
             MNone()
-        case o2: State.Claim.Def.AdtLit =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Def.Random =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym)))
-          else
-            MNone()
-        case o2: State.Claim.Let.CurrentName =>
+        case o2: State.Claim.Let.Random =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           if (hasChanged || r0.nonEmpty)
             MSome(o2(sym = r0.getOrElse(o2.sym)))
@@ -2220,20 +1930,33 @@ import MStateTransformer._
     }
   }
 
-  def transformStateClaimDef(o: State.Claim.Def): MOption[State.Claim.Def] = {
-    val preR: PreResult[State.Claim.Def] = preStateClaimDef(o)
-    val r: MOption[State.Claim.Def] = if (preR.continu) {
-      val o2: State.Claim.Def = preR.resultOpt.getOrElse(o)
+  def transformStateClaimLet(o: State.Claim.Let): MOption[State.Claim.Let] = {
+    val preR: PreResult[State.Claim.Let] = preStateClaimLet(o)
+    val r: MOption[State.Claim.Let] = if (preR.continu) {
+      val o2: State.Claim.Let = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val rOpt: MOption[State.Claim.Def] = o2 match {
-        case o2: State.Claim.Def.SeqLit =>
+      val rOpt: MOption[State.Claim.Let] = o2 match {
+        case o2: State.Claim.Let.AdtLit =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Claim.Def.SeqLit.Arg]] = transformISZ(o2.args, transformStateClaimDefSeqLitArg _)
+          val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
             MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
           else
             MNone()
-        case o2: State.Claim.Def.SeqStore =>
+        case o2: State.Claim.Let.SeqLit =>
+          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
+          val r1: MOption[IS[Z, State.Claim.Let.SeqLit.Arg]] = transformISZ(o2.args, transformStateClaimLetSeqLitArg _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
+          else
+            MNone()
+        case o2: State.Claim.Let.CurrentName =>
+          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(sym = r0.getOrElse(o2.sym)))
+          else
+            MNone()
+        case o2: State.Claim.Let.SeqStore =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           val r1: MOption[State.Value] = transformStateValue(o2.seq)
           val r2: MOption[State.Value] = transformStateValue(o2.index)
@@ -2242,7 +1965,7 @@ import MStateTransformer._
             MSome(o2(sym = r0.getOrElse(o2.sym), seq = r1.getOrElse(o2.seq), index = r2.getOrElse(o2.index), element = r3.getOrElse(o2.element)))
           else
             MNone()
-        case o2: State.Claim.Def.FieldStore =>
+        case o2: State.Claim.Let.FieldStore =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           val r1: MOption[State.Value] = transformStateValue(o2.adt)
           val r2: MOption[State.Value] = transformStateValue(o2.value)
@@ -2250,217 +1973,7 @@ import MStateTransformer._
             MSome(o2(sym = r0.getOrElse(o2.sym), adt = r1.getOrElse(o2.adt), value = r2.getOrElse(o2.value)))
           else
             MNone()
-        case o2: State.Claim.Def.AdtLit =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Def.Random =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym)))
-          else
-            MNone()
-        case o2: State.Claim.Let.CurrentName =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Name =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym)))
-          else
-            MNone()
-        case o2: State.Claim.Let.CurrentId =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Id =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Eq =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.value)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), value = r1.getOrElse(o2.value)))
-          else
-            MNone()
-        case o2: State.Claim.Let.TypeTest =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.value)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), value = r1.getOrElse(o2.value)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Quant =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Claim.Let.Quant.Var]] = transformISZ(o2.vars, transformStateClaimLetQuantVar _)
-          val r2: MOption[IS[Z, State.Claim]] = transformISZ(o2.claims, transformStateClaim _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), vars = r1.getOrElse(o2.vars), claims = r2.getOrElse(o2.claims)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Ite =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.cond)
-          val r2: MOption[State.Value] = transformStateValue(o2.left)
-          val r3: MOption[State.Value] = transformStateValue(o2.right)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty || r3.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), cond = r1.getOrElse(o2.cond), left = r2.getOrElse(o2.left), right = r3.getOrElse(o2.right)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Binary =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.left)
-          val r2: MOption[State.Value] = transformStateValue(o2.right)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), left = r1.getOrElse(o2.left), right = r2.getOrElse(o2.right)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Unary =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.value)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), value = r1.getOrElse(o2.value)))
-          else
-            MNone()
-        case o2: State.Claim.Let.SeqLookup =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.seq)
-          val r2: MOption[State.Value] = transformStateValue(o2.index)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), seq = r1.getOrElse(o2.seq), index = r2.getOrElse(o2.index)))
-          else
-            MNone()
-        case o2: State.Claim.Let.SeqInBound =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.seq)
-          val r2: MOption[State.Value] = transformStateValue(o2.index)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), seq = r1.getOrElse(o2.seq), index = r2.getOrElse(o2.index)))
-          else
-            MNone()
-        case o2: State.Claim.Let.FieldLookup =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.adt)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), adt = r1.getOrElse(o2.adt)))
-          else
-            MNone()
-        case o2: State.Claim.Let.ProofFunApply =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.ProofFun] = transformStateProofFun(o2.pf)
-          val r2: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), pf = r1.getOrElse(o2.pf), args = r2.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Apply =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Let.IApply =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.o)
-          val r2: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), o = r1.getOrElse(o2.o), args = r2.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Let.TupleLit =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Let.And =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Or =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Let.Imply =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
-          else
-            MNone()
-      }
-      rOpt
-    } else if (preR.resultOpt.nonEmpty) {
-      MSome(preR.resultOpt.getOrElse(o))
-    } else {
-      MNone()
-    }
-    val hasChanged: B = r.nonEmpty
-    val o2: State.Claim.Def = r.getOrElse(o)
-    val postR: MOption[State.Claim.Def] = postStateClaimDef(o2)
-    if (postR.nonEmpty) {
-      return postR
-    } else if (hasChanged) {
-      return MSome(o2)
-    } else {
-      return MNone()
-    }
-  }
-
-  def transformStateClaimDefSeqLitArg(o: State.Claim.Def.SeqLit.Arg): MOption[State.Claim.Def.SeqLit.Arg] = {
-    val preR: PreResult[State.Claim.Def.SeqLit.Arg] = preStateClaimDefSeqLitArg(o)
-    val r: MOption[State.Claim.Def.SeqLit.Arg] = if (preR.continu) {
-      val o2: State.Claim.Def.SeqLit.Arg = preR.resultOpt.getOrElse(o)
-      val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[State.Value] = transformStateValue(o2.index)
-      val r1: MOption[State.Value] = transformStateValue(o2.value)
-      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-        MSome(o2(index = r0.getOrElse(o2.index), value = r1.getOrElse(o2.value)))
-      else
-        MNone()
-    } else if (preR.resultOpt.nonEmpty) {
-      MSome(preR.resultOpt.getOrElse(o))
-    } else {
-      MNone()
-    }
-    val hasChanged: B = r.nonEmpty
-    val o2: State.Claim.Def.SeqLit.Arg = r.getOrElse(o)
-    val postR: MOption[State.Claim.Def.SeqLit.Arg] = postStateClaimDefSeqLitArg(o2)
-    if (postR.nonEmpty) {
-      return postR
-    } else if (hasChanged) {
-      return MSome(o2)
-    } else {
-      return MNone()
-    }
-  }
-
-  def transformStateClaimLet(o: State.Claim.Let): MOption[State.Claim.Let] = {
-    val preR: PreResult[State.Claim.Let] = preStateClaimLet(o)
-    val r: MOption[State.Claim.Let] = if (preR.continu) {
-      val o2: State.Claim.Let = preR.resultOpt.getOrElse(o)
-      val hasChanged: B = preR.resultOpt.nonEmpty
-      val rOpt: MOption[State.Claim.Let] = o2 match {
-        case o2: State.Claim.Let.CurrentName =>
+        case o2: State.Claim.Let.Random =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           if (hasChanged || r0.nonEmpty)
             MSome(o2(sym = r0.getOrElse(o2.sym)))
@@ -2614,6 +2127,34 @@ import MStateTransformer._
     val hasChanged: B = r.nonEmpty
     val o2: State.Claim.Let = r.getOrElse(o)
     val postR: MOption[State.Claim.Let] = postStateClaimLet(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformStateClaimLetSeqLitArg(o: State.Claim.Let.SeqLit.Arg): MOption[State.Claim.Let.SeqLit.Arg] = {
+    val preR: PreResult[State.Claim.Let.SeqLit.Arg] = preStateClaimLetSeqLitArg(o)
+    val r: MOption[State.Claim.Let.SeqLit.Arg] = if (preR.continu) {
+      val o2: State.Claim.Let.SeqLit.Arg = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: MOption[State.Value] = transformStateValue(o2.index)
+      val r1: MOption[State.Value] = transformStateValue(o2.value)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(index = r0.getOrElse(o2.index), value = r1.getOrElse(o2.value)))
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: State.Claim.Let.SeqLit.Arg = r.getOrElse(o)
+    val postR: MOption[State.Claim.Let.SeqLit.Arg] = postStateClaimLetSeqLitArg(o2)
     if (postR.nonEmpty) {
       return postR
     } else if (hasChanged) {

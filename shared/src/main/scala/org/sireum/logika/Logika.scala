@@ -1029,7 +1029,7 @@ import Util._
       @pure def random(tpe: AST.Typed): ISZ[(State, State.Value)] = {
         val s0 = state
         val (s1, sym) = s0.freshSym(tpe, pos)
-        val s2 = s1.addClaim(State.Claim.Def.Random(sym, pos))
+        val s2 = s1.addClaim(State.Claim.Let.Random(sym, pos))
         return ISZ((Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym))
       }
       exp.attr.resOpt.get match {
@@ -1106,9 +1106,9 @@ import Util._
               }
             }
             smt2.addSeqLit(t, indices.size, reporter)
-            val as: ISZ[State.Claim.Def.SeqLit.Arg] =
-              for (p <- ops.ISZOps(indices).zip(args)) yield State.Claim.Def.SeqLit.Arg(p._1, p._2.get)
-            r = r :+ ((s1.addClaim(State.Claim.Def.SeqLit(sym, as)), sym))
+            val as: ISZ[State.Claim.Let.SeqLit.Arg] =
+              for (p <- ops.ISZOps(indices).zip(args)) yield State.Claim.Let.SeqLit.Arg(p._1, p._2.get)
+            r = r :+ ((s1.addClaim(State.Claim.Let.SeqLit(sym, as)), sym))
           } else {
             r = r :+ ((s1, State.errorValue))
           }
@@ -1138,7 +1138,7 @@ import Util._
                 }
               case _ =>
             }
-            val s4 = s3.addClaim(State.Claim.Def.AdtLit(sym, args.toIS.map((vOpt: Option[State.Value]) => vOpt.get)))
+            val s4 = s3.addClaim(State.Claim.Let.AdtLit(sym, args.toIS.map((vOpt: Option[State.Value]) => vOpt.get)))
             val (s5, vs) = addValueInv(this, smt2, cache, T, s4, sym, attr.posOpt.get, reporter)
             var s6 = s5
             for (v <- vs if s6.status) {
@@ -1235,7 +1235,7 @@ import Util._
         r = r :+ ((s4.addClaims(ISZ(
           State.Claim.Let.FieldLookup(i, iv, "_1"),
           State.Claim.Let.FieldLookup(v, iv, "_2"),
-          State.Claim.Def.SeqStore(newSeq, seq, i, v)
+          State.Claim.Let.SeqStore(newSeq, seq, i, v)
         )), newSeq))
       }
       return r
@@ -2153,7 +2153,7 @@ import Util._
     def evalRandomInt(): ISZ[(State, State.Value)] = {
       val pos = e.posOpt.get
       val (s1, sym) = state.freshSym(AST.Typed.z, pos)
-      return ISZ((s1.addClaim(State.Claim.Def.Random(sym, pos)), sym))
+      return ISZ((s1.addClaim(State.Claim.Let.Random(sym, pos)), sym))
     }
 
     def evalSeqIndexValidSize(targ: AST.Type, arg: AST.Exp): ISZ[(State, State.Value)] = {
@@ -2520,7 +2520,7 @@ import Util._
     val receiverType = context.methodOpt.get.receiverTypeOpt.get
     val (s1, o) = idIntro(pos, s0, lcontext, "this", receiverType, None())
     val (s2, newSym) = s1.freshSym(receiverType, pos)
-    val s3 = evalAssignLocalH(F, s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs)), lcontext, "this",
+    val s3 = evalAssignLocalH(F, s2.addClaim(State.Claim.Let.FieldStore(newSym, o, id, rhs)), lcontext, "this",
       newSym, Some(pos), reporter)
     return s3
   }
@@ -2552,7 +2552,7 @@ import Util._
           val s3 = checkSeqIndexing(smt2, cache, T, s2, a, i, lhs.args(0).posOpt, reporter)
           if (s3.status) {
             val (s4, newSym) = s3.freshSym(t, receiverPos)
-            r = r ++ assignRec(split, smt2, cache, rtCheck, s4.addClaim(State.Claim.Def.SeqStore(newSym, a, i, rhs)),
+            r = r ++ assignRec(split, smt2, cache, rtCheck, s4.addClaim(State.Claim.Let.SeqStore(newSym, a, i, rhs)),
               receiver, newSym, reporter)
           } else {
             r = r :+ s3
@@ -2569,7 +2569,7 @@ import Util._
           if (s1.status) {
             val (s2, newSym) = s1.freshSym(t, receiverPos)
             val id = lhs.id.value
-            val s3 = s2.addClaim(State.Claim.Def.FieldStore(newSym, o, id, rhs))
+            val s3 = s2.addClaim(State.Claim.Let.FieldStore(newSym, o, id, rhs))
             if (notInContext(t.ids, F)) {
               val typeParams: ISZ[AST.TypeParam] = th.typeMap.get(t.ids).get match {
                 case info: TypeInfo.Adt => info.ast.typeParams

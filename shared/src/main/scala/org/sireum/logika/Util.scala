@@ -41,15 +41,15 @@ object Util {
     }
   }
 
-  @record class ClaimDefs(var value: HashMap[Z, ISZ[State.Claim.Def]]) {
-    def addDef(d: State.Claim.Def): Unit = {
+  @record class ClaimDefs(var value: HashMap[Z, ISZ[State.Claim.Let]]) {
+    def addDef(d: State.Claim.Let): Unit = {
       value.get(d.sym.num) match {
         case Some(s) => value = value + d.sym.num ~> (s :+ d)
         case _ => value = value + d.sym.num ~> ISZ(d)
       }
     }
 
-    def hasDef(d: State.Claim.Def): B = {
+    def hasDef(d: State.Claim.Let): B = {
       return value.contains(d.sym.num)
     }
   }
@@ -76,7 +76,7 @@ object Util {
             if (!defs.hasDef(c)) {
               defs.addDef(c)
             }
-          case c: State.Claim.Def => defs.addDef(c)
+          case c: State.Claim.Let => defs.addDef(c)
           case _ =>
         }
         c match {
