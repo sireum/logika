@@ -710,11 +710,7 @@ object Util {
           val (pid, pt) = pair
           val (s0_1, pv) = idIntro(pos, s0, context, pid.value, pt, pid.attr.posOpt)
           val s0_2 = assumeValueInv(logika, smt2, cache, T, s0_1, pv, pos, reporter)
-          if (s0_2.claims.size > s0_1.claims.size) {
-            s0 = s0_2
-          } else {
-            s0 = s0(nextFresh = s0_2.nextFresh)
-          }
+          s0 = s0_2
         }
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
         val svs = logika.evalAssignExpValue(split, smt2, cache, pf.returnType, T, s0, body, reporter)
@@ -732,7 +728,7 @@ object Util {
         (r, for (ss <- sss) yield (ss._1(nextFresh = maxFresh), ss._2), maxFresh)
       }
 
-      smt2.addStrictPureMethod(pos, pf, svs, res, 0)
+      smt2.addStrictPureMethod(pos, pf, svs, res, 0, reporter)
 
       val s1 = state(nextFresh = maxFresh)
       if (config.sat) {

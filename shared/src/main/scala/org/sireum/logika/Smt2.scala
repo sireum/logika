@@ -373,7 +373,7 @@ object Smt2 {
   }
 
   def addStrictPureMethod(pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value.Sym)],
-                          res: State.Value.Sym, statePrefix: Z): Unit = {
+                          res: State.Value.Sym, statePrefix: Z, reporter: Reporter): Unit = {
     val id = proofFunId(pf)
     val context = pf.context :+ pf.id
     val thisId = currentLocalIdString(context, "this")
@@ -402,6 +402,10 @@ object Smt2 {
 
     if (ecs.isEmpty) {
       ecs = ecs :+ st"true"
+      val ignore = reporter.ignore
+      reporter.setIgnore(F)
+      reporter.warn(Some(pos), Logika.kind, "Could not derive SMT2 function; try refactoring to a @strictpure method")
+      reporter.setIgnore(ignore)
     }
 
     val claim: ST = {
