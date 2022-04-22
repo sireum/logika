@@ -1648,6 +1648,10 @@ import Util._
         r = r :+ ((s3.addClaim(State.Claim.Let.ProofFunApply(re, pf, args)), re))
       }
 
+      val invs: ISZ[Info.Inv] =
+        if (info.isHelper || info.strictPureBodyOpt.nonEmpty) ISZ()
+        else retrieveInvs(res.owner, res.isInObject)
+
       def compositional(s: State, typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed,
                         receiverOpt: Option[State.Value.Sym], paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): Unit = {
         var s1 = s
@@ -1788,13 +1792,31 @@ import Util._
             return Context.ContractCaseResult(T, cs6.addClaim(State.Claim.Let.And(rsym, requireSyms)),
               State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
           }
-          val cs6 = evalAssignReceiver(
+          val (cs10, rcvOpt): (State, Option[State.Value.Sym]) = if (receiverOpt.nonEmpty) {
+            receiverOpt match {
+              case Some(receiver) if invs.nonEmpty =>
+                val (cs7, rcv) = idIntro(pos, cs5, ctx, "this", receiver.tipe, None())
+                if (isUnit) {
+                  (cs7, Some(rcv))
+                } else {
+                  val (cs8, res) = resIntro(pos, cs7, ctx, retType, None())
+                  val cs9 = assumeValueInv(logikaComp, smt2, cache, rtCheck, cs8, res, pos, reporter)
+                  (cs9, Some(rcv))
+                }
+              case _ => (cs5, receiverOpt)
+            }
+          } else {
+            (cs5, None())
+          }
+          val cs11 = Util.checkInvs(logikaComp, posOpt, T, "Post-invariant", smt2, cache, rtCheck, cs10,
+            logikaComp.context.receiverTypeOpt, rcvOpt, invs, typeSubstMap, reporter)
+          val cs12 = evalAssignReceiver(
             if (receiverModified) contract.modifies else ISZ(),
-            this, logikaComp, smt2, cache, rtCheck, cs5, invokeReceiverOpt, receiverOpt, typeSubstMap, reporter)
-          val cs7 = modVarsRewrite(cs6, posOpt)
-          val (cs8, rsym) = cs7.freshSym(AST.Typed.b, pos)
-          val cs9 = cs8.addClaim(State.Claim.Let.And(rsym, requireSyms))
-          return Context.ContractCaseResult(T, conjunctClaimSuffix(cs0, cs9), result, State.Claim.Prop(T, rsym), rep.messages)
+            this, logikaComp, smt2, cache, rtCheck, cs11, invokeReceiverOpt, receiverOpt, typeSubstMap, reporter)
+          val cs13 = modVarsRewrite(cs12, posOpt)
+          val (cs14, rsym) = cs13.freshSym(AST.Typed.b, pos)
+          val cs15 = cs14.addClaim(State.Claim.Let.And(rsym, requireSyms))
+          return Context.ContractCaseResult(T, conjunctClaimSuffix(cs0, cs15), result, State.Claim.Prop(T, rsym), rep.messages)
         }
 
         val logikaComp: Logika = {
@@ -1853,9 +1875,6 @@ import Util._
             s1 = s1.addClaim(State.Claim.Let.CurrentId(F, receiver, res.owner :+ res.id, "this", receiverPosOpt))
           case _ =>
         }
-        val invs: ISZ[Info.Inv] =
-          if (info.isHelper || info.strictPureBodyOpt.nonEmpty) ISZ()
-          else retrieveInvs(res.owner, res.isInObject)
         s1 = {
           val pis = Util.checkInvs(logikaComp, posOpt, F, "Pre-invariant", smt2, cache, rtCheck, s1,
             logikaComp.context.receiverTypeOpt, receiverOpt, invs, typeSubstMap, reporter)
@@ -1951,26 +1970,11 @@ import Util._
         r = ISZ()
         var nextFresh: Z = -1
         for (sv <- oldR) {
-          val (s9, sym) = sv
-          if (s9.status) {
-            val (s12, rcvOpt): (State, Option[State.Value.Sym]) = receiverOpt match {
-              case Some(receiver) if invs.nonEmpty =>
-                val (s10, rcv) = idIntro(invs(0).posOpt.get, s9, logikaComp.context.methodName, "this", receiver.tipe, None())
-                (s10, Some(rcv))
-              case _ => (s9, receiverOpt)
-            }
-            val s13 = Util.checkInvs(logikaComp, posOpt, T, "Post-invariant", smt2, cache, rtCheck, s12,
-              logikaComp.context.receiverTypeOpt, rcvOpt, invs, typeSubstMap, reporter)
-            if (s13.nextFresh > nextFresh) {
-              nextFresh = s13.nextFresh
-            }
-            r = r :+ ((conjunctClaimSuffix(s9, s13), sym))
-          } else {
-            if (s9.nextFresh > nextFresh) {
-              nextFresh = s9.nextFresh
-            }
-            r = r :+ sv
+          val s9 = sv._1
+          if (s9.nextFresh > nextFresh) {
+            nextFresh = s9.nextFresh
           }
+          r = r :+ sv
         }
         r = for (sv <- r) yield (sv._1(nextFresh = nextFresh), sv._2)
       }

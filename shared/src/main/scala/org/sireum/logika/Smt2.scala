@@ -397,7 +397,11 @@ object Smt2 {
       val (s0, v) = sv
       val s1 = s0.addClaim(State.Claim.Let.CurrentId(F, v, context, "Res", None()))
       val claims = ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)
-      ecs = ecs :+ embeddedClaims(F, claims, ISZ(v), None(), HashSMap.empty)
+      ecs = ecs :+ embeddedClaims(T, claims, ISZ(v), None(), HashSMap.empty)
+    }
+
+    if (ecs.isEmpty) {
+      ecs = ecs :+ st"true"
     }
 
     val claim: ST = {
@@ -405,7 +409,7 @@ object Smt2 {
           |(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)}))
           |  (=>
           |    $resEq
-          |    (or
+          |    (and
           |      ${(ecs, "\n")}
           |    )
           |  )
