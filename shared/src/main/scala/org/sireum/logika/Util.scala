@@ -346,7 +346,8 @@ object Util {
             case Some(r) => return r
             case _ =>
               val r: ST = lets.get(v.num) match {
-                case Some(ls) if ls.size == 1 => smt2.l2RhsST(ls(0), sv2ST _, lets, declIds)
+                case Some(ls) if ls.size == 1 && !ls(0).isInstanceOf[State.Claim.Let.Random] =>
+                  smt2.l2RhsST(ls(0), sv2ST _, lets, declIds)
                 case _ => smt2.v2ST(v)
               }
               cache = cache + v.num ~> r
