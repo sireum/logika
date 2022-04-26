@@ -400,12 +400,17 @@ object Smt2 {
       ecs = ecs :+ embeddedClaims(T, claims, ISZ(v), None(), HashSMap.empty)
     }
 
-    if (ecs.isEmpty) {
-      ecs = ecs :+ st"true"
+    val ec: ST = if (ecs.isEmpty) {
       val ignore = reporter.ignore
       reporter.setIgnore(F)
       reporter.warn(Some(pos), Logika.kind, "Could not derive SMT2 function; try refactoring to a @strictpure method")
       reporter.setIgnore(ignore)
+      st"true"
+    } else if (ecs.size == 1) {
+      ecs(0)
+    } else {
+      st"""(and
+          |  ${(ecs, "\n")})"""
     }
 
     val claim: ST = {
@@ -413,11 +418,7 @@ object Smt2 {
           |(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)}))
           |  (=>
           |    $resEq
-          |    (and
-          |      ${(ecs, "\n")}
-          |    )
-          |  )
-          |))"""
+          |    $ec)))"""
     }
 
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, claim)))
