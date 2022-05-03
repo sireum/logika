@@ -1821,8 +1821,8 @@ import Util._
 
         val logikaComp: Logika = {
           val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
-            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, contract.modifies, ISZ(), plugins,
-            Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get))
+            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
+            plugins, Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get))
           )
           val mctx = l.context.methodOpt.get
           var objectVarInMap = mctx.objectVarInMap
@@ -3443,19 +3443,26 @@ import Util._
     }
 
     def evalReturn(s0: State, returnStmt: AST.Stmt.Return): ISZ[State] = {
-      returnStmt.expOpt match {
-        case Some(exp) =>
-          var r = ISZ[State]()
-          for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp, reporter)) {
-            val (s1, v) = p
-            val pos = exp.posOpt.get
-            val (s2, sym) = value2Sym(s1, v, pos)
-            r = r :+ conjunctClaimSuffix(s0,
-              s2.addClaim(State.Claim.Let.CurrentId(F, sym, context.methodOpt.get.name, "Res", Some(pos))))
-          }
-          return r
-        case _ => return ISZ(state)
+      def evalReturnH(): ISZ[State] = {
+        returnStmt.expOpt match {
+          case Some(exp) =>
+            var r = ISZ[State]()
+            for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp, reporter)) {
+              val (s1, v) = p
+              val pos = exp.posOpt.get
+              val (s2, sym) = value2Sym(s1, v, pos)
+              r = r :+ conjunctClaimSuffix(s0,
+                s2.addClaim(State.Claim.Let.CurrentId(F, sym, context.methodOpt.get.name, "Res", Some(pos))))
+            }
+            return r
+          case _ => return ISZ(state)
+        }
       }
+      val mcontext = context.methodOpt.get
+      val invs = retrieveInvs(mcontext.owner, mcontext.isInObject)
+      val ss = Util.checkMethodPost(this, smt2, cache, reporter,  evalReturnH(), mcontext.posOpt, invs,
+        mcontext.ensures, config.logPc, config.logRawPc, Some(afterPos(returnStmt.posOpt.get)))
+      return for (s <- ss) yield s(status = F)
     }
 
     def evalSpecBlock(sp: Split.Type, s0: State, block: AST.Stmt.SpecBlock): ISZ[State] = {

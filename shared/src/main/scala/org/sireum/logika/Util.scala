@@ -362,11 +362,12 @@ object Util {
 
 
   def logikaMethod(th: TypeHierarchy, config: Config, owner: ISZ[String], id: String, receiverTypeOpt: Option[AST.Typed],
-                   params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position], reads: ISZ[AST.Exp.Ident],
-                   modifies: ISZ[AST.Exp.Ident], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
+                   params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position],
+                   reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ident],
+                   ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
                    implicitContext: Option[(String, Position)]): Logika = {
-    val mctx = Context.Method(owner, id, receiverTypeOpt, params, retType, reads, modifies, HashMap.empty, HashMap.empty,
-      HashMap.empty, posOpt)
+    val mctx = Context.Method(owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
+      HashMap.empty, HashMap.empty, HashMap.empty, posOpt)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext)
     return Logika(th, config, ctx, plugins)
   }
@@ -412,30 +413,34 @@ object Util {
                       postPosOpt: Option[Position]): ISZ[State] = {
     var r = ISZ[State]()
     for (state <- states) {
-      var s = state
-      val statePreEnInvSize = state.claims.size
-      s = checkInv(F, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
-      val hasPreEnInv = state.claims.size != statePreEnInvSize
-      val statePreEnSize = s.claims.size
-      for (e <- ensures if s.status) {
-        s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
+      if (!state.status) {
+        r = r :+ state
+      } else {
+        var s = state
+        val statePreEnInvSize = state.claims.size
+        s = checkInv(F, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
+        val hasPreEnInv = state.claims.size != statePreEnInvSize
+        val statePreEnSize = s.claims.size
+        for (e <- ensures if s.status) {
+          s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
+        }
+        if (s.claims.size != statePreEnSize) {
+          val stateOps = ops.ISZOps(s.claims)
+          s = s(claims = stateOps.slice(0, statePreEnSize) :+ State.Claim.And(
+            stateOps.slice(statePreEnSize, s.claims.size)
+          ))
+        }
+        if (hasPreEnInv && s.claims.size != statePreEnSize) {
+          val stateOps = ops.ISZOps(s.claims)
+          s = s(claims = stateOps.slice(0, statePreEnInvSize) :+ State.Claim.And(
+            stateOps.slice(statePreEnInvSize, s.claims.size)
+          ))
+        }
+        if (postPosOpt.nonEmpty && s.status) {
+          logika.logPc(logPc, logRawPc, s, reporter, Some(afterPos(postPosOpt.get)))
+        }
+        r = r :+ s
       }
-      if (s.claims.size != statePreEnSize) {
-        val stateOps = ops.ISZOps(s.claims)
-        s = s(claims = stateOps.slice(0, statePreEnSize) :+ State.Claim.And(
-          stateOps.slice(statePreEnSize, s.claims.size)
-        ))
-      }
-      if (hasPreEnInv && s.claims.size != statePreEnSize) {
-        val stateOps = ops.ISZOps(s.claims)
-        s = s(claims = stateOps.slice(0, statePreEnInvSize) :+ State.Claim.And(
-          stateOps.slice(statePreEnInvSize, s.claims.size)
-        ))
-      }
-      if (postPosOpt.nonEmpty && s.status) {
-        logika.logPc(logPc, logRawPc, s, reporter, Some(afterPos(postPosOpt.get)))
-      }
-      r = r :+ s
     }
     return r
   }
@@ -457,6 +462,7 @@ object Util {
         case _ =>
       }
       val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+      val methodPosOpt = method.sig.id.attr.posOpt
       val logika: Logika = {
         val mname = res.owner :+ method.sig.id.value
         val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
@@ -469,7 +475,7 @@ object Util {
           }
         }
         val l = logikaMethod(th, mconfig, res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes,
-          method.sig.returnType.typedOpt.get, method.posOpt, reads, modifies,
+          method.sig.returnType.typedOpt.get, methodPosOpt, reads, requires, modifies, ensures,
           if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None())
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
@@ -513,10 +519,9 @@ object Util {
           localInMap = localInMap))))
       }
       val invs = logika.retrieveInvs(res.owner, res.isInObject)
-      state = checkInv(T, state, logika, smt2, cache, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
-      val methodPosOpt = method.sig.id.attr.posOpt
-      val stmts = method.bodyOpt.get.stmts
+      state = checkInv(T, state, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
+      val stmts = method.bodyOpt.get.stmts
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
         val body = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
         logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, body, reporter)
@@ -715,7 +720,8 @@ object Util {
       val (res, svs, maxFresh): (State.Value.Sym, ISZ[(State, State.Value.Sym)], Z) = {
         val context = pf.context :+ pf.id
         val logika: Logika = logikaMethod(th, config, pf.context, pf.id,  pf.receiverTypeOpt,
-          ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(), plugins, implicitContextOpt)
+          ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins,
+          implicitContextOpt)
         var s0 = state(claims = ISZ())
         val r: State.Value.Sym = {
           val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
@@ -882,7 +888,9 @@ object Util {
       params = ISZ(),
       retType = AST.Typed.unit,
       reads = ISZ(),
+      requires = ISZ(),
       modifies = ISZ(),
+      ensures = ISZ(),
       objectVarInMap = HashMap.empty,
       fieldVarInMap = HashMap.empty,
       localInMap = HashMap.empty,
