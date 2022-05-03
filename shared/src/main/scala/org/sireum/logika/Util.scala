@@ -382,6 +382,64 @@ object Util {
       substMap, reporter)
   }
 
+  def checkMethodPre(logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, state: State,
+                     methodPosOpt: Option[Position], invs: ISZ[Info.Inv], requires: ISZ[AST.Exp]): State = {
+    var s = state
+    val statePreReqInvSize = s.claims.size
+    s = checkInv(T, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
+    val hasPreReqInv = s.claims.size != statePreReqInvSize
+    val statePreReqSize = s.claims.size
+    for (r <- requires if s.status) {
+      s = logika.evalAssume(smt2, cache, T, "Precondition", s, r, r.posOpt, reporter)._1
+    }
+    if (s.claims.size != statePreReqSize) {
+      val stateOps = ops.ISZOps(s.claims)
+      s = s(claims = stateOps.slice(0, statePreReqSize) :+ State.Claim.And(
+        stateOps.slice(statePreReqSize, s.claims.size)
+      ))
+    }
+    if (hasPreReqInv && s.claims.size != statePreReqSize) {
+      val stateOps = ops.ISZOps(s.claims)
+      s = s(claims = stateOps.slice(0, statePreReqInvSize) :+ State.Claim.And(
+        stateOps.slice(statePreReqInvSize, s.claims.size)
+      ))
+    }
+    return s
+  }
+
+  def checkMethodPost(logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, states: ISZ[State],
+                      methodPosOpt: Option[Position], invs: ISZ[Info.Inv], ensures: ISZ[AST.Exp], logPc: B, logRawPc: B,
+                      postPosOpt: Option[Position]): ISZ[State] = {
+    var r = ISZ[State]()
+    for (state <- states) {
+      var s = state
+      val statePreEnInvSize = state.claims.size
+      s = checkInv(F, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
+      val hasPreEnInv = state.claims.size != statePreEnInvSize
+      val statePreEnSize = s.claims.size
+      for (e <- ensures if s.status) {
+        s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
+      }
+      if (s.claims.size != statePreEnSize) {
+        val stateOps = ops.ISZOps(s.claims)
+        s = s(claims = stateOps.slice(0, statePreEnSize) :+ State.Claim.And(
+          stateOps.slice(statePreEnSize, s.claims.size)
+        ))
+      }
+      if (hasPreEnInv && s.claims.size != statePreEnSize) {
+        val stateOps = ops.ISZOps(s.claims)
+        s = s(claims = stateOps.slice(0, statePreEnInvSize) :+ State.Claim.And(
+          stateOps.slice(statePreEnInvSize, s.claims.size)
+        ))
+      }
+      if (postPosOpt.nonEmpty && s.status) {
+        logika.logPc(logPc, logRawPc, s, reporter, Some(afterPos(postPosOpt.get)))
+      }
+      r = r :+ s
+    }
+    return r
+  }
+
   def checkMethod(th: TypeHierarchy,
                   plugins: ISZ[plugin.Plugin],
                   method: AST.Stmt.Method,
@@ -455,58 +513,18 @@ object Util {
           localInMap = localInMap))))
       }
       val invs = logika.retrieveInvs(res.owner, res.isInObject)
-      val statePreReqInvSize = state.claims.size
       state = checkInv(T, state, logika, smt2, cache, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
+      val methodPosOpt = method.sig.id.attr.posOpt
       val stmts = method.bodyOpt.get.stmts
-      val hasPreReqInv = state.claims.size != statePreReqInvSize
-      val statePreReqSize = state.claims.size
-      for (r <- requires if state.status) {
-        state = logika.evalAssume(smt2, cache, T, "Precondition", state, r, r.posOpt, reporter)._1
-      }
-      if (state.claims.size != statePreReqSize) {
-        val stateOps = ops.ISZOps(state.claims)
-        state = state(claims = stateOps.slice(0, statePreReqSize) :+ State.Claim.And(
-          stateOps.slice(statePreReqSize, state.claims.size)
-        ))
-      }
-      if (hasPreReqInv && state.claims.size != statePreReqSize) {
-        val stateOps = ops.ISZOps(state.claims)
-        state = state(claims = stateOps.slice(0, statePreReqInvSize) :+ State.Claim.And(
-          stateOps.slice(statePreReqInvSize, state.claims.size)
-        ))
-      }
+      state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
         val body = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
         logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, body, reporter)
       } else {
         logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
       }
-      for (s <- ss) {
-        var s2 = s
-        val statePreEnInvSize = state.claims.size
-        s2 = checkInv(F, s2, logika, smt2, cache, invs, method.sig.id.attr.posOpt, TypeChecker.emptySubstMap, reporter)
-        val hasPreEnInv = state.claims.size != statePreEnInvSize
-        val statePreEnSize = state.claims.size
-        for (e <- ensures if s2.status) {
-          s2 = logika.evalAssert(smt2, cache, T, "Postcondition", s2, e, e.posOpt, reporter)._1
-        }
-        if (state.claims.size != statePreEnSize) {
-          val stateOps = ops.ISZOps(state.claims)
-          state = state(claims = stateOps.slice(0, statePreEnSize) :+ State.Claim.And(
-            stateOps.slice(statePreEnSize, state.claims.size)
-          ))
-        }
-        if (hasPreEnInv && state.claims.size != statePreEnSize) {
-          val stateOps = ops.ISZOps(state.claims)
-          state = state(claims = stateOps.slice(0, statePreEnInvSize) :+ State.Claim.And(
-            stateOps.slice(statePreEnInvSize, state.claims.size)
-          ))
-        }
-        if (stmts.nonEmpty && s2.status) {
-          logika.logPc(mconfig.logPc, mconfig.logRawPc, s2, reporter,
-            Some(afterPos(stmts(stmts.size - 1).posOpt.get)))
-        }
-      }
+      checkMethodPost(logika, smt2, cache, reporter, ss, methodPosOpt, invs, ensures, mconfig.logPc, mconfig.logRawPc,
+        if (stmts.nonEmpty) stmts(stmts.size - 1).posOpt else None())
     }
 
     if (method.mcontract.isEmpty) {
