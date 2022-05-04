@@ -794,13 +794,9 @@ object Util {
       if (vs.hasThis) {
         receiverOpt match {
           case Some(receiver) =>
-            paramIds = paramIds :+ AST.Id("this", AST.Attr(posOpt))
-            paramTypes = paramTypes :+ receiverTypeOpt.get
             s0 = s0.addClaim(State.Claim.Let.CurrentId(T, receiver, logika.context.methodName, "this", None()))
             args = args :+ receiver
           case _ =>
-            paramIds = paramIds :+ AST.Id("this", AST.Attr(posOpt))
-            paramTypes = paramTypes :+ receiverTypeOpt.get
             val e = AST.Exp.This(AST.TypedAttr(posOpt, receiverTypeOpt))
             val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, cache, T, s0, e, reporter)
             s0 = s1
@@ -833,7 +829,7 @@ object Util {
           args = args :+ arg
         case _ =>
       }
-      val (s2, pf) = strictPureMethod(logika.th, logika.config, logika.plugins, smt2, cache, s0, None(),
+      val (s2, pf) = strictPureMethod(logika.th, logika.config, logika.plugins, smt2, cache, s0, receiverTypeOpt,
         AST.Typed.Fun(T, F, paramTypes, t), owner, id, paramIds,
         AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter, logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)
