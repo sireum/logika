@@ -841,6 +841,7 @@ object Smt2 {
             st"""(declare-fun $upOp ($tId ${q.fieldAdtType}) $tId)
                 |(assert (forall ((x!0 $tId) (x!1 ${q.fieldAdtType}) (x!2 $tId))
                 |  (=>
+                |    (= (type-of x!2) $thId)
                 |    (= x!2 ($upOp x!0 x!1))
                 |    (and
                 |      (= (type-of x!2) (type-of x!0))
