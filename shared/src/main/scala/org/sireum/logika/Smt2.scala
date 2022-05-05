@@ -373,17 +373,20 @@ object Smt2 {
   }
 
   def addStrictPureMethod(pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value.Sym)],
-                          res: State.Value.Sym, statePrefix: Z, reporter: Reporter): Unit = {
+                          statePrefix: Z, reporter: Reporter): Unit = {
     val id = proofFunId(pf)
     val context = pf.context :+ pf.id
     val thisId = currentLocalIdString(context, "this")
     val resId = currentLocalIdString(context, "Res")
     var paramTypes: ISZ[ST] = for (pt <- pf.paramTypes) yield typeId(pt)
     var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(context, id)
+    var paramThTypes: ISZ[ST] = for (p <- ops.ISZOps(pf.paramTypes).zip(paramIds) if isAdtType(p._1)) yield
+      st"(sub-type (type-of ${p._2}) ${typeHierarchyId(p._1)})"
     var params: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
     pf.receiverTypeOpt match {
       case Some(receiverType) =>
         val thisType = typeId(receiverType)
+        paramThTypes = st"(sub-type (type-of $thisId) ${typeHierarchyId(receiverType)})" +: paramThTypes
         paramTypes = thisType +: paramTypes
         paramIds = st"$thisId" +: paramIds
         params = st"($thisId $thisType)" +: params
@@ -418,6 +421,7 @@ object Smt2 {
           |(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)}))
           |  (=>
           |    $resEq
+          |    ${(paramThTypes, "\n")}
           |    $ec)))"""
     }
 
