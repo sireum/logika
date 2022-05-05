@@ -32,6 +32,8 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
 
+  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(3, 6, -101, -100, 1, 109)
+
   def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z, cvcRLimit: Z,
              fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B,
              reporter: Logika.Reporter): Smt2 = {
@@ -180,7 +182,7 @@ object Smt2Impl {
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
       val pout: String = pr.out
-      val isTimeout: B = pr.exitCode === 6 || pr.exitCode === -101 || pr.exitCode === -100
+      val isTimeout: B = Smt2Impl.timeoutCodes.contains(pr.exitCode)
       if (pout.size == 0 && pr.exitCode != 0 && !isTimeout) {
         err(pout, pr.exitCode)
       }
@@ -239,7 +241,9 @@ object Smt2Impl {
       case _ =>
     }
     val r = checkH()
-    cache.set(isSat, query, args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
+    if (r != Smt2Query.Result.Kind.Timeout) {
+      cache.set(isSat, query, args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
+    }
     return r
   }
 
