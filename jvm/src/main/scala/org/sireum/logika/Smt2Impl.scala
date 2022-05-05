@@ -241,9 +241,7 @@ object Smt2Impl {
       case _ =>
     }
     val r = checkH()
-    if (r != Smt2Query.Result.Kind.Timeout) {
-      cache.set(isSat, query, args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
-    }
+    cache.set(isSat, query, args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
     return r
   }
 
