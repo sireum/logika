@@ -280,9 +280,17 @@ object Smt2 {
 
   def writeFile(dir: String, filename: String, content: String): Unit
 
-  @strictpure def proofFunId(pf: State.ProofFun): ST =
-    if (pf.context.isEmpty) st"|${pf.id}|"
-    else st"|${(pf.context, ".")}${if (pf.receiverTypeOpt.isEmpty) "." else "#"}${pf.id}|"
+  @strictpure def proofFunId(pf: State.ProofFun): ST = {
+    val targs: ST = pf.receiverTypeOpt match {
+      case Some(receiverType: AST.Typed.Name) =>
+        if (receiverType.args.isEmpty) st"#"
+        else st"[${(for (arg <- receiverType.args) yield typeIdRaw(arg), ", ")}]#"
+      case _ => st"."
+    }
+    val pTypes: ST = st"(${(for (pt <- pf.paramTypes) yield typeIdRaw(pt), ", ")})"
+    if (pf.context.isEmpty) st"|${pf.id}$pTypes|"
+    else st"|${(pf.context, ".")}$targs${pf.id}$pTypes|"
+  }
 
   def injectAdditionalClaims(v: State.Value.Sym, claims: ISZ[State.Claim],
                              additionalClaims: ISZ[State.Claim]): Option[ISZ[State.Claim]] = {
