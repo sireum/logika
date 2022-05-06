@@ -32,7 +32,7 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
 
-  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(3, 6, -101, -100, 1, 109)
+  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 1, 6, 132)
 
   def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z, cvcRLimit: Z,
              fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B,
@@ -172,7 +172,7 @@ object Smt2Impl {
       }
       //println(s"$exe Query:")
       //println(query)
-      var args = config.args(isSat, timeoutInMs)
+      val args = config.args(isSat, timeoutInMs)
       var proc = Os.proc(config.exe +: args).input(query).redirectErr
       proc = proc.timeout(timeoutInMs * 2)
       val startTime = extension.Time.currentMillis
