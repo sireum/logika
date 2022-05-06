@@ -173,10 +173,6 @@ object Smt2Impl {
       //println(s"$exe Query:")
       //println(query)
       var args = config.args(isSat, timeoutInMs)
-      config match {
-        case _: CvcConfig => args = args :+ s"--rlimit=$cvcRLimit"
-        case _ =>
-      }
       var proc = Os.proc(config.exe +: args).input(query).redirectErr
       proc = proc.timeout(timeoutInMs * 2)
       val startTime = extension.Time.currentMillis
