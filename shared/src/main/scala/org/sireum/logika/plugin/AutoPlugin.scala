@@ -157,7 +157,7 @@ import org.sireum.logika.Logika.Reporter
           case Smt2Query.Result.Kind.Unsat => T
           case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step ${step.id}")
           case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step ${step.id}")
-          case Smt2Query.Result.Kind.Timeout => error(s"Time out when deducing the claim of proof step ${step.id}")
+          case Smt2Query.Result.Kind.Timeout => error(s"Timed out when deducing the claim of proof step ${step.id}")
           case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step ${step.id}")
         }
       }
