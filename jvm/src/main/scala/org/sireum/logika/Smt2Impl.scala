@@ -32,17 +32,16 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
 
-  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 1, 3, 6, 132)
-
   def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z, cvcRLimit: Z,
-             fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B,
+             fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B, smt2Seq: B,
              reporter: Logika.Reporter): Smt2 = {
-    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, cvcRLimit,
+    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, cvcRLimit, smt2Seq,
       fpRoundingMode, configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
       ISZ(), HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
     r.addType(AST.Typed.z, reporter)
     return r
   }
+
 }
 
 @record class Smt2Impl(val typeHierarchy: TypeHierarchy,
@@ -52,6 +51,7 @@ object Smt2Impl {
                        val useReal: B,
                        val simplifiedQuery: B,
                        val cvcRLimit: Z,
+                       val smt2Seq: B,
                        val fpRoundingMode: String,
                        val configs: ISZ[Smt2Config],
                        var types: HashSet[AST.Typed],
@@ -67,23 +67,9 @@ object Smt2Impl {
                        var filenameCount: HashMap[String, Z],
                        var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
 
- val satArgs: ISZ[String] = {
-   var r = ISZ[String]()
-   for (config <- configs) {
-     r = (r :+ config.exe) ++ config.args(T, timeoutInMs)
-   }
-   r
- }
+  val smt2Configs: Smt2Configs = Smt2Configs(configs)
 
-  val validArgs: ISZ[String] = {
-    var r = ISZ[String]()
-    for (config <- configs) {
-      r = (r :+ config.exe) ++ config.args(F, timeoutInMs)
-    }
-    r
-  }
-
- def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
+  def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
     shortIds = newShortIds
   }
 
@@ -161,84 +147,7 @@ object Smt2Impl {
   }
 
   def checkQuery(cache: Smt2.Cache, isSat: B, query: String, timeoutInMs: Z): Smt2Query.Result = {
-    def checkQueryH(config: Smt2Config): Smt2Query.Result = {
-      def err(out: String, exitCode: Z): Unit = {
-        halt(
-          st"""Error encountered when running ${config.exe} query:
-              |$query
-              |
-              |${config.exe} output (exit code $exitCode):
-              |$out""".render)
-      }
-      //println(s"$exe Query:")
-      //println(query)
-      val args = config.args(isSat, timeoutInMs)
-      var proc = Os.proc(config.exe +: args).input(query).redirectErr
-      proc = proc.timeout(timeoutInMs * 2)
-      val startTime = extension.Time.currentMillis
-      val pr = proc.run()
-      val pout: String = pr.out
-      val isTimeout: B = Smt2Impl.timeoutCodes.contains(pr.exitCode)
-      if (pout.size == 0 && pr.exitCode != 0 && !isTimeout) {
-        err(pout, pr.exitCode)
-      }
-      val duration = extension.Time.currentMillis - startTime
-      val out = ops.StringOps(pout).split((c: C) => c.isWhitespace)
-      val firstLine: String = if (isTimeout) "timeout" else out(0)
-      val r: Smt2Query.Result = firstLine match {
-        case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query,
-          st"""; Result: ${if (isSat) "Sat" else "Invalid"}
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-        case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, query,
-          st"""; Result: ${if (isSat) "Unsat" else "Valid"}
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-        case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, config.name, query,
-          st"""; Result: Timeout
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-        case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, config.name, query,
-          st"""; Result: Don't Know
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-        case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, query,
-          st"""; Result: Error
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-      }
-      //println(s"$exe Result (${r.kind}):")
-      //println(r.output)
-      if (r.kind == Smt2Query.Result.Kind.Error) {
-        err(pout, pr.exitCode)
-      }
-
-      return r
-    }
-    def checkH(): Smt2Query.Result = {
-      for (i <- 0 until configs.size - 1) {
-        val r = checkQueryH(configs(i))
-        val stop: B = r.kind match {
-          case Smt2Query.Result.Kind.Sat => T
-          case Smt2Query.Result.Kind.Unsat => T
-          case Smt2Query.Result.Kind.Unknown => F
-          case Smt2Query.Result.Kind.Timeout => F
-          case Smt2Query.Result.Kind.Error => T
-        }
-        if (isSat || stop) {
-          return r
-        }
-      }
-      return checkQueryH(configs(configs.size - 1))
-    }
-    val args: ISZ[String] = if (isSat) satArgs else validArgs
-    cache.get(isSat, query, args) match {
-      case Some(r) => return r
-      case _ =>
-    }
-    val r = checkH()
-    cache.set(isSat, query, args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
-    return r
+    return Smt2Invoke.query(smt2Configs, cache, isSat, smt2Seq, query, timeoutInMs)
   }
 
   def formatVal(width: Z, n: Z): ST = {

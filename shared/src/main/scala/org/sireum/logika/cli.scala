@@ -134,12 +134,16 @@ object cli {
           tpe = Type.Str(Some(','), None() /*Some("--finite-model-find")*/),
           description = "Additional options for CVC satisfiability checks"
         ),
+        Opt(name = "sequential", longKey = "smt2-seq", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Disable SMT2 solvers parallelization"
+        ),
         Opt(name = "simplify", longKey = "simplify", shortKey = None(),
           tpe = Type.Flag(F),
-          description = "Simplify SMT2 query"
+          description = "Simplify SMT2 query (experimental)"
         ),
         Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
-          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc", "z3")),
+          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc4", "cvc5", "z3")),
           description = "SMT2 solver"
         ),
         Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),

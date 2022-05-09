@@ -49,7 +49,8 @@ import org.sireum._
                        val checkInfeasiblePatternMatch: B,
                        val cvcRLimit: Z,
                        val fpRoundingMode: String,
-                       val caching: B)
+                       val caching: B,
+                       val smt2Seq: B)
 
 @datatype trait Smt2Config {
   def name: String
@@ -58,6 +59,24 @@ import org.sireum._
   def satOpts: ISZ[String]
   @pure def args(isSat: B, timeoutInMs: Z): ISZ[String]
   @pure def updateOtherOpts(solverName: String, isSat: B, opts: ISZ[String]): Smt2Config
+}
+
+@datatype class Smt2Configs(val configs: ISZ[Smt2Config]) {
+  @memoize def satArgs(timeoutInMs: Z): ISZ[String] = {
+    var r = ISZ[String]()
+    for (config <- configs) {
+      r = (r :+ config.exe) ++ config.args(T, timeoutInMs)
+    }
+    return r
+  }
+
+  @memoize def validArgs(timeoutInMs: Z): ISZ[String] = {
+    var r = ISZ[String]()
+    for (config <- configs) {
+      r = (r :+ config.exe) ++ config.args(F, timeoutInMs)
+    }
+    return r
+  }
 }
 
 @datatype class Z3Config(val exe: String, val validOpts: ISZ[String], val satOpts: ISZ[String]) extends Smt2Config {

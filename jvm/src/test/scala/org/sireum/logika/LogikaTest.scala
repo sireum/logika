@@ -43,9 +43,15 @@ object LogikaTest {
     case _ => "z3"
   }
 
-  val cvcExe: String = Os.env("SIREUM_HOME") match {
+  val cvc4Exe: String = Os.env("SIREUM_HOME") match {
     case Some(p) if Os.kind != Os.Kind.Unsupported =>
       (Os.path(p) / "bin" / platform / (if (Os.isWin) "cvc.exe" else "cvc")).canon.string
+    case _ => "cvc4"
+  }
+
+  val cvc5Exe: String = Os.env("SIREUM_HOME") match {
+    case Some(p) if Os.kind != Os.Kind.Unsupported =>
+      (Os.path(p) / "bin" / platform / (if (Os.isWin) "cvc5.exe" else "cvc5")).canon.string
     case _ => "cvc5"
   }
 
@@ -53,7 +59,11 @@ object LogikaTest {
 
   val config: Config =
     Config(
-      smt2Configs = ISZ(CvcConfig(cvcExe, ISZ("--full-saturate-quant"), ISZ(), 1000000), Z3Config(z3Exe, ISZ(), ISZ())),
+      smt2Configs = ISZ(
+        CvcConfig(cvc4Exe, ISZ("--full-saturate-quant"), ISZ(), 1000000),
+        Z3Config(z3Exe, ISZ(), ISZ()),
+        CvcConfig(cvc5Exe, ISZ("--full-saturate-quant"), ISZ(), 1000000)
+      ),
       sat = T,
       timeoutInMs = timeoutInMs,
       defaultLoopBound = 10,
@@ -76,7 +86,8 @@ object LogikaTest {
       checkInfeasiblePatternMatch = T,
       cvcRLimit = 1000000,
       fpRoundingMode = "RNE",
-      caching = F
+      caching = F,
+      smt2Seq = F,
     )
 }
 
@@ -199,7 +210,7 @@ class LogikaTest extends TestSuite {
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkScript(None(), input, config,
       th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.cvcRLimit, config.fpRoundingMode,
-        config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, reporter),
+        config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, config.smt2Seq, reporter),
       Smt2.NoCache(), reporter, 1, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {
