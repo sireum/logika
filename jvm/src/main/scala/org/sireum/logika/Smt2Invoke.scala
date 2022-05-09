@@ -99,6 +99,11 @@ object Smt2Invoke {
       }
     }
     val start = extension.Time.currentMillis
+    val args: ISZ[String] = if (isSat) smt2Configs.satArgs(timeoutInMs) else smt2Configs.validArgs(timeoutInMs)
+    cache.get(isSat, query, args) match {
+      case Some(r) => return r
+      case _ =>
+    }
     val r: Smt2Query.Result = ops.ISZOpsUtil.invokeAny(fs, () =>
       Smt2Query.Result(Smt2Query.Result.Kind.Unknown, "all", query,
         st"""; Result: Don't Know or Timeout
@@ -106,11 +111,6 @@ object Smt2Invoke {
             |${(for (config <- smt2Configs.configs) yield st"; * ${config.exe} ${config.args(isSat, timeoutInMs)}", "\n")}""".render,
         "", extension.Time.currentMillis - start, F),
       smt2Seq || fs.size == 1)
-    val args: ISZ[String] = if (isSat) smt2Configs.satArgs(timeoutInMs) else smt2Configs.validArgs(timeoutInMs)
-    cache.get(isSat, query, args) match {
-      case Some(r) => return r
-      case _ =>
-    }
     cache.set(isSat, query, args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
     return r
   }
