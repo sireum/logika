@@ -47,10 +47,15 @@ object Smt2Invoke {
             |$out""".render)
     }
 
+    val start = extension.Time.currentMillis
+    val args: ISZ[String] = if (isSat) smt2Configs.satArgs(timeoutInMs) else smt2Configs.validArgs(timeoutInMs)
+    cache.get(isSat, query, args) match {
+      case Some(r) => return r
+      case _ =>
+    }
     val fs: ISZ[() => Option[Smt2Query.Result] @pure] = for (config <- smt2Configs.configs) yield () => {
       //println(s"$exe Query:")
       //println(query)
-      val args = config.args(isSat, timeoutInMs)
       var proc = Os.proc(config.exe +: args).input(query).redirectErr
       proc = proc.timeout(timeoutInMs * 2)
       val startTime = extension.Time.currentMillis
@@ -97,12 +102,6 @@ object Smt2Invoke {
         case Smt2Query.Result.Kind.Timeout => None()
         case Smt2Query.Result.Kind.Error => Some(r)
       }
-    }
-    val start = extension.Time.currentMillis
-    val args: ISZ[String] = if (isSat) smt2Configs.satArgs(timeoutInMs) else smt2Configs.validArgs(timeoutInMs)
-    cache.get(isSat, query, args) match {
-      case Some(r) => return r
-      case _ =>
     }
     val r: Smt2Query.Result = ops.ISZOpsUtil.invokeAny(fs, () =>
       Smt2Query.Result(Smt2Query.Result.Kind.Unknown, "all", query,
