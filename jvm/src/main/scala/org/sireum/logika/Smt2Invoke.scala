@@ -38,24 +38,13 @@ object Smt2Invoke {
             query: String,
             timeoutInMs: Z): Smt2Query.Result = {
 
-    def err(config: Smt2Config, out: String, exitCode: Z): Unit = {
-      halt(
-        st"""Error encountered when running ${config.exe} query:
-            |$query
-            |
-            |${config.exe} output (exit code $exitCode):
-            |$out""".render)
-    }
-
-    val start = extension.Time.currentMillis
     val smt2Args: ISZ[String] = if (isSat) smt2Configs.satArgs(timeoutInMs) else smt2Configs.validArgs(timeoutInMs)
     cache.get(isSat, query, smt2Args) match {
       case Some(r) => return r
       case _ =>
     }
+    val start = extension.Time.currentMillis
     val fs: ISZ[() => Option[Smt2Query.Result] @pure] = for (config <- smt2Configs.configs) yield () => {
-      //println(s"$exe Query:")
-      //println(query)
       val args = config.args(isSat, timeoutInMs)
       var proc = Os.proc(config.exe +: args).input(query).redirectErr
       proc = proc.timeout(timeoutInMs * 2)
@@ -63,46 +52,34 @@ object Smt2Invoke {
       val pr = proc.run()
       val pout: String = pr.out
       val isTimeout: B = timeoutCodes.contains(pr.exitCode)
-      if (pout.size == 0 && pr.exitCode != 0 && !isTimeout) {
-        err(config, pout, pr.exitCode)
+      val rOpt: Option[Smt2Query.Result] = if (pout.size == 0 && pr.exitCode != 0 && !isTimeout) {
+        halt(
+          st"""Error encountered when running ${config.exe} query:
+              |; Result: Error
+              |; Solver: ${config.exe}
+              |; Arguments: ${(config.args(isSat, timeoutInMs), " ")}
+              |$query
+              |
+              |${config.exe} output (exit code ${pr.exitCode}):
+              |${pr.out}""".render)
+      } else {
+        val duration = extension.Time.currentMillis - startTime
+        val out = ops.StringOps(pout).split((c: C) => c.isWhitespace)
+        val firstLine: String = if (isTimeout) "timeout" else out(0)
+        firstLine match {
+          case string"sat" => Some(Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query,
+            st"""; Result: ${if (isSat) "Sat" else "Invalid"}
+                |; Solver: ${config.exe}
+                |; Arguments: ${(args, " ")}""".render, pout, duration, F))
+          case string"unsat" => Some(Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, query,
+            st"""; Result: ${if (isSat) "Unsat" else "Valid"}
+                |; Solver: ${config.exe}
+                |; Arguments: ${(args, " ")}""".render, pout, duration, F))
+          case string"timeout" => None()
+          case string"unknown" => None()
+        }
       }
-      val duration = extension.Time.currentMillis - startTime
-      val out = ops.StringOps(pout).split((c: C) => c.isWhitespace)
-      val firstLine: String = if (isTimeout) "timeout" else out(0)
-      val r: Smt2Query.Result = firstLine match {
-        case string"sat" => Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query,
-          st"""; Result: ${if (isSat) "Sat" else "Invalid"}
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-        case string"unsat" => Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, query,
-          st"""; Result: ${if (isSat) "Unsat" else "Valid"}
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-        case string"timeout" => Smt2Query.Result(Smt2Query.Result.Kind.Timeout, config.name, query,
-          st"""; Result: Timeout
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-        case string"unknown" => Smt2Query.Result(Smt2Query.Result.Kind.Unknown, config.name, query,
-          st"""; Result: Don't Know
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-        case _ => Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, query,
-          st"""; Result: Error
-              |; Solver: ${config.exe}
-              |; Arguments: ${(args, " ")}""".render, pout, duration, F)
-      }
-      //println(s"$exe Result (${r.kind}):")
-      //println(r.output)
-      if (r.kind == Smt2Query.Result.Kind.Error) {
-        err(config, pout, pr.exitCode)
-      }
-      r.kind match {
-        case Smt2Query.Result.Kind.Sat => Some(r)
-        case Smt2Query.Result.Kind.Unsat => Some(r)
-        case Smt2Query.Result.Kind.Unknown => None()
-        case Smt2Query.Result.Kind.Timeout => None()
-        case Smt2Query.Result.Kind.Error => Some(r)
-      }
+      rOpt
     }
     val r: Smt2Query.Result = ops.ISZOpsUtil.invokeAny(fs, () =>
       Smt2Query.Result(Smt2Query.Result.Kind.Unknown, "all", query,
