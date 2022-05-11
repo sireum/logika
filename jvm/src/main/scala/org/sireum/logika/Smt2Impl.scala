@@ -32,10 +32,10 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
 
-  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z, cvcRLimit: Z,
+  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z,
              fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B, smt2Seq: B,
              reporter: Logika.Reporter): Smt2 = {
-    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, cvcRLimit, smt2Seq,
+    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, smt2Seq,
       fpRoundingMode, configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
       ISZ(), HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
     r.addType(AST.Typed.z, reporter)
@@ -50,7 +50,6 @@ object Smt2Impl {
                        val intBitWidth: Z,
                        val useReal: B,
                        val simplifiedQuery: B,
-                       val cvcRLimit: Z,
                        val smt2Seq: B,
                        val fpRoundingMode: String,
                        val configs: ISZ[Smt2Config],
@@ -66,8 +65,6 @@ object Smt2Impl {
                        var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)],
                        var filenameCount: HashMap[String, Z],
                        var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
-
-  val smt2Configs: Smt2Configs = Smt2Configs(configs)
 
   def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
     shortIds = newShortIds
@@ -136,18 +133,18 @@ object Smt2Impl {
     println(s"Wrote $f")
   }
 
-  def checkSat(cache: Smt2.Cache, query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
-    val r = checkQuery(cache, T, query, timeoutInMs)
+  def checkSat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result) = {
+    val r = checkQuery(cache, T, query)
     return (r.kind != Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkUnsat(cache: Smt2.Cache, query: String, timeoutInMs: Z): (B, Smt2Query.Result) = {
-    val r = checkQuery(cache, F, query, timeoutInMs)
+  def checkUnsat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result) = {
+    val r = checkQuery(cache, F, query)
     return (r.kind == Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkQuery(cache: Smt2.Cache, isSat: B, query: String, timeoutInMs: Z): Smt2Query.Result = {
-    return Smt2Invoke.query(smt2Configs, cache, isSat, smt2Seq, query, timeoutInMs)
+  def checkQuery(cache: Smt2.Cache, isSat: B, query: String): Smt2Query.Result = {
+    return Smt2Invoke.query(configs, cache, isSat, smt2Seq, query, if (isSat) Smt2.satTimeoutInMs else timeoutInMs)
   }
 
   def formatVal(width: Z, n: Z): ST = {

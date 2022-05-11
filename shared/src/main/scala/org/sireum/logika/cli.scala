@@ -100,9 +100,6 @@ object cli {
         Opt(name = "par", longKey = "par", shortKey = Some('p'),
           tpe = Type.NumFlag(100, Some(1), Some(100)),
           description = "Enable parallelization (with CPU cores percentage to use)"),
-        Opt(name = "ramFolder", longKey = "ram-folder", shortKey = None(),
-          tpe = Type.Path(F, None()),
-          description = "RAM folder to temporarily store various artifacts (e.g., SMT2 solvers)"),
       )),
       OptGroup(name = "Path Splitting", opts = ISZ(
         Opt(name = "dontSplitFunQuant", longKey = "dont-split-pfq", shortKey = None(),
@@ -122,18 +119,6 @@ object cli {
           description = "Split on match expressions and statements"),
       )),
       OptGroup(name = "SMT2", opts = ISZ(
-        Opt(name = "cvcRLimit", longKey = "cvc-rlimit", shortKey = None(),
-          tpe = Type.Num(None(), 1000000, None(), None()),
-          description = "CVC rlimit"
-        ),
-        Opt(name = "cvcVOpts", longKey = "cvc-vopts", shortKey = None(),
-          tpe = Type.Str(Some(','), Some("--full-saturate-quant")),
-          description = "Additional options for CVC validity checks"
-        ),
-        Opt(name = "cvcSOpts", longKey = "cvc-sopts", shortKey = None(),
-          tpe = Type.Str(Some(','), None() /*Some("--finite-model-find")*/),
-          description = "Additional options for CVC satisfiability checks"
-        ),
         Opt(name = "sequential", longKey = "smt2-seq", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Disable SMT2 solvers parallelization"
@@ -142,21 +127,17 @@ object cli {
           tpe = Type.Flag(F),
           description = "Simplify SMT2 query (experimental)"
         ),
-        Opt(name = "solver", longKey = "solver", shortKey = Some('m'),
-          tpe = Type.Choice(name = "LogikaSolver", sep = None(), elements = ISZ("all", "cvc4", "cvc5", "z3")),
-          description = "SMT2 solver"
+        Opt(name = "smt2SatConfigs", longKey = "solver-sat", shortKey = None(),
+          tpe = Type.Str(None(), Some(logika.Smt2.defaultSatOpts)),
+          description = "SMT2 configurations for satisfiability queries"
+        ),
+        Opt(name = "smt2ValidConfigs", longKey = "solver-valid", shortKey = None(),
+          tpe = Type.Str(None(), Some(logika.Smt2.defaultValidOpts)),
+          description = "SMT2 configurations for validity queries"
         ),
         Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
           tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
           description = "Timeout (seconds) for SMT2 solver"
-        ),
-        Opt(name = "z3VOpts", longKey = "z3-vopts", shortKey = None(),
-          tpe = Type.Str(Some(','), None()),
-          description = "Additional options for Z3 validity checks"
-        ),
-        Opt(name = "z3SOpts", longKey = "z3-sopts", shortKey = None(),
-          tpe = Type.Str(Some(','), None()),
-          description = "Additional options for Z3 satisfiability checks"
         ),
       )),
     )

@@ -47,59 +47,10 @@ import org.sireum._
                        val splitContract: B,
                        val simplifiedQuery: B,
                        val checkInfeasiblePatternMatch: B,
-                       val cvcRLimit: Z,
                        val fpRoundingMode: String,
                        val caching: B,
                        val smt2Seq: B)
 
-@datatype trait Smt2Config {
-  def name: String
-  def exe: String
-  def validOpts: ISZ[String]
-  def satOpts: ISZ[String]
-  @pure def args(isSat: B, timeoutInMs: Z): ISZ[String]
-  @pure def updateOtherOpts(solverName: String, isSat: B, opts: ISZ[String]): Smt2Config
-}
-
-@datatype class Smt2Configs(val configs: ISZ[Smt2Config]) {
-  @memoize def satArgs(timeoutInMs: Z): ISZ[String] = {
-    var r = ISZ[String]()
-    for (config <- configs) {
-      r = (r :+ config.exe) ++ config.args(T, timeoutInMs)
-    }
-    return r
-  }
-
-  @memoize def validArgs(timeoutInMs: Z): ISZ[String] = {
-    var r = ISZ[String]()
-    for (config <- configs) {
-      r = (r :+ config.exe) ++ config.args(F, timeoutInMs)
-    }
-    return r
-  }
-}
-
-@datatype class Z3Config(val exe: String, val validOpts: ISZ[String], val satOpts: ISZ[String]) extends Smt2Config {
-  val name: String = "z3"
-
-  @pure def args(isSat: B, timeoutInMs: Z): ISZ[String] = {
-    return ISZ[String]("-smt2", "-in", s"-t:$timeoutInMs") ++ (if (isSat) satOpts else validOpts)
-  }
-
-  @strictpure def updateOtherOpts(solverName: String, isSat: B, newOpts: ISZ[String]): Z3Config =
-    if (name == solverName) Z3Config(exe, if (isSat) validOpts else newOpts, if (isSat) newOpts else satOpts) else this
-}
-
-@datatype class CvcConfig(val exe: String, val validOpts: ISZ[String], val satOpts: ISZ[String], val rlimit: Z) extends Smt2Config {
-  val name: String = "cvc"
-
-  @pure def args(isSat: B, timeoutInMs: Z): ISZ[String] = {
-    return ISZ[String]("--lang=smt2.6", s"--tlimit=$timeoutInMs", s"--rlimit=$rlimit") ++ (if (isSat) satOpts else validOpts)
-  }
-
-  @strictpure def updateOtherOpts(solverName: String, isSat: B, newOpts: ISZ[String]): CvcConfig =
-    if (name == solverName) CvcConfig(exe, if (isSat) validOpts else newOpts, if (isSat) newOpts else satOpts, rlimit) else this
-}
-
+@datatype class Smt2Config(val isSat: B, val name: String, val exe: String, val opts: ISZ[String])
 
 @datatype class LoopId(val ids: ISZ[String])

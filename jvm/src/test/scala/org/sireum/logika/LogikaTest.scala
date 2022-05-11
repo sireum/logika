@@ -30,40 +30,16 @@ import org.sireum.message.Reporter
 import org.sireum.test._
 
 object LogikaTest {
-  val platform: String = Os.kind match {
-    case Os.Kind.Win => "win"
-    case Os.Kind.Linux => "linux"
-    case Os.Kind.Mac => "mac"
-    case _ => "unsupported"
-  }
 
-  val z3Exe: String = Os.env("SIREUM_HOME") match {
-    case Some(p) if Os.kind != Os.Kind.Unsupported =>
-      (Os.path(p) / "bin" / platform / "z3" / "bin" / (if (Os.isWin) "z3.exe" else "z3")).canon.string
-    case _ => "z3"
-  }
-
-  val cvc4Exe: String = Os.env("SIREUM_HOME") match {
-    case Some(p) if Os.kind != Os.Kind.Unsupported =>
-      (Os.path(p) / "bin" / platform / (if (Os.isWin) "cvc.exe" else "cvc")).canon.string
-    case _ => "cvc4"
-  }
-
-  val cvc5Exe: String = Os.env("SIREUM_HOME") match {
-    case Some(p) if Os.kind != Os.Kind.Unsupported =>
-      (Os.path(p) / "bin" / platform / (if (Os.isWin) "cvc5.exe" else "cvc5")).canon.string
-    case _ => "cvc5"
-  }
+  val sireumHome: Os.Path = Os.path(Os.env("SIREUM_HOME").get).canon
 
   val timeoutInMs: Z = 2000
 
   val config: Config =
     Config(
-      smt2Configs = ISZ(
-        CvcConfig(cvc4Exe, ISZ("--full-saturate-quant"), ISZ(), 1000000),
-        Z3Config(z3Exe, ISZ(), ISZ()),
-        CvcConfig(cvc5Exe, ISZ("--full-saturate-quant"), ISZ(), 1000000)
-      ),
+      smt2Configs =
+        Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, Smt2.defaultValidOpts, timeoutInMs).left ++
+          Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, 500).left,
       sat = T,
       timeoutInMs = timeoutInMs,
       defaultLoopBound = 10,
@@ -84,7 +60,6 @@ object LogikaTest {
       splitMatch = F,
       simplifiedQuery = F,
       checkInfeasiblePatternMatch = T,
-      cvcRLimit = 1000000,
       fpRoundingMode = "RNE",
       caching = F,
       smt2Seq = F,
@@ -209,7 +184,7 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Logika.checkScript(None(), input, config,
-      th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.cvcRLimit, config.fpRoundingMode,
+      th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.fpRoundingMode,
         config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, config.smt2Seq, reporter),
       Smt2.NoCache(), reporter, 1, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {

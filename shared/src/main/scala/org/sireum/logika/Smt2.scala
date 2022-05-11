@@ -59,8 +59,6 @@ object Smt2 {
   @datatype class MemPrinter(val defs: HashMap[Z, ISZ[State.Claim.Let]]) {
   }
 
-  val topPrefix: String = "_"
-
   val basicTypes: HashSet[AST.Typed] = HashSet ++ ISZ[AST.Typed](
     AST.Typed.b,
     AST.Typed.z,
@@ -148,6 +146,57 @@ object Smt2 {
 
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 
+  val topPrefix: String = "_"
+
+  val z3DefaultValidOpts: String = "z3"
+
+  val z3DefaultSatOpts: String = "z3"
+
+  val cvc4DefaultValidOpts: String = "cvc4,--full-saturate-quant,--rlimit=1000000"
+
+  val cvc4DefaultSatOpts: String = "cvc4,--rlimit=1000000"
+
+  val cvc5DefaultValidOpts: String = "cvc5,--full-saturate-quant,--rlimit=1000000"
+
+  val cvc5DefaultSatOpts: String = "cvc5,--finite-model-find,--rlimit=1000000"
+
+  val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts"
+
+  val defaultSatOpts: String = s"$cvc4DefaultSatOpts; $z3DefaultSatOpts; $cvc5DefaultSatOpts"
+
+  val validTimeoutInMs: Z = 2000
+
+  val satTimeoutInMs: Z = 500
+
+  def timeoutInMsArgs(name: String, timeoutInMs: Z): Option[ISZ[String]] = {
+    name match {
+      case string"cvc4" => return Some(ISZ("--lang=smt2.6", s"--tlimit=$timeoutInMs"))
+      case string"cvc5" => return Some(ISZ("--lang=smt2.6", s"--tlimit=$timeoutInMs"))
+      case string"z3" => return Some(ISZ("-smt2", "-in", s"-t:$timeoutInMs"))
+      case _ => return None()
+    }
+  }
+
+  def parseConfigs(nameExePathMap: HashMap[String, String],
+                   isSat: B,
+                   options: String,
+                   timeoutInMs: Z): Either[ISZ[Smt2Config], String] = {
+    var r = ISZ[Smt2Config]()
+    for (option <- ops.StringOps(options).split((c: C) => c === ';')) {
+      val opts: ISZ[String] =
+        for (e <- ops.StringOps(ops.StringOps(option).trim).split((c: C) => c === ',')) yield ops.StringOps(e).trim
+      opts match {
+        case ISZ(name, _*) =>
+          timeoutInMsArgs(name, timeoutInMs) match {
+            case Some(prefix) =>
+              r = r :+ Smt2Config(isSat, name, nameExePathMap.get(name).get, prefix ++ ops.ISZOps(opts).drop(1))
+            case _ => return Either.Right(s"Unsupported SMT2 solver name: $name")
+          }
+        case _ => return Either.Right(s"Invalid SMT2 configuration: $option")
+      }
+    }
+    return Either.Left(r)
+  }
 }
 
 @msig trait Smt2 {
@@ -487,9 +536,9 @@ object Smt2 {
 
   def typeHierarchy: TypeHierarchy
 
-  def checkSat(cache: Smt2.Cache, query: String, timeoutInMs: Z): (B, Smt2Query.Result)
+  def checkSat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result)
 
-  def checkUnsat(cache: Smt2.Cache, query: String, timeoutInMs: Z): (B, Smt2Query.Result)
+  def checkUnsat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result)
 
   def formatVal(width: Z, n: Z): ST
 
@@ -534,7 +583,7 @@ object Smt2 {
   def satResult(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
                 claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
     val startTime = extension.Time.currentMillis
-    val (r, smt2res) = checkSat(cache, satQuery(claims, None(), reporter).render, 500)
+    val (r, smt2res) = checkSat(cache, satQuery(claims, None(), reporter).render)
     val header =
       st"""; Satisfiability check for $title
           |${smt2res.info}"""
@@ -1194,7 +1243,7 @@ object Smt2 {
   def valid(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
             premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
     val startTime = extension.Time.currentMillis
-    val (_, smt2res) = checkUnsat(cache, satQuery(premises, Some(conclusion), reporter).render, timeoutInMs)
+    val (_, smt2res) = checkUnsat(cache, satQuery(premises, Some(conclusion), reporter).render)
     val defs = ClaimDefs.empty
     val header =
       st"""; Validity Check for $title

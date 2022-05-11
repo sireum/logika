@@ -31,22 +31,49 @@ object Smt2Invoke {
 
   val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 1, 3, 6, 132)
 
-  def query(smt2Configs: Smt2Configs,
-            cache: Smt2.Cache,
-            isSat: B,
-            smt2Seq: B,
-            query: String,
-            timeoutInMs: Z): Smt2Query.Result = {
+  @pure def nameExePathMap(sireumHome: Os.Path): HashMap[String, String] = {
+    val platform: String = Os.kind match {
+      case Os.Kind.Mac => "mac"
+      case Os.Kind.Linux => "linux"
+      case Os.Kind.Win => "win"
+      case _ => halt("Unsupported platform")
+    }
+    return HashMap.empty[String, String] ++ ISZ[(String, String)](
+      "cvc4" ~> (sireumHome / "bin" / platform / "cvc").string,
+      "cvc5" ~> (sireumHome / "bin" / platform / "cvc5").string,
+      "z3" ~> (sireumHome / "bin" / platform / "z3" / "bin" / "z3").string,
+    )
+  }
 
-    val smt2Args: ISZ[String] = if (isSat) smt2Configs.satArgs(timeoutInMs) else smt2Configs.validArgs(timeoutInMs)
-    cache.get(isSat, query, smt2Args) match {
+  @pure def queryDefault(sireumHome: Os.Path,
+                         cache: Smt2.Cache,
+                         isSat: B,
+                         smt2Seq: B,
+                         queryString: String,
+                         timeoutInMs: Z): Smt2Query.Result = {
+    val smt2Configs: ISZ[Smt2Config] =
+      if (isSat) Smt2.parseConfigs(nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, timeoutInMs).left
+      else Smt2.parseConfigs(nameExePathMap(sireumHome), F, Smt2.defaultValidOpts, timeoutInMs).left
+    return query(smt2Configs, cache, isSat, smt2Seq, queryString, timeoutInMs)
+  }
+
+  @pure def query(smt2Configs: ISZ[Smt2Config],
+                  cache: Smt2.Cache,
+                  isSat: B,
+                  smt2Seq: B,
+                  queryString: String,
+                  timeoutInMs: Z): Smt2Query.Result = {
+    val configs: ISZ[Smt2Config] = for (smt2Config <- smt2Configs if isSat == smt2Config.isSat) yield smt2Config
+    val smt2Args: ISZ[String] =
+      for (smt2Config <- configs if isSat == smt2Config.isSat; arg <- smt2Config.name +: smt2Config.opts) yield arg
+    cache.get(isSat, queryString, smt2Args) match {
       case Some(r) => return r
       case _ =>
     }
     val start = extension.Time.currentMillis
-    val fs: ISZ[() => Option[Smt2Query.Result] @pure] = for (config <- smt2Configs.configs) yield () => {
-      val args = config.args(isSat, timeoutInMs)
-      var proc = Os.proc(config.exe +: args).input(query).redirectErr
+    val fs: ISZ[() => Option[Smt2Query.Result] @pure] = for (config <- configs) yield () => {
+      val args = config.opts
+      var proc = Os.proc(config.exe +: args).input(queryString).redirectErr
       proc = proc.timeout(timeoutInMs * 2)
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
@@ -57,8 +84,8 @@ object Smt2Invoke {
           st"""Error encountered when running ${config.exe} query:
               |; Result: Error
               |; Solver: ${config.exe}
-              |; Arguments: ${(config.args(isSat, timeoutInMs), " ")}
-              |$query
+              |; Arguments: ${(config.opts, " ")}
+              |$queryString
               |
               |${config.exe} output (exit code ${pr.exitCode}):
               |${pr.out}""".render)
@@ -67,11 +94,11 @@ object Smt2Invoke {
         val out = ops.StringOps(pout).split((c: C) => c.isWhitespace)
         val firstLine: String = if (isTimeout) "timeout" else out(0)
         firstLine match {
-          case string"sat" => Some(Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, query,
+          case string"sat" => Some(Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, queryString,
             st"""; Result: ${if (isSat) "Sat" else "Invalid"}
                 |; Solver: ${config.exe}
                 |; Arguments: ${(args, " ")}""".render, pout, duration, F))
-          case string"unsat" => Some(Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, query,
+          case string"unsat" => Some(Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, queryString,
             st"""; Result: ${if (isSat) "Unsat" else "Valid"}
                 |; Solver: ${config.exe}
                 |; Arguments: ${(args, " ")}""".render, pout, duration, F))
@@ -82,13 +109,13 @@ object Smt2Invoke {
       rOpt
     }
     val r: Smt2Query.Result = ops.ISZOpsUtil.invokeAny(fs, () =>
-      Smt2Query.Result(Smt2Query.Result.Kind.Unknown, "all", query,
+      Smt2Query.Result(Smt2Query.Result.Kind.Unknown, "all", queryString,
         st"""; Result: Don't Know or Timeout
             |; Solver and arguments:
-            |${(for (config <- smt2Configs.configs) yield st"; * ${config.exe} ${config.args(isSat, timeoutInMs)}", "\n")}""".render,
+            |${(for (config <- configs) yield st"; * ${config.exe} ${config.opts}", "\n")}""".render,
         "", extension.Time.currentMillis - start, F),
       smt2Seq || fs.size == 1)
-    cache.set(isSat, query, smt2Args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
+    cache.set(isSat, queryString, smt2Args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
     return r
   }
 

@@ -43,18 +43,12 @@ class LogikaRcTest extends SireumRcSpec {
     var c = config
     path(path.size - 1) match {
       case "collection.sc" | "strictpure.sc" => c = c(timeoutInMs = 5000)
-      case name if name.startsWith("zfail$Inexhaustive$pattern-") => c = c(smt2Configs =
-        for (smt2Config <- c.smt2Configs) yield smt2Config match {
-          case smt2Config: CvcConfig => smt2Config(satOpts = smt2Config.satOpts :+ "--finite-model-find")
-          case _ => smt2Config
-        }
-      )
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last).string))
     val p = Os.path(path.mkString(Os.fileSep.value))
     Logika.checkScript(Some(p.string), content, c,
-      th => Smt2Impl.create(c.smt2Configs, th, c.timeoutInMs, c.cvcRLimit, c.fpRoundingMode, c.charBitWidth,
+      th => Smt2Impl.create(c.smt2Configs, th, c.timeoutInMs, c.fpRoundingMode, c.charBitWidth,
         c.intBitWidth, c.useReal, c.simplifiedQuery, c.smt2Seq, reporter),
       Smt2.NoCache(), reporter, 0, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     reporter.printMessages()
