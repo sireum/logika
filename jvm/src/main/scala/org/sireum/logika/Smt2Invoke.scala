@@ -74,7 +74,7 @@ object Smt2Invoke {
     val fs: ISZ[() => Option[Smt2Query.Result] @pure] = for (config <- configs) yield () => {
       val args = config.opts
       var proc = Os.proc(config.exe +: args).input(queryString).redirectErr
-      proc = proc.timeout(timeoutInMs * 2)
+      proc = proc.timeout(timeoutInMs * Os.numOfProcessors * 2)
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
       val pout: String = pr.out
