@@ -135,7 +135,13 @@ object InceptionPlugin {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Inception]
     def handleH(res: AST.ResolvedInfo.Method, posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
-      val mi = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
+      val mi: Info.Method = logika.th.nameMap.get(res.owner :+ res.id).get match {
+        case info: Info.Method => info
+        case _: Info.JustMethod =>
+          reporter.error(posOpt, Logika.kind, "Inception on a @just method application is currently unsupported")
+          return emptyResult
+        case info => halt(s"Infeasible: $info")
+      }
       val (reads, requires, modifies, ensures): (ISZ[AST.Exp.Ident], ISZ[AST.Exp], ISZ[AST.Exp.Ident], ISZ[AST.Exp]) = {
         mi.ast.contract match {
           case c: AST.MethodContract.Simple => (c.reads, c.requires, c.modifies, c.ensures)
