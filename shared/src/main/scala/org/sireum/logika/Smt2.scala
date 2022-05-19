@@ -152,13 +152,13 @@ object Smt2 {
 
   val z3DefaultSatOpts: String = "z3"
 
-  val cvc4DefaultValidOpts: String = "cvc4,--full-saturate-quant,--rlimit=1000000"
+  val cvc4DefaultValidOpts: String = "cvc4,--full-saturate-quant"
 
-  val cvc4DefaultSatOpts: String = "cvc4,--rlimit=1000000"
+  val cvc4DefaultSatOpts: String = "cvc4"
 
-  val cvc5DefaultValidOpts: String = "cvc5,--full-saturate-quant,--rlimit=1000000"
+  val cvc5DefaultValidOpts: String = "cvc5,--full-saturate-quant"
 
-  val cvc5DefaultSatOpts: String = "cvc5,--finite-model-find,--rlimit=1000000"
+  val cvc5DefaultSatOpts: String = "cvc5,--finite-model-find"
 
   val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts"
 
@@ -168,11 +168,13 @@ object Smt2 {
 
   val satTimeoutInMs: Z = 500
 
-  def timeoutInMsArgs(name: String, timeoutInMs: Z): Option[ISZ[String]] = {
+  val rlimit: Z = 1000000
+
+  def solverArgs(name: String, timeoutInMs: Z, rlimit: Z): Option[ISZ[String]] = {
     name match {
-      case string"cvc4" => return Some(ISZ("--lang=smt2.6", s"--tlimit=$timeoutInMs"))
-      case string"cvc5" => return Some(ISZ("--lang=smt2.6", s"--tlimit=$timeoutInMs"))
-      case string"z3" => return Some(ISZ("-smt2", "-in", s"-t:$timeoutInMs"))
+      case string"cvc4" => return Some(ISZ("--lang=smt2.6", s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
+      case string"cvc5" => return Some(ISZ("--lang=smt2.6", s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
+      case string"z3" => return Some(ISZ("-smt2", "-in", s"rlimit=$rlimit", s"-t:$timeoutInMs"))
       case _ => return None()
     }
   }
@@ -180,14 +182,15 @@ object Smt2 {
   def parseConfigs(nameExePathMap: HashMap[String, String],
                    isSat: B,
                    options: String,
-                   timeoutInMs: Z): Either[ISZ[Smt2Config], String] = {
+                   timeoutInMs: Z,
+                   rlimit: Z): Either[ISZ[Smt2Config], String] = {
     var r = ISZ[Smt2Config]()
     for (option <- ops.StringOps(options).split((c: C) => c === ';')) {
       val opts: ISZ[String] =
         for (e <- ops.StringOps(ops.StringOps(option).trim).split((c: C) => c === ',')) yield ops.StringOps(e).trim
       opts match {
         case ISZ(name, _*) =>
-          timeoutInMsArgs(name, timeoutInMs) match {
+          solverArgs(name, timeoutInMs, rlimit) match {
             case Some(prefix) =>
               r = r :+ Smt2Config(isSat, name, nameExePathMap.get(name).get, prefix ++ ops.ISZOps(opts).drop(1))
             case _ => return Either.Right(s"Unsupported SMT2 solver name: $name")

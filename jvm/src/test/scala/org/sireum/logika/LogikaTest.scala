@@ -33,14 +33,17 @@ object LogikaTest {
 
   val sireumHome: Os.Path = Os.path(Os.env("SIREUM_HOME").get).canon
 
+  val rlimit: Z = 1000000
+
   val timeoutInMs: Z = 2000
 
   val config: Config =
     Config(
       smt2Configs =
-        Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, Smt2.defaultValidOpts, timeoutInMs).left ++
-          Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, 500).left,
+        Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, Smt2.defaultValidOpts, timeoutInMs, rlimit).left ++
+          Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, 500, rlimit).left,
       sat = T,
+      rlimit = rlimit,
       timeoutInMs = timeoutInMs,
       defaultLoopBound = 10,
       loopBounds = HashMap.empty,

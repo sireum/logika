@@ -50,10 +50,11 @@ object Smt2Invoke {
                          isSat: B,
                          smt2Seq: B,
                          queryString: String,
-                         timeoutInMs: Z): Smt2Query.Result = {
+                         timeoutInMs: Z,
+                         rlimit: Z): Smt2Query.Result = {
     val smt2Configs: ISZ[Smt2Config] =
-      if (isSat) Smt2.parseConfigs(nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, timeoutInMs).left
-      else Smt2.parseConfigs(nameExePathMap(sireumHome), F, Smt2.defaultValidOpts, timeoutInMs).left
+      if (isSat) Smt2.parseConfigs(nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, timeoutInMs, rlimit).left
+      else Smt2.parseConfigs(nameExePathMap(sireumHome), F, Smt2.defaultValidOpts, timeoutInMs, rlimit).left
     return query(smt2Configs, cache, isSat, smt2Seq, queryString, timeoutInMs)
   }
 
@@ -112,7 +113,7 @@ object Smt2Invoke {
       Smt2Query.Result(Smt2Query.Result.Kind.Unknown, "all", queryString,
         st"""; Result: Don't Know or Timeout
             |; Solver and arguments:
-            |${(for (config <- configs) yield st"; * ${config.exe} ${config.opts}", "\n")}""".render,
+            |${(for (config <- configs) yield st"; * ${config.exe} ${(config.opts, " ")}", "\n")}""".render,
         "", extension.Time.currentMillis - start, F),
       smt2Seq || fs.size == 1)
     cache.set(isSat, queryString, smt2Args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))

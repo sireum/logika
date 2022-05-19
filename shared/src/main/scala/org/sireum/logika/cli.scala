@@ -119,6 +119,10 @@ object cli {
           description = "Split on match expressions and statements"),
       )),
       OptGroup(name = "SMT2", opts = ISZ(
+        Opt(name = "rlimit", longKey = "rlimit", shortKey = None(),
+          tpe = Type.Num(None(), Smt2.rlimit, Some(0), None()),
+          description = "SMT2 solver resource limit"
+        ),
         Opt(name = "sequential", longKey = "smt2-seq", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Disable SMT2 solvers parallelization"

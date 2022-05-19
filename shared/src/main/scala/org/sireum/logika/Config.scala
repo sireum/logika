@@ -29,6 +29,7 @@ import org.sireum._
 
 @datatype class Config(val smt2Configs: ISZ[Smt2Config],
                        val sat: B,
+                       val rlimit: Z,
                        val timeoutInMs: Z,
                        val defaultLoopBound: Z,
                        val loopBounds: HashMap[LoopId, Z],
