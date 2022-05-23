@@ -29,7 +29,7 @@ import org.sireum._
 
 object Smt2Invoke {
 
-  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 1, 3, 6, 132)
+  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 1, 3, 6, 132, 142)
 
   @pure def nameExePathMap(sireumHome: Os.Path): HashMap[String, String] = {
     val platform: String = Os.kind match {
@@ -38,11 +38,13 @@ object Smt2Invoke {
       case Os.Kind.Win => "win"
       case _ => halt("Unsupported platform")
     }
+    val platformHome = sireumHome / "bin" / platform
     return HashMap.empty[String, String] ++ ISZ[(String, String)](
-      "cvc4" ~> (sireumHome / "bin" / platform / "cvc").string,
-      "cvc5" ~> (sireumHome / "bin" / platform / "cvc5").string,
-      "z3" ~> (sireumHome / "bin" / platform / "z3" / "bin" / "z3").string,
-    )
+      "cvc4" ~> (platformHome / "cvc").string,
+      "cvc5" ~> (platformHome / "cvc5").string,
+      "z3" ~> (platformHome / "z3" / "bin" / "z3").string,
+    ) ++ (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
+      "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
   }
 
   @pure def queryDefault(sireumHome: Os.Path,
@@ -75,7 +77,7 @@ object Smt2Invoke {
     val fs: ISZ[() => Option[Smt2Query.Result] @pure] = for (config <- configs) yield () => {
       val args = config.opts
       var proc = Os.proc(config.exe +: args).input(queryString).redirectErr
-      proc = proc.timeout(timeoutInMs * Os.numOfProcessors * 2)
+      proc = proc.timeout(timeoutInMs * Os.numOfProcessors * 3 / 2)
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
       val pout: String = pr.out

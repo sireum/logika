@@ -160,6 +160,10 @@ object Smt2 {
 
   val cvc5DefaultSatOpts: String = "cvc5,--finite-model-find"
 
+  val altErgoDefaultValidOpts: String = "alt-ergo"
+
+  val altErgoDefaultSatOpts: String = "alt-ergo"
+
   val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts"
 
   val defaultSatOpts: String = s"$cvc4DefaultSatOpts; $z3DefaultSatOpts; $cvc5DefaultSatOpts"
@@ -172,6 +176,12 @@ object Smt2 {
 
   def solverArgs(name: String, timeoutInMs: Z, rlimit: Z): Option[ISZ[String]] = {
     name match {
+      case string"alt-ergo" =>
+        var timeoutInS: Z = timeoutInMs / 1000
+        if (timeoutInMs % 1000 != 0) {
+          timeoutInS = timeoutInS + 1
+        }
+        return Some(ISZ("-i", "smtlib2", "--use-fpa", "-S", s"$rlimit", s"-t", s"$timeoutInS"))
       case string"cvc4" => return Some(ISZ("--lang=smt2.6", s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
       case string"cvc5" => return Some(ISZ("--lang=smt2.6", s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
       case string"z3" => return Some(ISZ("-smt2", "-in", s"rlimit=$rlimit", s"-t:$timeoutInMs"))
@@ -192,7 +202,10 @@ object Smt2 {
         case ISZ(name, _*) =>
           solverArgs(name, timeoutInMs, rlimit) match {
             case Some(prefix) =>
-              r = r :+ Smt2Config(isSat, name, nameExePathMap.get(name).get, prefix ++ ops.ISZOps(opts).drop(1))
+              nameExePathMap.get(name) match {
+                case Some(exe) => r = r :+ Smt2Config(isSat, name, exe, prefix ++ ops.ISZOps(opts).drop(1))
+                case _ =>
+              }
             case _ => return Either.Right(s"Unsupported SMT2 solver name: $name")
           }
         case _ => return Either.Right(s"Invalid SMT2 configuration: $option")
