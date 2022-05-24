@@ -1653,7 +1653,9 @@ import Util._
         else retrieveInvs(res.owner, res.isInObject)
 
       def compositional(s: State, typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed,
-                        receiverOpt: Option[State.Value.Sym], paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): Unit = {
+                        receiverOpt: Option[State.Value.Sym],
+                        paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)],
+                        oldVars: HashSMap[String, State.Value.Sym]): Unit = {
         var s1 = s
         for (q <- paramArgs) {
           val (l, _, arg, v) = q
@@ -1710,11 +1712,15 @@ import Util._
 
           def modVarsRewrite(ms0: State, modPosOpt: Option[Position]): State = {
             var ms1 = ms0
+            var newVars = oldVars
             for (q <- paramArgs) {
               val (p, t, arg, _) = q
               if (modLocals.contains(p)) {
                 val (ms2, v) = idIntro(arg.posOpt.get, ms1, p.context, p.id, t, None())
                 ms1 = singleState(assignRec(Split.Disabled, smt2, cache, rtCheck, ms2, arg, v, reporter))
+                if (newVars.contains(p.id)) {
+                  newVars = newVars + p.id ~> v
+                }
               }
             }
             var rwLocals: ISZ[AST.ResolvedInfo.LocalVar] = for (q <- paramArgs) yield q._1
@@ -1725,6 +1731,15 @@ import Util._
               rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this")
             }
             ms1 = rewriteLocalVars(ms1, rwLocals, modPosOpt, reporter)
+            if (newVars.nonEmpty) {
+              for (q <- paramArgs) {
+                val p = q._1
+                newVars.get(p.id) match {
+                  case Some(v) => ms1 = ms1.addClaim(State.Claim.Let.CurrentId(T, v, ctx, p.id, posOpt))
+                  case _ =>
+                }
+              }
+            }
             callerReceiverOpt match {
               case Some(receiver) =>
                 ms1 = ms1.addClaim(State.Claim.Let.CurrentId(F, receiver, context.methodOpt.get.name, "this",
@@ -2043,17 +2058,8 @@ import Util._
                     s2 = rewriteLocals(s2, ctx, oldVars.keys ++ (if (receiverOpt.isEmpty) ISZ[String]() else ISZ[String]("this")))
                   }
 
-                  compositional(s2, typeSubstMap, retType, receiverOpt, paramArgs)
+                  compositional(s2, typeSubstMap, retType, receiverOpt, paramArgs, oldVars)
 
-                  if (oldVars.nonEmpty) {
-                    val rOld = r
-                    r = ISZ()
-                    for (sv <- rOld) {
-                      val s3 = sv._1.
-                        addClaims(for (p <- oldVars.entries) yield State.Claim.Let.CurrentId(T, p._2, ctx, p._1, posOpt))
-                      r = r :+ ((s3, sv._2))
-                    }
-                  }
                 }
               case _ =>
                 r = r :+ ((s1, State.errorValue))
