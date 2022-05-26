@@ -932,6 +932,7 @@ object Smt2 {
           st"""(declare-fun $newId (${(for (q <- fieldInfos if q.isParam) yield q.fieldAdtType, " ")}) $tId)
               |(assert (forall (${(for (q <- fieldInfos if q.isParam) yield st"(${q.fieldId} ${q.fieldAdtType})", " ")} (x!0 $tId))
               |  (=>
+              |    ${(for (q <- fieldInfos if q.isParam && q.fieldAdtType.render === "ADT") yield st"(sub-type (type-of ${q.fieldId}) ${typeHierarchyId(q.fieldType)})", "\n")}
               |    (= x!0 ${if (hasParam) st"($newId ${(for (q <- fieldInfos if q.isParam) yield q.fieldId, " ")})" else newId})
               |    (and
               |      (= (type-of x!0) $thId)
