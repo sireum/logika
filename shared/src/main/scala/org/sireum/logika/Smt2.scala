@@ -59,6 +59,11 @@ object Smt2 {
   @datatype class MemPrinter(val defs: HashMap[Z, ISZ[State.Claim.Let]]) {
   }
 
+  val builtInCurrentNames: HashSet[ISZ[String]] = HashSet.empty[ISZ[String]] ++ ISZ[ISZ[String]](
+    AST.Typed.f32Name :+ "NaN", AST.Typed.f32Name :+ "PInf", AST.Typed.f32Name :+ "NInf",
+    AST.Typed.f64Name :+ "NaN", AST.Typed.f64Name :+ "PInf", AST.Typed.f64Name :+ "NInf",
+  )
+
   val basicTypes: HashSet[AST.Typed] = HashSet ++ ISZ[AST.Typed](
     AST.Typed.b,
     AST.Typed.z,
@@ -224,6 +229,8 @@ object Smt2 {
         |(declare-const |F32.PInf| F32)
         |(declare-const |F32.NInf| F32)
         |(declare-const |F32.NaN| F32)
+        |(define-fun |F32.isNaN| ((x F32)) B (= x |F32.NaN|))
+        |(define-fun |F32.isInfinite| ((x F32)) B (or (= x |F32.PInf|) (= x F32.NInf|)))
         |(define-fun |F32.unary_-| ((x F32)) F32 (- x))
         |(define-fun |F32.<=| ((x F32) (y F32)) B (<= x y))
         |(define-fun |F32.<| ((x F32) (y F32)) B (< x y))
@@ -241,6 +248,8 @@ object Smt2 {
         |(define-const |F32.PInf| F32 (_ +oo 8 24))
         |(define-const |F32.NInf| F32 (_ -oo 8 24))
         |(define-const |F32.NaN| F32 (_ NaN 8 24))
+        |(define-fun |F32.isNaN| ((x F32)) B (fp.isNaN x))
+        |(define-fun |F32.isInfinite| ((x F32)) B (fp.isInfinite x))
         |(define-fun |F32.unary_-| ((x F32)) F32 (fp.neg x))
         |(define-fun |F32.<=| ((x F32) (y F32)) B (fp.leq x y))
         |(define-fun |F32.<| ((x F32) (y F32)) B (fp.lt x y))
@@ -260,6 +269,8 @@ object Smt2 {
         |(declare-const |F64.PInf| F64)
         |(declare-const |F64.NInf| F64)
         |(declare-const |F64.NaN| F64)
+        |(define-fun |F64.isNaN| ((x F64)) B (= x |F64.NaN|))
+        |(define-fun |F64.isInfinite| ((x F64)) B (or (= x |F64.PInf|) (= x F64.NInf|)))
         |(define-fun |F64.unary_-| ((x F64)) F64 (- x))
         |(define-fun |F64.<=| ((x F64) (y F64)) B (<= x y))
         |(define-fun |F64.<| ((x F64) (y F64)) B (< x y))
@@ -277,6 +288,8 @@ object Smt2 {
         |(define-const |F64.PInf| F64 (_ +oo 11 53))
         |(define-const |F64.NInf| F64 (_ -oo 11 53))
         |(define-const |F64.NaN| F64 (_ NaN 11 53))
+        |(define-fun |F64.isNaN| ((x F64)) B (fp.isNaN x))
+        |(define-fun |F64.isInfinite| ((x F64)) B (fp.isInfinite x))
         |(define-fun |F64.unary_-| ((x F64)) F64 (fp.neg x))
         |(define-fun |F64.<=| ((x F64) (y F64)) B (fp.leq x y))
         |(define-fun |F64.<| ((x F64) (y F64)) B (fp.lt x y))
@@ -590,10 +603,6 @@ object Smt2 {
 
   @memoize def adtTypeOpId(t: AST.Typed, op: String): ST = {
     return if (adtId(t).render == "ADT") st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
-  }
-
-  @memoize def globalId(owner: ISZ[String], id: String): ST = {
-    return st"|g:${(shorten(owner), ".")}.$id|"
   }
 
   def satResult(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
@@ -1448,7 +1457,8 @@ object Smt2 {
   }
 
   @pure def currentNameIdString(name: ISZ[String]): ST = {
-    return st"|g:${(shorten(name), ".")}|"
+    return if (Smt2.builtInCurrentNames.contains(name)) st"|${name(name.size - 2)}.${name(name.size - 1)}|"
+    else st"|g:${(shorten(name), ".")}|"
   }
 
   @pure def currentLocalId(c: State.Claim.Let.CurrentId): ST = {
@@ -1679,7 +1689,7 @@ object Smt2 {
       case c: State.Claim.Let.Apply =>
         val args: ST =
           if (c.args.size == 1) v2st(c.args(0))
-          else st"(${typeOpId(AST.Typed.Tuple(for (arg <- c.args) yield arg.tipe), "new")} ${(for (arg <- c.args) yield v2st(arg), " ")})"
+          else st"(${typeOpId(AST.Typed.Tuple(for (arg <- c.args) yield arg.tipe), c.id)} ${(for (arg <- c.args) yield v2st(arg), " ")})"
         return st"(select ${if (c.isLocal) currentLocalIdString(c.context, c.id) else currentNameIdString(c.context :+ c.id)} $args)"
       case c: State.Claim.Let.IApply =>
         halt("TODO") // TODO
@@ -1855,6 +1865,9 @@ object Smt2 {
       case c: State.Claim.Or => return for (claim <- c.claims; p <- c2DeclST(claim)) yield p
       case c: State.Claim.Imply => return for (claim <- c.claims; p <- c2DeclST(claim)) yield p
       case c: State.Claim.Let.CurrentName =>
+        if (Smt2.builtInCurrentNames.contains(c.ids)) {
+          return def2DeclST(c)
+        }
         var r = def2DeclST(c)
         val n = currentNameId(c)
         val ns = n.render

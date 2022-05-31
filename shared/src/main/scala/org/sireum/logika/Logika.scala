@@ -118,7 +118,9 @@ object Logika {
   val verifyingDesc: String = "Verifying"
   val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
-    (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size")
+    (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
+    (F, AST.Typed.f32Name, "isNaN"), (F, AST.Typed.f32Name, "isInfinite"),
+    (F, AST.Typed.f64Name, "isNaN"), (F, AST.Typed.f64Name, "isInfinite"),
   )
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
@@ -686,6 +688,8 @@ import Util._
       res match {
         case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
           return (s0, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
+        case AST.ResolvedInfo.Var(T, F, T, name, id) if (name == AST.Typed.f32Name || name == AST.Typed.f64Name) && (id == "NaN" || id == "PInf" || id == "NInf") =>
+          return nameIntro(pos, s0, name :+ id, t, Some(pos))
         case res: AST.ResolvedInfo.LocalVar =>
           val (s1, r) = idIntro(pos, s0, res.context, res.id, t, None())
           return (s1, r)
