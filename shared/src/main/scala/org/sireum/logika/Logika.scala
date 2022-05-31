@@ -689,7 +689,8 @@ import Util._
         case AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, id) if id == "T" || id == "F" =>
           return (s0, if (id == "T") State.Value.B(T, pos) else State.Value.B(F, pos))
         case AST.ResolvedInfo.Var(T, F, T, name, id) if (name == AST.Typed.f32Name || name == AST.Typed.f64Name) && (id == "NaN" || id == "PInf" || id == "NInf") =>
-          return nameIntro(pos, s0, name :+ id, t, Some(pos))
+          val (s1, v) = nameIntro(pos, s0, name :+ id, t, Some(pos))
+          return (s1, v)
         case res: AST.ResolvedInfo.LocalVar =>
           val (s1, r) = idIntro(pos, s0, res.context, res.id, t, None())
           return (s1, r)
