@@ -3546,8 +3546,7 @@ import Util._
           AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, Some(AST.ResolvedInfo.BuiltIn(opKind)), Some(AST.Typed.b)))
         var i = 0
         for (sequent <- deduceStmt.sequents) {
-          val seqClaim: AST.Exp =
-          if (sequent.premises.isEmpty) {
+          val seqClaim: AST.Exp = if (sequent.premises.isEmpty) {
             sequent.conclusion
           } else {
             bin(
@@ -3556,7 +3555,8 @@ import Util._
                 sequent.premises(0)), AST.Exp.BinaryOp.Imply, AST.ResolvedInfo.BuiltIn.Kind.BinaryImply,
               sequent.conclusion, sequent.attr.posOpt)
           }
-          st0 = evalAssume(smt2, cache, F, s"Sequent #$i", st0, seqClaim, seqClaim.posOpt, reporter)._1
+          val thisL = this
+          st0 = thisL(config = config(sat = F)).evalAssume(smt2, cache, F, s"Sequent #$i", st0, seqClaim, seqClaim.posOpt, reporter)._1
           i = i + 1
         }
       }

@@ -29,7 +29,7 @@ import org.sireum._
 
 object Smt2Invoke {
 
-  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 1, 3, 6, 132, 142)
+  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 3, 6, 132, 142)
 
   @pure def nameExePathMap(sireumHome: Os.Path): HashMap[String, String] = {
     val platform: String = Os.kind match {
@@ -76,26 +76,30 @@ object Smt2Invoke {
     val start = extension.Time.currentMillis
     val fs: ISZ[() => Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] @pure] = for (config <- configs) yield () => {
       val args = config.opts
-      var proc = Os.proc(config.exe +: args).input(queryString).redirectErr
+      var proc = Os.proc(config.exe +: args).input(queryString)
       proc = proc.timeout(timeoutInMs * Os.numOfProcessors * 2)
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
-      val pout: String = pr.out
-      val isTimeout: B = timeoutCodes.contains(pr.exitCode)
-      val rOpt: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] = if (pout.size == 0 && pr.exitCode != 0 && !isTimeout) {
-        halt(
-          st"""Error encountered when running ${config.exe} query:
-              |; Result: Error
-              |; Solver: ${config.exe}
-              |; Arguments: ${(config.opts, " ")}
-              |$queryString
-              |
-              |${config.exe} output (exit code ${pr.exitCode}):
-              |${pr.out}""".render)
-      } else {
+      val pout: String = st"${pr.err}${pr.out}".render
+      val isTimeout: B = timeoutCodes.contains(pr.exitCode) || (config.name === "alt-ergo" && pr.exitCode === 1)
+      val rOpt: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] = {
         val duration = extension.Time.currentMillis - startTime
-        val out = ops.StringOps(pout).split((c: C) => c.isWhitespace)
-        val firstLine: String = if (isTimeout) "timeout" else out(0)
+        val out = ops.StringOps(pout).split((c: C) => c == '\n')
+        val firstLine: String = if (isTimeout) {
+          "timeout"
+        } else {
+          var l: String = ""
+          var i: Z = 0
+          while (i < out.size) {
+            val lineOps = ops.StringOps(out(i))
+            if (!(lineOps.startsWith(";") || lineOps.trim.size === 0)) {
+              l = out(i)
+              i = out.size
+            }
+            i = i + 1
+          }
+          ops.StringOps(l).trim
+        }
         firstLine match {
           case string"sat" => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, queryString,
             st"""; Result: ${if (isSat) "Sat" else "Invalid"}
@@ -107,12 +111,26 @@ object Smt2Invoke {
                 |; Arguments: ${(args, " ")}""".render, pout, duration, F))
           case string"timeout" => Either.Right((config.exe, config.opts, Smt2Query.Result.Kind.Timeout))
           case string"unknown" => Either.Right((config.exe, config.opts, Smt2Query.Result.Kind.Unknown))
-        }
+          case _ => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, queryString,
+            st"""Error encountered when running ${config.exe} query:
+                |; Result: Error (exit code ${pr.exitCode})
+                |; Solver: ${config.exe}
+                |; Arguments: ${(config.opts, " ")}""".render, pout, duration, F))        }
       }
       rOpt
     }
     val r: Smt2Query.Result = ops.ISZOpsUtil.invokeAnyEither(fs, smt2Seq || fs.size == 1) match {
-      case Either.Left(qr) => qr
+      case Either.Left(qr) =>
+        if (qr.kind == Smt2Query.Result.Kind.Error) {
+          halt(
+            st"""${qr.info}
+                |${qr.query}
+                |
+                |Output:
+                |${qr.output}""".render
+          )
+        }
+        qr
       case Either.Right(ts) =>
         val sortedTs = ops.ISZOps(ts).sortWith((t1: (String, ISZ[String], Smt2Query.Result.Kind.Type), t2: (String, ISZ[String], Smt2Query.Result.Kind.Type)) =>
           Os.path(t1._1).name < Os.path(t2._1).name
