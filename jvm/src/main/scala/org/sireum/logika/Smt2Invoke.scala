@@ -81,12 +81,16 @@ object Smt2Invoke {
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
       val pout: String = st"${pr.err}${pr.out}".render
-      val isTimeout: B = timeoutCodes.contains(pr.exitCode) || (config.name === "alt-ergo" && pr.exitCode === 1)
+      val isTimeout: B = timeoutCodes.contains(pr.exitCode)
+      val isUnknown: B = pr.exitCode === 1 && ((config.name === "alt-ergo") ||
+        (config.name === "cvc5" && ops.StringOps(pout).contains("An uninterpreted constant was preregistered to the UF theory")))
       val rOpt: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] = {
         val duration = extension.Time.currentMillis - startTime
         val out = ops.StringOps(pout).split((c: C) => c == '\n')
         val firstLine: String = if (isTimeout) {
           "timeout"
+        } else if (isUnknown) {
+          "unknown"
         } else {
           var l: String = ""
           var i: Z = 0
