@@ -29,7 +29,7 @@ import org.sireum._
 
 object Smt2Invoke {
 
-  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 3, 6, 132, 142)
+  val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 3, 6, 132, 134, 142)
 
   @pure def nameExePathMap(sireumHome: Os.Path): HashMap[String, String] = {
     val platform: String = Os.kind match {
