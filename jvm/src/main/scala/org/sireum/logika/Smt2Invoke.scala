@@ -81,7 +81,8 @@ object Smt2Invoke {
       val startTime = extension.Time.currentMillis
       val pr = proc.run()
       val pout: String = st"${pr.err}${pr.out}".render
-      val isTimeout: B = timeoutCodes.contains(pr.exitCode)
+      val isTimeout: B = timeoutCodes.contains(pr.exitCode) ||
+        (config.name === "cvc5" && ops.StringOps(pout).contains("cvc5 interrupted by timeout."))
       val isUnknown: B = pr.exitCode === 1 && ((config.name === "alt-ergo") ||
         (config.name === "cvc5" && ops.StringOps(pout).contains("An uninterpreted constant was preregistered to the UF theory")))
       val rOpt: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] = {
@@ -115,6 +116,7 @@ object Smt2Invoke {
                 |; Arguments: ${(args, " ")}""".render, pout, duration, F))
           case string"timeout" => Either.Right((config.exe, config.opts, Smt2Query.Result.Kind.Timeout))
           case string"unknown" => Either.Right((config.exe, config.opts, Smt2Query.Result.Kind.Unknown))
+          case string"cvc5 interrupted by timeout." => Either.Right((config.exe, config.opts, Smt2Query.Result.Kind.Timeout))
           case _ => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, queryString,
             st"""Error encountered when running ${config.exe} query:
                 |; Result: Error (exit code ${pr.exitCode})
