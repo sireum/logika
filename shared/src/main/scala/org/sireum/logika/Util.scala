@@ -58,7 +58,7 @@ object Util {
     def toST(prefix: ST, num: Z): ST = {
       val ps = prefix.render
       value.get(ps) match {
-        case Some(n) if n != num => return st"$prefix#$num"
+        case Some(n) => return if (n != num) st"$prefix#$num" else prefix
         case _ =>
           value = value + ps ~> num
           return prefix
