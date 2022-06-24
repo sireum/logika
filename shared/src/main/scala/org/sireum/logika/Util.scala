@@ -54,6 +54,18 @@ object Util {
     }
   }
 
+  @record class NumMap(var value: HashMap[String, Z]) {
+    def toST(prefix: ST, num: Z): ST = {
+      val ps = prefix.render
+      value.get(ps) match {
+        case Some(n) if n != num => return st"$prefix#$num"
+        case _ =>
+          value = value + ps ~> num
+          return prefix
+      }
+    }
+  }
+
   object ClaimDefs {
     @strictpure def empty: ClaimDefs = ClaimDefs(HashMap.empty)
 
