@@ -44,7 +44,7 @@ object Util {
   @record class ClaimDefs(var value: HashMap[Z, ISZ[State.Claim.Let]]) {
     def addDef(d: State.Claim.Let): Unit = {
       value.get(d.sym.num) match {
-        case Some(s) => value = value + d.sym.num ~> (s :+ d)
+        case Some(s) => value = value + d.sym.num ~> (Set(s) + d).elements
         case _ => value = value + d.sym.num ~> ISZ(d)
       }
     }
