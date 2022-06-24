@@ -3771,13 +3771,27 @@ import Util._
   }
 
   def mergeStates(s0: State, cond: State.Value.Sym, sT: State, sF: State, nextFresh: Z): State = {
-    @pure def mergeClaimPrefix(tClaim: State.Claim, fClaim: State.Claim): State.Claim = {
-      return if (tClaim == fClaim) tClaim else State.Claim.If(cond, ISZ(tClaim), ISZ(fClaim))
+    @pure def mergeClaimPrefix(tClaim: State.Claim, fClaim: State.Claim): ISZ[State.Claim ]= {
+      if (tClaim == fClaim) {
+        return ISZ(tClaim)
+      } else if (!tClaim.isInstanceOf[State.Claim.Let] && !fClaim.isInstanceOf[State.Claim.Let]) {
+        return ISZ(State.Claim.If(cond, ISZ(tClaim), ISZ(fClaim)))
+      } else {
+        var r = ISZ[State.Claim]()
+        tClaim match {
+          case tClaim: State.Claim.Let => r = r :+ tClaim
+          case _ => r = r :+ State.Claim.Imply(ISZ(State.Claim.Prop(T, cond), tClaim))
+        }
+        fClaim match {
+          case fClaim: State.Claim.Let => r = r :+ fClaim
+          case _ => r = r :+ State.Claim.Imply(ISZ(State.Claim.Prop(F, cond), fClaim))
+        }
+        return r
+      }
     }
 
     val size = s0.claims.size
-    val prefixClaims: ISZ[State.Claim] =
-      for (i <- 0 until size) yield mergeClaimPrefix(sT.claims(i), sF.claims(i))
+    val prefixClaims: ISZ[State.Claim] = for (i <- 0 until size; c <- mergeClaimPrefix(sT.claims(i), sF.claims(i))) yield c
     return State(sT.status && sF.status, prefixClaims :+
       State.Claim.If(cond, ops.ISZOps(sT.claims).drop(size + 1),
         ops.ISZOps(sF.claims).drop(size + 1)), nextFresh)
