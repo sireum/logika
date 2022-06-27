@@ -1309,7 +1309,7 @@ import Util._
             s2 = s5.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
           }
         }
-        conjunctClaimSuffix(s0, s2)
+        s2
       }
       var nextFresh = s1.nextFresh
       val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
@@ -1465,10 +1465,7 @@ import Util._
           val s9 = s8.addClaim(State.Claim.Let.SeqLookup(select, seq, qvar))
           val s10 = s9.addClaim(State.Claim.Let.CurrentId(T, select, qVarRes.context, qVarRes.id, None()))
           val (s11, sym) = s10.freshSym(AST.Typed.b, quant.attr.posOpt.get)
-          val s12: State = {
-            val s13 = Util.assumeValueInv(this, smt2, cache, rtCheck, s11, select, pos, reporter)
-            conjunctClaimSuffix(s11, s13)
-          }
+          val s12 = Util.assumeValueInv(this, smt2, cache, rtCheck, s11, select, pos, reporter)
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s12.nextFresh
@@ -1776,7 +1773,7 @@ import Util._
               csr0 = csr1
               i = i + 1
             }
-            return (conjunctClaimSuffix(cs1, csr0), requireSyms)
+            return (csr0, requireSyms)
           }
 
           def evalEnsures(cs1: State, label: String, rep: Reporter): State = {
@@ -1790,7 +1787,7 @@ import Util._
               cse3 = logikaComp.evalAssume(smt2, cache, F, title, cse3, ensure, posOpt, rep)._1
               i = i + 1
             }
-            return conjunctClaimSuffix(cs1, cse3)
+            return cse3
           }
 
           val rep = reporter.empty
@@ -1836,7 +1833,7 @@ import Util._
           val cs13 = modVarsRewrite(cs12, posOpt)
           val (cs14, rsym) = cs13.freshSym(AST.Typed.b, pos)
           val cs15 = cs14.addClaim(State.Claim.Let.And(rsym, requireSyms))
-          return Context.ContractCaseResult(T, conjunctClaimSuffix(cs0, cs15), result, State.Claim.Prop(T, rsym), rep.messages)
+          return Context.ContractCaseResult(T, cs15, result, State.Claim.Prop(T, rsym), rep.messages)
         }
 
         val logikaComp: Logika = {
@@ -2925,7 +2922,7 @@ import Util._
         if (!s1c.status) {
           r = r :+ s1c
         } else {
-          val s2 = conjunctClaimSuffix(s0, s1c)
+          val s2 = s1c
           val prop = State.Claim.Prop(T, cond)
           val thenClaims = s2.claims :+ prop
           val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
@@ -3027,19 +3024,19 @@ import Util._
           case AST.ResolvedInfo.BuiltIn.Kind.Assert =>
             val exp = e.args(0)
             val (s0, v) = evalAssert(smt2, cache, T, "Assertion", state, exp, exp.posOpt, reporter)
-            return ISZ((conjunctClaimSuffix(state, s0), v))
+            return ISZ((s0, v))
           case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg =>
             val exp = e.args(0)
             val (s0, v) = evalAssert(smt2, cache, T, "Assertion", state, exp, exp.posOpt, reporter)
-            return ISZ((conjunctClaimSuffix(state, s0), v))
+            return ISZ((s0, v))
           case AST.ResolvedInfo.BuiltIn.Kind.Assume =>
             val exp = e.args(0)
             val (s0, v) = evalAssume(smt2, cache, T, "Assumption", state, exp, exp.posOpt, reporter)
-            return ISZ((conjunctClaimSuffix(state, s0), v))
+            return ISZ((s0, v))
           case AST.ResolvedInfo.BuiltIn.Kind.AssumeMsg =>
             val exp = e.args(0)
             val (s0, v) = evalAssume(smt2, cache, T, "Assumption", state, exp, exp.posOpt, reporter)
-            return ISZ((conjunctClaimSuffix(state, s0), v))
+            return ISZ((s0, v))
           case AST.ResolvedInfo.BuiltIn.Kind.Print => return printH()
           case AST.ResolvedInfo.BuiltIn.Kind.Println => return printH()
           case AST.ResolvedInfo.BuiltIn.Kind.Cprint => return printH()
@@ -3054,7 +3051,7 @@ import Util._
             return ISZ((state(status = F), State.errorValue))
         }
       case _ =>
-        return for (p <- evalExp(split, smt2, cache, rtCheck, state, e, reporter)) yield (conjunctClaimSuffix(state, p._1), p._2)
+        return evalExp(split, smt2, cache, rtCheck, state, e, reporter)
     }
   }
 
@@ -3226,7 +3223,7 @@ import Util._
         val (s1, init) = p
         if (s1.status) {
           val (s2, sym) = value2Sym(s1, init, rhs.asStmt.posOpt.get)
-          r = r :+ conjunctClaimSuffix(s0, evalAssignLocalH(decl, s2, lcontext, id, sym, idPosOpt, reporter))
+          r = r :+ evalAssignLocalH(decl, s2, lcontext, id, sym, idPosOpt, reporter)
         } else {
           r = r :+ s1
         }
@@ -3240,8 +3237,7 @@ import Util._
         val (s1, init) = p
         if (s1.status) {
           val (s2, sym) = value2Sym(s1, init, assignStmt.rhs.asStmt.posOpt.get)
-          r = r ++ (for (s3 <- assignRec(split, smt2, cache, rtCheck, s2, assignStmt.lhs, sym, reporter)) yield
-            conjunctClaimSuffix(s0, s3))
+          r = r ++ assignRec(split, smt2, cache, rtCheck, s2, assignStmt.lhs, sym, reporter)
         } else {
           r = r :+ s1
         }
@@ -3323,7 +3319,7 @@ import Util._
       for (s0w <- checkExps(split, smt2, cache, F, "Loop invariant", " at the beginning of while-loop", s0,
         whileStmt.invariants, reporter)) {
         if (s0w.status) {
-          val s1 = conjunctClaimSuffix(s0, s0w)
+          val s1 = s0w
           val modLocalVars = whileStmt.contract.modifiedLocalVars(context.receiverLocalTypeOpt)._2
           if (whileStmt.contract.modifiedObjectVars.nonEmpty || whileStmt.contract.modifiedRecordVars.nonEmpty) {
             halt("TODO: rewrite Vars/fields as well") // TODO
@@ -3396,7 +3392,7 @@ import Util._
               val (s2, v) = p
               val pos = whileStmt.cond.posOpt.get
               val (s2w, cond) = value2Sym(s2, v, pos)
-              val s3 = conjunctClaimSuffix(current, s2w)
+              val s3 = s2w
               val prop = State.Claim.Prop(T, cond)
               val thenClaims = s3.claims :+ prop
               val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
@@ -3462,8 +3458,7 @@ import Util._
               val (s1, v) = p
               val pos = exp.posOpt.get
               val (s2, sym) = value2Sym(s1, v, pos)
-              r = r :+ conjunctClaimSuffix(s0,
-                s2.addClaim(State.Claim.Let.CurrentId(F, sym, context.methodOpt.get.name, "Res", Some(pos))))
+              r = r :+ s2.addClaim(State.Claim.Let.CurrentId(F, sym, context.methodOpt.get.name, "Res", Some(pos)))
             }
             return r
           case _ => return ISZ(state)

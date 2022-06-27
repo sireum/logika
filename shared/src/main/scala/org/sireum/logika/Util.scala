@@ -398,24 +398,9 @@ object Util {
   def checkMethodPre(logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, state: State,
                      methodPosOpt: Option[Position], invs: ISZ[Info.Inv], requires: ISZ[AST.Exp]): State = {
     var s = state
-    val statePreReqInvSize = s.claims.size
     s = checkInv(T, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
-    val hasPreReqInv = s.claims.size != statePreReqInvSize
-    val statePreReqSize = s.claims.size
     for (r <- requires if s.status) {
       s = logika.evalAssume(smt2, cache, T, "Precondition", s, r, r.posOpt, reporter)._1
-    }
-    if (s.claims.size != statePreReqSize) {
-      val stateOps = ops.ISZOps(s.claims)
-      s = s(claims = stateOps.slice(0, statePreReqSize) :+ State.Claim.And(
-        stateOps.slice(statePreReqSize, s.claims.size)
-      ))
-    }
-    if (hasPreReqInv && s.claims.size != statePreReqSize) {
-      val stateOps = ops.ISZOps(s.claims)
-      s = s(claims = stateOps.slice(0, statePreReqInvSize) :+ State.Claim.And(
-        stateOps.slice(statePreReqInvSize, s.claims.size)
-      ))
     }
     return s
   }
@@ -429,24 +414,9 @@ object Util {
         r = r :+ state
       } else {
         var s = state
-        val statePreEnInvSize = state.claims.size
         s = checkInv(F, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
-        val hasPreEnInv = state.claims.size != statePreEnInvSize
-        val statePreEnSize = s.claims.size
         for (e <- ensures if s.status) {
           s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
-        }
-        if (s.claims.size != statePreEnSize) {
-          val stateOps = ops.ISZOps(s.claims)
-          s = s(claims = stateOps.slice(0, statePreEnSize) :+ State.Claim.And(
-            stateOps.slice(statePreEnSize, s.claims.size)
-          ))
-        }
-        if (hasPreEnInv && s.claims.size != statePreEnSize) {
-          val stateOps = ops.ISZOps(s.claims)
-          s = s(claims = stateOps.slice(0, statePreEnInvSize) :+ State.Claim.And(
-            stateOps.slice(statePreEnInvSize, s.claims.size)
-          ))
         }
         if (postPosOpt.nonEmpty && s.status) {
           logika.logPc(logPc, logRawPc, s, reporter, Some(afterPos(postPosOpt.get)))
@@ -531,7 +501,6 @@ object Util {
           localInMap = localInMap))))
       }
       val invs = logika.retrieveInvs(res.owner, res.isInObject)
-      state = checkInv(T, state, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
       val stmts = method.bodyOpt.get.stmts
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
@@ -679,17 +648,6 @@ object Util {
       }
     }
     return current
-  }
-
-  def conjunctClaimSuffix(s0: State, s1: State): State = {
-    if (s1.claims.size - s0.claims.size <= 1) {
-      assert(s1.claims.size - s0.claims.size >= 0)
-      return s1
-    }
-    val size1 = s0.claims.size
-    val size2 = s1.claims.size
-    val claimsOps = ops.ISZOps(s1.claims)
-    return s1(claims = claimsOps.slice(0, size1) :+ State.Claim.And(claimsOps.slice(size1, size2)))
   }
 
   def constructAssume(cond: AST.Exp, posOpt: Option[Position]): AST.Stmt = {
