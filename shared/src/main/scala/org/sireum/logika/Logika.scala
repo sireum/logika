@@ -119,9 +119,12 @@ object Logika {
   val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
+    (F, AST.Typed.isName, "firstIndex"), (F, AST.Typed.msName, "firstIndex"),
+    (F, AST.Typed.isName, "lastIndex"), (F, AST.Typed.msName, "lastIndex"),
     (F, AST.Typed.f32Name, "isNaN"), (F, AST.Typed.f32Name, "isInfinite"),
     (F, AST.Typed.f64Name, "isNaN"), (F, AST.Typed.f64Name, "isInfinite"),
   )
+  val indexingFields: HashSet[String] = HashSet ++ ISZ[String]("firstIndex", "lastIndex")
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
@@ -969,25 +972,33 @@ import Util._
       def evalField(t: AST.Typed): ISZ[(State, State.Value)] = {
         var r = ISZ[(State, State.Value)]()
         for (p <- evalExp(sp, smt2, cache, rtCheck, state, receiverOpt.get, reporter)) {
-          val (s0, o) = p
           def evalFieldH(): (State, State.Value.Sym) = {
+            var s0 = p._1
+            val o = p._2
             o.tipe match {
-              case ot: AST.Typed.Name =>
-                evalConstantVarInstance(smt2, cache, rtCheck, s0, ot.ids, id, reporter) match {
-                  case Some((s1, v)) => return value2Sym(s1, v, pos)
-                  case _ =>
+              case tipe: AST.Typed.Name =>
+                if (indexingFields.contains(id) && (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName)) {
+                  val (s1, size) = s0.freshSym(AST.Typed.z, pos)
+                  val (s2, cond) = s1.addClaim(State.Claim.Let.FieldLookup(size, o, "size")).freshSym(AST.Typed.b, pos)
+                  val s3 = s2.addClaim(State.Claim.Let.Binary(cond, size, AST.Exp.BinaryOp.Gt, State.Value.Z(0, pos), AST.Typed.z))
+                  s0 = evalAssertH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), reporter)
+                } else {
+                  evalConstantVarInstance(smt2, cache, rtCheck, s0, tipe.ids, id, reporter) match {
+                    case Some((s1, v)) => return value2Sym(s1, v, pos)
+                    case _ =>
+                  }
                 }
               case _ =>
             }
-            val (s1, sym) = s0.freshSym(t, pos)
-            val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, o, id))
-            return (s2, sym)
+            val (s4, sym) = s0.freshSym(t, pos)
+            val s5 = s4.addClaim(State.Claim.Let.FieldLookup(sym, o, id))
+            return (s5, sym)
           }
-          val (s3, sym) = evalFieldH()
-          if (s3.status) {
-            r = r :+ ((Util.assumeValueInv(this, smt2, cache, rtCheck, s3, sym, pos, reporter), sym))
+          val (s6, sym) = evalFieldH()
+          if (s6.status) {
+            r = r :+ ((Util.assumeValueInv(this, smt2, cache, rtCheck, s6, sym, pos, reporter), sym))
           } else {
-            r = r :+ ((s0, State.errorValue))
+            r = r :+ ((s6, State.errorValue))
           }
         }
         return r
