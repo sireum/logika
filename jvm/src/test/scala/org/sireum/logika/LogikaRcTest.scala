@@ -42,7 +42,7 @@ class LogikaRcTest extends SireumRcSpec {
     val reporter = Logika.Reporter.create
     var c = config
     path(path.size - 1) match {
-      case "collection.sc" | "strictpure.sc" => c = c(smt2Configs = for (c <- c.smt2Configs if c.name =!= "alt-ergo") yield c, timeoutInMs = 5000)
+      case "collection.sc" | "strictpure.sc" => c = c(smt2Configs = for (c <- c.smt2Configs if c.name =!= "alt-ergo") yield c, timeoutInMs = 8000)
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last).string))
