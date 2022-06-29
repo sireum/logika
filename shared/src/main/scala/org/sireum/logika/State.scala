@@ -458,8 +458,7 @@ object State {
       @pure def toRawST: ST = {
         val r: ST =
           if (claims.size == 2)
-            st"""${claims(0).toRawST} →
-                |  ${claims(1).toRawST}"""
+            st"""${claims(0).toRawST} → ${claims(1).toRawST}"""
           else
             st"""→(
                 |  ${(for (c <- claims) yield c.toRawST, ",\n")}
@@ -481,10 +480,7 @@ object State {
         if (claimSTs.value.size == 0) {
           return Some(conclusion)
         } else if (claimSTs.value.size == 1) {
-          return Some(
-            st"""${claimSTs.value(0)} →
-                |  $conclusion"""
-          )
+          return Some(st"""${claimSTs.value(0)} → $conclusion""")
         } else {
           return Some(
             st"""→(
@@ -593,11 +589,11 @@ object State {
       @datatype class CurrentName(val sym: Value.Sym, val ids: ISZ[String],
                                   @hidden val defPosOpt: Option[Position]) extends Let {
         @pure override def toRawST: ST = {
-          return st"${(ids, ".")} == ${sym.toRawST}"
+          return st"${(shorten(ids), ".")} == ${sym.toRawST}"
         }
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
-          return Some(st"${(ids, ".")}")
+          return Some(st"${(shorten(ids), ".")}")
         }
 
         override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
@@ -639,11 +635,11 @@ object State {
 
       @datatype class Name(val sym: Value.Sym, val ids: ISZ[String], val num: Z, val poss: ISZ[Position]) extends Let {
         @pure override def toRawST: ST = {
-          return st"${(ids, ".")}@${possLines(poss)}#$num == ${sym.toRawST}"
+          return st"${(shorten(ids), ".")}@${possLines(poss)}#$num == ${sym.toRawST}"
         }
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
-          return Some(numMap.toST(st"${(ids, ".")}@${possLines(poss)}", num))
+          return Some(numMap.toST(st"${(shorten(ids), ".")}@${possLines(poss)}", num))
         }
 
         override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
@@ -674,12 +670,12 @@ object State {
 
         @pure override def toRawST: ST = {
           return if (context.isEmpty) st"$id@${possLines(poss)}#$num == ${sym.toRawST}"
-          else st"$id:${(context, ".")}@${possLines(poss)}#$num == ${sym.toRawST}"
+          else st"$id:${(shorten(context), ".")}@${possLines(poss)}#$num == ${sym.toRawST}"
         }
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
           return Some(numMap.toST(
-            if (context.isEmpty) st"$id@${possLines(poss)}" else st"$id:${(context, ".")}@${possLines(poss)}",
+            if (context.isEmpty) st"$id@${possLines(poss)}" else st"$id:${(shorten(context), ".")}@${possLines(poss)}",
             num
           ))
         }
@@ -760,8 +756,7 @@ object State {
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
           return Some(
-            st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST(numMap, defs), ", ")}
-                |  ${if (isAll) Claim.Imply(claims).toST(numMap, defs).getOrElse(State.stTrue) else Claim.And(claims).toST(numMap, defs).getOrElse(State.stTrue)}"""
+            st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST(numMap, defs), ", ")}  ${if (isAll) Claim.Imply(claims).toST(numMap, defs).getOrElse(State.stTrue) else Claim.And(claims).toST(numMap, defs).getOrElse(State.stTrue)}"""
           )
         }
 
@@ -862,14 +857,14 @@ object State {
         @pure override def toRawST: ST = {
           return if (pf.receiverTypeOpt.isEmpty)
             if (pf.context.isEmpty) st"${sym.toRawST} ≜ ${pf.id}(${(for (arg <- args) yield arg.toRawST, ", ")})"
-            else st"${sym.toRawST} ≜ ${(pf.context :+ pf.id, ".")}(${(for (arg <- args) yield arg.toRawST, ", ")})"
+            else st"${sym.toRawST} ≜ ${(shorten(pf.context) :+ pf.id, ".")}(${(for (arg <- args) yield arg.toRawST, ", ")})"
           else st"${sym.toRawST} ≜ ${args(0).toRawST}.${pf.id}(${(for (i <- 1 until args.size) yield args(i).toRawST, ", ")})"
         }
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
           return Some(
             if (pf.receiverTypeOpt.isEmpty)
-              st"${(pf.context :+ pf.id, ".")}(${(for (arg <- args) yield arg.toST(numMap, defs), ", ")})"
+              st"${(shorten(pf.context) :+ pf.id, ".")}(${(for (arg <- args) yield arg.toST(numMap, defs), ", ")})"
             else st"${args(0).toST(numMap, defs)}.${pf.id}(${(for (i <- 1 until args.size) yield args(i).toST(numMap, defs), ", ")})"
           )
         }
@@ -880,11 +875,11 @@ object State {
         @strictpure def name: ISZ[String] = context :+ id
 
         @pure override def toRawST: ST = {
-          return st"${sym.toRawST} ≜ ${(name, ".")}(${(for (arg <- args) yield arg.toRawST, ", ")})"
+          return st"${sym.toRawST} ≜ ${(shorten(name), ".")}(${(for (arg <- args) yield arg.toRawST, ", ")})"
         }
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
-          return Some(st"${(name, ".")}(${(for (arg <- args) yield arg.toST(numMap, defs), ", ")})")
+          return Some(st"${(shorten(name), ".")}(${(for (arg <- args) yield arg.toST(numMap, defs), ", ")})")
         }
 
         @pure override def funs: ISZ[Fun] = {
@@ -1044,5 +1039,8 @@ object State {
   @memoize def create: State = {
     return State(T, ISZ(), 1)
   }
+
+  @strictpure def shorten(ids: ISZ[String]): ISZ[String] =
+    if (ids.size > 2 && ids(0) === "org" && ids(1) === "sireum") ops.ISZOps(ids).slice(2, ids.size) else ids
 
 }
