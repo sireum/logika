@@ -517,8 +517,8 @@ object State {
       @pure override def toRawST: ST = {
         val r =
           st"""${cond.toRawST} ?
-              |  ${And(tClaims).toRawST}
-              |: ${And(fClaims).toRawST}"""
+              |    ${And(tClaims).toRawST}
+              |  : ${And(fClaims).toRawST}"""
         return r
       }
 
@@ -530,16 +530,10 @@ object State {
           case (Some(tST), Some(fST)) =>
             claimSTs.add(
               st"""$condST ?
-                  |  $tST
-                  |: $fST""")
-          case (Some(tST), _) =>
-            claimSTs.add(
-              st"""$condST →
-                  |  $tST""")
-          case (_, Some(fST)) =>
-            claimSTs.add(
-              st"""¬($condST) →
-                  |  $fST""")
+                  |    $tST
+                  |  : $fST""")
+          case (Some(tST), _) => claimSTs.add(st"""$condST → $tST""")
+          case (_, Some(fST)) => claimSTs.add(st"""¬($condST) → $fST""")
           case (_, _) =>
         }
       }
