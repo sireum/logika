@@ -619,7 +619,7 @@ object Util {
       val poss = StateTransformer(CurrentNamePossCollector(ids)).
         transformState(ISZ(), current).ctx
       if (poss.isEmpty) {
-        reporter.error(Some(pos), Logika.kind, s"Missing Modifies clause for ${(l.owner, ".")}.${l.id}")
+        reporter.error(Some(pos), Logika.kind, st"Missing Modifies clause for ${(ids, ".")}".render)
         return state(status = F)
       }
       val (s1, num) = current.fresh
