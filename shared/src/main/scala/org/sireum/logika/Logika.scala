@@ -3777,13 +3777,31 @@ import Util._
   }
 
   def mergeStates(s0: State, cond: State.Value.Sym, sT: State, sF: State, nextFresh: Z): State = {
-    @pure def mergeClaimPrefix(tClaim: State.Claim, fClaim: State.Claim): State.Claim = {
-      return if (tClaim == fClaim) tClaim else State.Claim.If(cond, ISZ(tClaim), ISZ(fClaim))
+    @pure def mergeClaimPrefix(i: Z, til: Z): (State.Claim, Z) = {
+      var j: Z = i
+      var found = F
+      while (!found && j < til) {
+        if (sT.claims(j) == sF.claims(j)) {
+          found = T
+        } else {
+          j = j + 1
+        }
+      }
+      if (j == i) {
+        return (sT.claims(j), j + 1)
+      } else {
+        return (State.Claim.If(cond, ops.ISZOps(sT.claims).slice(i, j), ops.ISZOps(sF.claims).slice(i, j)), j)
+      }
     }
 
     val size = s0.claims.size
-    val prefixClaims: ISZ[State.Claim] =
-      for (i <- 0 until size) yield mergeClaimPrefix(sT.claims(i), sF.claims(i))
+    var prefixClaims = ISZ[State.Claim]()
+    var i: Z = 0
+    while (i < size) {
+      val (c, j) = mergeClaimPrefix(i, size)
+      prefixClaims = prefixClaims :+ c
+      i = j
+    }
     return State(sT.status && sF.status, prefixClaims :+
       State.Claim.If(cond, ops.ISZOps(sT.claims).drop(size + 1),
         ops.ISZOps(sF.claims).drop(size + 1)), nextFresh)
