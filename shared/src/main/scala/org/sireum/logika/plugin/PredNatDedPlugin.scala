@@ -125,7 +125,7 @@ object PredNatDedPlugin {
             exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
-        if (!subProof.contains(AST.Util.deBruijn(substClaim))) {
+        if (!subProof.contains(AST.Util.normalizeFun(substClaim))) {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not infer the stated claim using ${just.invokeIdent.id.value}")
           return emptyResult
         }
@@ -176,11 +176,11 @@ object PredNatDedPlugin {
             exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
-        if (AST.Util.deBruijn(substClaim) != assumption) {
+        if (AST.Util.normalizeFun(substClaim) != assumption) {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not match the assumption in let sub-proof $subProofNo")
           return emptyResult
         }
-        val stepClaim = step.claimDeBruijn
+        val stepClaim = step.claimNorm
         if (!subProof.contains(stepClaim) && stepClaim != assumption) {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not find the stated claim in let sub-proof $subProofNo")
           return emptyResult

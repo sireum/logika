@@ -3074,9 +3074,9 @@ import Util._
       var r = ISZ[AST.Exp]()
       for (stp <- steps) {
         stp match {
-          case stp: AST.ProofAst.Step.Regular => r = r :+ AST.Util.deBruijn(stp.claim)
-          case stp: AST.ProofAst.Step.Assert => r = r :+ AST.Util.deBruijn(stp.claim)
-          case stp: AST.ProofAst.Step.Assume => r = r :+ AST.Util.deBruijn(stp.claim)
+          case stp: AST.ProofAst.Step.Regular => r = r :+ AST.Util.normalizeFun(stp.claim)
+          case stp: AST.ProofAst.Step.Assert => r = r :+ AST.Util.normalizeFun(stp.claim)
+          case stp: AST.ProofAst.Step.Assume => r = r :+ AST.Util.normalizeFun(stp.claim)
           case _ =>
         }
       }
@@ -3107,7 +3107,7 @@ import Util._
         s0 = stateMap._1(status = s0.status, nextFresh = s0.nextFresh)
         if (s0.status) {
           m = stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
-            AST.Util.deBruijn(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps))
+            AST.Util.normalizeFun(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps))
           return (s0, m)
         } else {
           return (s0, stateMap._2)
@@ -3119,7 +3119,7 @@ import Util._
           s0 = p._1
           m  = p._2
           sub match {
-            case sub: AST.ProofAst.Step.Regular if s0.status => provenClaims = provenClaims + sub.claimDeBruijn
+            case sub: AST.ProofAst.Step.Regular if s0.status => provenClaims = provenClaims + sub.claimNorm
             case _ =>
           }
         }
@@ -3127,7 +3127,7 @@ import Util._
         if (!s0.status) {
           return (s0(status = F), stateMap._2)
         }
-        if (!provenClaims.contains(step.claimDeBruijn)) {
+        if (!provenClaims.contains(step.claimNorm)) {
           reporter.error(step.claim.posOpt, Logika.kind, "The claim is not proven in the assertion's sub-proof")
           return (s0(status = F), stateMap._2)
         }
@@ -3145,7 +3145,7 @@ import Util._
           if (step.steps.nonEmpty && step.steps(0).isInstanceOf[AST.ProofAst.Step.Assume]) {
             return (s0,
               stateMap._2 + stepNo ~> StepProofContext.FreshAssumeSubProof(stepNo, step.params,
-                AST.Util.deBruijn(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim),
+                AST.Util.normalizeFun(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim),
                 extractClaims(step.steps)))
           } else {
             return (s0,
@@ -3537,8 +3537,8 @@ import Util._
           }
           st0 = s0(status = p._1.status, nextFresh = p._1.nextFresh, claims = s0.claims)
           val provenClaims = HashSet ++ (for (spc <- p._2.values if spc.isInstanceOf[StepProofContext.Regular]) yield
-            AST.Util.deBruijn(spc.asInstanceOf[StepProofContext.Regular].exp))
-          if (st0.status && !provenClaims.contains(AST.Util.deBruijn(sequent.conclusion))) {
+            AST.Util.normalizeFun(spc.asInstanceOf[StepProofContext.Regular].exp))
+          if (st0.status && !provenClaims.contains(AST.Util.normalizeFun(sequent.conclusion))) {
             reporter.error(sequent.conclusion.posOpt, Logika.kind, "The sequent's conclusion has not been proven")
             st0 = st0(status = F)
           }

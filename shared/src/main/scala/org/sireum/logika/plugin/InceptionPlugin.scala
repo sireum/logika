@@ -169,14 +169,14 @@ object InceptionPlugin {
         var provenClaims = HashMap.empty[AST.Exp, (AST.ProofAst.StepId, AST.Exp)]
         for (spc <- spcMap.values) {
           spc match {
-            case spc: StepProofContext.Regular => provenClaims = provenClaims + AST.Util.deBruijn(spc.exp) ~> ((spc.stepNo, spc.exp))
+            case spc: StepProofContext.Regular => provenClaims = provenClaims + AST.Util.normalizeFun(spc.exp) ~> ((spc.stepNo, spc.exp))
             case _ =>
           }
         }
         var ok = T
         for (require <- requires) {
           val req = ips.transformExp(require).getOrElseEager(require)
-          val stepNoExpOpt = provenClaims.get(AST.Util.deBruijn(req))
+          val stepNoExpOpt = provenClaims.get(AST.Util.normalizeFun(req))
           val pos = require.posOpt.get
           if (ips.reporter.messages.isEmpty && stepNoExpOpt.isEmpty) {
             reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying ${mi.methodRes.id}'s assumption at [${pos.beginLine}, ${pos.beginColumn}]")
@@ -199,7 +199,7 @@ object InceptionPlugin {
         var ok = T
         for (w <- just.witnesses) {
           spcMap.get(w) match {
-            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + AST.Util.deBruijn(spc.exp) ~> ((spc.stepNo, spc.exp))
+            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + AST.Util.normalizeFun(spc.exp) ~> ((spc.stepNo, spc.exp))
             case Some(_) =>
               reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step $w as an argument for inception")
               ok = F
@@ -218,7 +218,7 @@ object InceptionPlugin {
         }
         for (i <- 0 until rs.size) {
           val pos = requires(i).posOpt.get
-          val require = AST.Util.deBruijn(rs(i))
+          val require = AST.Util.normalizeFun(rs(i))
           witnesses.get(require) match {
             case Some((stepNo, exp)) =>
               evidence = evidence :+
@@ -241,11 +241,11 @@ object InceptionPlugin {
       }
       @pure def esMapEntry(ensure: AST.Exp): (AST.Exp, (Position, AST.Exp, AST.Exp)) = {
         val tensure = ips.transformExp(ensure).getOrElseEager(ensure)
-        val dbensure = AST.Util.deBruijn(tensure)
+        val dbensure = AST.Util.normalizeFun(tensure)
         return (dbensure, (ensure.posOpt.get, ensure, tensure))
       }
       val esMap = HashMap ++ (for (e <- ensures) yield esMapEntry(e))
-      val ePosExpTExpOpt = esMap.get(step.claimDeBruijn)
+      val ePosExpTExpOpt = esMap.get(step.claimNorm)
       if (ePosExpTExpOpt.isEmpty) {
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from any of ${mi.methodRes.id}'s conclusions".render)
         return emptyResult
