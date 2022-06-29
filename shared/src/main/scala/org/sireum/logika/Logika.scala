@@ -1971,14 +1971,13 @@ import Util._
                   if (ops.ISZOps(okCcrs).forall((ccr: Context.ContractCaseResult) => ccr.state.claims(i) == rootClaim)) {
                     claims = claims :+ rootClaim
                   } else {
-                    claims = claims :+ State.Claim.And(
-                      for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim, ccr.state.claims(i))))
+                    val implies: ISZ[State.Claim] = for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim, ccr.state.claims(i)))
+                    claims = claims ++ implies
                   }
                 }
-                claims = claims :+ State.Claim.And(
-                  for (ccr <- okCcrs) yield
-                    State.Claim.Imply(ISZ(ccr.requiresClaim,
-                      State.Claim.And(for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i)))))
+                val implies: ISZ[State.Claim] = for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
+                  State.Claim.And(for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i))))
+                claims = claims ++ implies
                 claims = claims :+ State.Claim.Or(for (ccr <- okCcrs) yield ccr.requiresClaim)
                 s1 = s1(claims = claims)
                 if (isUnit) {
@@ -1986,9 +1985,9 @@ import Util._
                 } else {
                   val (s8, sym) = s1.freshSym(retType, pos)
                   s1 = s8
-                  r = r :+ ((s1(nextFresh = nextFresh).addClaim(State.Claim.And(
+                  r = r :+ ((s1(nextFresh = nextFresh).addClaims(
                     for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
-                      State.Claim.Let.Eq(sym, ccr.retVal))))), sym))
+                      State.Claim.Let.Eq(sym, ccr.retVal)))), sym))
                 }
               }
             }
