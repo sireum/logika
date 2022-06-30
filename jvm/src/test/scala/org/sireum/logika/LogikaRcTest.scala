@@ -34,8 +34,17 @@ class LogikaRcTest extends SireumRcSpec {
   val failPrefix: Predef.String = "zfail$"
   val failDemoSuffix: Predef.String = "-demo-fail.sc"
 
-  def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = $internal.RC.text(Vector("example")) { (p, f) =>
-    p.last.endsWith(".sc") && !p.last.startsWith("wip-")
+  lazy val hasAltErgo: B = Os.env("SIREUM_HOME") match {
+    case Some(sireumHome) =>
+      val m = Smt2Invoke.nameExePathMap(Os.path(sireumHome))
+      val r = m.contains("alt-ergo")
+      r
+    case _ => F
+  }
+
+  def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = {
+    val m = $internal.RC.text(Vector("example")) { (p, f) => p.last.endsWith(".sc") && !p.last.startsWith("wip-") }
+    for ((k, v) <- m if hasAltErgo || k.last != "count.sc") yield (k, v)
   }
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
