@@ -460,33 +460,44 @@ object Smt2 {
 
   def addStrictPureMethod(pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value.Sym)],
                           statePrefix: Z, reporter: Reporter): Unit = {
-    val id = proofFunId(pf)
     val context = pf.context :+ pf.id
     val thisId = currentLocalIdString(context, "this")
-    val resId = currentLocalIdString(context, "Res")
     var paramTypes: ISZ[ST] = for (pt <- pf.paramTypes) yield typeId(pt)
     var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(context, id)
     var paramThTypes: ISZ[ST] = for (p <- ops.ISZOps(pf.paramTypes).zip(paramIds) if isAdtType(p._1)) yield
       st"(sub-type (type-of ${p._2}) ${typeHierarchyId(p._1)})"
     var params: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
+    var paramTypeIds = ops.ISZOps(pf.paramTypes).zip(pf.paramIds)
     pf.receiverTypeOpt match {
       case Some(receiverType) =>
         val thisType = typeId(receiverType)
         paramThTypes = st"(sub-type (type-of $thisId) ${typeHierarchyId(receiverType)})" +: paramThTypes
         paramTypes = thisType +: paramTypes
         paramIds = st"$thisId" +: paramIds
+        paramTypeIds = ((receiverType, "this")) +: paramTypeIds
         params = st"($thisId $thisType)" +: params
       case _ =>
     }
     val (decl, declClaim) = strictPureMethods.get(pf).get
 
     var ecs = ISZ[ST]()
-    val resEq: ST = if (paramIds.isEmpty) st"(= $resId $id)" else st"(= $resId ($id ${(paramIds, " ")}))"
     for (sv <- svs if sv._1.status) {
       val (s0, v) = sv
-      val s1 = s0.addClaim(State.Claim.Let.CurrentId(F, v, context, "Res", None()))
-      val claims = ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)
-      ecs = ecs :+ embeddedClaims(T, claims, ISZ(v), None(), HashSMap.empty)
+      var s1 = s0
+      var args = ISZ[State.Value]()
+      for (ptid <- paramTypeIds) {
+        val (pt, pid) = ptid
+        val (s2, v2) = idIntro(pos, s1, context, pid, pt, None())
+        args = args :+ v2
+        s1 = s2
+      }
+      val (s3, v3) = s1.freshSym(pf.returnType, pos)
+      s1 = s3.addClaim(State.Claim.Let.ProofFunApply(v3, pf, args))
+      val claims = State.Claim.Imply(ISZ(
+        State.Claim.And(ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)),
+        State.Claim.Let.Eq(v, v3)
+      ))
+      ecs = ecs :+ embeddedClaims(T, ISZ(claims), ISZ(), None(), HashSMap.empty)
     }
 
     val ec: ST = if (ecs.isEmpty) {
@@ -502,14 +513,27 @@ object Smt2 {
           |  ${(ecs, "\n")})"""
     }
 
-    val claim: ST = {
-      st"""$declClaim
-          |(assert (forall (${(params, " ")} ($resId ${adtId(pf.returnType)}))
-          |  (=>
-          |    $resEq
-          |    ${(paramThTypes, "\n")}
-          |    $ec)))"""
-    }
+    val claim: ST =
+      if (paramThTypes.nonEmpty)
+        if (params.nonEmpty)
+          st"""$declClaim
+              |(assert (forall (${(params, " ")})
+              |  (=>
+              |    ${(paramThTypes, "\n")}
+              |    $ec)))"""
+        else
+          st"""$declClaim
+              |(assert (=>
+              |  ${(paramThTypes, "\n")}
+              |  $ec))"""
+      else
+        if (params.nonEmpty)
+          st"""$declClaim
+              |(assert (forall (${(params, " ")})
+              |  $ec))"""
+        else
+          st"""$declClaim
+              |(assert $ec)"""
 
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, claim)))
   }
