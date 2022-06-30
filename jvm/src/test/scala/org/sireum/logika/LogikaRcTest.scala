@@ -42,16 +42,22 @@ class LogikaRcTest extends SireumRcSpec {
     case _ => F
   }
 
+  def shouldIgnore(name: Predef.String): Boolean = name match {
+    case "count.sc" if !hasAltErgo => true
+    case "collection.sc" if Os.isMac && Os.env("GITHUB_WORKSPACE").nonEmpty => true
+    case _ => false
+  }
+
   def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = {
     val m = $internal.RC.text(Vector("example")) { (p, f) => p.last.endsWith(".sc") && !p.last.startsWith("wip-") }
-    for ((k, v) <- m if hasAltErgo || k.last != "count.sc") yield (k, v)
+    for ((k, v) <- m if !shouldIgnore(k.last)) yield (k, v)
   }
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
     val reporter = Logika.Reporter.create
     var c = config
     path(path.size - 1) match {
-      case "collection.sc" | "strictpure.sc" => c = c(smt2Configs = for (c <- c.smt2Configs if c.name =!= "alt-ergo") yield c, timeoutInMs = 8000)
+      case "collection.sc" | "strictpure.sc" => c = c(smt2Configs = for (c <- c.smt2Configs if c.name =!= "alt-ergo") yield c, timeoutInMs = 5000)
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last).string))
