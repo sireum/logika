@@ -116,7 +116,7 @@ object Logika {
   val libraryDesc: String = "Library"
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
-  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
+  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), FactPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
     (F, AST.Typed.isName, "firstIndex"), (F, AST.Typed.msName, "firstIndex"),
@@ -1537,6 +1537,11 @@ import Util._
               extractResolvedInfo(mi.ast.attr), extractAssignExpOpt(mi))
           case Some(mi: lang.symbol.Info.ExtMethod) =>
             return Context.InvokeMethodInfo(T, mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), None())
+          case Some(mi: lang.symbol.Info.SpecMethod) =>
+            val typedAttr = AST.TypedAttr(mi.ast.sig.id.attr.posOpt, mi.ast.sig.returnType.typedOpt)
+            return Context.InvokeMethodInfo(T, mi.ast.sig, AST.MethodContract.Simple.empty,
+              extractResolvedInfo(mi.ast.attr), Some(AST.Stmt.Expr(
+                AST.Exp.Result(None(), typedAttr), typedAttr)))
           case info => halt(s"Infeasible: $owner.$id => $info")
         }
       } else {
@@ -3668,6 +3673,7 @@ import Util._
         case _: AST.Stmt.Adt => return ISZ(state)
         case _: AST.Stmt.Sig => return ISZ(state)
         case _: AST.Stmt.TypeAlias => return ISZ(state)
+        case _: AST.Stmt.Fact => return ISZ(state)
         case _ =>
           reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
           return ISZ(state(status = F))

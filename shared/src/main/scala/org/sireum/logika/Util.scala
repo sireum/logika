@@ -149,8 +149,12 @@ object Util {
     }
 
     override def postExpEta(o: AST.Exp.Eta): MOption[AST.Exp] = {
-      if (reporter.messages.isEmpty && !o.typedOpt.get.asInstanceOf[AST.Typed.Fun].isPureFun) {
-        reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $o")
+      if (reporter.messages.isEmpty) {
+        o.typedOpt.get match {
+          case t: AST.Typed.Fun if !t.isPureFun =>
+            reporter.warn(posOpt, Logika.kind, s"Verification of $id was skipped due to impure function (currently unsupported): $o")
+          case _ =>
+        }
       }
       return AST.MTransformer.PostResultExpEta
     }
@@ -704,9 +708,12 @@ object Util {
           s0 = s0_2
         }
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
-        val svs = logika.evalAssignExpValue(split, smt2, cache, pf.returnType, T, s0, body, reporter)
+        val svs: ISZ[(State, State.Value)] = body match {
+          case AST.Stmt.Expr(_: AST.Exp.Result) => ISZ()
+          case _ => logika.evalAssignExpValue(split, smt2, cache, pf.returnType, T, s0, body, reporter)
+        }
         var sss = ISZ[(State, State.Value.Sym)]()
-        var maxFresh: Z = -1
+        var maxFresh: Z = s0.nextFresh
         for (sv <- svs) {
           val (s, v) = sv
           val (s2, sym) = logika.value2Sym(s, v, pos)
@@ -715,11 +722,13 @@ object Util {
             maxFresh = s2.nextFresh
           }
         }
-        assert(maxFresh >= 0)
+        assert(svs.isEmpty || maxFresh >= 0)
         (for (ss <- sss) yield (ss._1(nextFresh = maxFresh), ss._2), maxFresh)
       }
 
-      smt2.addStrictPureMethod(pos, pf, svs, 0, reporter)
+      if (svs.nonEmpty) {
+        smt2.addStrictPureMethod(pos, pf, svs, 0, reporter)
+      }
 
       val s1 = state(nextFresh = maxFresh)
       if (config.sat) {
