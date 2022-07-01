@@ -51,6 +51,31 @@ object Task {
     }
   }
 
+  @datatype class Fact(val th: TypeHierarchy,
+                       val config: Config,
+                       val fact: AST.Stmt.Fact,
+                       val plugins: ISZ[Plugin]) extends Task {
+    override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
+      val logika = Logika(th, config, Context.empty, plugins)
+      val fsmt2 = smt2
+      var s0 = State.create
+      for (claim <- fact.claims if s0.status) {
+        val pos = claim.posOpt.get
+        val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, fsmt2, cache, T, s0, claim, reporter)
+        val (s2, sym) = logika.value2Sym(s1, v, pos)
+        val s3 = s2.addClaim(State.Claim.Prop(T, sym))
+        if (fsmt2.satResult(cache, T, config.logVc, config.logVcDirOpt, "Fact claim", pos,
+          s3.claims, reporter)._2.kind == Smt2Query.Result.Kind.Unsat) {
+          reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
+          s0 = s3(status = F)
+        } else {
+          s0 = s3
+        }
+      }
+      return reporter.messages
+    }
+  }
+
   @datatype class Stmts(val th: TypeHierarchy,
                         val config: Config,
                         val stmts: ISZ[AST.Stmt],

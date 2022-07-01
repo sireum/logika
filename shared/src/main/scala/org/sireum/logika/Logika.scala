@@ -160,6 +160,18 @@ object Logika {
       var ownerTasks = ISZ[Task]()
       for (stmt <- stmts) {
         stmt match {
+          case stmt: AST.Stmt.Fact =>
+            if (ownerPosOpt.nonEmpty) {
+              ownerTasks = ownerTasks :+ Task.Fact(th, config, stmt, plugins)
+            } else {
+              val pos = stmt.posOpt.get
+              val ownerPos = (pos.beginLine, pos.beginColumn)
+              val tasks: ISZ[Task] = taskMap.get(ownerPos) match {
+                case Some(ts) => ts
+                case _ => ISZ()
+              }
+              taskMap = taskMap + ownerPos ~> (tasks :+ Task.Fact(th, config, stmt, plugins))
+            }
           case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty && !noMethods(owner, stmt.sig.id.value) =>
             if (ownerPosOpt.nonEmpty) {
               stmt.mcontract match {
@@ -209,7 +221,7 @@ object Logika {
     }
 
     def findTasks(): ISZ[Task] = {
-      def findMethodTasks(): ISZ[Task] = {
+      def findMethodFactTasks(): ISZ[Task] = {
         var r = ISZ[Task]()
         if (line <= 0) {
           return r
@@ -218,6 +230,11 @@ object Logika {
           t match {
             case t: Task.Method =>
               val pos = t.method.posOpt.get
+              if (pos.beginLine <= line && line <= pos.endLine) {
+                r = r :+ t
+              }
+            case t: Task.Fact =>
+              val pos = t.fact.posOpt.get
               if (pos.beginLine <= line && line <= pos.endLine) {
                 r = r :+ t
               }
@@ -238,7 +255,7 @@ object Logika {
         }
         return ISZ()
       }
-      var r = findMethodTasks()
+      var r = findMethodFactTasks()
       if (r.nonEmpty) {
         return r
       }
