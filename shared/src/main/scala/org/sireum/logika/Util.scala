@@ -165,7 +165,8 @@ object Util {
                                var hasThis: B,
                                var resultOpt: Option[(AST.Exp, AST.Exp.Ident)],
                                var map: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)],
-                               var inputMap: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)])
+                               var inputMap: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)],
+                               var invokeIdents: HashSet[AST.Exp.Ident])
     extends AST.MTransformer {
     def introIdent(o: AST.Exp, res: AST.ResolvedInfo, id: AST.Id, typedOpt: Option[AST.Typed]): MOption[AST.Exp] = {
       map.get(res) match {
@@ -209,6 +210,16 @@ object Util {
       halt("Non-simple input")
     }
 
+    override def preExpInvoke(o: AST.Exp.Invoke): AST.MTransformer.PreResult[AST.Exp] = {
+      invokeIdents = invokeIdents + o.ident
+      return AST.MTransformer.PreResultExpInvoke
+    }
+
+    override def preExpInvokeNamed(o: AST.Exp.InvokeNamed): AST.MTransformer.PreResult[AST.Exp] = {
+      invokeIdents = invokeIdents + o.ident
+      return AST.MTransformer.PreResultExpInvokeNamed
+    }
+
     override def postExpResult(o: AST.Exp.Result): MOption[AST.Exp] = {
       val id = AST.Id("return", AST.Attr(o.posOpt))
       val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
@@ -218,6 +229,9 @@ object Util {
     }
 
     override def postExpIdent(o: AST.Exp.Ident): MOption[AST.Exp] = {
+      if (invokeIdents.contains(o)) {
+        return AST.MTransformer.PostResultExpIdent
+      }
       o.attr.resOpt.get match {
         case res: AST.ResolvedInfo.Var =>
           if (res.isInObject) {
@@ -233,6 +247,45 @@ object Util {
         case _ =>
       }
       return AST.MTransformer.PostResultExpIdent
+    }
+
+    def invokeIdentH(ident: AST.Exp.Ident): Option[(Option[AST.Exp], AST.Exp.Ident, ISZ[AST.Type])] = {
+      invokeIdents = invokeIdents - ident
+      postExpIdent(ident) match {
+        case MSome(exp: AST.Exp.Ident) => return Some((None(), exp, ISZ()))
+        case MSome(exp: AST.Exp.Select) => return Some((exp.receiverOpt, AST.Exp.Ident(exp.id, exp.attr), exp.targs))
+        case _ =>
+      }
+      return None()
+    }
+
+    override def postExpInvoke(o: AST.Exp.Invoke): MOption[AST.Exp] = {
+      invokeIdentH(o.ident) match {
+        case Some((Some(receiver), ident, targs)) =>
+          val rident = receiver.asInstanceOf[AST.Exp.Ident]
+          o.receiverOpt match {
+            case Some(rcv) =>
+              return MSome(o(receiverOpt = Some(AST.Exp.Select(Some(rcv), rident.id, targs, rident.attr)), ident = ident))
+            case _ => return MSome(o(receiverOpt = Some(receiver), ident = ident))
+          }
+        case Some((_, ident, _)) => return MSome(o(ident = ident))
+        case _ =>
+      }
+      return AST.MTransformer.PostResultExpInvoke
+    }
+
+    override def postExpInvokeNamed(o: AST.Exp.InvokeNamed): MOption[AST.Exp] = {
+      invokeIdentH(o.ident) match {
+        case Some((Some(receiver), ident, targs)) =>
+          val rident = receiver.asInstanceOf[AST.Exp.Ident]
+          o.receiverOpt match {
+            case Some(rcv) => return MSome(o(receiverOpt = Some(AST.Exp.Select(Some(rcv), rident.id, targs, rident.attr)), ident = ident))
+            case _ => return MSome(o(receiverOpt = Some(receiver), ident = ident))
+          }
+        case Some((_, ident, _)) => return MSome(o(ident = ident))
+        case _ =>
+      }
+      return AST.MTransformer.PostResultExpInvokeNamed
     }
 
     override def postExpThis(o: AST.Exp.This): MOption[AST.Exp] = {
@@ -760,7 +813,7 @@ object Util {
     val posOpt = exp.posOpt
     val tOpt = exp.typedOpt
     val t = tOpt.get
-    val vs = VarSubstitutor(owner :+ id, receiverTypeOpt, F, None(), HashSMap.empty, HashSMap.empty)
+    val vs = VarSubstitutor(owner :+ id, receiverTypeOpt, F, None(), HashSMap.empty, HashSMap.empty, HashSet.empty)
     val newExp = vs.transformExp(exp).getOrElse(exp)
     if (vs.hasThis || vs.map.nonEmpty) {
       var paramIds = ISZ[AST.Id]()
