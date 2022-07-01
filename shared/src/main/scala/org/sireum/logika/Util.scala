@@ -767,7 +767,7 @@ object Util {
         }
         var sss = ISZ[(State, State.Value.Sym)]()
         var maxFresh: Z = s0.nextFresh
-        var status = F
+        var status = svs.isEmpty
         for (sv <- svs) {
           val (s, v) = sv
           if (s.status) {
