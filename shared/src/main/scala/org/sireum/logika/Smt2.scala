@@ -229,6 +229,16 @@ object Smt2 {
     }
     return Either.Left(r)
   }
+
+  @pure def isSimpsOp(l: State.Claim.Let.Binary): B = {
+    if (!imsOps.contains(l.op)) {
+      return F
+    }
+    l.tipe match {
+      case t: AST.Typed.Name => return t.ids == AST.Typed.isName || t.ids == AST.Typed.msName
+      case _ => return F
+    }
+  }
 }
 
 @msig trait Smt2 {
@@ -1604,7 +1614,7 @@ object Smt2 {
 
       for (i <- 0 until claims.size) {
         claims(i) match {
-          case claim: State.Claim.Let.Binary if Smt2.imsOps.contains(claim.op) => rest = rest :+ claim
+          case claim: State.Claim.Let.Binary if Smt2.isSimpsOp(claim) => syms = syms :+ claim.sym; rest = rest :+ claim
           case claim: State.Claim.Let if i != claims.size - 1 => lsyms = lsyms :+ claim.sym; lets = lets :+ claim
           case claim: State.Claim.Let => syms = syms :+ claim.sym; rest = rest :+ claim
           case claim: State.Claim.If => syms = collectSyms(claim, syms); rest = rest :+ claim
@@ -1748,7 +1758,8 @@ object Smt2 {
           st"""(exists (${(qvars, " ")})
               |  $body
               |)"""
-      case c: State.Claim.Let.Binary => return st"(${typeOpId(c.tipe, c.op)} ${v2st(c.left)} ${v2st(c.right)})"
+      case c: State.Claim.Let.Binary =>
+        return if (Smt2.isSimpsOp(c)) v2ST(c.sym) else st"(${typeOpId(c.tipe, c.op)} ${v2st(c.left)} ${v2st(c.right)})"
       case c: State.Claim.Let.Unary =>
         return st"(${typeOpId(c.sym.tipe, s"unary_${c.op}")} ${v2st(c.value)})"
       case c: State.Claim.Let.SeqLookup =>
@@ -1792,21 +1803,14 @@ object Smt2 {
         return None()
       case c: State.Claim.Let =>
         c match {
+          case c: State.Claim.Let.Binary if Smt2.isSimpsOp(c) =>
+            return Some(st"(${typeOpId(c.tipe, c.op)} ${v2st(c.left)} ${v2st(c.right)} ${v2st(c.sym)})")
           case c: State.Claim.Let.CurrentId if c.declId =>
           case _ =>
             lets.get(c.sym.num) match {
               case Some(ls) if ls.size == 1 => return None()
               case _ =>
             }
-        }
-        c match {
-          case c: State.Claim.Let.Binary if Smt2.imsOps.contains(c.op) =>
-            c.tipe match {
-              case t: AST.Typed.Name if t.ids == AST.Typed.isName || t.ids == AST.Typed.msName =>
-                return Some(st"(${typeOpId(t, c.op)} ${v2st(c.left)} ${v2st(c.right)} ${v2st(c.sym)})")
-              case _ =>
-            }
-          case _ =>
         }
         val rhs: ST = c match {
           case c: State.Claim.Let.CurrentName =>

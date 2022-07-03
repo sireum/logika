@@ -311,10 +311,8 @@ object Util {
 
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
       o match {
-        case o: State.Claim.Let.Binary if Smt2.imsOps.contains(o.op) =>
-          syms = syms + o.sym
-          return MStateTransformer.PreResultStateClaimProp
-        case o: State.Claim.Let.CurrentId if o.declId => return MStateTransformer.PreResultStateClaimProp
+        case o: State.Claim.Let.Binary if Smt2.isSimpsOp(o) => syms = syms + o.sym
+        case o: State.Claim.Let.CurrentId if o.declId =>
         case o: State.Claim.Let =>
           if (o.isInstanceOf[State.Claim.Let.Random]) {
             syms = syms + o.sym
@@ -322,10 +320,9 @@ object Util {
           val key = o.sym.num
           val s = value.get(key).getOrElse(HashSet.empty) + o
           value = value + key ~> s
-          return MStateTransformer.PreResult(F, MNone())
         case _ =>
-          return MStateTransformer.PreResultStateClaimProp
       }
+      return MStateTransformer.PreResultStateClaimProp
     }
   }
 
