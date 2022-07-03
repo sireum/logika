@@ -77,9 +77,9 @@ object Smt2 {
   val imsOps: HashSet[String] =
     HashSet.empty[String] ++
       ISZ(
-        AST.Exp.BinaryOp.Append,
+        //AST.Exp.BinaryOp.Append,
         AST.Exp.BinaryOp.AppendAll,
-        AST.Exp.BinaryOp.Prepend,
+        //AST.Exp.BinaryOp.Prepend,
         AST.Exp.BinaryOp.RemoveAll,
       )
 
@@ -777,13 +777,18 @@ object Smt2 {
         addSTypeDecl(st"(assert (forall ((o $tId) (i $itId)) (=> ${thidTypeOpt("o")} ($isInBoundId o i) (sub-type (type-of ($atId o i)) $etThid))))")
       }
       addSTypeDecl(
-        st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
-            |  (and
-            |    ${thidTypeOpt("z")}
-            |    ($itEqId ($sizeId z) ($zAddId ($sizeId x) $zOne))
-            |    (forall ((i $itId)) (=> ($isInBoundId x i)
-            |                        (= ($atId z i) ($atId x i))))
-            |    (= ($atId z ($lastIndexId z)) y)))""")
+        st"""(declare-fun $appendId ($tId $etId) $tId)
+            |(assert (forall ((x $tId) (y $etId) (z $tId))
+            |  (=>
+            |    ${thidTypeOpt("x")}
+            |    ${etThidSubtypeOpt("y")}
+            |    (= z ($appendId x y))
+            |    (and
+            |      ${thidTypeOpt("z")}
+            |      ($itEqId ($sizeId z) ($zAddId ($sizeId x) $zOne))
+            |      (forall ((i $itId)) (=> ($isInBoundId x i)
+            |                          (= ($atId z i) ($atId x i))))
+            |      (= ($atId z ($lastIndexId z)) y)))))""")
       addSTypeDecl(
         st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
             |  (and
@@ -794,13 +799,18 @@ object Smt2 {
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId ($itAddId ($lastIndexId x) ($itSubId i ($firstIndexId y))) $itOne)) ($atId y i))))))""")
       addSTypeDecl(
-        st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
-            |  (and
-            |    ${thidTypeOpt("z")}
-            |    (= ($sizeId z) ($zAddId ($sizeId y) 1))
-            |    (forall ((i $itId)) (=> ($isInBoundId y i)
-            |                            (= ($atId z ($itAddId i $itOne)) ($atId y i))))
-            |    (= ($atId z ($firstIndexId z)) x)))""")
+        st"""(declare-fun $prependId ($etId $tId) $tId)
+            |(assert (forall ((x $etId) (y $tId) (z $tId))
+            |  (=>
+            |    ${etThidSubtypeOpt("x")}
+            |    ${thidTypeOpt("y")}
+            |    (= z ($prependId x y))
+            |    (and
+            |      ${thidTypeOpt("z")}
+            |      (= ($sizeId z) ($zAddId ($sizeId y) 1))
+            |      (forall ((i $itId)) (=> ($isInBoundId y i)
+            |                              (= ($atId z ($itAddId i $itOne)) ($atId y i))))
+            |      (= ($atId z ($firstIndexId z)) x)))))""")
       addSTypeDecl(
         st"""(declare-fun $upId ($tId $itId $etId) $tId)
             |(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
