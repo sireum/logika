@@ -1,7 +1,7 @@
 // #Sireum #Logika
 
 import org.sireum._
-import org.sireum.justification.{Auto, Lift}
+import org.sireum.justification.{Auto, Lift, Premise}
 import org.sireum.justification.natded.prop.ImplyI
 
 @strictpure def isOrdered(seq: ZS): B = All(0 until seq.size - 1)(i => seq(i) <= seq(i + 1))
@@ -38,7 +38,14 @@ import org.sireum.justification.natded.prop.ImplyI
         m <= seq.size,
         All(n until m)(j => seq(n) <= seq(j))
       )
+      Deduce(|- (All(n until m)(j => seq(n) <= seq(j)))) // required when SMT2 query is simplified
       m = m + 1
+      Deduce(                                                 // required when SMT2 query is simplified
+        //@formatter:off
+        1 #> All(n until m - 1)(j => seq(n) <= seq(j))  by Premise,
+        2 #> ((m - 2 >= 0) -->: (seq(m - 2) <= seq(m - 1)))  by Premise
+        //@formatter:on
+      )
     }
     n = n + 1
   }

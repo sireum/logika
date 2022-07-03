@@ -54,5 +54,8 @@ def swapZS2(s: ZS, i: Z, j: Z): Unit = {
     s(i) = s(i) + s(j)
     s(j) = s(i) - s(j)
     s(i) = s(i) - s(j)
+    Deduce(|- (All{ k: Z => (0 <= k & k < s.size) -->: (k != i & k != j) ->: (s(k) == In(s)(k)) })) // required when SMT2 query is simplified
+  } else {
+    Deduce(|- (All{ k: Z => (0 <= k & k < s.size) -->: (k != i & k != j) ->: (s(k) == In(s)(k)) })) // require when SMT2 query is simplified
   }
 }

@@ -40,7 +40,7 @@ object LogikaTest {
   val config: Config =
     Config(
       smt2Configs =
-        Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, s"${Smt2.defaultValidOpts}; ${Smt2.altErgoDefaultValidOpts}", timeoutInMs, rlimit).left ++
+        Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, s"${Smt2.defaultValidOpts}; ${Smt2.altErgoOpenDefaultValidOpts}; ${Smt2.altErgoDefaultValidOpts}", timeoutInMs, rlimit).left ++
           Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, 500, rlimit).left,
       sat = T,
       rlimit = rlimit,

@@ -29,15 +29,22 @@ import org.sireum._
 import org.sireum.test._
 import LogikaTest._
 
-class LogikaRcTest extends SireumRcSpec {
+object LogikaRcTest {
 
   val failPrefix: Predef.String = "zfail$"
   val failDemoSuffix: Predef.String = "-demo-fail.sc"
+  val simplifiedPrefix: Predef.String = " (simplified)"
+
+}
+
+import LogikaRcTest._
+
+class LogikaRcTest extends SireumRcSpec {
 
   lazy val hasAltErgo: B = Os.env("SIREUM_HOME") match {
     case Some(sireumHome) =>
       val m = Smt2Invoke.nameExePathMap(Os.path(sireumHome))
-      val r = m.contains("alt-ergo")
+      val r = m.contains("alt-ergo") || m.contains("alt-ergo-open")
       r
     case _ => F
   }
@@ -50,24 +57,26 @@ class LogikaRcTest extends SireumRcSpec {
 
   def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = {
     val m = $internal.RC.text(Vector("example")) { (p, f) => p.last.endsWith(".sc") && !p.last.startsWith("wip-") }
-    for ((k, v) <- m if !shouldIgnore(k.last)) yield (k, v)
+    for ((k, v) <- m if !shouldIgnore(k.last); pair <- Seq((k, v), (k.dropRight(1) :+ s"${k.last}$simplifiedPrefix", v))) yield pair
   }
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
+    val isSimplified = path.last.endsWith(simplifiedPrefix)
+    val p = if (isSimplified) path.dropRight(1) :+ path.last.replace(simplifiedPrefix, "") else path
     val reporter = Logika.Reporter.create
-    var c = config
-    path(path.size - 1) match {
-      case "collection.sc" | "strictpure.sc" => c = c(smt2Configs = for (c <- c.smt2Configs if c.name =!= "alt-ergo") yield c, timeoutInMs = 5000)
+    var c = config(simplifiedQuery = isSimplified)
+    p(p.size - 1) match {
+      case "collection.sc" | "strictpure.sc" => c = c(timeoutInMs = 5000)
       case _ =>
     }
-    //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last).string))
-    val p = Os.path(path.mkString(Os.fileSep.value))
-    Logika.checkScript(Some(p.string), content, c,
+    //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))
+    val f = Os.path(p.mkString(Os.fileSep.value))
+    Logika.checkScript(Some(f.string), content, c,
       th => Smt2Impl.create(c.smt2Configs, th, c.timeoutInMs, c.fpRoundingMode, c.charBitWidth,
         c.intBitWidth, c.useReal, c.simplifiedQuery, c.smt2Seq, reporter),
       Smt2.NoCache(), reporter, 0, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     reporter.printMessages()
-    val name = p.name.value
+    val name = f.name.value
     if (name.startsWith(failPrefix)) {
       val j = name.indexOf('$', failPrefix.length)
       val key = name.substring(failPrefix.length, j)

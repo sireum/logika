@@ -37,7 +37,7 @@ object Smt2Impl {
              reporter: Logika.Reporter): Smt2 = {
     val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, smt2Seq,
       fpRoundingMode, configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
-      ISZ(), HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
+      ISZ(), HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty, HashSet.empty)
     r.addType(AST.Typed.z, reporter)
     return r
   }
@@ -64,7 +64,8 @@ object Smt2Impl {
                        var shortIds: HashMap[ISZ[String], ISZ[String]],
                        var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)],
                        var filenameCount: HashMap[String, Z],
-                       var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
+                       var seqLits: HashSSet[Smt2.SeqLit],
+                       var typeOfSeqSet: HashSet[(String, AST.Typed)]) extends Smt2 {
 
   def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
     shortIds = newShortIds
@@ -108,6 +109,10 @@ object Smt2Impl {
 
   def strictPureMethodsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit = {
     strictPureMethods = newProofFuns
+  }
+
+  def typeOfSeqSetUp(newTypeOfSeqSet: HashSet[(String, AST.Typed)]): Unit = {
+    typeOfSeqSet = newTypeOfSeqSet
   }
 
   def writeFile(dir: String, filename: String, content: String): Unit = {

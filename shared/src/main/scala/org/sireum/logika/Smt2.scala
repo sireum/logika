@@ -85,6 +85,7 @@ object Smt2 {
 
   val stTrue: ST = st"true"
   val stFalse: ST = st"false"
+  val symPrefix: String = "cx!"
 
   @strictpure def cST(charBitWidth: Z): ST =
     st"""(define-sort C () (_ BitVec $charBitWidth))
@@ -169,6 +170,10 @@ object Smt2 {
 
   val altErgoDefaultSatOpts: String = "alt-ergo"
 
+  val altErgoOpenDefaultValidOpts: String = "alt-ergo-open"
+
+  val altErgoOpenDefaultSatOpts: String = "alt-ergo-open"
+
   val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts"
 
   val defaultSatOpts: String = s"$cvc4DefaultSatOpts; $z3DefaultSatOpts; $cvc5DefaultSatOpts"
@@ -186,7 +191,13 @@ object Smt2 {
         if (timeoutInMs % 1000 != 0) {
           timeoutInS = timeoutInS + 1
         }
-        return Some(ISZ("-i", "smtlib2", "--use-fpa", "-S", s"$rlimit", s"-t", s"$timeoutInS"))
+        return Some(ISZ("-default-lang", "smt2", "-use-fpa", "-steps-bound", rlimit.string, "-timelimit", timeoutInS.string))
+      case string"alt-ergo-open" =>
+        var timeoutInS: Z = timeoutInMs / 1000
+        if (timeoutInMs % 1000 != 0) {
+          timeoutInS = timeoutInS + 1
+        }
+        return Some(ISZ("-default-lang", "smt2", "-use-fpa", "-steps-bound", rlimit.string, "-timelimit", timeoutInS.string))
       case string"cvc4" => return Some(ISZ("--lang=smt2.6", s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
       case string"cvc5" => return Some(ISZ("--lang=smt2.6", s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
       case string"z3" => return Some(ISZ("-smt2", "-in", s"rlimit=$rlimit", s"-t:$timeoutInMs"))
@@ -357,6 +368,10 @@ object Smt2 {
   def constraintsUp(newConstraints: ISZ[ST]): Unit
 
   def writeFile(dir: String, filename: String, content: String): Unit
+
+  def typeOfSeqSet: HashSet[(String, AST.Typed)]
+
+  def typeOfSeqSetUp(newTypeOfSeqSet: HashSet[(String, AST.Typed)]): Unit
 
   @strictpure def proofFunId(pf: State.ProofFun): ST = {
     val targs: ST = pf.receiverTypeOpt match {
@@ -602,19 +617,6 @@ object Smt2 {
   def formatR(value: R): ST
 
   @memoize def adtId(tipe: AST.Typed): ST = {
-    @pure def isAdt(t: AST.Typed.Name): B = {
-      typeHierarchy.typeMap.get(t.ids).get match {
-        case _: TypeInfo.Adt => return T
-        case _: TypeInfo.Sig =>
-          if (Smt2.basicTypes.contains(t)) {
-            return F
-          } else if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
-            return F
-          }
-          return T
-        case _ => return F
-      }
-    }
     tipe match {
       case tipe: AST.Typed.Name if isAdt(tipe) => return st"ADT"
       case _ => typeId(tipe)
@@ -704,6 +706,8 @@ object Smt2 {
     typesUp(types + t)
   }
 
+  @strictpure def sTypeOfName(t: AST.Typed.Name): ST = st"|type-of-${t.ids(t.ids.size - 1)}-${typeIdRaw(t.args(0))}|"
+
   def addType(tipe: AST.Typed, reporter: Reporter): Unit = {
     def addS(t: AST.Typed.Name): Unit = {
       val it = t.args(0)
@@ -711,6 +715,7 @@ object Smt2 {
       val et = t.args(1)
       addType(et, reporter)
       val tId = typeId(t)
+      val thId = typeHierarchyId(t)
       val itId = typeId(it)
       val etId = adtId(et)
       val atId = typeOpId(t, "at")
@@ -736,12 +741,28 @@ object Smt2 {
       val zSubId = typeOpId(AST.Typed.z, "-")
       val zGeId = typeOpId(AST.Typed.z, ">=")
       val zEqId = typeOpId(AST.Typed.z, "==")
+      val etThid = typeHierarchyId(et)
+      val etAdt: B = isAdtType(et)
+      val sname = t.ids(t.ids.size - 1)
+      val typeOfSeqOpt: Option[ST] = if (etAdt) {
+        addTypeHiearchyId(thId)
+        val typeofName = sTypeOfName(t)
+        if (!typeOfSeqSet.contains((sname, it))) {
+          typeOfSeqSetUp(typeOfSeqSet + ((sname, it)))
+          addSTypeDecl(st"""(declare-fun $typeofName ($tId) Type)""")
+        }
+        addSTypeDecl(st"""(declare-const $thId Type)""")
+        Some(typeofName)
+      } else {
+        None()
+      }
+      @strictpure def etThidSubtypeOpt(x: String): Option[ST] = if (etAdt) Some(st"(sub-type (type-of $x) $etThid)") else None()
       addSort(st"(define-sort $tId () (Array $itId $etId))")
       addSTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
       addSTypeDecl(st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
       addSTypeDecl(st"(declare-fun $firstIndexId ($tId) $itId)")
       addSTypeDecl(st"(declare-fun $lastIndexId ($tId) $itId)")
-      val (itMin, itOne): (ST, ST) = it match {
+      val (_, itOne): (ST, ST) = it match {
         case it: AST.Typed.Name =>
           if (it == AST.Typed.z) {
             val min = toVal(it, 0)
@@ -767,8 +788,8 @@ object Smt2 {
       }
       addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and (not ($zEqId ($sizeId x) 0)) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
       addSTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
-      if (etId.render === "ADT") {
-        addSTypeDecl(st"(assert (forall ((o $tId) (i $itId)) (=> ($isInBoundId o i) (sub-type (type-of ($atId o i)) ${typeHierarchyId(et)}))))")
+      if (etAdt) {
+        addSTypeDecl(st"(assert (forall ((o $tId) (i $itId)) (=> ($isInBoundId o i) (sub-type (type-of ($atId o i)) $etThid))))")
       }
       addSTypeDecl(
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
@@ -796,6 +817,7 @@ object Smt2 {
         st"""(declare-fun $upId ($tId $itId $etId) $tId)
             |(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
             |  (=>
+            |    ${etThidSubtypeOpt("z")}
             |    (= x2 ($upId x y z))
             |    (and
             |      (= ($sizeId x2) ($sizeId x))
@@ -810,12 +832,13 @@ object Smt2 {
             |    (=> (not (= 0 ($sizeId x))) ($itEqId ($lastIndexId x) ($lastIndexId y)))
             |    (forall ((i $itId)) (=> ($isInBoundId x i) (= (select x i) (select y i))))))""")
       addSTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
-      if (isAdtType(et)) {
+      if (etAdt) {
         addSTypeDecl(
           st"""(assert (forall ((x $tId) (i $itId) (v ADT))
-              |  (=> ($isInBoundId x i)
+              |  (=> (= ($typeOfSeqOpt x) $thId)
+              |      ($isInBoundId x i)
               |      (= ($atId x i) v)
-              |      (sub-type (type-of v) ${typeHierarchyId(et)}))))""")
+              |      ${etThidSubtypeOpt("v")})))""")
       }
     }
 
@@ -1231,6 +1254,7 @@ object Smt2 {
     val distinctOpt: Option[ST] =
       if (size > 1) Some(st"(distinct ${(for (i <- 0 until size) yield st"i$i", " ")})")
       else None()
+    val typeOfOpt: Option[ST] = if (isAdtType(et)) Some(st"(= (${sTypeOfName(t)} x) ${typeHierarchyId(t)})") else None()
     val r =
       st"""(declare-fun $seqLitId (${(for (i <- 0 until size) yield st"$itId $etId", " ")}) $tId)
           |(assert (forall (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId))
@@ -1238,6 +1262,7 @@ object Smt2 {
           |    $distinctOpt
           |    (= x ${if (size == 0) seqLitId else st"($seqLitId ${(for (i <- 0 until size) yield st"i$i v$i", " ")})"})
           |    (and
+          |      $typeOfOpt
           |      (= ($sizeId x) $size)
           |      $lastIndexOpt
           |      ${(for (i <- 0 until size) yield st"(=> ($inBoundId x i$i) (= ($atId x i$i) v$i))", "\n")})
@@ -1270,9 +1295,8 @@ object Smt2 {
     for (c <- claims; t <- c.types) {
       addType(t, reporter)
     }
-    var decls: HashSMap[String, ST] = HashSMap.empty[String, ST] ++
-      (for (c <- claims; p <- c2DeclST(c)) yield p)
-    val lets = Util.collectLetClaims(simplifiedQuery, claims)
+    var decls: HashSMap[String, ST] = HashSMap.empty[String, ST] ++ (for (c <- claims; p <- c2DeclST(c)) yield p)
+    val (lets, lsyms) = Util.collectLetClaims(simplifiedQuery, claims)
     val lids = collectLids(claims)
     val sv2ST = Util.value2ST(this, lets, lids)
     var claimSmts = ISZ[ST]()
@@ -1289,6 +1313,17 @@ object Smt2 {
       case _ =>
     }
     val seqLitDecls: ISZ[ST] = for (seqLit <- seqLits.elements) yield seqLit2SmtDeclST(seqLit)
+    if (lets.nonEmpty) {
+      val uscdid = UsedSymsCurrentDeclIdCollector(HashSet.empty, ISZ())
+      for (c <- claims) {
+        uscdid.transformStateClaim(c)
+      }
+      val usedSyms = uscdid.syms
+      val symNums = HashSet ++ (for (sym <- lsyms.elements) yield v2ST(sym).render) ++
+        (for (ds <- lets.values if ds.size > 1 && usedSyms.contains(ds(0).sym)) yield v2ST(ds(0).sym).render)
+      decls = HashSMap.empty[String, ST] ++
+        (for (d <- decls.entries if !ops.StringOps(d._1).startsWith(Smt2.symPrefix) || symNums.contains(d._1)) yield d)
+    }
     return query(seqLitDecls, decls.values, claimSmts)
   }
 
@@ -1332,10 +1367,24 @@ object Smt2 {
     return res
   }
 
-  def isAdtType(t: AST.Typed): B = {
+  @memoize def isAdt(t: AST.Typed.Name): B = {
+    typeHierarchy.typeMap.get(t.ids).get match {
+      case _: TypeInfo.Adt => return T
+      case _: TypeInfo.Sig =>
+        if (Smt2.basicTypes.contains(t)) {
+          return F
+        } else if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
+          return F
+        }
+        return T
+      case _ => return F
+    }
+  }
+
+  @pure def isAdtType(t: AST.Typed): B = {
     t match {
-      case _: AST.Typed.Fun => return F
-      case _ => return adtId(t).render == "ADT"
+      case t: AST.Typed.Name => return isAdt(t)
+      case _ => return F
     }
   }
 
@@ -1399,7 +1448,7 @@ object Smt2 {
     v match {
       case v: State.Value.B => return if (v.value) Smt2.stTrue else Smt2.stFalse
       case v: State.Value.Z => return if (v.value < 0) st"(- ${v.value * -1})" else st"${v.value}"
-      case v: State.Value.Sym => return st"cx!${v.num}"
+      case v: State.Value.Sym => return st"${Smt2.symPrefix}${v.num}"
       case v: State.Value.Range => return if (v.value < 0) st"(- ${v.value * -1})" else st"${v.value}"
       case v: State.Value.Enum => return enumId(v.owner, v.id)
       case v: State.Value.S8 => return toVal(v.tipe, conversions.S8.toZ(v.value))
@@ -1510,8 +1559,8 @@ object Smt2 {
 
   def qvar2ST(x: State.Claim.Let.Quant.Var): ST = {
     x match {
-      case x: State.Claim.Let.Quant.Var.Id => return st"(${currentLocalIdString(x.context, x.id)} ${typeId(x.tipe)})"
-      case x: State.Claim.Let.Quant.Var.Sym => return st"(${v2ST(x.sym)} ${typeId(x.sym.tipe)})"
+      case x: State.Claim.Let.Quant.Var.Id => return st"${currentLocalIdString(x.context, x.id)}"
+      case x: State.Claim.Let.Quant.Var.Sym => return st"${v2ST(x.sym)}"
     }
   }
 
@@ -1610,7 +1659,7 @@ object Smt2 {
     }
 
     def simplified: ST = {
-      var lets = Util.collectLetClaims(simplifiedQuery, claims)
+      var (lets, lsyms) = Util.collectLetClaims(simplifiedQuery, claims)
       letsOpt match {
         case Some(ls) =>
           for (p <- ls.entries) {
@@ -1635,7 +1684,7 @@ object Smt2 {
         uscdid.transformStateClaim(c)
       }
       val usedSyms = uscdid.syms
-      val syms: ISZ[State.Value.Sym] = for (ds <- lets.values if ds.size > 1 && usedSyms.contains(ds(0).sym)) yield ds(0).sym
+      val syms = lsyms.elements ++ (for (ds <- lets.values if ds.size > 1 && usedSyms.contains(ds(0).sym)) yield ds(0).sym)
       var decls: ISZ[ST] =
         (for (id <- lids.values) yield st"(${localId(id)} ${typeId(id.sym.tipe)})") ++
           (for (sym <- syms) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})")
@@ -1644,7 +1693,7 @@ object Smt2 {
       }
       if (decls.nonEmpty) {
         r =
-          st"""(forall (${(decls, " ")})
+          st"""(${if (isImply) "forall" else "exists"} (${(decls, " ")})
               |  $r)"""
       }
       return r
@@ -1681,13 +1730,34 @@ object Smt2 {
       case c: State.Claim.Let.TypeTest =>
         return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2st(c.value)}) ${typeHierarchyId(c.tipe)})"
       case c: State.Claim.Let.Quant =>
-        val body = embeddedClaims(c.isAll, c.claims, ISZ(), Some(lets), declIds)
+        var body = embeddedClaims(c.isAll, c.claims, ISZ(), Some(lets), declIds)
+        var qvars = ISZ[ST]()
+        var subtypes = ISZ[ST]()
+        for (qvar <- c.vars) {
+          val x = qvar2ST(qvar)
+          val tipe = qvar.tipe
+          val t = adtId(tipe)
+          qvars = qvars :+ st"($x $t)"
+          tipe match {
+            case tipe: AST.Typed.Name if (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName) && isAdtType(tipe.args(1)) =>
+              subtypes = subtypes :+ st"(= (${sTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
+            case tipe if isAdtType(tipe) =>
+              subtypes = subtypes :+ st"(sub-type (type-of $x) ${typeHierarchyId(tipe)})"
+            case _ =>
+          }
+        }
+        if (subtypes.nonEmpty) {
+          body =
+            st"""(${if (c.isAll) "=>" else "and"}
+                |  ${(subtypes, "\n")}
+                |  $body)"""
+        }
         return if (c.isAll)
-          st"""(forall (${(for (x <- c.vars) yield qvar2ST(x), " ")})
+          st"""(forall (${(qvars, " ")})
               |  $body
               |)"""
         else
-          st"""(exists (${(for (x <- c.vars) yield qvar2ST(x), " ")})
+          st"""(exists (${(qvars, " ")})
               |  $body
               |)"""
       case c: State.Claim.Let.Binary => return st"(${typeOpId(c.tipe, c.op)} ${v2st(c.left)} ${v2st(c.right)})"
@@ -1864,12 +1934,19 @@ object Smt2 {
 
   def c2DeclST(c: State.Claim): ISZ[(String, ST)] = {
     @pure def declareConst(n: ST, tipe: AST.Typed): ST = {
-      val r: ST = if (isAdtType(tipe)) {
-        st"""(declare-const $n ${typeId(tipe)})
-            |(assert (sub-type (type-of $n) ${typeHierarchyId(tipe)}))"""
-      } else {
-        st"(declare-const $n ${typeId(tipe)})"
+      val r: ST = tipe match {
+        case tipe: AST.Typed.Name if (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName) && isAdtType(tipe.args(1)) =>
+          st"""(declare-const $n ${typeId(tipe)})
+              |(assert (sub-type (${sTypeOfName(tipe)} $n) ${typeHierarchyId(tipe)}))"""
+        case _ =>
+          if (isAdtType(tipe)) {
+            st"""(declare-const $n ${typeId(tipe)})
+                |(assert (sub-type (type-of $n) ${typeHierarchyId(tipe)}))"""
+          } else {
+            st"(declare-const $n ${typeId(tipe)})"
+          }
       }
+
       return r
     }
     def def2DeclST(cDef: State.Claim.Let): ISZ[(String, ST)] = {

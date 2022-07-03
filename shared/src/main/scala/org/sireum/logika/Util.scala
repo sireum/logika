@@ -306,13 +306,19 @@ object Util {
     }
   }
 
-  @record class LetCollector(var value: HashMap[Z, HashSet[State.Claim.Let]]) extends MStateTransformer {
+  @record class LetCollector(var value: HashMap[Z, HashSet[State.Claim.Let]],
+                             var syms: HashSSet[State.Value.Sym]) extends MStateTransformer {
 
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
       o match {
-        case o: State.Claim.Let.Binary if Smt2.imsOps.contains(o.op) => return MStateTransformer.PreResultStateClaimProp
+        case o: State.Claim.Let.Binary if Smt2.imsOps.contains(o.op) =>
+          syms = syms + o.sym
+          return MStateTransformer.PreResultStateClaimProp
         case o: State.Claim.Let.CurrentId if o.declId => return MStateTransformer.PreResultStateClaimProp
         case o: State.Claim.Let =>
+          if (o.isInstanceOf[State.Claim.Let.Random]) {
+            syms = syms + o.sym
+          }
           val key = o.sym.num
           val s = value.get(key).getOrElse(HashSet.empty) + o
           value = value + key ~> s
@@ -390,15 +396,15 @@ object Util {
     AST.Typed.rName, AST.Typed.stName, AST.Typed.isName, AST.Typed.msName
   )
 
-  def collectLetClaims(enabled: B, claims: ISZ[State.Claim]): HashMap[Z, ISZ[State.Claim.Let]] = {
+  def collectLetClaims(enabled: B, claims: ISZ[State.Claim]): (HashMap[Z, ISZ[State.Claim.Let]], HashSSet[State.Value.Sym]) = {
     if (enabled) {
-      val lc = LetCollector(HashMap.empty)
+      val lc = LetCollector(HashMap.empty, HashSSet.empty)
       for (c <- claims) {
         lc.transformStateClaim(c)
       }
-      return HashMap.empty[Z, ISZ[State.Claim.Let]] ++ (for (p <- lc.value.entries) yield (p._1, p._2.elements))
+      return (HashMap.empty[Z, ISZ[State.Claim.Let]] ++ (for (p <- lc.value.entries) yield (p._1, p._2.elements)), lc.syms)
     } else {
-      return HashMap.empty
+      return (HashMap.empty, HashSSet.empty)
     }
   }
 

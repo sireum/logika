@@ -39,12 +39,14 @@ object Smt2Invoke {
       case _ => halt("Unsupported platform")
     }
     val platformHome = sireumHome / "bin" / platform
+    val altErgoOpen = platformHome / "alt-ergo-open"
     return HashMap.empty[String, String] ++ ISZ[(String, String)](
       "cvc4" ~> (platformHome / "cvc").string,
       "cvc5" ~> (platformHome / "cvc5").string,
       "z3" ~> (platformHome / "z3" / "bin" / "z3").string,
-    ) ++ (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
-      "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
+    ) ++ (if (altErgoOpen.exists) ISZ(altErgoOpen.name ~> altErgoOpen.string) else ISZ[(String, String)]()) ++
+      (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
+        "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
   }
 
   @pure def queryDefault(sireumHome: Os.Path,
@@ -83,8 +85,21 @@ object Smt2Invoke {
       val pout: String = st"${pr.err}${pr.out}".render
       val isTimeout: B = timeoutCodes.contains(pr.exitCode) ||
         (config.name === "cvc5" && ops.StringOps(pout).contains("cvc5 interrupted by timeout."))
-      val isUnknown: B = pr.exitCode === 1 && ((config.name === "alt-ergo") ||
-        (config.name === "cvc5" && ops.StringOps(pout).contains("An uninterpreted constant was preregistered to the UF theory")))
+      val isUnknown: B = if (pr.exitCode == 1) {
+        config.name match {
+          case string"cvc5" =>
+            val poutOps = ops.StringOps(pout)
+            poutOps.contains("An uninterpreted constant was preregistered to the UF theory") ||
+              poutOps.contains("Array theory solver does not yet support write-chains connecting two different constant arrays")
+          case string"alt-ergo" => T
+          case string"alt-ergo-open" => T
+          case _ => F
+        }
+      } else if (pr.exitCode == 2 && config.name == "alt-ergo-open") {
+        T
+      } else {
+        F
+      }
       val rOpt: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] = {
         val duration = extension.Time.currentMillis - startTime
         val out = ops.StringOps(pout).split((c: C) => c == '\n')

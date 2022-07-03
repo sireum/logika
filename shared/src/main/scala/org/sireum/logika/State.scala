@@ -719,6 +719,7 @@ object State {
         @datatype trait Var {
           @pure def toRawST: ST
           @pure def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST]
+          @pure def tipe: AST.Typed
         }
 
         object Var {
@@ -731,6 +732,7 @@ object State {
             override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
               return Some(toRawST)
             }
+
           }
 
           @datatype class Sym(val sym: Value.Sym) extends Var {
@@ -740,6 +742,7 @@ object State {
             override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
               return sym.toSTOpt(numMap, defs)
             }
+            @strictpure def tipe: AST.Typed = sym.tipe
           }
         }
       }
