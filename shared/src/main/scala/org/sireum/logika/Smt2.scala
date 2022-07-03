@@ -53,7 +53,7 @@ object Smt2 {
                                val fieldId: String,
                                val fieldLookupId: ST,
                                val fieldStoreId: ST,
-                               val fieldAdtType: ST,
+                               val fieldTypeId: ST,
                                val fieldType: AST.Typed)
 
   @datatype class MemPrinter(val defs: HashMap[Z, ISZ[State.Claim.Let]]) {
@@ -451,25 +451,25 @@ object Smt2 {
     val id = proofFunId(pf)
     val context = pf.context :+ pf.id
     val thisId = currentLocalIdString(context, "this")
-    var paramTypes: ISZ[ST] = for (pt <- pf.paramTypes) yield typeId(pt)
-    var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(context, id)
-    var params: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
+    var paramIdTypes: ISZ[(ST, AST.Typed)] = ISZ[(ST, AST.Typed)]()
     pf.receiverTypeOpt match {
-      case Some(receiverType) =>
-        val thisType = typeId(receiverType)
-        paramTypes = thisType +: paramTypes
-        paramIds = st"$thisId" +: paramIds
-        params = st"($thisId $thisType)" +: params
+      case Some(receiverType) => paramIdTypes = paramIdTypes :+ ((thisId, receiverType))
       case _ =>
     }
-    val decl = st"(declare-fun $id (${(paramTypes, " ")}) ${typeId(pf.returnType)})"
-    val app: ST = if (paramIds.isEmpty) id else st"($id ${(paramIds, " ")})"
-    val declClaim: ST = if (invClaims.size == 0) st"" else
-      st"""(assert (forall (${(params, " ")} (${v2ST(sym)} ${adtId(pf.returnType)}))
-          |  (=>
+    for (p <- ops.ISZOps(pf.paramIds).zip(pf.paramTypes)) {
+      paramIdTypes = paramIdTypes :+ ((currentLocalIdString(context, p._1), p._2))
+    }
+    val app: ST = if (paramIdTypes.isEmpty) id else st"($id ${(for (p <- paramIdTypes) yield p._1, " ")})"
+    val (decls, claim) = addTypeConstraints(T, paramIdTypes :+ ((v2ST(sym), pf.returnType)),
+      st"""(=>
           |    (= ${v2ST(sym)} $app)
-          |    ${embeddedClaims(F, invClaims, ISZ(), None(), HashSMap.empty)}
-          |)))"""
+          |    ${embeddedClaims(F, invClaims, ISZ(), None(), HashSMap.empty)})"""
+    )
+    val declClaim: ST = if (invClaims.size == 0) st"" else
+      st"""(assert (forall (${(decls, " ")})
+          |  $claim
+          |))"""
+    val decl = st"(declare-fun $id (${(for (p <- paramIdTypes) yield adtId(p._2), " ")}) ${adtId(pf.returnType)})"
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, declClaim)))
   }
 
@@ -477,21 +477,13 @@ object Smt2 {
                           statePrefix: Z, reporter: Reporter): Unit = {
     val context = pf.context :+ pf.id
     val thisId = currentLocalIdString(context, "this")
-    var paramTypes: ISZ[ST] = for (pt <- pf.paramTypes) yield typeId(pt)
-    var paramIds: ISZ[ST] = for (id <- pf.paramIds) yield currentLocalIdString(context, id)
-    var paramThTypes: ISZ[ST] = for (p <- ops.ISZOps(pf.paramTypes).zip(paramIds) if isAdtType(p._1)) yield
-      st"(sub-type (type-of ${p._2}) ${typeHierarchyId(p._1)})"
-    var params: ISZ[ST] = for (p <- ops.ISZOps(paramIds).zip(paramTypes)) yield st"(${p._1} ${p._2})"
-    var paramTypeIds = ops.ISZOps(pf.paramTypes).zip(pf.paramIds)
+    var paramIdTypes: ISZ[(String, ST, AST.Typed)] = ISZ[(String, ST, AST.Typed)]()
     pf.receiverTypeOpt match {
-      case Some(receiverType) =>
-        val thisType = typeId(receiverType)
-        paramThTypes = st"(sub-type (type-of $thisId) ${typeHierarchyId(receiverType)})" +: paramThTypes
-        paramTypes = thisType +: paramTypes
-        paramIds = st"$thisId" +: paramIds
-        paramTypeIds = ((receiverType, "this")) +: paramTypeIds
-        params = st"($thisId $thisType)" +: params
+      case Some(receiverType) => paramIdTypes = paramIdTypes :+ (("this", thisId, receiverType))
       case _ =>
+    }
+    for (p <- ops.ISZOps(pf.paramIds).zip(pf.paramTypes)) {
+      paramIdTypes = paramIdTypes :+ ((p._1, currentLocalIdString(context, p._1), p._2))
     }
     val (decl, declClaim) = strictPureMethods.get(pf).get
 
@@ -500,8 +492,8 @@ object Smt2 {
       val (s0, v) = sv
       var s1 = s0
       var args = ISZ[State.Value]()
-      for (ptid <- paramTypeIds) {
-        val (pt, pid) = ptid
+      for (ptid <- paramIdTypes) {
+        val (pid, _, pt) = ptid
         val (s2, v2) = idIntro(pos, s1, context, pid, pt, None())
         args = args :+ v2
         s1 = s2
@@ -514,7 +506,6 @@ object Smt2 {
       ))
       ecs = ecs :+ embeddedClaims(T, ISZ(claims), ISZ(), None(), HashSMap.empty)
     }
-
     val ec: ST = if (ecs.isEmpty) {
       val ignore = reporter.ignore
       reporter.setIgnore(F)
@@ -527,29 +518,15 @@ object Smt2 {
       st"""(and
           |  ${(ecs, "\n")})"""
     }
-
-    val claim: ST =
-      if (paramThTypes.nonEmpty)
-        if (params.nonEmpty)
-          st"""$declClaim
-              |(assert (forall (${(params, " ")})
-              |  (=>
-              |    ${(paramThTypes, "\n")}
-              |    $ec)))"""
-        else
-          st"""$declClaim
-              |(assert (=>
-              |  ${(paramThTypes, "\n")}
-              |  $ec))"""
-      else
-        if (params.nonEmpty)
-          st"""$declClaim
-              |(assert (forall (${(params, " ")})
-              |  $ec))"""
-        else
-          st"""$declClaim
-              |(assert $ec)"""
-
+    val claim: ST = if (paramIdTypes.nonEmpty) {
+      val (decls, ec2) = addTypeConstraints(T, for (t <- paramIdTypes) yield (t._2, t._3), ec)
+      st"""$declClaim
+          |(assert (forall (${(decls, " ")})
+          |  $ec2))"""
+    } else {
+      st"""$declClaim
+          |(assert $ec)"""
+    }
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, claim)))
   }
 
@@ -628,7 +605,7 @@ object Smt2 {
   }
 
   @memoize def adtTypeOpId(t: AST.Typed, op: String): ST = {
-    return if (adtId(t).render == "ADT") st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
+    return if (isAdtType(t)) st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
   }
 
   def satResult(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
@@ -744,7 +721,7 @@ object Smt2 {
       val etThid = typeHierarchyId(et)
       val etAdt: B = isAdtType(et)
       val sname = t.ids(t.ids.size - 1)
-      val typeOfSeqOpt: Option[ST] = if (etAdt) {
+      if (etAdt) {
         addTypeHiearchyId(thId)
         val typeofName = sTypeOfName(t)
         if (!typeOfSeqSet.contains((sname, it))) {
@@ -752,11 +729,9 @@ object Smt2 {
           addSTypeDecl(st"""(declare-fun $typeofName ($tId) Type)""")
         }
         addSTypeDecl(st"""(declare-const $thId Type)""")
-        Some(typeofName)
-      } else {
-        None()
       }
       @strictpure def etThidSubtypeOpt(x: String): Option[ST] = if (etAdt) Some(st"(sub-type (type-of $x) $etThid)") else None()
+      @strictpure def thidTypeOpt(x: String): Option[ST] = if (etAdt) Some(st"(= (${sTypeOfName(t)} $x) $thId)") else None()
       addSort(st"(define-sort $tId () (Array $itId $etId))")
       addSTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
       addSTypeDecl(st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
@@ -789,11 +764,12 @@ object Smt2 {
       addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and (not ($zEqId ($sizeId x) 0)) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
       addSTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       if (etAdt) {
-        addSTypeDecl(st"(assert (forall ((o $tId) (i $itId)) (=> ($isInBoundId o i) (sub-type (type-of ($atId o i)) $etThid))))")
+        addSTypeDecl(st"(assert (forall ((o $tId) (i $itId)) (=> ${thidTypeOpt("o")} ($isInBoundId o i) (sub-type (type-of ($atId o i)) $etThid))))")
       }
       addSTypeDecl(
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
             |  (and
+            |    ${thidTypeOpt("z")}
             |    ($itEqId ($sizeId z) ($zAddId ($sizeId x) $zOne))
             |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                        (= ($atId z i) ($atId x i))))
@@ -801,6 +777,7 @@ object Smt2 {
       addSTypeDecl(
         st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
             |  (and
+            |    ${thidTypeOpt("z")}
             |    (= ($sizeId z) ($zAddId ($sizeId x) ($sizeId y)))
             |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                            (= ($atId z i) ($atId x i))))
@@ -809,6 +786,7 @@ object Smt2 {
       addSTypeDecl(
         st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
             |  (and
+            |    ${thidTypeOpt("z")}
             |    (= ($sizeId z) ($zAddId ($sizeId y) 1))
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId i $itOne)) ($atId y i))))
@@ -817,9 +795,11 @@ object Smt2 {
         st"""(declare-fun $upId ($tId $itId $etId) $tId)
             |(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
             |  (=>
+            |    ${thidTypeOpt("x")}
             |    ${etThidSubtypeOpt("z")}
             |    (= x2 ($upId x y z))
             |    (and
+            |      ${thidTypeOpt("x2")}
             |      (= ($sizeId x2) ($sizeId x))
             |      ($itEqId ($lastIndexId x2) ($lastIndexId x))
             |      (=> ($isInBoundId x y) (= x2 (store x y z))))
@@ -834,8 +814,8 @@ object Smt2 {
       addSTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       if (etAdt) {
         addSTypeDecl(
-          st"""(assert (forall ((x $tId) (i $itId) (v ADT))
-              |  (=> (= ($typeOfSeqOpt x) $thId)
+          st"""(assert (forall ((x $tId) (i $itId) (v $etId))
+              |  (=> ${thidTypeOpt("x")}
               |      ($isInBoundId x i)
               |      (= ($atId x i) v)
               |      ${etThidSubtypeOpt("v")})))""")
@@ -926,13 +906,13 @@ object Smt2 {
       @pure def fieldInfo(isParam: B, f: Info.Var): Smt2.AdtFieldInfo = {
         val ft = f.typedOpt.get.subst(sm)
         val id = f.ast.id.value
-        return Smt2.AdtFieldInfo(isParam, F, id, typeOpId(t, id), typeOpId(t, s"${id}_="), adtId(ft), ft)
+        return Smt2.AdtFieldInfo(isParam, F, id, typeOpId(t, id), typeOpId(t, s"${id}_="), typeId(ft), ft)
       }
 
       @pure def specFieldInfo(f: Info.SpecVar): Smt2.AdtFieldInfo = {
         val ft = f.typedOpt.get.subst(sm)
         val id = f.ast.id.value
-        return Smt2.AdtFieldInfo(F, T, id, typeOpId(t, id), typeOpId(t, s"${id}_="), adtId(ft), ft)
+        return Smt2.AdtFieldInfo(F, T, id, typeOpId(t, id), typeOpId(t, s"${id}_="), typeId(ft), ft)
       }
 
       val eqId = typeOpId(t, "==")
@@ -962,9 +942,12 @@ object Smt2 {
         val fieldInfos: ISZ[Smt2.AdtFieldInfo] =
           (for (f <- ti.vars.values) yield fieldInfo(params.contains(f.ast.id.value), f)) ++ (for (f <- ti.specVars.values) yield specFieldInfo(f))
         for (q <- fieldInfos) {
-          addTypeDecl(st"(declare-fun ${q.fieldLookupId} ($tId) ${q.fieldAdtType})")
-          if (q.fieldAdtType.render === "ADT") {
-            addTypeDecl(st"(assert (forall ((o $tId)) (sub-type (type-of (${q.fieldLookupId} o)) ${typeHierarchyId(q.fieldType)})))")
+          addTypeDecl(st"(declare-fun ${q.fieldLookupId} ($tId) ${q.fieldTypeId})")
+          if (isAdtType(q.fieldType)) {
+            addTypeDecl(
+              st"""(assert (forall ((o $tId))
+                  |  (=> (= (type-of o) $thId)
+                  |      (sub-type (type-of (${q.fieldLookupId} o)) ${typeHierarchyId(q.fieldType)}))))""")
           }
         }
         var hasParam = F
@@ -977,8 +960,8 @@ object Smt2 {
             if (q2.fieldId == q.fieldId) st"(= (${q2.fieldLookupId} x!2) x!1)"
             else st"(= (${q2.fieldLookupId} x!2) (${q2.fieldLookupId} x!0))"
           addTypeDecl(
-            st"""(declare-fun $upOp ($tId ${q.fieldAdtType}) $tId)
-                |(assert (forall ((x!0 $tId) (x!1 ${q.fieldAdtType}) (x!2 $tId))
+            st"""(declare-fun $upOp ($tId ${q.fieldTypeId}) $tId)
+                |(assert (forall ((x!0 $tId) (x!1 ${q.fieldTypeId}) (x!2 $tId))
                 |  (=>
                 |    (= (type-of x!2) $thId)
                 |    (= x!2 ($upOp x!0 x!1))
@@ -991,10 +974,10 @@ object Smt2 {
           )
         }
         addTypeDecl(
-          st"""(declare-fun $newId (${(for (q <- fieldInfos if q.isParam) yield q.fieldAdtType, " ")}) $tId)
-              |(assert (forall (${(for (q <- fieldInfos if q.isParam) yield st"(${q.fieldId} ${q.fieldAdtType})", " ")} (x!0 $tId))
+          st"""(declare-fun $newId (${(for (q <- fieldInfos if q.isParam) yield q.fieldTypeId, " ")}) $tId)
+              |(assert (forall (${(for (q <- fieldInfos if q.isParam) yield st"(${q.fieldId} ${q.fieldTypeId})", " ")} (x!0 $tId))
               |  (=>
-              |    ${(for (q <- fieldInfos if q.isParam && q.fieldAdtType.render === "ADT") yield st"(sub-type (type-of ${q.fieldId}) ${typeHierarchyId(q.fieldType)})", "\n")}
+              |    ${(for (q <- fieldInfos if q.isParam && isAdtType(q.fieldType)) yield st"(sub-type (type-of ${q.fieldId}) ${typeHierarchyId(q.fieldType)})", "\n")}
               |    (= x!0 ${if (hasParam) st"($newId ${(for (q <- fieldInfos if q.isParam) yield q.fieldId, " ")})" else newId})
               |    (and
               |      (= (type-of x!0) $thId)
@@ -1005,7 +988,7 @@ object Smt2 {
           st"""(define-fun $eqId ((x!0 $tId) (x!1 $tId)) B
               |  (and
               |    (= (type-of x!0) (type-of x!1) $thId)
-              |    ${(for (q <- fieldInfos if q.isParam) yield st"(${if (q.fieldAdtType.render == "ADT") st"${typeOpId(q.fieldType, "==")}" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
+              |    ${(for (q <- fieldInfos if q.isParam) yield st"(${if (isAdtType(q.fieldType)) st"${typeOpId(q.fieldType, "==")}" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
         addTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       }
@@ -1621,6 +1604,7 @@ object Smt2 {
 
       for (i <- 0 until claims.size) {
         claims(i) match {
+          case claim: State.Claim.Let.Binary if Smt2.imsOps.contains(claim.op) => rest = rest :+ claim
           case claim: State.Claim.Let if i != claims.size - 1 => lsyms = lsyms :+ claim.sym; lets = lets :+ claim
           case claim: State.Claim.Let => syms = syms :+ claim.sym; rest = rest :+ claim
           case claim: State.Claim.If => syms = collectSyms(claim, syms); rest = rest :+ claim
@@ -1648,12 +1632,13 @@ object Smt2 {
       }
       val s = HashSSet.empty[State.Value.Sym] ++ syms -- lsyms
       if (s.nonEmpty) {
-        val decls: ISZ[ST] =
-          (for (id <- lids.values) yield st"(${localId(id)} ${typeId(id.sym.tipe)})") ++
-            (for (sym <- s.elements) yield st"(${v2ST(sym)} ${typeId(sym.tipe)})")
+          val (decls, body2) = addTypeConstraints(isImply,
+            (for (id <- lids.values) yield (localId(id), id.sym.tipe)) ++
+              (for (sym <- s.elements) yield (v2ST(sym), sym.tipe)),
+            body)
         body =
           st"""(${if (isImply) "forall" else "exists"} (${(decls, " ")})
-              |  $body)"""
+              |  $body2)"""
       }
       return body
     }
@@ -1702,6 +1687,29 @@ object Smt2 {
     return if (simplifiedQuery) simplified else raw
   }
 
+  @pure def addTypeConstraints(isImply: B, ps: ISZ[(ST, AST.Typed)], claim: ST): (ISZ[ST], ST) = {
+    var varDecls = ISZ[ST]()
+    var typeConstraints = ISZ[ST]()
+    for (p <- ps) {
+      val (x, tipe) = p
+      val t = typeId(tipe)
+      varDecls = varDecls :+ st"($x $t)"
+      tipe match {
+        case tipe: AST.Typed.Name if (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName) && isAdtType(tipe.args(1)) =>
+          typeConstraints = typeConstraints :+ st"(= (${sTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
+        case tipe if isAdtType(tipe) =>
+          typeConstraints = typeConstraints :+ st"(sub-type (type-of $x) ${typeHierarchyId(tipe)})"
+        case _ =>
+      }
+    }
+    return if (typeConstraints.nonEmpty)
+      (varDecls,
+        st"""(${if (isImply) "=>" else "and"}
+            |  ${(typeConstraints, "\n")}
+            |  $claim)""")
+    else (varDecls, claim)
+  }
+
   def l2RhsST(c: State.Claim.Let,
               v2st: State.Value => ST,
               lets: HashMap[Z, ISZ[State.Claim.Let]],
@@ -1730,28 +1738,8 @@ object Smt2 {
       case c: State.Claim.Let.TypeTest =>
         return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2st(c.value)}) ${typeHierarchyId(c.tipe)})"
       case c: State.Claim.Let.Quant =>
-        var body = embeddedClaims(c.isAll, c.claims, ISZ(), Some(lets), declIds)
-        var qvars = ISZ[ST]()
-        var subtypes = ISZ[ST]()
-        for (qvar <- c.vars) {
-          val x = qvar2ST(qvar)
-          val tipe = qvar.tipe
-          val t = adtId(tipe)
-          qvars = qvars :+ st"($x $t)"
-          tipe match {
-            case tipe: AST.Typed.Name if (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName) && isAdtType(tipe.args(1)) =>
-              subtypes = subtypes :+ st"(= (${sTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
-            case tipe if isAdtType(tipe) =>
-              subtypes = subtypes :+ st"(sub-type (type-of $x) ${typeHierarchyId(tipe)})"
-            case _ =>
-          }
-        }
-        if (subtypes.nonEmpty) {
-          body =
-            st"""(${if (c.isAll) "=>" else "and"}
-                |  ${(subtypes, "\n")}
-                |  $body)"""
-        }
+        val (qvars, body) = addTypeConstraints(c.isAll, for (qvar <- c.vars) yield (qvar2ST(qvar), qvar.tipe),
+          embeddedClaims(c.isAll, c.claims, ISZ(), Some(lets), declIds))
         return if (c.isAll)
           st"""(forall (${(qvars, " ")})
               |  $body
@@ -1937,7 +1925,7 @@ object Smt2 {
       val r: ST = tipe match {
         case tipe: AST.Typed.Name if (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName) && isAdtType(tipe.args(1)) =>
           st"""(declare-const $n ${typeId(tipe)})
-              |(assert (sub-type (${sTypeOfName(tipe)} $n) ${typeHierarchyId(tipe)}))"""
+              |(assert (= (${sTypeOfName(tipe)} $n) ${typeHierarchyId(tipe)}))"""
         case _ =>
           if (isAdtType(tipe)) {
             st"""(declare-const $n ${typeId(tipe)})
@@ -2002,7 +1990,7 @@ object Smt2 {
     }
   }
 
-  def typeIdRaw(t: AST.Typed): ST = {
+  @memoize def typeIdRaw(t: AST.Typed): ST = {
     Util.normType(t) match {
       case t: AST.Typed.Name =>
         val ids: ISZ[String] = if (t.ids.size === 1) Smt2.topPrefix +: t.ids else t.ids
@@ -2017,6 +2005,22 @@ object Smt2 {
       case t: AST.Typed.Fun => return st"${(for (arg <- t.args) yield typeIdRaw(arg), ", ")} => ${typeIdRaw(t.ret)}"
       case _ => halt(s"TODO: $t") // TODO
     }
+  }
+
+  @memoize def typeId(t: AST.Typed): ST = {
+    Util.normType(t) match {
+      case t: AST.Typed.Fun =>
+        if (t.args.size === 1) {
+          return st"(Array ${typeId(t.args(0))} ${typeId(t.ret)})"
+        } else {
+          return st"(Array ${typeId(AST.Typed.Tuple(t.args))} ${typeId(t.ret)})"
+        }
+      case _ => return id(t, "")
+    }
+  }
+
+  @memoize def typeHierarchyId(t: AST.Typed): ST = {
+    return id(t, "T")
   }
 
   @pure def id(t: AST.Typed, prefix: String): ST = {
@@ -2036,22 +2040,5 @@ object Smt2 {
       case t: AST.Typed.TypeVar => return st"$$${t.id}"
       case _ => return if (prefix == "") st"|${typeIdRaw(t)}|" else st"|$prefix:${typeIdRaw(t)}|"
     }
-  }
-
-  @pure def typeId(t: AST.Typed): ST = {
-    Util.normType(t) match {
-      case t: AST.Typed.Fun =>
-        if (t.args.size === 1) {
-          return st"(Array ${typeId(t.args(0))} ${typeId(t.ret)})"
-        } else {
-          return st"(Array ${typeId(AST.Typed.Tuple(t.args))} ${typeId(t.ret)})"
-        }
-      case _ => return id(t, "")
-    }
-
-  }
-
-  @pure def typeHierarchyId(t: AST.Typed): ST = {
-    return id(t, "T")
   }
 }
