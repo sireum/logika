@@ -40,17 +40,17 @@ import org.sireum.logika.Logika.Reporter
         reporter.error(a.posOpt, Logika.kind, s"Expecting an eta expansion of a fact")
         return err()
     }
-    val name: ISZ[String] = arg match {
+    val (name, targs): (ISZ[String], ISZ[AST.Typed]) = arg match {
       case arg: AST.Exp.Ident =>
         arg.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Fact => res.name
+          case res: AST.ResolvedInfo.Fact => (res.name, ISZ())
           case _ =>
             reporter.error(arg.posOpt, Logika.kind, s"Expecting a fact")
             return err()
         }
       case arg: AST.Exp.Select =>
         arg.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Fact => res.name
+          case res: AST.ResolvedInfo.Fact => (res.name, for (t <- arg.targs) yield t.typedOpt.get)
           case _ =>
             reporter.error(arg.posOpt, Logika.kind, s"Expecting a fact")
             return err()
@@ -61,9 +61,12 @@ import org.sireum.logika.Logika.Reporter
     }
 
     val info = logika.th.nameMap.get(name).get.asInstanceOf[Info.Fact]
+    val sm = lang.tipe.TypeChecker.buildTypeSubstMap(name, arg.posOpt, info.ast.typeParams, targs, reporter).get
     val stepClaim = AST.Util.normalizeFun(step.claim)
     for (claim <- info.ast.claims) {
-      if (stepClaim == AST.Util.normalizeFun(claim)) {
+      val normClaim = AST.Util.normalizeFun(claim)
+      val substNormClaim = AST.Util.substExpSkipResolvedInfo(normClaim, sm)
+      if (stepClaim == substNormClaim) {
         val claimPos = claim.posOpt.get
         val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
         val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
