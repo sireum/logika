@@ -74,7 +74,7 @@ import org.sireum.message.Position
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
 
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
-    val AST.ProofAst.Step.Justification.Incept(AST.Exp.Invoke(_, _, _, ISZ(invoke: AST.Exp.Invoke)), _) = just
+    val AST.ProofAst.Step.Justification.Incept(AST.Exp.Invoke(_, _, ISZ(invoke: AST.Exp.Invoke)), _) = just
     val res = invoke.ident.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     val args = invoke.args
     val posOpt = invoke.ident.attr.posOpt
