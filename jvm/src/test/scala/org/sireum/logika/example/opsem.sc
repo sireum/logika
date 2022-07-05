@@ -117,7 +117,7 @@ object Impl {
 
   def evalLitB(state: State, e: AST.Exp.LitB): (State, State.Value) = {
     Contract(
-      Ensures(Spec.evalExp(state, e.asInstanceOf[AST.Exp]) == Res)
+      Ensures(Spec.evalExp(state, e) == Res)
     )
     val exp: AST.Exp = e
     val rv: State.Value = State.Value.Boolean(e.value)
@@ -184,7 +184,7 @@ object Impl {
 
   def evalLitZ(state: State, e: AST.Exp.LitZ): (State, State.Value) = {
     Contract(
-      Ensures(Spec.evalExp(state, e.asInstanceOf[AST.Exp]) == Res)
+      Ensures(Spec.evalExp(state, e) == Res)
     )
     val rv: State.Value = State.Value.Integer(e.value)
     val exp: AST.Exp = e
@@ -202,7 +202,7 @@ object Impl {
 
   def evalVarRef(state: State, e: AST.Exp.VarRef): (State, State.Value) = {
     Contract(
-      Ensures(Spec.evalExp(state, e.asInstanceOf[AST.Exp]) == Res)
+      Ensures(Spec.evalExp(state, e) == Res)
     )
     val exp: AST.Exp = e
     val r: (State, State.Value) = state.store.get(e.id) match {
