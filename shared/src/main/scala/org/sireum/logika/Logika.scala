@@ -116,7 +116,7 @@ object Logika {
   val libraryDesc: String = "Library"
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
-  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), FactPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
+  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), ClaimOfPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
     (F, AST.Typed.isName, "firstIndex"), (F, AST.Typed.msName, "firstIndex"),
@@ -125,6 +125,7 @@ object Logika {
     (F, AST.Typed.f64Name, "isNaN"), (F, AST.Typed.f64Name, "isInfinite"),
   )
   val indexingFields: HashSet[String] = HashSet ++ ISZ[String]("firstIndex", "lastIndex")
+  val eqOps: HashSet[String] = HashSet ++ ISZ(AST.Exp.BinaryOp.Eq, AST.Exp.BinaryOp.Eq3, AST.Exp.BinaryOp.Ne, AST.Exp.BinaryOp.Ne3)
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
@@ -160,7 +161,7 @@ object Logika {
       var ownerTasks = ISZ[Task]()
       for (stmt <- stmts) {
         stmt match {
-          case stmt: AST.Stmt.Fact =>
+          case stmt: AST.Stmt.Fact if config.sat =>
             if (ownerPosOpt.nonEmpty) {
               ownerTasks = ownerTasks :+ Task.Fact(th, config, stmt, plugins)
             } else {
@@ -171,6 +172,18 @@ object Logika {
                 case _ => ISZ()
               }
               taskMap = taskMap + ownerPos ~> (tasks :+ Task.Fact(th, config, stmt, plugins))
+            }
+          case stmt: AST.Stmt.Theorem =>
+            if (ownerPosOpt.nonEmpty) {
+              ownerTasks = ownerTasks :+ Task.Theorem(th, config, stmt, plugins)
+            } else {
+              val pos = stmt.posOpt.get
+              val ownerPos = (pos.beginLine, pos.beginColumn)
+              val tasks: ISZ[Task] = taskMap.get(ownerPos) match {
+                case Some(ts) => ts
+                case _ => ISZ()
+              }
+              taskMap = taskMap + ownerPos ~> (tasks :+ Task.Theorem(th, config, stmt, plugins))
             }
           case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty && !noMethods(owner, stmt.sig.id.value) =>
             if (ownerPosOpt.nonEmpty) {
@@ -235,6 +248,11 @@ object Logika {
               }
             case t: Task.Fact =>
               val pos = t.fact.posOpt.get
+              if (pos.beginLine <= line && line <= pos.endLine) {
+                r = r :+ t
+              }
+            case t: Task.Theorem =>
+              val pos = t.theorem.posOpt.get
               if (pos.beginLine <= line && line <= pos.endLine) {
                 r = r :+ t
               }
@@ -952,16 +970,32 @@ import Util._
       exp.attr.resOpt.get match {
         case AST.ResolvedInfo.BuiltIn(kind) =>
           var r = ISZ[(State, State.Value)]()
+          var maxFresh = s0.nextFresh
           for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.left, reporter)) {
             val (s1, v1) = p
             if (s1.status) {
               if (kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo) {
-                r = r ++ evalMapsTo(s1, v1)
+                for (svs2 <- evalMapsTo(s1, v1)) {
+                  if (maxFresh < svs2._1.nextFresh) {
+                    maxFresh = svs2._1.nextFresh
+                  }
+                  r = r :+ svs2
+                }
               } else if (isCond(kind)) {
                 val (s2, left) = value2Sym(s1, v1, exp.left.posOpt.get)
-                r = r ++ evalCond(s2, kind, left)
-              } else if (exp.op == "==" || exp.op == "!=" || isBasic(smt2, v1.tipe)) {
-                r = r ++ evalBasic(s1, kind, v1)
+                for (svs2 <-evalCond(s2, kind, left)) {
+                  if (maxFresh < svs2._1.nextFresh) {
+                    maxFresh = svs2._1.nextFresh
+                  }
+                  r = r :+ svs2
+                }
+              } else if (eqOps.contains(exp.op) || isBasic(smt2, v1.tipe)) {
+                for (svs2 <-evalBasic(s1, kind, v1)) {
+                  if (maxFresh < svs2._1.nextFresh) {
+                    maxFresh = svs2._1.nextFresh
+                  }
+                  r = r :+ svs2
+                }
               } else {
                 reporter.warn(e.posOpt, Logika.kind, s"Not currently supported: $e")
                 r = r :+ ((s1(status = F), State.errorValue))
@@ -970,7 +1004,7 @@ import Util._
               r = r :+ ((s1, State.errorValue))
             }
           }
-          return r
+          return for (svs <- r) yield (svs._1(nextFresh = maxFresh), svs._2)
         case m: AST.ResolvedInfo.Method =>
           if (isSeq(m)) {
             return evalSeq(s0, m)
@@ -982,6 +1016,31 @@ import Util._
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
           return ISZ((s0(status = F), State.errorValue))
       }
+    }
+
+    def evalInstanceOfAs(isCast: B, receiverOpt: Option[AST.Exp], tipe: AST.Typed, pos: Position): ISZ[(State, State.Value)] = {
+      var r = ISZ[(State, State.Value)]()
+      for (p <- evalExp(split, smt2, cache, rtCheck, state, receiverOpt.get, reporter)) {
+        val (s0, v) = p
+        if (s0.status) {
+          val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
+          val s2 = s1.addClaim(State.Claim.Let.TypeTest(cond, F, v, tipe))
+          if (isCast) {
+            val s3 = evalAssertH(T, smt2, cache, "asInstanceOf", s2, cond, Some(pos), reporter)
+            if (s3.status) {
+              val (s4, cv) = s3.freshSym(tipe, pos)
+              r = r :+ ((s4.addClaim(State.Claim.Let.Eq(cv, v)), cv))
+            } else {
+              r = r :+ ((s3, State.errorValue))
+            }
+          } else {
+            r = r :+ ((s2, cond))
+          }
+        } else {
+          r = r :+ ((s0, State.errorValue))
+        }
+      }
+      return r
     }
 
     def evalSelectH(sp: Split.Type, res: AST.ResolvedInfo, receiverOpt: Option[AST.Exp], id: String, tipe: AST.Typed,
@@ -1068,6 +1127,10 @@ import Util._
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random =>
           return random(exp.typedOpt.get)
+        case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.IsInstanceOf ||
+          res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf =>
+          return evalInstanceOfAs(res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf, exp.receiverOpt,
+            exp.targs(0).typedOpt.get, exp.posOpt.get)
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext  =>
           if (res.owner.size == 3 && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id === "random") {
             return random(res.tpeOpt.get.ret)
@@ -2072,7 +2135,7 @@ import Util._
             }
             val mType = info.sig.funType
             val invokeType = mType(args = argTypes.toIS, ret = attr.typedOpt.get)
-            TypeChecker.unify(th, posOpt, TypeChecker.TypeRelation.Equal, invokeType, mType, reporter) match {
+            TypeChecker.unifyFun(Logika.kind, th, posOpt, TypeChecker.TypeRelation.Subtype, invokeType, mType, reporter) match {
               case Some(sm) =>
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
@@ -2310,8 +2373,12 @@ import Util._
                   return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
                 case AST.MethodMode.Ext if res.id == "randomInt" && res.owner == AST.Typed.sireumName =>
                   return evalRandomInt()
-                case AST.MethodMode.Spec if res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName =>
-                  return evalSeqIndexValidSize(e.targs(0), e.args(0))
+                case AST.MethodMode.Spec =>
+                  if (res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName) {
+                    return evalSeqIndexValidSize(e.targs(0), e.args(0))
+                  } else {
+                    return evalInvoke(s0, e.receiverOpt, e.ident, Either.Left(e.args), e.attr)
+                  }
                 case AST.MethodMode.Method =>
                   if (res.id == "isInBound" && (res.owner == AST.Typed.isName || res.owner == AST.Typed.msName)) {
                     return evalIsInBound(s0, e.receiverOpt.get, e.args(0), e.attr)
@@ -2339,8 +2406,12 @@ import Util._
                   return evalConstructor(split, F, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
                 case AST.MethodMode.Copy =>
                   return evalConstructor(split, T, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
-                case AST.MethodMode.Spec if res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName =>
-                  return evalSeqIndexValidSize(e.targs(0), e.args(0).arg)
+                case AST.MethodMode.Spec =>
+                  if (res.id == "seqIndexValidSize" && res.owner == AST.Typed.sireumName) {
+                    return evalSeqIndexValidSize(e.targs(0), e.args(0).arg)
+                  } else {
+                    return evalInvoke(s0, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
+                  }
                 case AST.MethodMode.Method =>
                   return evalInvoke(s0, e.receiverOpt, e.ident, Either.Right(e.args), e.attr)
                 case AST.MethodMode.Ext =>
@@ -3096,9 +3167,9 @@ import Util._
       var r = ISZ[AST.Exp]()
       for (stp <- steps) {
         stp match {
-          case stp: AST.ProofAst.Step.Regular => r = r :+ AST.Util.normalizeFun(stp.claim)
-          case stp: AST.ProofAst.Step.Assert => r = r :+ AST.Util.normalizeFun(stp.claim)
-          case stp: AST.ProofAst.Step.Assume => r = r :+ AST.Util.normalizeFun(stp.claim)
+          case stp: AST.ProofAst.Step.Regular => r = r :+ AST.Util.normalizeExp(stp.claim)
+          case stp: AST.ProofAst.Step.Assert => r = r :+ AST.Util.normalizeExp(stp.claim)
+          case stp: AST.ProofAst.Step.Assume => r = r :+ AST.Util.normalizeExp(stp.claim)
           case _ =>
         }
       }
@@ -3129,7 +3200,7 @@ import Util._
         s0 = stateMap._1(status = s0.status, nextFresh = s0.nextFresh)
         if (s0.status) {
           m = stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
-            AST.Util.normalizeFun(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps))
+            AST.Util.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps))
           return (s0, m)
         } else {
           return (s0, stateMap._2)
@@ -3167,7 +3238,7 @@ import Util._
           if (step.steps.nonEmpty && step.steps(0).isInstanceOf[AST.ProofAst.Step.Assume]) {
             return (s0,
               stateMap._2 + stepNo ~> StepProofContext.FreshAssumeSubProof(stepNo, step.params,
-                AST.Util.normalizeFun(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim),
+                AST.Util.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim),
                 extractClaims(step.steps)))
           } else {
             return (s0,
@@ -3559,8 +3630,8 @@ import Util._
           }
           st0 = s0(status = p._1.status, nextFresh = p._1.nextFresh, claims = s0.claims)
           val provenClaims = HashSet ++ (for (spc <- p._2.values if spc.isInstanceOf[StepProofContext.Regular]) yield
-            AST.Util.normalizeFun(spc.asInstanceOf[StepProofContext.Regular].exp))
-          if (st0.status && !provenClaims.contains(AST.Util.normalizeFun(sequent.conclusion))) {
+            AST.Util.normalizeExp(spc.asInstanceOf[StepProofContext.Regular].exp))
+          if (st0.status && !provenClaims.contains(AST.Util.normalizeExp(sequent.conclusion))) {
             reporter.error(sequent.conclusion.posOpt, Logika.kind, "The sequent's conclusion has not been proven")
             st0 = st0(status = F)
           }
@@ -3691,6 +3762,7 @@ import Util._
         case _: AST.Stmt.Sig => return ISZ(state)
         case _: AST.Stmt.TypeAlias => return ISZ(state)
         case _: AST.Stmt.Fact => return ISZ(state)
+        case _: AST.Stmt.Theorem => return ISZ(state)
         case _ =>
           reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
           return ISZ(state(status = F))

@@ -50,8 +50,10 @@ import org.sireum.logika.Logika.Reporter
         }
         return r
       case just: AST.ProofAst.Step.Justification.Incept if just.witnesses.isEmpty =>
-        val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-        return res.id == "Auto" && res.owner == justificationName
+        just.invokeIdent.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.Method => return res.id == "Auto" && res.owner == justificationName
+          case _ => return F
+        }
       case _ => return F
     }
   }
@@ -101,7 +103,7 @@ import org.sireum.logika.Logika.Reporter
       val args = argsOpt.get
 
       val provenClaims = HashMap ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
-        (AST.Util.normalizeFun(spc.asInstanceOf[StepProofContext.Regular].exp), spc.asInstanceOf[StepProofContext.Regular]))
+        (AST.Util.normalizeExp(spc.asInstanceOf[StepProofContext.Regular].exp), spc.asInstanceOf[StepProofContext.Regular]))
 
       var status = args.isEmpty
       if (status) {
@@ -166,7 +168,7 @@ import org.sireum.logika.Logika.Reporter
       val num = argsOpt.get(0).asInstanceOf[AST.ProofAst.StepId.Num]
       spcMap.get(num) match {
         case Some(spc: StepProofContext.Regular) =>
-          if (AST.Util.normalizeFun(spc.exp) == AST.Util.normalizeFun(step.claim)) {
+          if (AST.Util.normalizeExp(spc.exp) == AST.Util.normalizeExp(step.claim)) {
             val spcPos = spc.stepNo.posOpt.get
             reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
               st"""Accepted by using ${Plugin.stepNoDesc(F, spc.stepNo)} at [${spcPos.beginLine}, ${spcPos.beginColumn}], i.e.:

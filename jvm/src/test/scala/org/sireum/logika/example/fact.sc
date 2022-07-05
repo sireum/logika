@@ -1,6 +1,6 @@
 // #Sireum #Logika
 import org.sireum._
-import org.sireum.justification.FactClaim
+import org.sireum.justification.ClaimOf
 
 @spec def f(num: Z): Z = $
 
@@ -19,7 +19,7 @@ import org.sireum.justification.FactClaim
 
   Deduce(
     //@formatter:off
-    1 #> (f(0) === 1)                                                 by FactClaim(fFact _)
+    1 #> (f(0) === 1)                                                 by ClaimOf(fFact _)
     //@formatter:on
   )
 
@@ -35,7 +35,7 @@ import org.sireum.justification.FactClaim
 
     Deduce(
       //@formatter:off
-      1 #> ∀{ num: Z => (num > 0) ->: (f(num) == num * f(num - 1)) }  by FactClaim(fFact _)
+      1 #> ∀{ num: Z => (num > 0) ->: (f(num) == num * f(num - 1)) }  by ClaimOf(fFact _)
       //@formatter:on
     )
   }
@@ -45,8 +45,8 @@ import org.sireum.justification.FactClaim
 def foo(): Unit = {
   Deduce(
     //@formatter:off
-    1 #> (f(0) === 1)                                                 by FactClaim(fFact _),
-    2 #> ∀{ num: Z => (num > 0) ->: (f(num) == num * f(num - 1)) }    by FactClaim(fFact _)
+    1 #> (f(0) === 1)                                                 by ClaimOf(fFact _),
+    2 #> ∀{ num: Z => (num > 0) ->: (f(num) == num * f(num - 1)) }    by ClaimOf(fFact _)
     //@formatter:on
   )
   assert(factorial(5) == 120)

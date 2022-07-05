@@ -58,8 +58,10 @@ object PredNatDedPlugin {
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Incept =>
-        val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-        return justificationIds.contains(res.id) && res.owner == justificationName
+        just.invokeIdent.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.Method => return justificationIds.contains(res.id) && res.owner == justificationName
+          case _ => return F
+        }
       case _ => return F
     }
   }
@@ -125,7 +127,7 @@ object PredNatDedPlugin {
             exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
-        if (!subProof.contains(AST.Util.normalizeFun(substClaim))) {
+        if (!subProof.contains(AST.Util.normalizeExp(substClaim))) {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not infer the stated claim using ${just.invokeIdent.id.value}")
           return emptyResult
         }
@@ -176,7 +178,7 @@ object PredNatDedPlugin {
             exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
-        if (AST.Util.normalizeFun(substClaim) != assumption) {
+        if (AST.Util.normalizeExp(substClaim) != assumption) {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not match the assumption in let sub-proof $subProofNo")
           return emptyResult
         }

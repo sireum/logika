@@ -57,19 +57,71 @@ object Task {
                        val plugins: ISZ[Plugin]) extends Task {
     override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
-      val fsmt2 = smt2
+      for (tp <- fact.typeParams) {
+        smt2.addType(AST.Typed.TypeVar(tp.id.value), reporter)
+      }
       var s0 = State.create
-      for (claim <- fact.claims if s0.status) {
+      val claims: ISZ[AST.Exp] = if (fact.isFun) {
+        val first = fact.claims(0).asInstanceOf[AST.Exp.Quant]
+        for (p <- first.fun.params) {
+          val id = p.idOpt.get
+          val pos = id.attr.posOpt.get
+          val s1 = Util.idIntro(pos, s0, first.fun.context, id.value, p.typedOpt.get, Some(pos))._1
+          s0 = s1
+        }
+        for (c <- fact.claims) yield c.asInstanceOf[AST.Exp.Quant].fun.exp.asInstanceOf[AST.Stmt.Expr].exp
+      } else {
+        fact.claims
+      }
+      var i = 1
+      for (claim <- claims if s0.status) {
         val pos = claim.posOpt.get
-        val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, fsmt2, cache, T, s0, claim, reporter)
+        val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, smt2, cache, T, s0, claim, reporter)
         val (s2, sym) = logika.value2Sym(s1, v, pos)
         val s3 = s2.addClaim(State.Claim.Prop(T, sym))
-        if (fsmt2.satResult(cache, T, config.logVc, config.logVcDirOpt, "Fact claim", pos,
-          s3.claims, reporter)._2.kind == Smt2Query.Result.Kind.Unsat) {
+        if (smt2.satResult(cache, T, config.logVc, config.logVcDirOpt, s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos,
+          s3.claims, reporter)._2.kind === Smt2Query.Result.Kind.Unsat) {
           reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
           s0 = s3(status = F)
         } else {
           s0 = s3
+        }
+        i = i + 1
+      }
+      return reporter.messages
+    }
+  }
+
+  @datatype class Theorem(val th: TypeHierarchy,
+                       val config: Config,
+                       val theorem: AST.Stmt.Theorem,
+                       val plugins: ISZ[Plugin]) extends Task {
+    override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
+      val logika = Logika(th, config, Context.empty, plugins)
+      for (tp <- theorem.typeParams) {
+        smt2.addType(AST.Typed.TypeVar(tp.id.value), reporter)
+      }
+      var p = (State.create, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
+      for (step <- theorem.proof.steps if p._1.status) {
+        p = logika.evalProofStep(smt2, cache, p, step, reporter)
+      }
+      if (!p._1.status) {
+        return reporter.messages
+      }
+      val normClaim: AST.Exp = AST.Util.normalizeExp(
+        if (theorem.isFun) theorem.claim.asInstanceOf[AST.Exp.Quant].fun.exp.asInstanceOf[AST.Stmt.Expr].exp
+        else theorem.claim)
+      val spcEntries = p._2.entries
+      for (i <- spcEntries.size - 1 to 0 by -1 if spcEntries(i)._2.isInstanceOf[StepProofContext.Regular]) {
+        val StepProofContext.Regular(stepNo, claim, _) = spcEntries(i)._2
+        val spcPos = stepNo.posOpt.get
+        if (normClaim == AST.Util.normalizeExp(claim)) {
+          reporter.inform(normClaim.posOpt.get, Logika.Reporter.Info.Kind.Verified,
+            st"""Accepted by using ${Plugin.stepNoDesc(F, spcEntries(i)._1)}, i.e.:
+                |
+                |$claim
+                |""".render)
+          return reporter.messages
         }
       }
       return reporter.messages
