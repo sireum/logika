@@ -95,8 +95,13 @@ object Smt2Invoke {
           case string"alt-ergo-open" => T
           case _ => F
         }
-      } else if (pr.exitCode == 2 && config.name == "alt-ergo-open") {
-        T
+      } else if (pr.exitCode == 2) {
+        val poutOps = ops.StringOps(pout)
+        config.name match {
+          case string"alt-ergo" if poutOps.contains("exception Psmt2Frontend__Smtlib_parser.MenhirBasics.Error") => T
+          case string"alt-ergo-open" if poutOps.contains("exception Psmt2Frontend__Smtlib_parser.MenhirBasics.Error") => T
+          case _ => F
+        }
       } else {
         F
       }
