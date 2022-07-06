@@ -67,6 +67,8 @@ object LogikaTest {
       caching = F,
       smt2Seq = F,
     )
+
+  lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
 }
 
 import LogikaTest._

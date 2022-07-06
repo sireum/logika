@@ -50,7 +50,7 @@ class LogikaRcTest extends SireumRcSpec {
   }
 
   def shouldIgnore(name: Predef.String): Boolean = name match {
-    case "collection.sc" if !Os.isWin && Os.env("GITHUB_ACTION").nonEmpty => true
+    case "collection.sc" if !Os.isWin && isInGithubAction => true
     case _ => false
   }
 
@@ -65,7 +65,7 @@ class LogikaRcTest extends SireumRcSpec {
     val reporter = Logika.Reporter.create
     var c = config(simplifiedQuery = isSimplified)
     p(p.size - 1) match {
-      case "collection.sc" | "strictpure.sc" => c = c(timeoutInMs = 5000)
+      case "collection.sc" | "strictpure.sc" => c = c(timeoutInMs = if (isInGithubAction) 8000 else 5000)
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))
