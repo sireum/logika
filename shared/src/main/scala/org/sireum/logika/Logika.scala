@@ -1026,12 +1026,17 @@ import Util._
           val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
           val s2 = s1.addClaim(State.Claim.Let.TypeTest(cond, F, v, tipe))
           if (isCast) {
-            val s3 = evalAssertH(T, smt2, cache, "asInstanceOf", s2, cond, Some(pos), reporter)
-            if (s3.status) {
-              val (s4, cv) = s3.freshSym(tipe, pos)
-              r = r :+ ((s4.addClaim(State.Claim.Let.Eq(cv, v)), cv))
+            if (!rtCheck) {
+              val (s3, cv) = s2.freshSym(tipe, pos)
+              r = r :+ ((s3.addClaim(State.Claim.Let.Eq(cv, v)), cv))
             } else {
-              r = r :+ ((s3, State.errorValue))
+              val s3 = evalAssertH(T, smt2, cache, "asInstanceOf", s2, cond, Some(pos), reporter)
+              if (s3.status) {
+                val (s4, cv) = s3.freshSym(tipe, pos)
+                r = r :+ ((s4.addClaim(State.Claim.Let.Eq(cv, v)), cv))
+              } else {
+                r = r :+ ((s3, State.errorValue))
+              }
             }
           } else {
             r = r :+ ((s2, cond))
@@ -1054,10 +1059,14 @@ import Util._
             o.tipe match {
               case tipe: AST.Typed.Name =>
                 if (indexingFields.contains(id) && (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName)) {
-                  val (s1, size) = s0.freshSym(AST.Typed.z, pos)
-                  val (s2, cond) = s1.addClaim(State.Claim.Let.FieldLookup(size, o, "size")).freshSym(AST.Typed.b, pos)
-                  val s3 = s2.addClaim(State.Claim.Let.Binary(cond, size, AST.Exp.BinaryOp.Gt, State.Value.Z(0, pos), AST.Typed.z))
-                  s0 = evalAssertH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), reporter)
+                  if (!rtCheck) {
+                    // skip
+                  } else {
+                    val (s1, size) = s0.freshSym(AST.Typed.z, pos)
+                    val (s2, cond) = s1.addClaim(State.Claim.Let.FieldLookup(size, o, "size")).freshSym(AST.Typed.b, pos)
+                    val s3 = s2.addClaim(State.Claim.Let.Binary(cond, size, AST.Exp.BinaryOp.Gt, State.Value.Z(0, pos), AST.Typed.z))
+                    s0 = evalAssertH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), reporter)
+                  }
                 } else {
                   evalConstantVarInstance(smt2, cache, rtCheck, s0, tipe.ids, id, reporter) match {
                     case Some((s1, v)) => return value2Sym(s1, v, pos)
