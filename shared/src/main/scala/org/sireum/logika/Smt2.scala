@@ -162,7 +162,7 @@ object Smt2 {
 
   val cvc4DefaultSatOpts: String = "cvc4"
 
-  val cvc5DefaultValidOpts: String = "cvc5,--full-saturate-quant"
+  val cvc5DefaultValidOpts: String = "cvc5,--full-saturate-quant; cvc5,--enum-inst-interleave"
 
   val cvc5DefaultSatOpts: String = "cvc5,--finite-model-find"
 
@@ -174,7 +174,7 @@ object Smt2 {
 
   val altErgoOpenDefaultSatOpts: String = "alt-ergo-open"
 
-  val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts"
+  val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts; $altErgoOpenDefaultValidOpts"
 
   val defaultSatOpts: String = s"$cvc4DefaultSatOpts; $z3DefaultSatOpts; $cvc5DefaultSatOpts"
 
@@ -184,6 +184,13 @@ object Smt2 {
 
   val rlimit: Z = 1000000
 
+  val solverArgsMap: HashMap[String, ISZ[String]] = HashMap.empty[String, ISZ[String]] +
+    "alt-ergo" ~> ISZ[String]("-default-lang", "smt2", "-use-fpa") +
+    "alt-ergo-open" ~> ISZ[String]("-default-lang", "smt2", "-use-fpa") +
+    "cvc4" ~> ISZ[String]("--lang=smt2.6") +
+    "cvc5" ~> ISZ[String]("--lang=smt2.6") +
+    "z3" ~> ISZ("-smt2", "-in")
+
   def solverArgs(name: String, timeoutInMs: Z, rlimit: Z): Option[ISZ[String]] = {
     name match {
       case string"alt-ergo" =>
@@ -191,16 +198,16 @@ object Smt2 {
         if (timeoutInMs % 1000 != 0) {
           timeoutInS = timeoutInS + 1
         }
-        return Some(ISZ("-default-lang", "smt2", "-use-fpa", "-steps-bound", rlimit.string, "-timelimit", timeoutInS.string))
+        return Some(solverArgsMap.get(name).get ++ ISZ("-steps-bound", rlimit.string, "-timelimit", timeoutInS.string))
       case string"alt-ergo-open" =>
         var timeoutInS: Z = timeoutInMs / 1000
         if (timeoutInMs % 1000 != 0) {
           timeoutInS = timeoutInS + 1
         }
-        return Some(ISZ("-default-lang", "smt2", "-use-fpa", "-steps-bound", rlimit.string, "-timelimit", timeoutInS.string))
-      case string"cvc4" => return Some(ISZ("--lang=smt2.6", s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
-      case string"cvc5" => return Some(ISZ("--lang=smt2.6", s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
-      case string"z3" => return Some(ISZ("-smt2", "-in", s"rlimit=$rlimit", s"-t:$timeoutInMs"))
+        return Some(solverArgsMap.get(name).get ++ ISZ("-steps-bound", rlimit.string, "-timelimit", timeoutInS.string))
+      case string"cvc4" => return Some(solverArgsMap.get(name).get ++ ISZ(s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
+      case string"cvc5" => return Some(solverArgsMap.get(name).get ++ ISZ(s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
+      case string"z3" => return Some(solverArgsMap.get(name).get ++ ISZ(s"rlimit=$rlimit", s"-t:$timeoutInMs"))
       case _ => return None()
     }
   }
