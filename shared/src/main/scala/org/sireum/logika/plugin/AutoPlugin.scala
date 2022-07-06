@@ -127,11 +127,14 @@ import org.sireum.logika.Logika.Reporter
       } else {
         var s0 = state(claims = ISZ())
         var ok = T
+        val autoSmt2 = smt2
         for (arg <- args) {
           val stepNo = arg
           spcMap.get(stepNo) match {
             case Some(spc: StepProofContext.Regular) =>
-              s0 = s0.addClaim(State.Claim.And(spc.claims))
+              val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, autoSmt2, cache, T, s0, spc.exp, reporter)
+              val (s2, sym) = logika.value2Sym(s1, v, spc.exp.posOpt.get)
+              s0 = s2.addClaim(State.Claim.Prop(T, sym))
             case Some(_) =>
               reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for $id")
               ok = F
