@@ -162,7 +162,7 @@ object Smt2 {
 
   val cvc4DefaultSatOpts: String = "cvc4"
 
-  val cvc5DefaultValidOpts: String = "cvc5,--full-saturate-quant; cvc5,--enum-inst-interleave"
+  val cvc5DefaultValidOpts: String = "cvc5,--full-saturate-quant"
 
   val cvc5DefaultSatOpts: String = "cvc5,--finite-model-find"
 
@@ -174,7 +174,7 @@ object Smt2 {
 
   val altErgoOpenDefaultSatOpts: String = "alt-ergo-open"
 
-  val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts; $altErgoOpenDefaultValidOpts"
+  val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts"
 
   val defaultSatOpts: String = s"$cvc4DefaultSatOpts; $z3DefaultSatOpts; $cvc5DefaultSatOpts"
 
