@@ -57,7 +57,7 @@ object PredNatDedPlugin {
 
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
-      case just: AST.ProofAst.Step.Justification.Incept =>
+      case just: AST.ProofAst.Step.Justification.Apply =>
         just.invokeIdent.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method => return justificationIds.contains(res.id) && res.owner == justificationName
           case _ => return F
@@ -75,7 +75,7 @@ object PredNatDedPlugin {
                       state: State,
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
-    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
+    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
     res.id match {

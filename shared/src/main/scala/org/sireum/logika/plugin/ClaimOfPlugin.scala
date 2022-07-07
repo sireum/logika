@@ -40,7 +40,7 @@ import org.sireum.logika.Logika.Reporter
 
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
-      case just: AST.ProofAst.Step.Justification.Incept =>
+      case just: AST.ProofAst.Step.Justification.Apply =>
         just.invokeIdent.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method => return res.id == "ClaimOf" && res.owner == justificationName
           case _ => return F
@@ -59,7 +59,7 @@ import org.sireum.logika.Logika.Reporter
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
     @strictpure def err(): Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
-    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
+    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val arg: AST.Exp = just.args(0) match {
       case a: AST.Exp.Eta => a.ref.asExp
       case a =>

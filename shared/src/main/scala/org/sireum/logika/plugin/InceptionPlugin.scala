@@ -125,8 +125,8 @@ object InceptionPlugin {
       case _ => F
     }
     just match {
-      case just: AST.ProofAst.Step.Justification.Incept => return canHandleRes(just.invokeIdent.attr.resOpt.get)
-      case just: AST.ProofAst.Step.Justification.InceptNamed => return canHandleRes(just.invokeIdent.attr.resOpt.get)
+      case just: AST.ProofAst.Step.Justification.Apply => return canHandleRes(just.invokeIdent.attr.resOpt.get)
+      case just: AST.ProofAst.Step.Justification.ApplyNamed => return canHandleRes(just.invokeIdent.attr.resOpt.get)
       case _ => return F
     }
   }
@@ -327,21 +327,21 @@ object InceptionPlugin {
       }
     }
     just match {
-      case just: AST.ProofAst.Step.Justification.Incept =>
+      case just: AST.ProofAst.Step.Justification.Apply =>
         just.invoke.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method => return handleMethod(res, just.invoke.ident.posOpt, just.args)
           case res: AST.ResolvedInfo.Fact => return handleFactTheorem(res.name, just.invoke.ident.posOpt, just.args)
           case res: AST.ResolvedInfo.Theorem => return handleFactTheorem(res.name, just.invoke.ident.posOpt, just.args)
           case _ => halt("Infeasible")
         }
-      case just: AST.ProofAst.Step.Justification.InceptNamed =>
+      case just: AST.ProofAst.Step.Justification.ApplyNamed =>
         just.invoke.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method => return handleMethod(res, just.invoke.ident.posOpt, just.args)
           case res: AST.ResolvedInfo.Fact => return handleFactTheorem(res.name, just.invoke.ident.posOpt, just.args)
           case res: AST.ResolvedInfo.Theorem => return handleFactTheorem(res.name, just.invoke.ident.posOpt, just.args)
           case _ => halt("Infeasible")
         }
-      case _: AST.ProofAst.Step.Justification.InceptEta =>
+      case _: AST.ProofAst.Step.Justification.ApplyEta =>
         halt("TODO") // TODO
     }
   }

@@ -43,9 +43,9 @@ import org.sireum.logika.Logika.Reporter
 
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
-      case just: AST.ProofAst.Step.Justification.Apply =>
+      case just: AST.ProofAst.Step.Justification.Ref =>
         return justificationIds.contains(just.idString) && just.isOwnedBy(justificationName)
-      case just: AST.ProofAst.Step.Justification.Incept if just.witnesses.isEmpty =>
+      case just: AST.ProofAst.Step.Justification.Apply if just.witnesses.isEmpty =>
         just.invokeIdent.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method => return justificationIds.contains(res.id) && res.owner == justificationName
           case _ => return F
@@ -65,10 +65,10 @@ import org.sireum.logika.Logika.Reporter
                       reporter: Reporter): Plugin.Result = {
 
     val (id, posOpt, argsOpt): (String, Option[Position], Option[ISZ[AST.ProofAst.StepId]]) = step.just match {
-      case just: AST.ProofAst.Step.Justification.Apply =>
+      case just: AST.ProofAst.Step.Justification.Ref =>
         val id = just.idString
-        (id, just.id.posOpt, AST.Util.toStepIds(just.args, Logika.kind, reporter))
-      case just: AST.ProofAst.Step.Justification.Incept =>
+        (id, just.id.asExp.posOpt, Some(ISZ()))
+      case just: AST.ProofAst.Step.Justification.Apply =>
         val invokeId = just.invokeIdent.id.value
         val ao: Option[ISZ[AST.ProofAst.StepId]] = if (just.args.size === 1) {
           just.args(0) match {

@@ -42,7 +42,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
-      case just: AST.ProofAst.Step.Justification.Incept =>
+      case just: AST.ProofAst.Step.Justification.Apply =>
         just.invokeIdent.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method => return (res.id == "Smt2" || res.id == "Smt2_*") && res.owner == justificationName
           case _ => return F
@@ -61,7 +61,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
     @strictpure def err(): Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
-    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
+    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val (options, timeout, resourceLimit, argsOpt): (String, Z, Z, Option[ISZ[AST.ProofAst.StepId]]) = just.args match {
       case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ) => (s.value, t.value, r.value, None())
       case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ, invoke: AST.Exp.Invoke) if invoke.typedOpt == iszzTypedOpt =>

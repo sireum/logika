@@ -42,7 +42,7 @@ import org.sireum.message.Position
 
   @pure def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
-      case AST.ProofAst.Step.Justification.Incept(invoke, ISZ()) =>
+      case AST.ProofAst.Step.Justification.Apply(invoke, ISZ()) =>
         val lresOpt: Option[AST.ResolvedInfo] = invoke.ident.attr.resOpt
         lresOpt match {
           case Some(lres: AST.ResolvedInfo.Method) if lres.id == "Lift" && lres.owner == justificationName =>
@@ -73,8 +73,8 @@ import org.sireum.message.Position
              reporter: Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
 
-    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
-    val AST.ProofAst.Step.Justification.Incept(AST.Exp.Invoke(_, _, ISZ(invoke: AST.Exp.Invoke)), _) = just
+    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
+    val AST.ProofAst.Step.Justification.Apply(AST.Exp.Invoke(_, _, ISZ(invoke: AST.Exp.Invoke)), _) = just
     val res = invoke.ident.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     val args = invoke.args
     val posOpt = invoke.ident.attr.posOpt
