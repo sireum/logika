@@ -162,7 +162,7 @@ object Smt2 {
 
   val cvc4DefaultSatOpts: String = "cvc4"
 
-  val cvc5DefaultValidOpts: String = "cvc5,--full-saturate-quant,--enum-inst-interleave"
+  val cvc5DefaultValidOpts: String = "cvc5,--full-saturate-quant"
 
   val cvc5DefaultSatOpts: String = "cvc5,--finite-model-find"
 
