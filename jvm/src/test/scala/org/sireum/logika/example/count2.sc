@@ -27,7 +27,7 @@ import org.sireum.justification.{Premise, Smt2}
     if (s(i) == e) {
       Deduce(
         //@formatter:off
-        1 #> (s(i) === e) by Premise,
+        1 #> (s(i) === e)                                                by Premise,
         2 #> (r == countRange(s, e, 0, i))                               by Premise,
         3 #> !(i + 1 > s.size | 0 < 0 | 0 >= i + 1)                      by Premise,
         4 #> (countRange(s, e, 0, i + 1) == 1 + countRange(s, e, 0, i))  by Smt2("cvc5,--enum-inst-interleave", 2000, 1000000),
