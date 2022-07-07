@@ -76,7 +76,8 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
         return err()
     }
 
-    val lsmt2: Smt2 = smt2.withConfig(F, options, timeout, resourceLimit, reporter) match {
+    val lsmt2: Smt2 = smt2.withConfig(F, options,
+      if (timeout <= 0) 0 else timeout, if (resourceLimit <= 0) 0 else resourceLimit, reporter) match {
       case MEither.Left(s) => s
       case MEither.Right(msg) =>
         reporter.error(just.invoke.posOpt, Logika.kind, msg)
