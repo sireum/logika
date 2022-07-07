@@ -1,7 +1,5 @@
 // #Sireum #Logika
 
-// Note: this example requires alt-ergo for validity checking
-
 import org.sireum._
 import org.sireum.justification.{Premise, Smt2}
 
