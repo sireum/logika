@@ -248,14 +248,12 @@ object Smt2 {
   }
 
   @strictpure def eqProp(eq: ST, tid: ST): ST =
-    st"""; eqprop
-        |(assert (forall ((o $tid)) ($eq o o)))
+    st"""(assert (forall ((o $tid)) ($eq o o)))
         |(assert (forall ((o1 $tid) (o2 $tid)) (= ($eq o1 o2) ($eq o2 o1))))
         |(assert(forall ((o1 $tid) (o2 $tid) (o3 $tid)) (=> ($eq o1 o2) ($eq o2 o3) ($eq o1 o3))))"""
 
   @strictpure def eqTypeOfThProp(eq: ST, tid: ST, trel: String, typeofName: ST, thid: ST): ST =
-    st"""; eqprop
-        |(assert (forall ((o $tid)) (=> ($trel ($typeofName o) $thid) ($eq o o))))
+    st"""(assert (forall ((o $tid)) (=> ($trel ($typeofName o) $thid) ($eq o o))))
         |(assert (forall ((o1 $tid) (o2 $tid)) (=> ($trel ($typeofName o1) $thid) ($trel ($typeofName o2) $thid) (= ($eq o1 o2) ($eq o2 o1)))))
         |(assert(forall ((o1 $tid) (o2 $tid) (o3 $tid)) (=> ($trel ($typeofName o1) $thid) ($trel ($typeofName o2) $thid) ($trel ($typeofName o3) $thid) ($eq o1 o2) ($eq o2 o3) ($eq o1 o3))))"""
 
