@@ -1,7 +1,7 @@
 // #Sireum #Logika
 
 import org.sireum._
-import org.sireum.justification.{Auto, Lift, Premise}
+import org.sireum.justification.{Auto_*, Lift, Auto}
 import org.sireum.justification.natded.prop.ImplyI
 
 @strictpure def isOrdered(seq: ZS): B = All(0 until seq.size - 1)(i => seq(i) <= seq(i + 1))
@@ -42,8 +42,8 @@ import org.sireum.justification.natded.prop.ImplyI
       m = m + 1
       Deduce(                                                 // required when SMT2 query is simplified
         //@formatter:off
-        1 #> All(n until m - 1)(j => seq(n) <= seq(j))  by Premise,
-        2 #> ((m - 2 >= 0) -->: (seq(m - 2) <= seq(m - 1)))  by Premise
+        1 #> All(n until m - 1)(j => seq(n) <= seq(j))  by Auto,
+        2 #> ((m - 2 >= 0) -->: (seq(m - 2) <= seq(m - 1)))  by Auto
         //@formatter:on
       )
     }
@@ -60,7 +60,7 @@ import org.sireum.justification.natded.prop.ImplyI
       6 #> isOrderedH(seq)                      by ordered2Lemma(seq) and 5,
     ),
     2 #> (isOrdered(seq) ->: isOrderedH(seq))   by ImplyI(4),
-    3 #> (isOrderedH(seq) == isOrdered(seq))    by Auto(ISZ(1, 2))
+    3 #> (isOrderedH(seq) == isOrdered(seq))    by Auto_*(ISZ(1, 2))
     //@formatter:on
   ))
 }
@@ -71,7 +71,7 @@ import org.sireum.justification.natded.prop.ImplyI
     //@formatter:off
     1 #> (isOrderedH(seq) ->: isOrdered(seq))   by ordered1Lemma(seq),
     2 #> (isOrdered(seq) -->: isOrderedH(seq))  by Lift(ordered2Lemma(seq)),
-    3 #> (isOrderedH(seq) == isOrdered(seq))    by Auto(ISZ(1, 2))
+    3 #> (isOrderedH(seq) == isOrdered(seq))    by Auto_*(ISZ(1, 2))
     //@formatter:on
   ))
 }

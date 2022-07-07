@@ -67,6 +67,22 @@ object Smt2Impl {
                        var seqLits: HashSSet[Smt2.SeqLit],
                        var typeOfSeqSet: HashSet[(String, AST.Typed)]) extends Smt2 {
 
+  def updateFrom(that: Smt2): Unit = {
+    types = that.types
+    poset = that.poset
+    sorts = that.sorts
+    adtDecls = that.adtDecls
+    sTypeDecls = that.sTypeDecls
+    typeDecls = that.typeDecls
+    constraints = that.constraints
+    typeHierarchyIds = that.typeHierarchyIds
+    shortIds = that.shortIds
+    strictPureMethods = that.strictPureMethods
+    filenameCount = that.filenameCount
+    seqLits = that.seqLits
+    typeOfSeqSet = that.typeOfSeqSet
+  }
+
   def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
     shortIds = newShortIds
   }

@@ -38,11 +38,13 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 
   val name: String = "Smt2"
 
+  val iszzTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.z)))
+
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Incept =>
         just.invokeIdent.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Method => return res.id == "Smt2" && res.owner == justificationName
+          case res: AST.ResolvedInfo.Method => return (res.id == "Smt2" || res.id == "Smt2_*") && res.owner == justificationName
           case _ => return F
         }
       case _ => return F
@@ -60,8 +62,15 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
                       reporter: Reporter): Plugin.Result = {
     @strictpure def err(): Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Incept]
-    val (options, timeout, resourceLimit): (String, Z, Z) = just.args match {
-      case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ) => (s.value, t.value, r.value)
+    val (options, timeout, resourceLimit, argsOpt): (String, Z, Z, Option[ISZ[AST.ProofAst.StepId]]) = just.args match {
+      case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ) => (s.value, t.value, r.value, None())
+      case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ, invoke: AST.Exp.Invoke) if invoke.typedOpt == iszzTypedOpt =>
+        invoke.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
+            (s.value, t.value, r.value, AST.Util.toStepIds(invoke.args, Logika.kind, reporter))
+          case _ =>
+            (s.value, t.value, r.value, AST.Util.toStepIds(ISZ(invoke), Logika.kind, reporter))
+        }
       case _ =>
         reporter.error(just.invoke.posOpt, Logika.kind, s"Expecting literals for SMT2 configuration, timeout (ms), and resource limit")
         return err()
@@ -74,16 +83,44 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
         return err()
     }
 
+    val id = just.invokeIdent.id.value
+
+    if (argsOpt.isEmpty && id === "Smt2_*") {
+      return Plugin.Result(F, state.nextFresh, state.claims)
+    }
+
     val posOpt = just.invokeIdent.posOpt
 
-    val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) = {
+    val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) = if (argsOpt.isEmpty) {
       val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
       ((q._1, q._2, state.claims ++ q._3, q._4), q._3 :+ q._4)
+    } else {
+      var s0 = state(claims = ISZ())
+      var ok = T
+      for (arg <- argsOpt.get) {
+        val stepNo = arg
+        spcMap.get(stepNo) match {
+          case Some(spc: StepProofContext.Regular) =>
+            val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, lsmt2, cache, T, s0, spc.exp, reporter)
+            val (s2, sym) = logika.value2Sym(s1, v, spc.exp.posOpt.get)
+            s0 = s2.addClaim(State.Claim.Prop(T, sym))
+          case Some(_) =>
+            reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for $id")
+            ok = F
+          case _ =>
+            reporter.error(posOpt, Logika.kind, s"Could not find proof step $stepNo")
+            ok = F
+        }
+      }
+      if (!ok) {
+        return Plugin.Result(F, s0.nextFresh, s0.claims)
+      }
+      val q = logika.evalRegularStepClaim(lsmt2, cache, s0, step.claim, step.id.posOpt, reporter)
+      ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
     }
 
     val status: B = if (stat) {
       val r = lsmt2.valid(cache, T, log, logDirOpt, s"${just.invokeIdent.id.value} Justification", posOpt.get, premises, conclusion, reporter)
-
       def error(msg: String): B = {
         reporter.error(posOpt, Logika.kind, msg)
         return F
@@ -99,6 +136,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
     } else {
       F
     }
+    smt2.updateFrom(lsmt2)
     return Plugin.Result(status, nextFresh, claims)
   }
 

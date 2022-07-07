@@ -1,7 +1,7 @@
 // #Sireum #Logika
 
 import org.sireum._
-import org.sireum.justification.{Premise, Smt2}
+import org.sireum.justification.{Auto, Smt2}
 
 @strictpure def countRange(s: ZS, e: Z, from: Z, til: Z): Z =
   if (til > s.size | from < 0 | from >= til) 0
@@ -27,9 +27,9 @@ import org.sireum.justification.{Premise, Smt2}
     if (s(i) == e) {
       Deduce(
         //@formatter:off
-        1 #> (s(i) === e)                                                by Premise,
-        2 #> (r == countRange(s, e, 0, i))                               by Premise,
-        3 #> !(i + 1 > s.size | 0 < 0 | 0 >= i + 1)                      by Premise,
+        1 #> (s(i) === e)                                                by Auto,
+        2 #> (r == countRange(s, e, 0, i))                               by Auto,
+        3 #> !(i + 1 > s.size | 0 < 0 | 0 >= i + 1)                      by Auto,
         4 #> (countRange(s, e, 0, i + 1) == 1 + countRange(s, e, 0, i))  by Smt2("cvc5,--enum-inst-interleave", 2000, 1000000),
         //@formatter:on
       )

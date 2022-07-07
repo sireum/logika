@@ -1,7 +1,7 @@
 // #Sireum #Logika
 
 import org.sireum._
-import org.sireum.justification.{ClaimOf, Premise}
+import org.sireum.justification.{ClaimOf, Auto}
 import org.sireum.justification.natded.prop.{negE, ImplyI}
 
 @spec def eq[T](t1: T, t2: T): B = $
@@ -15,7 +15,7 @@ import org.sireum.justification.natded.prop.{negE, ImplyI}
   Proof(
     //@formatter:off
     ∀ { (t1: A, t2: A) => eq(t1, t2) === (t1 == t2) } by ClaimOf(eqFact[A] _),
-    eq(t1, t2) === eq(t2, t1)                         by Premise
+    eq(t1, t2) === eq(t2, t1)                         by Auto
     //@formatter:on
   )
 )
@@ -23,7 +23,7 @@ import org.sireum.justification.natded.prop.{negE, ImplyI}
 @spec def `Obvious 0 < 1` = Lemma(
   z"0" < z"1",
   Proof(
-    (z"0" < z"1") by Premise
+    (z"0" < z"1") by Auto
   )
 )
 

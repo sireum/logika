@@ -402,7 +402,11 @@ object Smt2 {
 
   def typeOfSeqSetUp(newTypeOfSeqSet: HashSet[(String, AST.Typed)]): Unit
 
+  def filenameCount: HashMap[String, Z]
+
   def withConfig(isSat: B, options: String, timeout: Z, resourceLimit: Z, reporter: Reporter): MEither[Smt2, String]
+
+  def updateFrom(that: Smt2): Unit
 
   @strictpure def proofFunId(pf: State.ProofFun): ST = {
     val targs: ST = pf.receiverTypeOpt match {

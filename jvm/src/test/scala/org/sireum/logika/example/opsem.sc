@@ -2,7 +2,7 @@
 
 import org.sireum._
 import org.sireum.justification.natded.pred.allE
-import org.sireum.justification.{ClaimOf, Premise}
+import org.sireum.justification.{ClaimOf, Auto}
 
 object AST {
 
@@ -169,14 +169,14 @@ object Impl {
                                                                                                       v === State.Value.Boolean(exp.asInstanceOf[AST.Exp.LitB].value)) ->:
                                                                                                          (Spec.evalExp(state, exp) === ((state, v)))),
                                                                                                    rv) and 4,
-       6 #> exp.isInstanceOf[AST.Exp.LitB]                                                 by Premise,
+       6 #> exp.isInstanceOf[AST.Exp.LitB]                                                 by Auto,
        7 #> ((state === state &
               rv === State.Value.Boolean(exp.asInstanceOf[AST.Exp.LitB].value)) ->:
-                (Spec.evalExp(state, exp) === ((state, rv))))                              by Premise,
+                (Spec.evalExp(state, exp) === ((state, rv))))                              by Auto,
        8 #> (state === state &
-             rv === State.Value.Boolean(exp.asInstanceOf[AST.Exp.LitB].value))             by Premise,
-       9 #> (rv === State.Value.Boolean(exp.asInstanceOf[AST.Exp.LitB].value))             by Premise,
-      10 #> (Spec.evalExp(state, exp) === ((state, rv)))                                   by Premise,
+             rv === State.Value.Boolean(exp.asInstanceOf[AST.Exp.LitB].value))             by Auto,
+       9 #> (rv === State.Value.Boolean(exp.asInstanceOf[AST.Exp.LitB].value))             by Auto,
+      10 #> (Spec.evalExp(state, exp) === ((state, rv)))                                   by Auto,
       //@formatter:on
     )
     return (state, rv)
@@ -194,7 +194,7 @@ object Impl {
         (state === state &
          rv === State.Value.Integer(exp.asInstanceOf[AST.Exp.LitZ].value)) ->:
              (Spec.evalExp(state, exp) === ((state, rv)))))                                by Spec.evalExpLitZFact(state, exp, state, rv),
-      (Spec.evalExp(state, exp) === ((state, rv)))                                         by Premise
+      (Spec.evalExp(state, exp) === ((state, rv)))                                         by Auto
       //@formatter:on
     )
     return (state, rv)
@@ -213,7 +213,7 @@ object Impl {
             (state.store.get(exp.asInstanceOf[AST.Exp.VarRef].id) === Some(rv) &
              state === state) ->:
                 (Spec.evalExp(state, exp) === ((state, rv)))))                             by Spec.evalExpVarRefFact(state, exp, state, rv),
-          (Spec.evalExp(state, exp) === ((state, rv)))                                     by Premise
+          (Spec.evalExp(state, exp) === ((state, rv)))                                     by Auto
           //@formatter:on
         )
         (state, rv)
@@ -227,7 +227,7 @@ object Impl {
               ((rs === state(status = State.Status.Error) &
                 rv === State.Value.Error()) ->:
                   (Spec.evalExp(state, exp) === ((rs, rv))))))                             by Spec.evalExpVarRefErrorFact(state, exp, rs, rv),
-          (Spec.evalExp(state, exp) === ((rs, rv)))                                        by Premise
+          (Spec.evalExp(state, exp) === ((rs, rv)))                                        by Auto
           //@formatter:on
         )
         (rs, rv)
