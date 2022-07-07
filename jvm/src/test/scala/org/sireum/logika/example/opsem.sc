@@ -42,7 +42,7 @@ object AST {
                       val store: State.Store)
 
 object State {
-  type Store = Map[String, Value]
+  type Store = AssocS[String, Value]
 
   @datatype trait Value
 
