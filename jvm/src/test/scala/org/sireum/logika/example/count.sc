@@ -3,7 +3,7 @@
 // Note: this example requires alt-ergo for validity checking
 
 import org.sireum._
-import org.sireum.justification.Premise
+import org.sireum.justification.{Premise, Smt2}
 
 @strictpure def countTil(s: ZS, e: Z, til: Z): Z =
   if (til <= 0 | til > s.size) 0
@@ -30,7 +30,7 @@ import org.sireum.justification.Premise
         1 #> (r == countTil(s, e, i))                          by Premise,
         2 #> !(i + 1 <= 0 | i > s.size)                        by Premise,
         3 #> (s((i + 1) - 1) == e)                             by Premise,
-        4 #> (countTil(s, e, i + 1) == 1 + countTil(s, e, i))  by Premise
+        4 #> (countTil(s, e, i + 1) == 1 + countTil(s, e, i))  by Smt2("cvc5,--enum-inst-interleave", 2000, 1000000)
         //@formatter:on
       )
       r = r + 1

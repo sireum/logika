@@ -404,6 +404,8 @@ object Smt2 {
 
   def typeOfSeqSetUp(newTypeOfSeqSet: HashSet[(String, AST.Typed)]): Unit
 
+  def withConfig(isSat: B, options: String, timeout: Z, resourceLimit: Z, reporter: Reporter): MEither[Smt2, String]
+
   @strictpure def proofFunId(pf: State.ProofFun): ST = {
     val targs: ST = pf.receiverTypeOpt match {
       case Some(receiverType: AST.Typed.Name) =>

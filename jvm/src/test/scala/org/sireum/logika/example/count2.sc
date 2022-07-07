@@ -3,7 +3,7 @@
 // Note: this example requires alt-ergo for validity checking
 
 import org.sireum._
-import org.sireum.justification.Premise
+import org.sireum.justification.{Premise, Smt2}
 
 @strictpure def countRange(s: ZS, e: Z, from: Z, til: Z): Z =
   if (til > s.size | from < 0 | from >= til) 0
@@ -30,9 +30,9 @@ import org.sireum.justification.Premise
       Deduce(
         //@formatter:off
         1 #> (s(i) === e) by Premise,
-        5 #> (r == countRange(s, e, 0, i))                               by Premise,
-        6 #> !(i + 1 > s.size | 0 < 0 | 0 >= i + 1)                      by Premise,
-        7 #> (countRange(s, e, 0, i + 1) == 1 + countRange(s, e, 0, i))  by Premise,
+        2 #> (r == countRange(s, e, 0, i))                               by Premise,
+        3 #> !(i + 1 > s.size | 0 < 0 | 0 >= i + 1)                      by Premise,
+        4 #> (countRange(s, e, 0, i + 1) == 1 + countRange(s, e, 0, i))  by Smt2("cvc5,--enum-inst-interleave", 2000, 1000000),
         //@formatter:on
       )
       r = r + 1

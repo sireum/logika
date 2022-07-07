@@ -167,5 +167,15 @@ object Smt2Impl {
   def formatR(value: R): ST = {
     return Smt2Formatter.formatR(value)
   }
+
+  def withConfig(isSat: B, options: String, timeout: Z, resourceLimit: Z, reporter: Logika.Reporter): MEither[Smt2, String] = {
+    Smt2.parseConfigs(Smt2Invoke.nameExePathMap(Os.path(Os.env("SIREUM_HOME").get)), isSat, options, timeout,
+      resourceLimit) match {
+      case Either.Left(smt2Configs) =>
+        val thisL = this
+        return MEither.Left(thisL(configs = smt2Configs))
+      case Either.Right(msg) => return MEither.Right(msg)
+    }
+  }
 }
 
