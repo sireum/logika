@@ -855,8 +855,6 @@ object Smt2 {
               |    ${thidTypeOpt("y")}
               |    ($eqId x y)
               |    (= x y))))""")
-      } else if (etAdt) {
-        addSTypeDecl(Smt2.eqTypeOfThProp(eqId, tId, "=", typeofName, thId))
       }
       if (etAdt) {
         addSTypeDecl(
@@ -983,8 +981,6 @@ object Smt2 {
                 |    ($eqId x y)
                 |    (= x y))))"""
           )
-        } else {
-          addAdtDecl(Smt2.eqThProp(eqId, tId, "sub-type", thId))
         }
         addAdtDecl(st"(define-fun $neId ((o1 $tId) (o2 $tId)) B (not ($eqId o1 o2)))")
         var leaves: ISZ[ST] = ISZ()
@@ -1071,8 +1067,6 @@ object Smt2 {
                 |    (= (type-of x!0) $thId)
                 |    ($eqId x!0 x!1)
                 |    (= x!0 x!1))))""")
-        } else {
-          addTypeDecl(Smt2.eqThProp(eqId, tId, "=", thId))
         }
         addTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       }
@@ -1108,7 +1102,6 @@ object Smt2 {
         addAdtDecl(st"(define-fun $eqId ((x $tid) (y $tid)) B (= x y))")
       } else {
         addAdtDecl(st"(declare-fun $eqId ($tid $tid) B)")
-        addAdtDecl(Smt2.eqThProp(eqId, tid, "sub-type", thId))
       }
       addAdtDecl(st"(define-fun $neId ((o1 $tid) (o2 $tid)) B (not ($eqId o1 o2)))")
       addSub(ti.posOpt, T, t, thId, ti.parents, sm)
