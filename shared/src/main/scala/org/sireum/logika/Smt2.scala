@@ -154,7 +154,7 @@ object Smt2 {
 
   val topPrefix: String = "_"
 
-  val z3DefaultValidOpts: String = "z3,smt.mbqi=false"
+  val z3DefaultValidOpts: String = "z3"
 
   val z3DefaultSatOpts: String = "z3"
 
@@ -182,7 +182,7 @@ object Smt2 {
 
   val satTimeoutInMs: Z = 500
 
-  val rlimit: Z = 1000000
+  val rlimit: Z = 2000000
 
   val solverArgsMap: HashMap[String, ISZ[String]] = HashMap.empty[String, ISZ[String]] +
     "alt-ergo" ~> ISZ[String]("-default-lang", "smt2", "-use-fpa") +
