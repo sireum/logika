@@ -69,250 +69,233 @@ object State {
 
 object Spec {
 
-  object Aux {
-    @spec def valueToB(value: State.Value): B = $
-
-    @spec def valueToBFact(value: State.Value) = Fact(
-      ?(value)((v: State.Value.Boolean) =>
-        valueToB(value) == v.value
-      )
-    )
-
-    @spec def valueToZ(value: State.Value): Z = $
-
-    @spec def valueToZFact(value: State.Value) = Fact(
-      ?(value)((v: State.Value.Integer) =>
-        valueToZ(value) == v.value
-      )
-    )
-  }
-
   @spec def evalExp(state: State, exp: AST.Exp): (State, State.Value) = $
 
-  @spec def evalExpNonNormal(s0: State, exp: AST.Exp) = Fact(
-    (s0.status =!= State.Status.Normal) ->: (Spec.evalExp(s0, exp) === ((s0, State.Value.Error())))
-  )
-
-  @spec def evalExpLitBFact(s0: State, exp: AST.Exp) = Fact(
+  @spec def evalExpLitB(s0: State, exp: AST.Exp) = Fact(
     ?(exp) { (exp: AST.Exp.LitB) =>
       (s0.status === State.Status.Normal) ->:
         (Spec.evalExp(s0, exp) === ((s0, State.Value.Boolean(exp.value))))
     }
   )
 
-  @spec def evalExpLitZFact(s0: State, exp: AST.Exp) = Fact(
+  @spec def evalExpLitZ(s0: State, exp: AST.Exp) = Fact(
     ?(exp) { (exp: AST.Exp.LitZ) =>
       (s0.status === State.Status.Normal) ->:
         (Spec.evalExp(s0, exp) === ((s0, State.Value.Integer(exp.value))))
     }
   )
 
-  @spec def evalExpVarRefFact(s0: State, exp: AST.Exp, v: State.Value) = Fact(
+  @spec def evalExpVarRef(s0: State, exp: AST.Exp, v: State.Value) = Fact(
     ?(exp) { (exp: AST.Exp.VarRef) =>
       (s0.status === State.Status.Normal) ->: (s0.store.get(exp.id) === Some(v)) ->:
         (Spec.evalExp(s0, exp) === ((s0, v)))
     }
   )
 
-  @spec def evalExpVarRefStoreErrorFact(s0: State, exp: AST.Exp) = Fact(
+  @spec def evalExpBinaryBooleanAnd(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.And) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value & right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanOr(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Or) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value | right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanImply(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Imply) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value ->: right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanEq(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Eq) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value === right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanNe(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Ne) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value =!= right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanCondAnd1(s0: State, exp: AST.Exp, sN: State) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(F)))) ->:
+        (sN.status === State.Status.Normal) ->: (exp.op === AST.Exp.Binary.Op.CondAnd) ->:
+        (Spec.evalExp(s0, exp) === ((sN, State.Value.Boolean(F))))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanCondOr1(s0: State, exp: AST.Exp, sN: State) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(T)))) ->:
+        (sN.status === State.Status.Normal) ->: (exp.op === AST.Exp.Binary.Op.CondOr) ->:
+        (Spec.evalExp(s0, exp) === ((sN, State.Value.Boolean(T))))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanCondImply1(s0: State, exp: AST.Exp, sN: State) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(F)))) ->:
+        (sN.status === State.Status.Normal) ->: (exp.op === AST.Exp.Binary.Op.CondImply) ->:
+        (Spec.evalExp(s0, exp) === ((sN, State.Value.Boolean(T))))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanCondAnd2(s0: State, exp: AST.Exp, sN: State, right: State.Value.Boolean, sM: State) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(T)))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.CondAnd) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, right)))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanCondOr2(s0: State, exp: AST.Exp, sN: State, right: State.Value.Boolean, sM: State) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(F)))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.CondOr) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, right)))
+    }
+  )
+
+  @spec def evalExpBinaryBooleanCondImply2(s0: State, exp: AST.Exp, sN: State, right: State.Value.Boolean, sM: State) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(T)))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.CondImply) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, right)))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerAdd(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Add) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value + right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerSub(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Sub) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value - right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerMul(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Mul) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value * right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerDiv(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Div) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        ((right.value =!= 0) -->: (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value / right.value)))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerRem(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Rem) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        ((right.value > 0) -->: (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value % right.value)))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerEq(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Eq) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value === right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerNe(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Ne) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value =!= right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerLt(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Lt) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value < right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerLe(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Le) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value <= right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerGt(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Gt) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value > right.value))))
+    }
+  )
+
+  @spec def evalExpBinaryIntegerGe(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+    ?(exp) { (exp: AST.Exp.Binary) =>
+      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
+        (exp.op === AST.Exp.Binary.Op.Ge) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
+        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value >= right.value))))
+    }
+  )
+
+  @spec def evalExpNonNormal(s0: State, exp: AST.Exp) = Fact(
+    (s0.status =!= State.Status.Normal) ->:
+      (Spec.evalExp(s0, exp) === ((s0, State.Value.Error())))
+  )
+
+  @spec def evalExpVarRefStoreError(s0: State, exp: AST.Exp) = Fact(
     ?(exp) { (exp: AST.Exp.VarRef) =>
       (s0.status === State.Status.Normal) ->: (s0.store.get(exp.id) === None[State.Value]()) ->:
         (Spec.evalExp(s0, exp) === ((s0(status = State.Status.StoreError), State.Value.Error())))
     }
   )
 
-  @spec def evalExpBinaryBooleanAndFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.And) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value & right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryBooleanOrFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Or) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value | right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryBooleanImplyFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Imply) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value ->: right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryBooleanEqFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Eq) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value === right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryBooleanNeFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Boolean) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Ne) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value =!= right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryCondAnd1BooleanFact(s0: State, exp: AST.Exp, sN: State) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(F)))) ->:
-        (sN.status === State.Status.Normal) ->: (exp.op === AST.Exp.Binary.Op.CondAnd) ->:
-        (Spec.evalExp(s0, exp) === ((sN, State.Value.Boolean(F))))
-    },
-  )
-
-  @spec def evalExpBinaryCondOr1BooleanFact(s0: State, exp: AST.Exp, sN: State) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(T)))) ->:
-        (sN.status === State.Status.Normal) ->: (exp.op === AST.Exp.Binary.Op.CondOr) ->:
-        (Spec.evalExp(s0, exp) === ((sN, State.Value.Boolean(T))))
-    },
-  )
-
-  @spec def evalExpBinaryCondImply1BooleanFact(s0: State, exp: AST.Exp, sN: State) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(F)))) ->:
-        (sN.status === State.Status.Normal) ->: (exp.op === AST.Exp.Binary.Op.CondImply) ->:
-        (Spec.evalExp(s0, exp) === ((sN, State.Value.Boolean(T))))
-    },
-  )
-
-  @spec def evalExpBinaryCondAnd2BooleanFact(s0: State, exp: AST.Exp, sN: State, right: State.Value.Boolean, sM: State) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(T)))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.CondAnd) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, right)))
-    },
-  )
-
-  @spec def evalExpBinaryCondOr2BooleanFact(s0: State, exp: AST.Exp, sN: State, right: State.Value.Boolean, sM: State) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(F)))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.CondOr) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, right)))
-    },
-  )
-
-  @spec def evalExpBinaryCondImply2BooleanFact(s0: State, exp: AST.Exp, sN: State, right: State.Value.Boolean, sM: State) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(T)))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.CondImply) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, right)))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerAddFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Add) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value + right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerSubFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Sub) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value - right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerMulFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Mul) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value * right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerDivFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Div) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        ((right.value =!= 0) -->: (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value / right.value)))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerRemFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Rem) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        ((right.value > 0) -->: (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(left.value % right.value)))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerEqFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Eq) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value === right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerNeFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Ne) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value =!= right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerLtFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Lt) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value < right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerLeFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Le) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value <= right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerGtFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Gt) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value > right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryIntegerGeFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
-    ?(exp) { (exp: AST.Exp.Binary) =>
-      (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
-        (exp.op === AST.Exp.Binary.Op.Ge) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
-        (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(left.value >= right.value))))
-    },
-  )
-
-  @spec def evalExpBinaryNonNormal1Fact(s0: State, exp: AST.Exp, sN: State, v1: State.Value) = Fact(
+  @spec def evalExpBinaryNonNormal1(s0: State, exp: AST.Exp, sN: State, v1: State.Value) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, v1))) ->: (sN.status =!= State.Status.Normal) ->:
         (Spec.evalExp(s0, exp) === ((sN, State.Value.Error())))
-    },
+    }
   )
 
-  @spec def evalExpBinaryNonNormal2Fact(s0: State, exp: AST.Exp, sN: State, v1: State.Value, sM: State, v2: State.Value) = Fact(
+  @spec def evalExpBinaryNonNormal2(s0: State, exp: AST.Exp, sN: State, v1: State.Value, sM: State, v2: State.Value) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, v1))) ->: (sN.status === State.Status.Normal) ->:
         (Spec.evalExp(sN, exp.right) === ((sM, v2))) ->: (sM.status =!= State.Status.Normal) ->:
         (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-    },
+    }
   )
 
-  @spec def evalExpBinaryBooleanOpTypeErrorFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean) = Fact(
+  @spec def evalExpBinaryBooleanTypeError(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->: !(
         exp.op === AST.Exp.Binary.Op.And | exp.op === AST.Exp.Binary.Op.Or | exp.op === AST.Exp.Binary.Op.Imply |
@@ -320,10 +303,10 @@ object Spec {
           exp.op === AST.Exp.Binary.Op.Eq | exp.op === AST.Exp.Binary.Op.Ne
         ) ->:
         (Spec.evalExp(s0, exp) === ((sN(status = State.Status.TypeError), State.Value.Error())))
-    },
+    }
   )
 
-  @spec def evalExpBinaryIntegerOpTypeErrorFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer) = Fact(
+  @spec def evalExpBinaryIntegerTypeError(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->: !(
         exp.op === AST.Exp.Binary.Op.Add | exp.op === AST.Exp.Binary.Op.Sub | exp.op === AST.Exp.Binary.Op.Mul |
@@ -332,54 +315,54 @@ object Spec {
           exp.op === AST.Exp.Binary.Op.Gt | exp.op === AST.Exp.Binary.Op.Ge
         ) ->:
         (Spec.evalExp(s0, exp) === ((sN(status = State.Status.TypeError), State.Value.Error())))
-    },
+    }
   )
 
-  @spec def evalExpBinaryTypeError1Fact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Integer) = Fact(
+  @spec def evalExpBinaryTypeError1(s0: State, exp: AST.Exp, sN: State, left: State.Value.Boolean, sM: State, right: State.Value.Integer) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
         (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
         (Spec.evalExp(s0, exp) === ((sM(status = State.Status.TypeError), State.Value.Error())))
-    },
+    }
   )
 
-  @spec def evalExpBinaryTypeError2Fact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Boolean) = Fact(
+  @spec def evalExpBinaryTypeError2(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Boolean) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
         (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
         (Spec.evalExp(s0, exp) === ((sM(status = State.Status.TypeError), State.Value.Error())))
-    },
+    }
   )
 
-  @spec def evalExpBinaryValueError1Fact(s0: State, exp: AST.Exp, sN: State) = Fact(
+  @spec def evalExpBinaryValueError1(s0: State, exp: AST.Exp, sN: State) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Error()))) ->:
         (Spec.evalExp(s0, exp) === ((sN, State.Value.Error())))
-    },
+    }
   )
 
-  @spec def evalExpBinaryValueError2Fact(s0: State, exp: AST.Exp, sN: State, sM: State, v1: State.Value) = Fact(
+  @spec def evalExpBinaryValueError2(s0: State, exp: AST.Exp, sN: State, sM: State, v1: State.Value) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, v1))) ->: (sN.status === State.Status.Normal) ->:
         (Spec.evalExp(sN, exp.right) === ((sM, State.Value.Error()))) ->:
         (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-    },
+    }
   )
 
-  @spec def evalExpBinaryIntegerDivArithErrorFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State) = Fact(
+  @spec def evalExpBinaryIntegerDivArithError(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->:
         (exp.op === AST.Exp.Binary.Op.Div) ->: (Spec.evalExp(sN, exp.right) === ((sM, State.Value.Integer(0)))) ->:
         (Spec.evalExp(s0, exp) === ((sM(status = State.Status.ArithError), State.Value.Error())))
-    },
+    }
   )
 
-  @spec def evalExpBinaryIntegerRemArithErrorFact(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
+  @spec def evalExpBinaryIntegerRemArithError(s0: State, exp: AST.Exp, sN: State, left: State.Value.Integer, sM: State, right: State.Value.Integer) = Fact(
     ?(exp) { (exp: AST.Exp.Binary) =>
       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->:
         (exp.op === AST.Exp.Binary.Op.Rem) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (right.value <= 0) ->:
         (Spec.evalExp(s0, exp) === ((sM(status = State.Status.ArithError), State.Value.Error())))
-    },
+    }
   )
 }
 
@@ -397,7 +380,7 @@ object Impl {
           (s0.status === State.Status.Normal) ->:
             (Spec.evalExp(s0, exp) === ((s0, State.Value.Boolean(exp.value))))
         }
-      } by ClaimOf(Spec.evalExpLitBFact _),
+      } by ClaimOf(Spec.evalExpLitB _)
     )
     return (state, rv)
   }
@@ -413,7 +396,7 @@ object Impl {
       ?(exp) { (exp: AST.Exp.LitZ) =>
         (state.status === State.Status.Normal) ->:
           (Spec.evalExp(state, exp) === ((state, State.Value.Integer(exp.value))))
-      } by Spec.evalExpLitZFact(state, exp),
+      } by Spec.evalExpLitZ(state, exp)
     )
     return (state, rv)
   }
@@ -430,7 +413,7 @@ object Impl {
           ?(exp) { (exp: AST.Exp.VarRef) =>
             (state.status === State.Status.Normal) ->: (state.store.get(exp.id) === Some(rv)) ->:
               (Spec.evalExp(state, exp) === ((state, rv)))
-          } by Spec.evalExpVarRefFact(state, exp, rv),
+          } by Spec.evalExpVarRef(state, exp, rv)
         )
         return (state, rv)
       case _ =>
@@ -438,7 +421,7 @@ object Impl {
           ?(exp) { (exp: AST.Exp.VarRef) =>
             (state.status === State.Status.Normal) ->: (state.store.get(exp.id) === None[State.Value]()) ->:
               (Spec.evalExp(state, exp) === ((state(status = State.Status.StoreError), State.Value.Error())))
-          } by Spec.evalExpVarRefStoreErrorFact(state, exp),
+          } by Spec.evalExpVarRefStoreError(state, exp)
         )
         return (state(status = State.Status.StoreError), State.Value.Error())
     }
@@ -456,7 +439,7 @@ object Impl {
         ?(exp) { (exp: AST.Exp.Binary) =>
           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status =!= State.Status.Normal) ->:
             (Spec.evalExp(s0, exp) === ((sN, State.Value.Error())))
-        } by Spec.evalExpBinaryNonNormal1Fact(s0, exp, sN, left)
+        } by Spec.evalExpBinaryNonNormal1(s0, exp, sN, left)
       )
       return (sN, State.Value.Error())
     } else {
@@ -471,7 +454,7 @@ object Impl {
                     (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                       (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status =!= State.Status.Normal) ->:
                       (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-                  } by Spec.evalExpBinaryNonNormal2Fact(s0, exp, sN, left, sM, right)
+                  } by Spec.evalExpBinaryNonNormal2(s0, exp, sN, left, sM, right)
                 )
                 return (sM, State.Value.Error())
               } else {
@@ -482,7 +465,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(T)))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.CondAnd) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, right)))
-                      } by Spec.evalExpBinaryCondAnd2BooleanFact(s0, exp, sN, right, sM)
+                      } by Spec.evalExpBinaryBooleanCondAnd2(s0, exp, sN, right, sM)
                     )
                     return (sM, right)
                   case r: State.Value.Integer =>
@@ -491,7 +474,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM(status = State.Status.TypeError), State.Value.Error())))
-                      } by Spec.evalExpBinaryTypeError1Fact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryTypeError1(s0, exp, sN, l, sM, r)
                     )
                     return (sM(status = State.Status.TypeError), State.Value.Error())
                   case r: State.Value.Error =>
@@ -500,7 +483,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                           (Spec.evalExp(sN, exp.right) === ((sM, State.Value.Error()))) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-                      } by Spec.evalExpBinaryValueError2Fact(s0, exp, sN, sM, left)
+                      } by Spec.evalExpBinaryValueError2(s0, exp, sN, sM, left)
                     )
                     return (sM, r)
                 }
@@ -511,7 +494,7 @@ object Impl {
                   (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(F)))) ->:
                     (sN.status === State.Status.Normal) ->: (exp.op === AST.Exp.Binary.Op.CondAnd) ->:
                     (Spec.evalExp(s0, exp) === ((sN, State.Value.Boolean(F))))
-                } by Spec.evalExpBinaryCondAnd1BooleanFact(s0, exp, sN)
+                } by Spec.evalExpBinaryBooleanCondAnd1(s0, exp, sN)
               )
               return (sN, State.Value.Boolean(F))
             }
@@ -524,7 +507,7 @@ object Impl {
                     (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                       (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status =!= State.Status.Normal) ->:
                       (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-                  } by Spec.evalExpBinaryNonNormal2Fact(s0, exp, sN, left, sM, right)
+                  } by Spec.evalExpBinaryNonNormal2(s0, exp, sN, left, sM, right)
                 )
                 return (sM, State.Value.Error())
               } else {
@@ -535,7 +518,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(F)))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.CondOr) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, right)))
-                      } by Spec.evalExpBinaryCondOr2BooleanFact(s0, exp, sN, right, sM)
+                      } by Spec.evalExpBinaryBooleanCondOr2(s0, exp, sN, right, sM)
                     )
                     return (sM, right)
                   case r: State.Value.Integer =>
@@ -544,7 +527,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM(status = State.Status.TypeError), State.Value.Error())))
-                      } by Spec.evalExpBinaryTypeError1Fact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryTypeError1(s0, exp, sN, l, sM, r)
                     )
                     return (sM(status = State.Status.TypeError), State.Value.Error())
                   case r: State.Value.Error =>
@@ -553,7 +536,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                           (Spec.evalExp(sN, exp.right) === ((sM, State.Value.Error()))) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-                      } by Spec.evalExpBinaryValueError2Fact(s0, exp, sN, sM, left)
+                      } by Spec.evalExpBinaryValueError2(s0, exp, sN, sM, left)
                     )
                     return (sM, r)
                 }
@@ -564,7 +547,7 @@ object Impl {
                   (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(T)))) ->:
                     (sN.status === State.Status.Normal) ->: (exp.op === AST.Exp.Binary.Op.CondOr) ->:
                     (Spec.evalExp(s0, exp) === ((sN, State.Value.Boolean(T))))
-                } by Spec.evalExpBinaryCondOr1BooleanFact(s0, exp, sN)
+                } by Spec.evalExpBinaryBooleanCondOr1(s0, exp, sN)
               )
               return (sN, State.Value.Boolean(T))
             }
@@ -577,7 +560,7 @@ object Impl {
                     (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                       (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status =!= State.Status.Normal) ->:
                       (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-                  } by Spec.evalExpBinaryNonNormal2Fact(s0, exp, sN, left, sM, right)
+                  } by Spec.evalExpBinaryNonNormal2(s0, exp, sN, left, sM, right)
                 )
                 return (sM, State.Value.Error())
               } else {
@@ -588,7 +571,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(T)))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.CondImply) ->: (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, right)))
-                      } by Spec.evalExpBinaryCondImply2BooleanFact(s0, exp, sN, right, sM)
+                      } by Spec.evalExpBinaryBooleanCondImply2(s0, exp, sN, right, sM)
                     )
                     return (sM, right)
                   case r: State.Value.Integer =>
@@ -597,7 +580,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM(status = State.Status.TypeError), State.Value.Error())))
-                      } by Spec.evalExpBinaryTypeError1Fact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryTypeError1(s0, exp, sN, l, sM, r)
                     )
                     return (sM(status = State.Status.TypeError), State.Value.Error())
                   case r: State.Value.Error =>
@@ -606,7 +589,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                           (Spec.evalExp(sN, exp.right) === ((sM, State.Value.Error()))) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-                      } by Spec.evalExpBinaryValueError2Fact(s0, exp, sN, sM, left)
+                      } by Spec.evalExpBinaryValueError2(s0, exp, sN, sM, left)
                     )
                     return (sM, r)
                 }
@@ -617,7 +600,7 @@ object Impl {
                   (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Boolean(F)))) ->:
                     (sN.status === State.Status.Normal) ->: (exp.op === AST.Exp.Binary.Op.CondImply) ->:
                     (Spec.evalExp(s0, exp) === ((sN, State.Value.Boolean(T))))
-                } by Spec.evalExpBinaryCondImply1BooleanFact(s0, exp, sN)
+                } by Spec.evalExpBinaryBooleanCondImply1(s0, exp, sN)
               )
               return (sN, State.Value.Boolean(T))
             }
@@ -629,7 +612,7 @@ object Impl {
                   (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                     (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status =!= State.Status.Normal) ->:
                     (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-                } by Spec.evalExpBinaryNonNormal2Fact(s0, exp, sN, left, sM, right)
+                } by Spec.evalExpBinaryNonNormal2(s0, exp, sN, left, sM, right)
               )
               return (sM, State.Value.Error())
             } else {
@@ -642,7 +625,7 @@ object Impl {
                           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                             (exp.op === AST.Exp.Binary.Op.And) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                             (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value & r.value))))
-                        } by Spec.evalExpBinaryBooleanAndFact(s0, exp, sN, l, sM, r)
+                        } by Spec.evalExpBinaryBooleanAnd(s0, exp, sN, l, sM, r)
                       )
                       return (sM, State.Value.Boolean(l.value & r.value))
                     case AST.Exp.Binary.Op.Or =>
@@ -651,7 +634,7 @@ object Impl {
                           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                             (exp.op === AST.Exp.Binary.Op.Or) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                             (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value | r.value))))
-                        } by Spec.evalExpBinaryBooleanOrFact(s0, exp, sN, l, sM, r)
+                        } by Spec.evalExpBinaryBooleanOr(s0, exp, sN, l, sM, r)
                       )
                       return (sM, State.Value.Boolean(l.value | r.value))
                     case AST.Exp.Binary.Op.Imply =>
@@ -660,7 +643,7 @@ object Impl {
                           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                             (exp.op === AST.Exp.Binary.Op.Imply) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                             (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value ->: r.value))))
-                        } by Spec.evalExpBinaryBooleanImplyFact(s0, exp, sN, l, sM, r)
+                        } by Spec.evalExpBinaryBooleanImply(s0, exp, sN, l, sM, r)
                       )
                       return (sM, State.Value.Boolean(l.value ->: r.value))
                     case AST.Exp.Binary.Op.Eq =>
@@ -669,7 +652,7 @@ object Impl {
                           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                             (exp.op === AST.Exp.Binary.Op.Eq) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                             (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value === r.value))))
-                        } by Spec.evalExpBinaryBooleanEqFact(s0, exp, sN, l, sM, r)
+                        } by Spec.evalExpBinaryBooleanEq(s0, exp, sN, l, sM, r)
                       )
                       return (sM, State.Value.Boolean(l.value === r.value))
                     case AST.Exp.Binary.Op.Ne =>
@@ -678,7 +661,7 @@ object Impl {
                           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                             (exp.op === AST.Exp.Binary.Op.Ne) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                             (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value =!= r.value))))
-                        } by Spec.evalExpBinaryBooleanNeFact(s0, exp, sN, l, sM, r)
+                        } by Spec.evalExpBinaryBooleanNe(s0, exp, sN, l, sM, r)
                       )
                       return (sM, State.Value.Boolean(l.value =!= r.value))
                     case _ =>
@@ -690,7 +673,7 @@ object Impl {
                               exp.op === AST.Exp.Binary.Op.Eq | exp.op === AST.Exp.Binary.Op.Ne
                             ) ->:
                             (Spec.evalExp(s0, exp) === ((sN(status = State.Status.TypeError), State.Value.Error())))
-                        } by Spec.evalExpBinaryBooleanOpTypeErrorFact(s0, exp, sN, l),
+                        } by Spec.evalExpBinaryBooleanTypeError(s0, exp, sN, l)
                       )
                       return (sN(status = State.Status.TypeError), State.Value.Error())
                   }
@@ -700,7 +683,7 @@ object Impl {
                       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                         (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                         (Spec.evalExp(s0, exp) === ((sM(status = State.Status.TypeError), State.Value.Error())))
-                    } by Spec.evalExpBinaryTypeError1Fact(s0, exp, sN, l, sM, r)
+                    } by Spec.evalExpBinaryTypeError1(s0, exp, sN, l, sM, r)
                   )
                   return (sM(status = State.Status.TypeError), State.Value.Error())
                 case r: State.Value.Error =>
@@ -709,7 +692,7 @@ object Impl {
                       (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                         (Spec.evalExp(sN, exp.right) === ((sM, State.Value.Error()))) ->:
                         (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-                    } by Spec.evalExpBinaryValueError2Fact(s0, exp, sN, sM, left)
+                    } by Spec.evalExpBinaryValueError2(s0, exp, sN, sM, left)
                   )
                   return (sM, r)
               }
@@ -723,7 +706,7 @@ object Impl {
                 (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                   (Spec.evalExp(sN, exp.right) === ((sM, right))) ->: (sM.status =!= State.Status.Normal) ->:
                   (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-              } by Spec.evalExpBinaryNonNormal2Fact(s0, exp, sN, left, sM, right)
+              } by Spec.evalExpBinaryNonNormal2(s0, exp, sN, left, sM, right)
             )
             return (sM, State.Value.Error())
           } else {
@@ -734,7 +717,7 @@ object Impl {
                     (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                       (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                       (Spec.evalExp(s0, exp) === ((sM(status = State.Status.TypeError), State.Value.Error())))
-                  } by Spec.evalExpBinaryTypeError2Fact(s0, exp, sN, l, sM, r)
+                  } by Spec.evalExpBinaryTypeError2(s0, exp, sN, l, sM, r)
                 )
                 return (sM(status = State.Status.TypeError), State.Value.Error())
               case r: State.Value.Integer =>
@@ -745,7 +728,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.Add) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(l.value + r.value))))
-                      } by Spec.evalExpBinaryIntegerAddFact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryIntegerAdd(s0, exp, sN, l, sM, r)
                     )
                     return (sM, State.Value.Integer(l.value + r.value))
                   case AST.Exp.Binary.Op.Sub =>
@@ -754,7 +737,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.Sub) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(l.value - r.value))))
-                      } by Spec.evalExpBinaryIntegerSubFact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryIntegerSub(s0, exp, sN, l, sM, r)
                     )
                     return (sM, State.Value.Integer(l.value - r.value))
                   case AST.Exp.Binary.Op.Mul =>
@@ -763,7 +746,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.Mul) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(l.value * r.value))))
-                      } by Spec.evalExpBinaryIntegerMulFact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryIntegerMul(s0, exp, sN, l, sM, r)
                     )
                     return (sM, State.Value.Integer(l.value * r.value))
                   case AST.Exp.Binary.Op.Div =>
@@ -773,7 +756,7 @@ object Impl {
                           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->:
                             (exp.op === AST.Exp.Binary.Op.Div) ->: (Spec.evalExp(sN, exp.right) === ((sM, State.Value.Integer(0)))) ->:
                             (Spec.evalExp(s0, exp) === ((sM(status = State.Status.ArithError), State.Value.Error())))
-                        } by Spec.evalExpBinaryIntegerDivArithErrorFact(s0, exp, sN, l, sM)
+                        } by Spec.evalExpBinaryIntegerDivArithError(s0, exp, sN, l, sM)
                       )
                       return (sM(status = State.Status.ArithError), State.Value.Error())
                     } else {
@@ -782,7 +765,7 @@ object Impl {
                           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                             (exp.op === AST.Exp.Binary.Op.Div) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                             ((r.value =!= 0) -->: (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(l.value / r.value)))))
-                        } by Spec.evalExpBinaryIntegerDivFact(s0, exp, sN, l, sM, r)
+                        } by Spec.evalExpBinaryIntegerDiv(s0, exp, sN, l, sM, r)
                       )
                       return (sM, State.Value.Integer(l.value / r.value))
                     }
@@ -793,7 +776,7 @@ object Impl {
                           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->:
                             (exp.op === AST.Exp.Binary.Op.Rem) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (r.value <= 0) ->:
                             (Spec.evalExp(s0, exp) === ((sM(status = State.Status.ArithError), State.Value.Error())))
-                        } by Spec.evalExpBinaryIntegerRemArithErrorFact(s0, exp, sN, l, sM, r)
+                        } by Spec.evalExpBinaryIntegerRemArithError(s0, exp, sN, l, sM, r)
                       )
                       return (sM(status = State.Status.ArithError), State.Value.Error())
                     } else {
@@ -802,7 +785,7 @@ object Impl {
                           (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                             (exp.op === AST.Exp.Binary.Op.Rem) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                             ((r.value > 0) -->: (Spec.evalExp(s0, exp) === ((sM, State.Value.Integer(l.value % r.value)))))
-                        } by Spec.evalExpBinaryIntegerRemFact(s0, exp, sN, l, sM, r)
+                        } by Spec.evalExpBinaryIntegerRem(s0, exp, sN, l, sM, r)
                       )
                       return (sM, State.Value.Integer(l.value % r.value))
                     }
@@ -812,7 +795,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.Eq) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value === r.value))))
-                      } by Spec.evalExpBinaryIntegerEqFact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryIntegerEq(s0, exp, sN, l, sM, r)
                     )
                     return (sM, State.Value.Boolean(l.value === r.value))
                   case AST.Exp.Binary.Op.Ne =>
@@ -821,7 +804,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.Ne) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value =!= r.value))))
-                      } by Spec.evalExpBinaryIntegerNeFact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryIntegerNe(s0, exp, sN, l, sM, r)
                     )
                     return (sM, State.Value.Boolean(l.value =!= r.value))
                   case AST.Exp.Binary.Op.Lt =>
@@ -830,7 +813,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.Lt) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value < r.value))))
-                      } by Spec.evalExpBinaryIntegerLtFact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryIntegerLt(s0, exp, sN, l, sM, r)
                     )
                     return (sM, State.Value.Boolean(l.value < r.value))
                   case AST.Exp.Binary.Op.Le =>
@@ -839,7 +822,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.Le) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value <= r.value))))
-                      } by Spec.evalExpBinaryIntegerLeFact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryIntegerLe(s0, exp, sN, l, sM, r)
                     )
                     return (sM, State.Value.Boolean(l.value <= r.value))
                   case AST.Exp.Binary.Op.Gt =>
@@ -848,7 +831,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.Gt) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value > r.value))))
-                      } by Spec.evalExpBinaryIntegerGtFact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryIntegerGt(s0, exp, sN, l, sM, r)
                     )
                     return (sM, State.Value.Boolean(l.value > r.value))
                   case AST.Exp.Binary.Op.Ge =>
@@ -857,7 +840,7 @@ object Impl {
                         (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, l))) ->: (sN.status === State.Status.Normal) ->:
                           (exp.op === AST.Exp.Binary.Op.Ge) ->: (Spec.evalExp(sN, exp.right) === ((sM, r))) ->: (sM.status === State.Status.Normal) ->:
                           (Spec.evalExp(s0, exp) === ((sM, State.Value.Boolean(l.value >= r.value))))
-                      } by Spec.evalExpBinaryIntegerGeFact(s0, exp, sN, l, sM, r)
+                      } by Spec.evalExpBinaryIntegerGe(s0, exp, sN, l, sM, r)
                     )
                     return (sM, State.Value.Boolean(l.value >= r.value))
                   case _ =>
@@ -870,7 +853,7 @@ object Impl {
                             exp.op === AST.Exp.Binary.Op.Gt | exp.op === AST.Exp.Binary.Op.Ge
                           ) ->:
                           (Spec.evalExp(s0, exp) === ((sN(status = State.Status.TypeError), State.Value.Error())))
-                      } by Spec.evalExpBinaryIntegerOpTypeErrorFact(s0, exp, sN, l)
+                      } by Spec.evalExpBinaryIntegerTypeError(s0, exp, sN, l)
                     )
                     return (sN(status = State.Status.TypeError), State.Value.Error())
                 }
@@ -880,7 +863,7 @@ object Impl {
                     (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, left))) ->: (sN.status === State.Status.Normal) ->:
                       (Spec.evalExp(sN, exp.right) === ((sM, State.Value.Error()))) ->:
                       (Spec.evalExp(s0, exp) === ((sM, State.Value.Error())))
-                  } by Spec.evalExpBinaryValueError2Fact(s0, exp, sN, sM, left)
+                  } by Spec.evalExpBinaryValueError2(s0, exp, sN, sM, left)
                 )
                 return (sM, r)
             }
@@ -890,7 +873,7 @@ object Impl {
             ?(exp) { (exp: AST.Exp.Binary) =>
               (s0.status === State.Status.Normal) ->: (Spec.evalExp(s0, exp.left) === ((sN, State.Value.Error()))) ->:
                 (Spec.evalExp(s0, exp) === ((sN, State.Value.Error())))
-            } by Spec.evalExpBinaryValueError1Fact(s0, exp, sN)
+            } by Spec.evalExpBinaryValueError1(s0, exp, sN)
           )
           return (sN, left)
       }
@@ -904,7 +887,7 @@ object Impl {
     if (state.status =!= State.Status.Normal) {
       Deduce(
         (state.status =!= State.Status.Normal) ->: (Spec.evalExp(state, exp) === ((state, State.Value.Error())))
-          by Spec.evalExpNonNormal(state, exp),
+          by Spec.evalExpNonNormal(state, exp)
       )
       return (state, State.Value.Error())
     } else {
