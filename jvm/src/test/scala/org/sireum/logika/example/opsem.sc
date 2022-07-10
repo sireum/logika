@@ -18,6 +18,7 @@ object AST {
     @datatype class Binary(val left: Exp, val op: Binary.Op.Type, val right: Exp) extends Exp
 
     object Binary {
+
       @enum object Op {
         "And"
         "Or"
@@ -45,6 +46,7 @@ object AST {
                       val store: State.Store)
 
 object State {
+
   type Store = AssocS[String, Value]
 
   @datatype trait Value
@@ -373,7 +375,6 @@ object Impl {
       Requires(state.status === State.Status.Normal),
       Ensures(Spec.evalExp(state, e) == Res)
     )
-    val rv: State.Value = State.Value.Boolean(e.value)
     Deduce(
       ∀ { (s0: State, exp: AST.Exp) =>
         ?(exp) { (exp: AST.Exp.LitB) =>
@@ -382,7 +383,7 @@ object Impl {
         }
       } by ClaimOf(Spec.evalExpLitB _)
     )
-    return (state, rv)
+    return (state, State.Value.Boolean(e.value))
   }
 
   def evalLitZ(state: State, e: AST.Exp.LitZ): (State, State.Value) = {
@@ -390,7 +391,6 @@ object Impl {
       Requires(state.status === State.Status.Normal),
       Ensures(Spec.evalExp(state, e) == Res)
     )
-    val rv: State.Value = State.Value.Integer(e.value)
     val exp: AST.Exp = e
     Deduce(
       ?(exp) { (exp: AST.Exp.LitZ) =>
@@ -398,7 +398,7 @@ object Impl {
           (Spec.evalExp(state, exp) === ((state, State.Value.Integer(exp.value))))
       } by Spec.evalExpLitZ(state, exp)
     )
-    return (state, rv)
+    return (state, State.Value.Integer(e.value))
   }
 
   def evalVarRef(state: State, e: AST.Exp.VarRef): (State, State.Value) = {
@@ -886,8 +886,8 @@ object Impl {
     )
     if (state.status =!= State.Status.Normal) {
       Deduce(
-        (state.status =!= State.Status.Normal) ->: (Spec.evalExp(state, exp) === ((state, State.Value.Error())))
-          by Spec.evalExpNonNormal(state, exp)
+        (state.status =!= State.Status.Normal) ->:
+          (Spec.evalExp(state, exp) === ((state, State.Value.Error()))) by Spec.evalExpNonNormal(state, exp)
       )
       return (state, State.Value.Error())
     } else {
