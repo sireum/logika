@@ -160,6 +160,78 @@ object Util {
     }
   }
 
+  @record class Substitutor(val substMap: HashMap[String, AST.Typed],
+                            val context: ISZ[String],
+                            val paramMap: HashSMap[String, AST.Exp],
+                            val reporter: Reporter) extends AST.MTransformer {
+    override def preTyped(o: AST.Typed): AST.MTransformer.PreResult[AST.Typed] = {
+      o match {
+        case o: AST.Typed.TypeVar =>
+          substMap.get(o.id) match {
+            case Some(t) => return AST.MTransformer.PreResult(F, MSome(t))
+            case _ =>
+          }
+        case _ =>
+      }
+      return AST.MTransformer.PreResultTypedTypeVar
+    }
+
+    override def preResolvedInfoMethod(o: AST.ResolvedInfo.Method): AST.MTransformer.PreResult[AST.ResolvedInfo] = {
+      return AST.MTransformer.PreResult(F, MNone())
+    }
+
+    override def preExpIdent(o: AST.Exp.Ident): AST.MTransformer.PreResult[AST.Exp] = {
+      o.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.LocalVar if paramMap.contains(res.id) && res.context == context =>
+          return AST.MTransformer.PreResult(F, MSome(paramMap.get(res.id).get))
+        case _ =>
+      }
+      return AST.MTransformer.PreResultExpIdent
+    }
+
+    override def preExpInvoke(o: AST.Exp.Invoke): AST.MTransformer.PreResult[AST.Exp] = {
+      val res: AST.ResolvedInfo.LocalVar = o.ident.attr.resOpt.get match {
+        case lv: AST.ResolvedInfo.LocalVar if paramMap.contains(lv.id) && lv.context == context => lv
+        case _ => return AST.MTransformer.PreResultExpInvoke
+      }
+      val arg = paramMap.get(res.id).get
+      arg match {
+        case arg: AST.Exp.Fun =>
+          arg.exp match {
+            case argExp: AST.Stmt.Expr =>
+              var fParamMap = HashSMap.empty[String, AST.Exp]
+              for (pArg <- ops.ISZOps(arg.params).zip(o.args)) {
+                pArg._1.idOpt match {
+                  case Some(id) => fParamMap = fParamMap + id.value ~> pArg._2
+                  case _ =>
+                }
+              }
+              val subst = Substitutor(substMap, arg.context, fParamMap, Reporter.create)
+              val expOpt = subst.transformExp(argExp.exp)
+              reporter.reports(subst.reporter.messages)
+              if (expOpt.isEmpty) {
+                return AST.MTransformer.PreResult(T, MSome(o(receiverOpt = paramMap.get(res.id),
+                  ident = o.ident(id = AST.Id("apply", o.ident.id.attr), attr = o.ident.attr(resOpt = TypeChecker.applyResOpt)))))
+              } else {
+                return AST.MTransformer.PreResult(T, expOpt)
+              }
+            case _ =>
+              reporter.error(arg.posOpt, Logika.kind, "Invalid argument form for inception")
+          }
+        case AST.Exp.Eta(ref) =>
+          ref match {
+            case ref: AST.Exp.Ident =>
+              return AST.MTransformer.PreResult(T, MSome(o(receiverOpt = None(), ident = ref)))
+            case ref: AST.Exp.Select =>
+              return AST.MTransformer.PreResult(T, MSome(o(receiverOpt = ref.receiverOpt, ident = AST.Exp.Ident(ref.id, ref.attr))))
+          }
+        case _ =>
+          reporter.error(arg.posOpt, Logika.kind, "Invalid argument form for inception")
+      }
+      return AST.MTransformer.PreResult(F, MSome(paramMap.get(res.id).get))
+    }
+  }
+
   @record class VarSubstitutor(val context: ISZ[String],
                                val receiverTypeOpt: Option[AST.Typed],
                                var hasThis: B,

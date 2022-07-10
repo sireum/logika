@@ -2356,6 +2356,57 @@ import Util._
       return r
     }
 
+    def evalTypeCond(cond: AST.Exp.TypeCond): ISZ[(State, State.Value)] = {
+      var r = ISZ[(State, State.Value)]()
+      var nextFresh = state.nextFresh
+      def evalTypeCondH(s0: State, args: ISZ[State.Value]): Unit = {
+        var condIdTypes = ISZ[State.Value.Sym]()
+        var paramMap = HashSMap.empty[String, AST.Exp]
+        var s1 = s0
+        for (p <- ops.ISZOps(args).zip(cond.fun.params)) {
+          val id = p._2.idOpt.get
+          val pos = id.attr.posOpt.get
+          val (s2, arg) = value2Sym(s1, p._1, pos)
+          val paramType = p._2.typedOpt.get
+          val (s3, c) = s2.freshSym(AST.Typed.b, pos)
+          s1 = s3.addClaim(State.Claim.Let.TypeTest(c, F, arg, paramType))
+          condIdTypes = condIdTypes :+ c
+          paramMap = paramMap + id.value ~> AST.Exp.Sym(arg.num, AST.TypedAttr(id.attr.posOpt, p._2.typedOpt))
+        }
+        var antecedent = condIdTypes(0)
+        val pos = cond.posOpt.get
+        for (i <- 1 until condIdTypes.size) {
+          val (s3, b) = s1.freshSym(AST.Typed.b, pos)
+          s1 = s3.addClaim(State.Claim.Let.Binary(b, antecedent, AST.Exp.BinaryOp.And, condIdTypes(i), AST.Typed.b))
+          antecedent = b
+        }
+        val exp = Util.Substitutor(HashMap.empty, cond.fun.context, paramMap, reporter).
+          transformExp(cond.fun.exp.asInstanceOf[AST.Stmt.Expr].exp).get
+        for (p <- evalExp(split, smt2, cache, rtCheck, s1.addClaim(State.Claim.Prop(T, antecedent)), exp, reporter)) {
+          val (s5, e) = p
+          val (s6, res) = s5.freshSym(AST.Typed.b, pos)
+          val s7 = s6.addClaim(State.Claim.Let.Binary(res, antecedent, AST.Exp.BinaryOp.Imply, e, AST.Typed.b))
+          if (nextFresh < s7.nextFresh) {
+            nextFresh = s7.nextFresh
+          }
+          val s8ClaimOps = ops.ISZOps(s7.claims)
+          r = r :+ ((s7(claims = s8ClaimOps.slice(0, s1.claims.size) ++ s8ClaimOps.slice(s1.claims.size + 1, s7.claims.size)), res))
+        }
+      }
+      for (p <- evalArgs(split, smt2, cache, rtCheck, state, cond.args.size, Either.Left[ISZ[AST.Exp], ISZ[AST.NamedArg]](cond.args), reporter)) {
+        val (s0, argOpts) = p
+        if (!s0.status) {
+          if (nextFresh < s0.nextFresh) {
+            nextFresh = s0.nextFresh
+          }
+          r = r :+ ((s0, State.errorValue))
+        } else {
+          evalTypeCondH(s0, for (argOpt <- argOpts) yield argOpt.get)
+        }
+      }
+      return for (p <- r) yield (p._1(nextFresh = nextFresh), p._2)
+    }
+
     def expH(s0: State): ISZ[(State, State.Value)] = {
       e match {
         case _: AST.Exp.LitStepId => return ISZ((s0(status = F), State.errorValue))
@@ -2450,6 +2501,8 @@ import Util._
           }
           return evalQuantEach(e)
         case e: AST.Exp.This => return ISZ(evalThis(e))
+        case e: AST.Exp.TypeCond => return evalTypeCond(e)
+        case e: AST.Exp.Sym => return ISZ[(State, State.Value)]((state, State.Value.Sym(e.num, e.typedOpt.get, e.posOpt.get)))
         case _ =>
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
           return ISZ((s0(status = F), State.errorValue))
@@ -2872,6 +2925,14 @@ import Util._
       return (s2, bindings)
     }
 
+    var allReturns = T
+    for (leafOpt <- stmt.leaves if allReturns) {
+      leafOpt match {
+        case Some(_: AST.Stmt.Return) =>
+        case _ => allReturns = F
+      }
+    }
+
     for (p <- evalExp(split, smt2, cache, rtCheck, state, stmt.exp, reporter)) {
       val (s0, v) = p
       if (s0.status) {
@@ -2932,12 +2993,12 @@ import Util._
               var claims = ISZ[ISZ[State.Claim]]()
               for (s12 <- evalBody(split, smt2, cache, rOpt, rtCheck, s11.addClaim(State.Claim.And(for (b <- bindings) yield
                 State.Claim.Prop(T, b.asInstanceOf[State.Value.Sym]))), c.body, c.pattern.posOpt, reporter)) {
-                s1 = s1(status = s1.status && s12.status, nextFresh = s12.nextFresh)
+                s1 = s1(status = if (allReturns) s1.status else s1.status && s12.status, nextFresh = s12.nextFresh)
                 if (s12.status) {
                   claims = claims :+ s12.claims
                 }
               }
-              if (claims.nonEmpty) {
+              if (!allReturns && claims.nonEmpty) {
                 leafClaims = leafClaims :+ ((cond, claims))
               }
             } else {

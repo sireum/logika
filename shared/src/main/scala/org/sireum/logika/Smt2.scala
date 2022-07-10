@@ -934,6 +934,10 @@ object Smt2 {
 
     def addAdt(t: AST.Typed.Name, ti: TypeInfo.Adt): Unit = {
       val sm = TypeChecker.buildTypeSubstMap(t.ids, None(), ti.ast.typeParams, t.args, reporter).get
+      val thId = typeHierarchyId(t)
+      addTypeHiearchyId(thId)
+      addSort(st"(declare-const $thId Type)")
+      addSub(ti.posOpt, ti.ast.isRoot, t, thId, ti.parents, sm)
       for (arg <- t.args) {
         addType(arg.subst(sm), reporter)
       }
@@ -946,13 +950,9 @@ object Smt2 {
       posetUp(poset.addNode(t))
       val tId = typeId(t)
       addAdtDecl(st"(define-sort $tId () ADT)")
-      val thId = typeHierarchyId(t)
-      addTypeHiearchyId(thId)
-      addSort(st"(declare-const $thId Type)")
       if (!ti.ast.isRoot) {
         addAdtDecl(st"(assert (forall ((x ${typeId(t)})) (= (sub-type (type-of x) $thId) (= (type-of x) $thId))))")
       }
-      addSub(ti.posOpt, ti.ast.isRoot, t, thId, ti.parents, sm)
 
       @pure def fieldInfo(isParam: B, f: Info.Var): Smt2.AdtFieldInfo = {
         val ft = f.typedOpt.get.subst(sm)

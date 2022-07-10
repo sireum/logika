@@ -99,7 +99,7 @@ import org.sireum.message.Position
 
     val smOpt = TypeChecker.unifyFun(Logika.kind, logika.th, posOpt, TypeChecker.TypeRelation.Subtype, res.tpeOpt.get,
       mi.methodType.tpe, reporter)
-    val ips = InceptionPlugin.Substitutor(smOpt.get, mi.name,
+    val ips = org.sireum.logika.Util.Substitutor(smOpt.get, mi.name,
       HashSMap.empty[String, AST.Exp] ++ ops.ISZOps(res.paramNames).zip(args), Reporter.create)
 
     var provenClaims = HashMap.empty[AST.Exp, (AST.ProofAst.StepId, AST.Exp)]
