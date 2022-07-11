@@ -43,7 +43,7 @@ object Logika {
     "Disabled"
   }
 
-  type Bindings = Map[String, (State.Value, AST.Typed, Position)]
+  type Bindings = Map[String, (State.Value.Sym, AST.Typed, Position)]
 
   @datatype class Branch(val title: String,
                          val sym: State.Value.Sym,
@@ -134,6 +134,7 @@ object Logika {
   )
   val indexingFields: HashSet[String] = HashSet ++ ISZ[String]("firstIndex", "lastIndex")
   val eqOps: HashSet[String] = HashSet ++ ISZ(AST.Exp.BinaryOp.Eq, AST.Exp.BinaryOp.Eq3, AST.Exp.BinaryOp.Ne, AST.Exp.BinaryOp.Ne3)
+  val emptyBindings: Bindings = Map.empty[String, (State.Value.Sym, AST.Typed, Position)]
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
@@ -2795,12 +2796,15 @@ import Util._
         pattern.tipeOpt match {
           case Some(tipe) =>
             val t = tipe.typedOpt.get
-            val (s1, cond) = evalTypeTestH(s0, v, t, tipe.posOpt.get)
-            return (s1, cond, Map.empty[String, (State.Value, AST.Typed, Position)] + pattern.id.value ~> ((v, t, pos)))
+            val tpos = tipe.posOpt.get
+            val (s1, cond) = evalTypeTestH(s0, v, t, tpos)
+            val (s2, sym) = value2Sym(s1, v, tpos)
+            return (s2, cond, emptyBindings + pattern.id.value ~> ((sym, t, tpos)))
           case _ =>
             val t = pattern.attr.typedOpt.get
-            return (s0, State.Value.B(T, pos),
-              Map.empty[String, (State.Value, AST.Typed, Position)] + pattern.id.value ~> ((v, t, pos)))
+            val (s1, sym) = value2Sym(s0, v, pattern.id.attr.posOpt.get)
+            return (s1, State.Value.B(T, pos),
+              emptyBindings + pattern.id.value ~> ((sym, t, pos)))
         }
       case pattern: AST.Pattern.Wildcard =>
         pattern.typeOpt match {
@@ -2811,9 +2815,14 @@ import Util._
             return (s0, State.Value.B(T, pos), Map.empty)
         }
       case pattern: AST.Pattern.Structure =>
-        var m = Map.empty[String, (State.Value, AST.Typed, Position)]
+        var m = emptyBindings
+        var s1 = s0
         pattern.idOpt match {
-          case Some(id) => m = m + id.value ~> ((v, pattern.attr.typedOpt.get, id.attr.posOpt.get))
+          case Some(id) =>
+            val idPos = id.attr.posOpt.get
+            val (s3, sym) = value2Sym(s1, v, idPos)
+            m = m + id.value ~> ((sym, pattern.attr.typedOpt.get, idPos))
+            s1 = s3
           case _ =>
         }
         if (pattern.nameOpt.nonEmpty) {
@@ -2823,62 +2832,62 @@ import Util._
             val et = t.args(1)
             val hasWildcard = ops.ISZOps(pattern.patterns).exists(
               (p: AST.Pattern) => p.isInstanceOf[AST.Pattern.SeqWildcard])
-            val (s1, sizeSym) = s0.freshSym(AST.Typed.z, pos)
-            val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sizeSym, v, "size"))
-            val (s3, cond) = s2.freshSym(AST.Typed.b, pos)
+            val (s3, sizeSym) = s1.freshSym(AST.Typed.z, pos)
+            val s4 = s3.addClaim(State.Claim.Let.FieldLookup(sizeSym, v, "size"))
+            val (s5, cond) = s4.freshSym(AST.Typed.b, pos)
             val (op, size): (String, Z) =
               if (hasWildcard) (">=", pattern.patterns.size - 1) else ("==", pattern.patterns.size)
-            var s4 = s3.addClaim(State.Claim.Let.Binary(cond, sizeSym, op, State.Value.Z(size, pos), AST.Typed.z))
+            var s6 = s5.addClaim(State.Claim.Let.Binary(cond, sizeSym, op, State.Value.Z(size, pos), AST.Typed.z))
             var conds = ISZ[State.Value](cond)
             val offset: Z = if (it == AST.Typed.z) 0 else th.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast.index
             for (i <- 0 until size) {
               val sub = pattern.patterns(i)
               val subPos = sub.posOpt.get
-              val (s5, sym) = s4.freshSym(et, subPos)
-              val (s6, cond, subM) = evalPattern(smt2, cache, rtCheck, s5.addClaim(
+              val (s7, sym) = s6.freshSym(et, subPos)
+              val (s8, cond, subM) = evalPattern(smt2, cache, rtCheck, s7.addClaim(
                 State.Claim.Let.SeqLookup(sym, v, State.Value.Z(offset + i, subPos))), sym, sub, reporter)
               conds = conds :+ cond
-              s4 = s6
+              s6 = s8
               m = m ++ subM.entries
             }
-            val (s7, aconds) = s4.freshSym(AST.Typed.b, pos)
-            return (s7.addClaim(State.Claim.Let.And(aconds, conds)), aconds, m)
+            val (s9, aconds) = s6.freshSym(AST.Typed.b, pos)
+            return (s9.addClaim(State.Claim.Let.And(aconds, conds)), aconds, m)
           } else {
-            val (s1, tcond) = evalTypeTestH(s0, v, t, pos)
+            val (s3, tcond) = evalTypeTestH(s1, v, t, pos)
             val ti = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
             val sm = TypeChecker.buildTypeSubstMap(t.ids, posOpt, ti.ast.typeParams, t.args, reporter).get
-            val (s2, o) = s1.freshSym(t, pos)
-            var s3 = s2.addClaim(State.Claim.Let.Eq(o, v))
+            val (s4, o) = s3.freshSym(t, pos)
+            var s5 = s4.addClaim(State.Claim.Let.Eq(o, v))
             var conds = ISZ[State.Value](tcond)
             for (p <- ops.ISZOps(ti.extractorTypeMap.entries).zip(pattern.patterns)) {
               val f = p._1._1
               val ft = p._1._2.subst(sm)
               val sub = p._2
-              val (s4, sym) = s3.freshSym(ft, sub.posOpt.get)
-              s3 = s4.addClaim(State.Claim.Let.FieldLookup(sym, o, f))
-              val (s5, cond, subM) = evalPattern(smt2, cache, rtCheck, s3, sym, sub, reporter)
-              s3 = s5
+              val (s6, sym) = s5.freshSym(ft, sub.posOpt.get)
+              s5 = s6.addClaim(State.Claim.Let.FieldLookup(sym, o, f))
+              val (s7, cond, subM) = evalPattern(smt2, cache, rtCheck, s5, sym, sub, reporter)
+              s5 = s7
               conds = conds :+ cond
               m = m ++ subM.entries
             }
-            val (s6, aconds) = s3.freshSym(AST.Typed.b, pos)
-            return (s6.addClaim(State.Claim.Let.And(aconds, conds)), aconds, m)
+            val (s8, aconds) = s5.freshSym(AST.Typed.b, pos)
+            return (s8.addClaim(State.Claim.Let.And(aconds, conds)), aconds, m)
           }
         } else {
           val t = pattern.attr.typedOpt.get.asInstanceOf[AST.Typed.Tuple]
-          var s1 = s0
+          var s3 = s1
           var conds = ISZ[State.Value]()
           for (i <- 1 to pattern.patterns.size) {
             val sub = pattern.patterns(i - 1)
-            val (s2, sym) = s1.freshSym(t.args(i - 1), sub.posOpt.get)
-            val s3 = s2.addClaim(State.Claim.Let.FieldLookup(sym, v, s"_$i"))
-            val (s4, cond, subM) = evalPattern(smt2, cache, rtCheck, s3, sym, sub, reporter)
-            s1 = s4
+            val (s4, sym) = s3.freshSym(t.args(i - 1), sub.posOpt.get)
+            val s5 = s4.addClaim(State.Claim.Let.FieldLookup(sym, v, s"_$i"))
+            val (s6, cond, subM) = evalPattern(smt2, cache, rtCheck, s5, sym, sub, reporter)
+            s3 = s6
             conds = conds :+ cond
             m = m ++ subM.entries
           }
-          val (s5, aconds) = s1.freshSym(AST.Typed.b, pos)
-          return (s5.addClaim(State.Claim.Let.And(aconds, conds)), aconds, m)
+          val (s7, aconds) = s3.freshSym(AST.Typed.b, pos)
+          return (s7.addClaim(State.Claim.Let.And(aconds, conds)), aconds, m)
         }
       case pattern: AST.Pattern.Ref =>
         val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
@@ -2907,11 +2916,11 @@ import Util._
   }
 
   def addBindings(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, lcontext: ISZ[String],
-                  m: Bindings, reporter: Reporter): (State, ISZ[State.Value]) = {
+                  m: Bindings, reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     val ids = m.keys
     val s1 = rewriteLocals(s0, lcontext, ids)
     var s2 = s1
-    var bindings = ISZ[State.Value]()
+    var bindings = ISZ[State.Value.Sym]()
     for (p <- m.entries) {
       val (id, (v, t, pos)) = p
       val (s3, x) = idIntro(pos, s2, lcontext, id, t, Some(pos))
@@ -2945,8 +2954,8 @@ import Util._
       s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s10.claims, reporter)) {
       possibleCases = T
       val (s11, bindings) = addBindings(smt2, cache, rtCheck, s10, lcontext, m, reporter)
-      val s12: State = if (bindings.isEmpty) s11 else s11.addClaim(State.Claim.And(for (b <- bindings) yield
-        State.Claim.Prop(T, b.asInstanceOf[State.Value.Sym])))
+      val s12: State = if (bindings.isEmpty) s11 else s11.addClaim(State.Claim.And(
+        for (b <- bindings) yield State.Claim.Prop(T, b)))
       var claims = ISZ[ISZ[State.Claim]]()
       for (s13 <- evalBody(split, smt2, cache, rOpt, rtCheck, s12, body, posOpt, reporter)) {
         if (nextFresh < s13.nextFresh) {
@@ -2981,7 +2990,7 @@ import Util._
           if (bindings.nonEmpty) {
             val (s5, icond) = s4.freshSym(AST.Typed.b, c.pattern.posOpt.get)
             conds = conds :+ icond
-            s5.addClaim(State.Claim.Let.Imply(icond, bindings :+ ccond))
+            s5.addClaim(State.Claim.Let.Imply(icond, (for (b <- bindings) yield b.asInstanceOf[State.Value]) :+ ccond))
           } else {
             conds = conds :+ ccond
             s4
