@@ -28,6 +28,7 @@ package org.sireum.logika
 import org.sireum._
 
 @datatype class Config(val smt2Configs: ISZ[Smt2Config],
+                       val parCores: Z,
                        val sat: B,
                        val rlimit: Z,
                        val timeoutInMs: Z,
@@ -50,7 +51,17 @@ import org.sireum._
                        val checkInfeasiblePatternMatch: B,
                        val fpRoundingMode: String,
                        val caching: B,
-                       val smt2Seq: B)
+                       val smt2Seq: B,
+                       val branchPar: Config.BranchPar.Type,
+                       val branchParCores: Z)
+
+object Config {
+  @enum object BranchPar {
+    "Disabled"
+    "OnlyAllReturns"
+    "All"
+  }
+}
 
 @datatype class Smt2Config(val isSat: B, val name: String, val exe: String, val opts: ISZ[String])
 

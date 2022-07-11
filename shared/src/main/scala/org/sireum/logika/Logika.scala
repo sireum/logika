@@ -325,7 +325,7 @@ object Logika {
 
   def checkScript(fileUriOpt: Option[String], input: String, config: Config,
                   smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
-                  par: Z, hasLogika: B, plugins: ISZ[Plugin], line: Z,
+                  hasLogika: B, plugins: ISZ[Plugin], line: Z,
                   skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
@@ -353,7 +353,7 @@ object Logika {
           reporter.timing(libraryDesc, typeCheckingStartTime - libraryStartTime)
           reporter.reports(rep.messages)
           val (th, p) = extension.Cancel.cancellable(() =>
-            lang.FrontEnd.checkWorksheet(par, Some(tc.typeHierarchy), program, reporter))
+            lang.FrontEnd.checkWorksheet(config.parCores, Some(tc.typeHierarchy), program, reporter))
           if (!reporter.hasError) {
             lang.tipe.PostTipeAttrChecker.checkProgram(p, reporter)
           }
@@ -362,7 +362,7 @@ object Logika {
 
           if (!reporter.hasError) {
             if (hasLogika) {
-              checkStmts(p.body.stmts, ISZ(), config, th, smt2f, cache, reporter, par, plugins, verifyingStartTime, T,
+              checkStmts(p.body.stmts, ISZ(), config, th, smt2f, cache, reporter, config.parCores, plugins, verifyingStartTime, T,
                 line, skipMethods, skipTypes)
             }
           } else {
@@ -392,12 +392,12 @@ object Logika {
   }
 
   def checkPrograms(sources: ISZ[(Option[String], String)], files: ISZ[String], config: Config, th: TypeHierarchy,
-                    smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter, par: Z,
+                    smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
                     strictAliasing: B, sanityCheck: B, plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String],
                     skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val (rep, _, nameMap, typeMap) = extension.Cancel.cancellable(() =>
-      lang.FrontEnd.parseProgramAndGloballyResolve(par, for (p <- sources) yield lang.FrontEnd.Input(p._2, p._1),
+      lang.FrontEnd.parseProgramAndGloballyResolve(config.parCores, for (p <- sources) yield lang.FrontEnd.Input(p._2, p._1),
         th.nameMap, th.typeMap))
     reporter.reports(rep.messages)
     val typeCheckingStartTime = extension.Time.currentMillis
@@ -413,7 +413,7 @@ object Logika {
       return
     }
     val th3 = extension.Cancel.cancellable(() =>
-      lang.tipe.TypeOutliner.checkOutline(par, strictAliasing, th2, reporter))
+      lang.tipe.TypeOutliner.checkOutline(config.parCores, strictAliasing, th2, reporter))
     if (reporter.hasError) {
       reporter.illFormed()
       return
@@ -441,7 +441,7 @@ object Logika {
       return r
     }
     val th4 = extension.Cancel.cancellable(() =>
-      TypeChecker.checkComponents(par, strictAliasing, th3, filterNameMap(th3.nameMap), filterTypeMap(th3.typeMap), reporter))
+      TypeChecker.checkComponents(config.parCores, strictAliasing, th3, filterNameMap(th3.nameMap), filterTypeMap(th3.typeMap), reporter))
     if (reporter.hasError) {
       reporter.illFormed()
       return
@@ -457,7 +457,7 @@ object Logika {
     val verifyingStartTime = extension.Time.currentMillis
     reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
 
-    checkTypedPrograms(verifyingStartTime, fileSet, config, th4, smt2f, cache, reporter, par, plugins, line,
+    checkTypedPrograms(verifyingStartTime, fileSet, config, th4, smt2f, cache, reporter, config.parCores, plugins, line,
       skipMethods, skipTypes)
   }
 
@@ -2996,9 +2996,9 @@ import Util._
       val (nextFresh, lcsOpt) = evalBranch(isMatch, split, smt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
       return (lcsOpt, nextFresh, rep.messages)
     }
-    if (allReturns) {
+    if (allReturns && config.branchPar != Config.BranchPar.Disabled) {
       val inputs: ISZ[Z] = branches.indices
-      val outputs = ops.ISZOps(inputs).mParMap(computeBranch _)
+      val outputs = ops.ISZOps(inputs).mParMapCores(computeBranch _, config.branchParCores)
       for (i <- 0 until outputs.size) {
         reporter.reports(outputs(i)._3)
       }

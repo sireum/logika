@@ -42,6 +42,7 @@ object LogikaTest {
       smt2Configs =
         Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, s"${Smt2.cvc4DefaultValidOpts}; ${Smt2.z3DefaultValidOpts}; ${Smt2.cvc5DefaultValidOpts}; ${Smt2.altErgoOpenDefaultValidOpts}; ${Smt2.altErgoDefaultValidOpts}", timeoutInMs, rlimit).left ++
           Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, 500, rlimit).left,
+      parCores = Runtime.getRuntime.availableProcessors,
       sat = T,
       rlimit = rlimit,
       timeoutInMs = timeoutInMs,
@@ -66,6 +67,8 @@ object LogikaTest {
       fpRoundingMode = "RNE",
       caching = F,
       smt2Seq = F,
+      branchPar = Config.BranchPar.All,
+      branchParCores = Runtime.getRuntime.availableProcessors
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
@@ -191,7 +194,7 @@ class LogikaTest extends TestSuite {
     Logika.checkScript(None(), input, config,
       th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.fpRoundingMode,
         config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, config.smt2Seq, reporter),
-      Smt2.NoCache(), reporter, 1, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
+      Smt2.NoCache(), reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

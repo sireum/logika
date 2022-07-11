@@ -97,7 +97,11 @@ object cli {
           description = "Write all verification conditions in a directory"),
       )),
       OptGroup(name = "Optimizations", opts = ISZ(
-        Opt(name = "par", longKey = "par", shortKey = Some('p'),
+        parOpt,
+        Opt(name = "branchParMode", longKey = "par-branch-mode", shortKey = None(),
+          tpe = Type.Choice("branchPar", None(), ISZ("all", "returns", "disabled")),
+          description = "Branch parallelization mode"),
+        Opt(name = "branchPar", longKey = "par-branch", shortKey = None(),
           tpe = Type.NumFlag(100, Some(1), Some(100)),
           description = "Enable parallelization (with CPU cores percentage to use)"),
       )),
