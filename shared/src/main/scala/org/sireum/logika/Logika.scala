@@ -308,7 +308,7 @@ object Logika {
       return r
     }
 
-    @pure def compute(task: Task): Reporter = {
+    def compute(task: Task): Reporter = {
       val r = reporter.empty
       val csmt2 = smt2
       task.compute(csmt2, cache, r)
@@ -2977,35 +2977,60 @@ import Util._
     return (nextFresh, None())
   }
 
-  def evalBranches(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, rOpt: Option[State.Value.Sym],
-                   lcontext: ISZ[String], s0: State, branches: ISZ[Branch],
+  def evalBranches(isMatch: B, split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B,
+                   rOpt: Option[State.Value.Sym], lcontext: ISZ[String], s0: State, branches: ISZ[Branch],
                    reporter: Reporter): (State, LeafClaims) = {
-    var s1 = s0
-    var leafClaims = ISZ[(State.Claim, ISZ[ISZ[State.Claim]])]()
-    for (i <- 0 until branches.size) {
-      val (nextFresh, lcsOpt) = evalBranch(T, split, smt2, cache, rtCheck, s1, lcontext, branches, i, rOpt, reporter)
-      s1 = s1(nextFresh = nextFresh)
-      if (lcsOpt.nonEmpty) {
-        leafClaims = leafClaims :+ lcsOpt.get
+    @pure def allReturns: B = {
+      for (branch <- branches) {
+        for (lOpt <- branch.body.leaves) {
+          lOpt match {
+            case Some(_: AST.Stmt.Return) =>
+            case _ => return F
+          }
+        }
       }
+      return T
     }
-    return (s1, leafClaims)
+    def computeBranch(i: Z): (Option[(State.Claim, ISZ[ISZ[State.Claim]])], Z, ISZ[Message]) = {
+      val rep = reporter.empty
+      val (nextFresh, lcsOpt) = evalBranch(isMatch, split, smt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
+      return (lcsOpt, nextFresh, rep.messages)
+    }
+    if (allReturns) {
+      val inputs: ISZ[Z] = branches.indices
+      val outputs = ops.ISZOps(inputs).mParMap(computeBranch _)
+      for (i <- 0 until outputs.size) {
+        reporter.reports(outputs(i)._3)
+      }
+      return (s0, ISZ())
+    } else {
+      var s1 = s0
+      var leafClaims: LeafClaims = ISZ()
+      for (i <- 0 until branches.size) {
+        val (nextFresh, lcsOpt) = evalBranch(isMatch, split, smt2, cache, rtCheck, s1, lcontext, branches, i, rOpt, reporter)
+        s1 = s1(nextFresh = nextFresh)
+        if (lcsOpt.nonEmpty) {
+          leafClaims = leafClaims :+ lcsOpt.get
+        }
+      }
+      return (s1, leafClaims)
+    }
   }
 
-  def mergeBranches(shouldSplit: B, s1: State, leafClaims: LeafClaims): ISZ[State] = {
+  def mergeBranches(shouldSplit: B, s0: State, leafClaims: LeafClaims): ISZ[State] = {
     var r = ISZ[State]()
     if (leafClaims.isEmpty) {
-      r = r :+ s1(status = F)
+      r = r :+ s0(status = F)
     } else {
       if (shouldSplit) {
         r = r ++ (for (p <- leafClaims; cs <- p._2) yield
-          s1(claims = (ops.ISZOps(cs).slice(0, s1.claims.size) :+ p._1) ++
-            ops.ISZOps(cs).slice(s1.claims.size + 1, cs.size)))
+          s0(claims = (ops.ISZOps(cs).slice(0, s0.claims.size) :+ p._1) ++
+            ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size)))
       } else {
         val css: ISZ[ISZ[State.Claim]] = for (p <- leafClaims; cs <- p._2) yield cs
         var commonClaimPrefix = ISZ[State.Claim]()
         var diffIndices = HashSet.empty[Z]
-        for (i <- 0 until s1.claims.size) {
+        for (i <- 0 until s0.claims.size) {
           val c = css(0)(i)
           var ok = T
           var j = 1
@@ -3026,10 +3051,10 @@ import Util._
           var orClaims = ISZ[State.Claim]()
           for (cs <- p._2) {
             var claims = ISZ[State.Claim]()
-            for (i <- 0 until s1.claims.size if diffIndices.contains(i)) {
+            for (i <- 0 until s0.claims.size if diffIndices.contains(i)) {
               claims = claims :+ cs(i)
             }
-            claims = claims ++ ops.ISZOps(cs).slice(s1.claims.size + 1, cs.size)
+            claims = claims ++ ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size)
             orClaims = orClaims :+ State.Claim.And(claims)
           }
           if (orClaims.size == 1) {
@@ -3039,9 +3064,9 @@ import Util._
           }
         }
         if (andClaims.size == 1) {
-          r = r :+ s1(claims = commonClaimPrefix :+ andClaims(0))
+          r = r :+ s0(claims = commonClaimPrefix :+ andClaims(0))
         } else {
-          r = r :+ s1(claims = commonClaimPrefix :+ State.Claim.And(andClaims))
+          r = r :+ s0(claims = commonClaimPrefix :+ State.Claim.And(andClaims))
         }
       }
     }
@@ -3099,7 +3124,7 @@ import Util._
           error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
           r = r :+ s1(status = F)
         } else {
-          val (s3, leafClaims) = evalBranches(split, smt2, cache, rtCheck, rOpt, lcontext, s1, branches, reporter)
+          val (s3, leafClaims) = evalBranches(T, split, smt2, cache, rtCheck, rOpt, lcontext, s1, branches, reporter)
           val shouldSplit: B = split match {
             case Split.Default => config.splitAll || config.splitMatch
             case Split.Enabled => T
