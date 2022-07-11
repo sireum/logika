@@ -2368,7 +2368,7 @@ import Util._
       var r = ISZ[(State, State.Value)]()
       var nextFresh = state.nextFresh
       def evalTypeCondH(s0: State, args: ISZ[State.Value]): Unit = {
-        var condIdTypes = ISZ[State.Value.Sym]()
+        var condIdTypes = ISZ[State.Value]()
         var paramMap = HashSMap.empty[String, AST.Exp]
         var s1 = s0
         for (p <- ops.ISZOps(args).zip(cond.fun.params)) {
@@ -2381,12 +2381,13 @@ import Util._
           condIdTypes = condIdTypes :+ c
           paramMap = paramMap + id.value ~> AST.Exp.Sym(arg.num, AST.TypedAttr(id.attr.posOpt, p._2.typedOpt))
         }
-        var antecedent = condIdTypes(0)
         val pos = cond.posOpt.get
-        for (i <- 1 until condIdTypes.size) {
+        val antecedent: State.Value.Sym = if (condIdTypes.size === 1) {
+          condIdTypes(0).asInstanceOf[State.Value.Sym]
+        } else {
           val (s3, b) = s1.freshSym(AST.Typed.b, pos)
-          s1 = s3.addClaim(State.Claim.Let.Binary(b, antecedent, AST.Exp.BinaryOp.And, condIdTypes(i), AST.Typed.b))
-          antecedent = b
+          s1 = s3.addClaim(State.Claim.Let.And(b, condIdTypes))
+          b
         }
         val exp = Util.Substitutor(HashMap.empty, cond.fun.context, paramMap, reporter).
           transformExp(cond.fun.exp.asInstanceOf[AST.Stmt.Expr].exp).get
