@@ -45,6 +45,8 @@ object Logika {
 
   type Bindings = Map[String, (State.Value.Sym, AST.Typed, Position)]
 
+  type LeafClaims = ISZ[(State.Claim, ISZ[ISZ[State.Claim]])]
+
   @datatype class Branch(val title: String,
                          val sym: State.Value.Sym,
                          val body: AST.Body,
@@ -2935,13 +2937,12 @@ import Util._
 
   def evalBranch(isMatch: B, split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State,
                  lcontext: ISZ[String], branches: ISZ[Branch], i: Z, rOpt: Option[State.Value.Sym],
-                 reporter: Reporter): (B, Z, Option[(State.Claim, ISZ[ISZ[State.Claim]])]) = {
+                 reporter: Reporter): (Z, Option[(State.Claim, ISZ[ISZ[State.Claim]])]) = {
     val shouldSplit: B = split match {
       case Split.Default => config.splitAll || (isMatch && config.splitMatch)
       case Split.Enabled => T
       case Split.Disabled => F
     }
-    var possibleCases = F
     var nextFresh = s0.nextFresh
     val s1 = s0
     val Branch(title, sym, body, m) = branches(i)
@@ -2953,7 +2954,6 @@ import Util._
     val s10 = s1.addClaim(cond)
     if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
       s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s10.claims, reporter)) {
-      possibleCases = T
       val (s11, bindings) = addBindings(smt2, cache, rtCheck, s10, lcontext, m, reporter)
       val s12: State = if (bindings.isEmpty) s11 else s11.addClaim(State.Claim.And(
         for (b <- bindings) yield State.Claim.Prop(T, b)))
@@ -2967,16 +2967,86 @@ import Util._
         }
       }
       if (claims.nonEmpty) {
-        return (possibleCases, nextFresh, Some((cond, claims)))
+        return (nextFresh, Some((cond, claims)))
       }
     } else {
       if (isMatch && config.checkInfeasiblePatternMatch && !shouldSplit) {
         warn(posOpt, "Infeasible pattern matching case", reporter)
       }
     }
-    return (F, nextFresh, None())
+    return (nextFresh, None())
   }
 
+  def evalBranches(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, rOpt: Option[State.Value.Sym],
+                   lcontext: ISZ[String], s0: State, branches: ISZ[Branch],
+                   reporter: Reporter): (State, LeafClaims) = {
+    var s1 = s0
+    var leafClaims = ISZ[(State.Claim, ISZ[ISZ[State.Claim]])]()
+    for (i <- 0 until branches.size) {
+      val (nextFresh, lcsOpt) = evalBranch(T, split, smt2, cache, rtCheck, s1, lcontext, branches, i, rOpt, reporter)
+      s1 = s1(nextFresh = nextFresh)
+      if (lcsOpt.nonEmpty) {
+        leafClaims = leafClaims :+ lcsOpt.get
+      }
+    }
+    return (s1, leafClaims)
+  }
+
+  def mergeBranches(shouldSplit: B, s1: State, leafClaims: LeafClaims): ISZ[State] = {
+    var r = ISZ[State]()
+    if (leafClaims.isEmpty) {
+      r = r :+ s1(status = F)
+    } else {
+      if (shouldSplit) {
+        r = r ++ (for (p <- leafClaims; cs <- p._2) yield
+          s1(claims = (ops.ISZOps(cs).slice(0, s1.claims.size) :+ p._1) ++
+            ops.ISZOps(cs).slice(s1.claims.size + 1, cs.size)))
+      } else {
+        val css: ISZ[ISZ[State.Claim]] = for (p <- leafClaims; cs <- p._2) yield cs
+        var commonClaimPrefix = ISZ[State.Claim]()
+        var diffIndices = HashSet.empty[Z]
+        for (i <- 0 until s1.claims.size) {
+          val c = css(0)(i)
+          var ok = T
+          var j = 1
+          while (ok && j < css.size) {
+            if (c != css(j)(i)) {
+              ok = F
+            }
+            j = j + 1
+          }
+          if (ok) {
+            commonClaimPrefix = commonClaimPrefix :+ c
+          } else {
+            diffIndices = diffIndices + i
+          }
+        }
+        var andClaims = ISZ[State.Claim]()
+        for (p <- leafClaims) {
+          var orClaims = ISZ[State.Claim]()
+          for (cs <- p._2) {
+            var claims = ISZ[State.Claim]()
+            for (i <- 0 until s1.claims.size if diffIndices.contains(i)) {
+              claims = claims :+ cs(i)
+            }
+            claims = claims ++ ops.ISZOps(cs).slice(s1.claims.size + 1, cs.size)
+            orClaims = orClaims :+ State.Claim.And(claims)
+          }
+          if (orClaims.size == 1) {
+            andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, orClaims(0)))
+          } else {
+            andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, State.Claim.Or(orClaims)))
+          }
+        }
+        if (andClaims.size == 1) {
+          r = r :+ s1(claims = commonClaimPrefix :+ andClaims(0))
+        } else {
+          r = r :+ s1(claims = commonClaimPrefix :+ State.Claim.And(andClaims))
+        }
+      }
+    }
+    return r
+  }
 
   def evalMatch(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
                 stmt: AST.Stmt.Match, reporter: Reporter): ISZ[State] = {
@@ -3029,72 +3099,13 @@ import Util._
           error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
           r = r :+ s1(status = F)
         } else {
-          var leafClaims = ISZ[(State.Claim, ISZ[ISZ[State.Claim]])]()
-          var possibleCases = F
-          for (i <- 0 until branches.size) {
-            val (pc, nextFresh, lcsOpt) = evalBranch(T, split, smt2, cache, rtCheck, s1, lcontext, branches, i, rOpt, reporter)
-            s1 = s1(nextFresh = nextFresh)
-            possibleCases = possibleCases || pc
-            if (lcsOpt.nonEmpty) {
-              leafClaims = leafClaims :+ lcsOpt.get
-            }
+          val (s3, leafClaims) = evalBranches(split, smt2, cache, rtCheck, rOpt, lcontext, s1, branches, reporter)
+          val shouldSplit: B = split match {
+            case Split.Default => config.splitAll || config.splitMatch
+            case Split.Enabled => T
+            case Split.Disabled => F
           }
-          if (leafClaims.isEmpty) {
-            r = r :+ s1(status = F)
-          } else {
-            val shouldSplit: B = split match {
-              case Split.Default => config.splitAll || config.splitMatch
-              case Split.Enabled => T
-              case Split.Disabled => F
-            }
-            if (shouldSplit) {
-              r = r ++ (for (p <- leafClaims; cs <- p._2) yield
-                s1(claims = (ops.ISZOps(cs).slice(0, s1.claims.size) :+ p._1) ++
-                  ops.ISZOps(cs).slice(s1.claims.size + 1, cs.size)))
-            } else {
-              val css: ISZ[ISZ[State.Claim]] = for (p <- leafClaims; cs <- p._2) yield cs
-              var commonClaimPrefix = ISZ[State.Claim]()
-              var diffIndices = HashSet.empty[Z]
-              for (i <- 0 until s1.claims.size) {
-                val c = css(0)(i)
-                var ok = T
-                var j = 1
-                while (ok && j < css.size) {
-                  if (c != css(j)(i)) {
-                    ok = F
-                  }
-                  j = j + 1
-                }
-                if (ok) {
-                  commonClaimPrefix = commonClaimPrefix :+ c
-                } else {
-                  diffIndices = diffIndices + i
-                }
-              }
-              var andClaims = ISZ[State.Claim]()
-              for (p <- leafClaims) {
-                var orClaims = ISZ[State.Claim]()
-                for (cs <- p._2) {
-                  var claims = ISZ[State.Claim]()
-                  for (i <- 0 until s1.claims.size if diffIndices.contains(i)) {
-                    claims = claims :+ cs(i)
-                  }
-                  claims = claims ++ ops.ISZOps(cs).slice(s1.claims.size + 1, cs.size)
-                  orClaims = orClaims :+ State.Claim.And(claims)
-                }
-                if (orClaims.size == 1) {
-                  andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, orClaims(0)))
-                } else {
-                  andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, State.Claim.Or(orClaims)))
-                }
-              }
-              if (andClaims.size == 1) {
-                r = r :+ s1(claims = commonClaimPrefix :+ andClaims(0))
-              } else {
-                r = r :+ s1(claims = commonClaimPrefix :+ State.Claim.And(andClaims))
-              }
-            }
-          }
+          r = r ++ mergeBranches(shouldSplit, s3, leafClaims)
         }
       } else {
         r = r :+ s0
