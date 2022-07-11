@@ -2901,12 +2901,6 @@ import Util._
 
   def evalMatch(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
                 stmt: AST.Stmt.Match, reporter: Reporter): ISZ[State] = {
-    var r = ISZ[State]()
-    val shouldSplit: B = split match {
-      case Split.Default => config.splitAll || config.splitMatch
-      case Split.Enabled => T
-      case Split.Disabled => F
-    }
 
     def addPatternVars(s0: State, lcontext: ISZ[String],
                        m: Map[String, (State.Value, AST.Typed, Position)]): (State, ISZ[State.Value]) = {
@@ -2925,12 +2919,73 @@ import Util._
       return (s2, bindings)
     }
 
-    var allReturns = T
-    for (leafOpt <- stmt.leaves if allReturns) {
-      leafOpt match {
-        case Some(_: AST.Stmt.Return) =>
-        case _ => allReturns = F
+    def evalCasePattern(s1: State, lcontext: ISZ[String], c: AST.Case, v: State.Value): (State, State.Value.Sym, Map[String, (State.Value, AST.Typed, Position)]) = {
+      val (s2, pcond, m) = evalPattern(smt2, cache, rtCheck, s1, v, c.pattern, reporter)
+      val (s3, bindings) = addPatternVars(s2, lcontext, m)
+      var conds = ISZ(pcond)
+      val s6: State = c.condOpt match {
+        case Some(cond) =>
+          val (s4, ccond) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s3, cond, reporter))
+          if (bindings.nonEmpty) {
+            val (s5, icond) = s4.freshSym(AST.Typed.b, c.pattern.posOpt.get)
+            conds = conds :+ icond
+            s5.addClaim(State.Claim.Let.Imply(icond, bindings :+ ccond))
+          } else {
+            conds = conds :+ ccond
+            s4
+          }
+        case _ =>
+          s3
       }
+      val pos = c.pattern.posOpt.get
+      val (s7, sym) = s6.freshSym(AST.Typed.b, pos)
+      val s8 = s7.addClaim(State.Claim.Let.And(sym, conds))
+      val s9 = rewriteLocals(s8, lcontext, m.keys)
+      return (s9, sym, m)
+    }
+
+    def evalCase(shouldSplit: B, s0: State, lcontext: ISZ[String],
+                 caseSyms: ISZ[(AST.Case, State.Value.Sym, Map[String, (State.Value, AST.Typed, Position)])], i: Z): (B, Z, Option[(State.Claim, ISZ[ISZ[State.Claim]])]) = {
+      var possibleCases = F
+      var nextFresh = s0.nextFresh
+      val s1 = s0
+      val (c, sym, m) = caseSyms(i)
+      val cond = State.Claim.And(
+        (for (j <- 0 until i) yield State.Claim.Prop(F, caseSyms(j)._2).asInstanceOf[State.Claim]) :+
+          State.Claim.Prop(T, sym))
+      val posOpt = c.pattern.posOpt
+      val pos = posOpt.get
+      val s10 = s1.addClaim(cond)
+      if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+        s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]", pos, s10.claims, reporter)) {
+        possibleCases = T
+        val (s11, bindings) = addPatternVars(s10, lcontext, m)
+        var claims = ISZ[ISZ[State.Claim]]()
+        for (s12 <- evalBody(split, smt2, cache, rOpt, rtCheck, s11.addClaim(State.Claim.And(for (b <- bindings) yield
+          State.Claim.Prop(T, b.asInstanceOf[State.Value.Sym]))), c.body, c.pattern.posOpt, reporter)) {
+          if (nextFresh < s12.nextFresh) {
+            nextFresh = s12.nextFresh
+          }
+          if (s12.status) {
+            claims = claims :+ s12.claims
+          }
+        }
+        if (claims.nonEmpty) {
+          return (possibleCases, nextFresh, Some((cond, claims)))
+        }
+      } else {
+        if (config.checkInfeasiblePatternMatch && !shouldSplit) {
+          warn(posOpt, "Infeasible pattern matching case", reporter)
+        }
+      }
+      return (F, nextFresh, None())
+    }
+
+    var r = ISZ[State]()
+    val shouldSplit: B = split match {
+      case Split.Default => config.splitAll || config.splitMatch
+      case Split.Enabled => T
+      case Split.Disabled => F
     }
 
     for (p <- evalExp(split, smt2, cache, rtCheck, state, stmt.exp, reporter)) {
@@ -2943,30 +2998,8 @@ import Util._
         }
         var s1 = s0
         for (c <- stmt.cases) {
-          val (s2, pcond, m) = evalPattern(smt2, cache, rtCheck, s1, v, c.pattern, reporter)
-          val (s3, bindings) = addPatternVars(s2, lcontext, m)
-          var conds = ISZ(pcond)
-          val s6: State = c.condOpt match {
-            case Some(cond) =>
-              val (s4, ccond) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s3, cond, reporter))
-              if (bindings.nonEmpty) {
-                val (s5, icond) = s4.freshSym(AST.Typed.b, c.pattern.posOpt.get)
-                conds = conds :+ icond
-                s5.addClaim(State.Claim.Let.Imply(icond, bindings :+ ccond))
-              } else {
-                conds = conds :+ ccond
-                s4
-              }
-            case _ =>
-              s3
-          }
-          val pos = c.pattern.posOpt.get
-          val (s7, sym) = s6.freshSym(AST.Typed.b, pos)
-          val s8 = s7.addClaim(State.Claim.Let.And(sym, conds))
-          val s9 = rewriteLocals(s8, lcontext, m.keys)
-          val s10 = s9
-          s1 = s1(nextFresh = s10.nextFresh).
-            addClaim(State.Claim.And(for (i <- s1.claims.size until s10.claims.size) yield s10.claims(i)))
+          val (s2, sym, m) = evalCasePattern(s1, lcontext, c, v)
+          s1 = s2
           caseSyms = caseSyms :+ ((c, sym, m))
         }
         val stmtPos = stmt.posOpt.get
@@ -2979,38 +3012,14 @@ import Util._
           var leafClaims = ISZ[(State.Claim, ISZ[ISZ[State.Claim]])]()
           var possibleCases = F
           for (i <- 0 until caseSyms.size) {
-            val (c, sym, m) = caseSyms(i)
-            val cond = State.Claim.And(
-              (for (j <- 0 until i) yield State.Claim.Prop(F, caseSyms(j)._2).asInstanceOf[State.Claim]) :+
-                State.Claim.Prop(T, sym))
-            val posOpt = c.pattern.posOpt
-            val pos = posOpt.get
-            val s10 = s1.addClaim(cond)
-            if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-              s"match case pattern at [${pos.beginLine}, ${pos.beginColumn}]", pos, s10.claims, reporter)) {
-              possibleCases = T
-              val (s11, bindings) = addPatternVars(s10, lcontext, m)
-              var claims = ISZ[ISZ[State.Claim]]()
-              for (s12 <- evalBody(split, smt2, cache, rOpt, rtCheck, s11.addClaim(State.Claim.And(for (b <- bindings) yield
-                State.Claim.Prop(T, b.asInstanceOf[State.Value.Sym]))), c.body, c.pattern.posOpt, reporter)) {
-                s1 = s1(status = if (allReturns) s1.status else s1.status && s12.status, nextFresh = s12.nextFresh)
-                if (s12.status) {
-                  claims = claims :+ s12.claims
-                }
-              }
-              if (!allReturns && claims.nonEmpty) {
-                leafClaims = leafClaims :+ ((cond, claims))
-              }
-            } else {
-              if (config.checkInfeasiblePatternMatch && !shouldSplit) {
-                warn(posOpt, "Infeasible pattern matching case", reporter)
-              }
+            val (pc, nextFresh, lcsOpt) = evalCase(shouldSplit, s1, lcontext, caseSyms, i)
+            s1 = s1(nextFresh = nextFresh)
+            possibleCases = possibleCases || pc
+            if (lcsOpt.nonEmpty) {
+              leafClaims = leafClaims :+ lcsOpt.get
             }
           }
           if (leafClaims.isEmpty) {
-            if (!possibleCases) {
-              warn(stmt.posOpt, "Infeasible pattern matching cases", reporter)
-            }
             r = r :+ s1(status = F)
           } else {
             if (shouldSplit) {
@@ -3136,7 +3145,15 @@ import Util._
                 }
               } else {
                 for (s4 <- s4s; s6 <- s6s) {
-                  r = r :+ mergeStates(s2, cond, s4, s6, s6NextFresh)
+                  (s4.status, s6.status) match {
+                    case (T, T) => r = r :+ mergeStates(s2, cond, s4, s6, s6NextFresh)
+                    case (T, F) => r = r :+ s4(nextFresh = s6NextFresh)
+                    case (F, T) => r = r :+ s6
+                    case _ =>
+                  }
+                }
+                if (r.isEmpty) {
+                  r = r :+ s2(status = F, nextFresh = s6NextFresh)
                 }
               }
             case (T, F) =>
@@ -3641,7 +3658,7 @@ import Util._
       val mcontext = context.methodOpt.get
       val invs = retrieveInvs(mcontext.owner, mcontext.isInObject)
       val ss = Util.checkMethodPost(this, smt2, cache, reporter,  evalReturnH(), mcontext.posOpt, invs,
-        mcontext.ensures, config.logPc, config.logRawPc, Some(afterPos(returnStmt.posOpt.get)))
+        mcontext.ensures, config.logPc, config.logRawPc, returnStmt.posOpt)
       return for (s <- ss) yield s(status = F)
     }
 
@@ -3814,14 +3831,22 @@ import Util._
         case stmt: AST.Stmt.Return =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalReturn(state, stmt)
-        case stmt: AST.Stmt.Block => return evalBlock(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
-        case stmt: AST.Stmt.SpecBlock => return evalSpecBlock(split, state, stmt)
-        case stmt: AST.Stmt.Match => return evalMatch(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
+        case stmt: AST.Stmt.Block =>
+          return evalBlock(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
+        case stmt: AST.Stmt.SpecBlock =>
+          return evalSpecBlock(split, state, stmt)
+        case stmt: AST.Stmt.Match =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          return evalMatch(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.Inv =>
           val s1 = evalInv(None(), F, "Invariant", smt2, cache, rtCheck, state, stmt, HashMap.empty, reporter)
           return ISZ(state(status = s1.status, nextFresh = s1.nextFresh))
-        case stmt: AST.Stmt.DeduceSteps => return evalDeduceSteps(state, stmt)
-        case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty => return evalDeduceSequent(state, stmt)
+        case stmt: AST.Stmt.DeduceSteps =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          return evalDeduceSteps(state, stmt)
+        case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty =>
+          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
+          return evalDeduceSequent(state, stmt)
         case _: AST.Stmt.Object => return ISZ(state)
         case _: AST.Stmt.Import => return ISZ(state)
         case _: AST.Stmt.Method => return ISZ(state)

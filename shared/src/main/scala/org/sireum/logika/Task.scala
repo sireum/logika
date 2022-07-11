@@ -145,7 +145,7 @@ object Task {
       for (state <- logika.evalStmts(Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.status) {
         if (stmts.nonEmpty) {
           val lastPos = stmts(stmts.size - 1).posOpt.get
-          logika.logPc(config.logPc, config.logRawPc, state, reporter, Some(Util.afterPos(lastPos)))
+          logika.logPc(config.logPc, config.logRawPc, state(status = F), reporter, Some(lastPos))
         }
       }
       return reporter.messages

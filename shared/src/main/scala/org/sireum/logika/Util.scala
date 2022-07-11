@@ -551,7 +551,7 @@ object Util {
           s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
         }
         if (postPosOpt.nonEmpty && s.status) {
-          logika.logPc(logPc, logRawPc, s, reporter, Some(afterPos(postPosOpt.get)))
+          logika.logPc(logPc, logRawPc, s(status = F), reporter, postPosOpt)
         }
         r = r :+ s
       }
