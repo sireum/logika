@@ -2986,9 +2986,8 @@ import Util._
       }
       return T
     }
-    val isEnabled = config.branchPar != Config.BranchPar.Disabled && config.branchParCores > 1
     var leafClaims: LeafClaims = ISZ()
-    if (isEnabled) {
+    if (config.branchPar != Config.BranchPar.Disabled && config.branchParCores > 1) {
       val inputs: ISZ[Z] = branches.indices
       if (allReturns) {
         def computeBranch(i: Z): (Option[(State.Claim, ISZ[ISZ[State.Claim]])], Z, ISZ[Message]) = {
