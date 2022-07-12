@@ -2986,85 +2986,131 @@ import Util._
       }
       return T
     }
-    def computeBranch(i: Z): (Option[(State.Claim, ISZ[ISZ[State.Claim]])], Z, ISZ[Message]) = {
-      val rep = reporter.empty
-      val lsmt2 = smt2
-      val (nextFresh, lcsOpt) = evalBranch(isMatch, split, lsmt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
-      return (lcsOpt, nextFresh, rep.messages)
-    }
-    if (allReturns && config.branchPar != Config.BranchPar.Disabled) {
+    val isEnabled = config.branchPar != Config.BranchPar.Disabled && config.branchParCores > 1
+    var leafClaims: LeafClaims = ISZ()
+    if (isEnabled) {
       val inputs: ISZ[Z] = branches.indices
-      val outputs = ops.ISZOps(inputs).mParMapCores(computeBranch _, config.branchParCores)
-      for (i <- 0 until outputs.size) {
-        reporter.reports(outputs(i)._3)
-      }
-      return (s0, ISZ())
-    } else {
-      var s1 = s0
-      var leafClaims: LeafClaims = ISZ()
-      for (i <- 0 until branches.size) {
-        val (nextFresh, lcsOpt) = evalBranch(isMatch, split, smt2, cache, rtCheck, s1, lcontext, branches, i, rOpt, reporter)
-        s1 = s1(nextFresh = nextFresh)
-        if (lcsOpt.nonEmpty) {
-          leafClaims = leafClaims :+ lcsOpt.get
+      if (allReturns) {
+        def computeBranch(i: Z): (Option[(State.Claim, ISZ[ISZ[State.Claim]])], Z, ISZ[Message]) = {
+          val rep = reporter.empty
+          val lsmt2 = smt2
+          val (nextFresh, lcsOpt) = evalBranch(isMatch, split, lsmt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
+          return (lcsOpt, nextFresh, rep.messages)
         }
+        val outputs = ops.ISZOps(inputs).mParMapCores(computeBranch _, config.branchParCores)
+        for (i <- 0 until outputs.size) {
+          reporter.reports(outputs(i)._3)
+        }
+        return (s0, leafClaims)
+      } else {
+        def computeBranchSmt2(i: Z): (Option[(State.Claim, ISZ[ISZ[State.Claim]])], Z, Smt2, ISZ[Message]) = {
+          val rep = reporter.empty
+          val lsmt2 = smt2
+          val (nextFresh, lcsOpt) = evalBranch(isMatch, split, lsmt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
+          return (lcsOpt, nextFresh, lsmt2, rep.messages)
+        }
+        var first: Z = -1
+        val outputs = ops.ISZOps(inputs).mParMapCores(computeBranchSmt2 _, config.branchParCores)
+        for (i <- 0 until outputs.size if first < 0) {
+          reporter.reports(outputs(i)._4)
+          if (outputs(i)._1.nonEmpty) {
+            first = i
+          }
+        }
+        if (first < 0) {
+          return (s0(status = F), leafClaims)
+        }
+        leafClaims = leafClaims :+ outputs(first)._1.get
+        var nextFreshGap = outputs(first)._2 - s0.nextFresh
+        for (i <- first + 1 until outputs.size) {
+          reporter.reports(outputs(i)._4)
+          outputs(i)._1 match {
+            case Some((cond, claimss)) =>
+              smt2.combineWith(outputs(i)._3)
+              if (nextFreshGap > 0) {
+                val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap)
+                val newCond = rw.transformStateClaim(cond).getOrElseEager(cond)
+                var newClaimss = ISZ[ISZ[State.Claim]]()
+                for (claims <- claimss) {
+                  newClaimss = newClaimss :+ (for (claim <- claims) yield
+                    rw.transformStateClaim(claim).getOrElseEager(claim))
+                }
+                leafClaims = leafClaims :+ ((newCond, newClaimss))
+              } else {
+                leafClaims = leafClaims :+ ((cond, claimss))
+              }
+              nextFreshGap = nextFreshGap + outputs(i)._2 - s0.nextFresh
+            case _ =>
+          }
+        }
+        return (s0(nextFresh = s0.nextFresh + nextFreshGap), leafClaims)
       }
-      return (s1, leafClaims)
     }
+
+    var s1 = s0
+    for (i <- 0 until branches.size) {
+      val (nextFresh, lcsOpt) = evalBranch(isMatch, split, smt2, cache, rtCheck, s1, lcontext, branches, i, rOpt, reporter)
+      s1 = s1(nextFresh = nextFresh)
+      if (lcsOpt.nonEmpty) {
+        leafClaims = leafClaims :+ lcsOpt.get
+      }
+    }
+    return (s1, leafClaims)
+
   }
 
   def mergeBranches(shouldSplit: B, s0: State, leafClaims: LeafClaims): ISZ[State] = {
-    var r = ISZ[State]()
     if (leafClaims.isEmpty) {
-      r = r :+ s0(status = F)
-    } else {
-      if (shouldSplit) {
-        r = r ++ (for (p <- leafClaims; cs <- p._2) yield
-          s0(claims = (ops.ISZOps(cs).slice(0, s0.claims.size) :+ p._1) ++
-            ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size)))
-      } else {
-        val css: ISZ[ISZ[State.Claim]] = for (p <- leafClaims; cs <- p._2) yield cs
-        var commonClaimPrefix = ISZ[State.Claim]()
-        var diffIndices = HashSet.empty[Z]
-        for (i <- 0 until s0.claims.size) {
-          val c = css(0)(i)
-          var ok = T
-          var j = 1
-          while (ok && j < css.size) {
-            if (c != css(j)(i)) {
-              ok = F
-            }
-            j = j + 1
+      return ISZ(s0(status = F))
+    } else if (shouldSplit) {
+      return for (p <- leafClaims; cs <- p._2) yield s0(claims = (ops.ISZOps(cs).slice(0, s0.claims.size) :+ p._1) ++
+        ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size))
+    }
+    @pure def computeDiffIndices(): (ISZ[State.Claim], HashSet[Z]) = {
+      var commonClaimPrefix = ISZ[State.Claim]()
+      var diffIndices = HashSet.empty[Z]
+      val css: ISZ[ISZ[State.Claim]] = for (p <- leafClaims; cs <- p._2) yield cs
+      for (i <- 0 until s0.claims.size) {
+        val c = css(0)(i)
+        var ok = T
+        var j = 1
+        while (ok && j < css.size) {
+          if (c != css(j)(i)) {
+            ok = F
           }
-          if (ok) {
-            commonClaimPrefix = commonClaimPrefix :+ c
-          } else {
-            diffIndices = diffIndices + i
-          }
+          j = j + 1
         }
-        var andClaims = ISZ[State.Claim]()
-        for (p <- leafClaims) {
-          var orClaims = ISZ[State.Claim]()
-          for (cs <- p._2) {
-            var claims = ISZ[State.Claim]()
-            for (i <- 0 until s0.claims.size if diffIndices.contains(i)) {
-              claims = claims :+ cs(i)
-            }
-            claims = claims ++ ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size)
-            orClaims = orClaims :+ State.Claim.And(claims)
-          }
-          if (orClaims.size == 1) {
-            andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, orClaims(0)))
-          } else {
-            andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, State.Claim.Or(orClaims)))
-          }
-        }
-        if (andClaims.size == 1) {
-          r = r :+ s0(claims = commonClaimPrefix :+ andClaims(0))
+        if (ok) {
+          commonClaimPrefix = commonClaimPrefix :+ c
         } else {
-          r = r :+ s0(claims = commonClaimPrefix :+ State.Claim.And(andClaims))
+          diffIndices = diffIndices + i
         }
       }
+      return (commonClaimPrefix, diffIndices)
+    }
+    var r = ISZ[State]()
+    val (commonClaimPrefix, diffIndices) = computeDiffIndices()
+    var andClaims = ISZ[State.Claim]()
+    for (p <- leafClaims) {
+      var orClaims = ISZ[State.Claim]()
+      for (cs <- p._2) {
+        var claims = ISZ[State.Claim]()
+        for (i <- 0 until s0.claims.size if diffIndices.contains(i)) {
+          claims = claims :+ cs(i)
+        }
+        claims = claims ++ ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size)
+        orClaims = orClaims :+ State.Claim.And(claims)
+      }
+      if (orClaims.size == 1) {
+        andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, orClaims(0)))
+      } else {
+        andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, State.Claim.Or(orClaims)))
+      }
+    }
+    if (andClaims.size == 1) {
+      r = r :+ s0(claims = commonClaimPrefix :+ andClaims(0))
+    } else {
+      r = r :+ s0(claims = commonClaimPrefix :+ State.Claim.And(andClaims))
     }
     return r
   }
