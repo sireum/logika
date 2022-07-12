@@ -803,15 +803,17 @@ object Smt2 {
       val typeofName = sTypeOfName(t)
       if (etAdt) {
         addTypeHierarchyId(t, thId)
+        addSort(t, st"(define-sort $tId () (Array $itId $etId))")
+        addSort(t, st"""(declare-const $thId Type)""")
         if (!typeOfSeqSet.contains((sname, it))) {
           typeOfSeqSetUp(typeOfSeqSet + ((sname, it)))
-          addSTypeDecl(t, st"""(declare-fun $typeofName ($tId) Type)""")
+          addSort(t, st"""(declare-fun $typeofName ($tId) Type)""")
         }
-        addSort(t, st"""(declare-const $thId Type)""")
+      } else {
+        addSort(t, st"(define-sort $tId () (Array $itId $etId))")
       }
       @strictpure def etThidSubtypeOpt(x: String): Option[ST] = if (etAdt) Some(st"(sub-type (type-of $x) $etThid)") else None()
       @strictpure def thidTypeOpt(x: String): Option[ST] = if (etAdt) Some(st"(= ($typeofName $x) $thId)") else None()
-      addSort(t, st"(define-sort $tId () (Array $itId $etId))")
       addSTypeDecl(t, st"(declare-fun $sizeId ($tId) Z)")
       addSTypeDecl(t, st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
       addSTypeDecl(t, st"(declare-fun $firstIndexId ($tId) $itId)")
@@ -993,7 +995,7 @@ object Smt2 {
       }
       posetUp(poset.addNode(t))
       val tId = typeId(t)
-      addAdtDecl(t, st"(define-sort $tId () ADT)")
+      addSort(t, st"(define-sort $tId () ADT)")
       if (!ti.ast.isRoot) {
         addAdtDecl(t, st"(assert (forall ((x ${typeId(t)})) (= (sub-type (type-of x) $thId) (= (type-of x) $thId))))")
       }
@@ -1132,13 +1134,13 @@ object Smt2 {
         addType(arg.subst(sm), reporter)
       }
       posetUp(poset.addNode(t))
+      val thId = typeHierarchyId(t)
+      addTypeHierarchyId(t, thId)
       val tid = typeId(t)
       val isString = t.ids === AST.Typed.stringName
       if (!isString) {
-        addAdtDecl(t, st"(define-sort $tid () ADT)")
+        addSort(t, st"(define-sort $tid () ADT)")
       }
-      val thId = typeHierarchyId(t)
-      addTypeHierarchyId(t, thId)
       addSort(t, st"(declare-const $thId Type)")
       val eqId = typeOpId(t, "==")
       val neId = typeOpId(t, "!=")
