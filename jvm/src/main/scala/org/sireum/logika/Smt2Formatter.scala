@@ -32,4 +32,5 @@ import org.sireum._
   def formatF32(useReal: B, value: F32): ST = $
   def formatF64(useReal: B, value: F64): ST = $
   def formatR(n: R): ST = $
+  def formatFilename(filename: String): String = $
 }

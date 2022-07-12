@@ -36,8 +36,9 @@ object Smt2Impl {
              fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B, smt2Seq: B,
              reporter: Logika.Reporter): Smt2 = {
     val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, smt2Seq,
-      fpRoundingMode, configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
-      ISZ(), HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty, HashSet.empty)
+      fpRoundingMode, configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, HashSMap.empty, HashSMap.empty,
+      HashSMap.empty, HashSMap.empty, HashSMap.empty, HashSMap.empty, HashMap.empty, HashSMap.empty, HashMap.empty,
+      HashSSet.empty, HashSet.empty)
     r.addType(AST.Typed.z, reporter)
     return r
   }
@@ -55,17 +56,38 @@ object Smt2Impl {
                        val configs: ISZ[Smt2Config],
                        var types: HashSet[AST.Typed],
                        var poset: Poset[AST.Typed.Name],
-                       var sorts: ISZ[ST],
-                       var adtDecls: ISZ[ST],
-                       var sTypeDecls: ISZ[ST],
-                       var typeDecls: ISZ[ST],
-                       var constraints: ISZ[ST],
-                       var typeHierarchyIds: ISZ[ST],
+                       var sorts: HashSMap[AST.Typed, ISZ[ST]],
+                       var adtDecls: HashSMap[AST.Typed.Name, ISZ[ST]],
+                       var sTypeDecls: HashSMap[AST.Typed.Name, ISZ[ST]],
+                       var typeDecls: HashSMap[AST.Typed, ISZ[ST]],
+                       var constraints: HashSMap[AST.Typed, ISZ[ST]],
+                       var typeHierarchyIds: HashSMap[AST.Typed, ST],
                        var shortIds: HashMap[ISZ[String], ISZ[String]],
                        var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)],
                        var filenameCount: HashMap[String, Z],
                        var seqLits: HashSSet[Smt2.SeqLit],
                        var typeOfSeqSet: HashSet[(String, AST.Typed)]) extends Smt2 {
+
+  def combineWith(that: Smt2): Unit = {
+    types = types ++ that.types.elements
+    poset = poset ++ that.poset
+    sorts = sorts ++ (that.sorts -- sorts.keys).entries
+    adtDecls = adtDecls ++ (that.adtDecls -- adtDecls.keys).entries
+    sTypeDecls = sTypeDecls ++ (that.sTypeDecls -- sTypeDecls.keys).entries
+    typeDecls = typeDecls ++ (that.typeDecls -- typeDecls.keys).entries
+    constraints = constraints ++ (that.constraints -- constraints.keys).entries
+    typeHierarchyIds = typeHierarchyIds ++ (that.typeHierarchyIds -- typeHierarchyIds.keys).entries
+    shortIds = shortIds ++ (that.shortIds -- shortIds.keys).entries
+    strictPureMethods = strictPureMethods ++ (that.strictPureMethods -- strictPureMethods.keys).entries
+    for (p <- that.filenameCount.entries) {
+      val count = filenameCount.get(p._1).getOrElse(0)
+      if (count < p._2) {
+        filenameCount = filenameCount + p
+      }
+    }
+    seqLits = seqLits ++ that.seqLits.elements
+    typeOfSeqSet = typeOfSeqSet ++ that.typeOfSeqSet.elements
+  }
 
   def updateFrom(that: Smt2): Unit = {
     types = that.types
@@ -87,27 +109,27 @@ object Smt2Impl {
     shortIds = newShortIds
   }
 
-  def sortsUp(newSorts: ISZ[ST]): Unit = {
+  def sortsUp(newSorts: HashSMap[AST.Typed, ISZ[ST]]): Unit = {
     sorts = newSorts
   }
 
-  def adtDeclsUp(newAdtDecls: ISZ[ST]): Unit = {
+  def adtDeclsUp(newAdtDecls: HashSMap[AST.Typed.Name, ISZ[ST]]): Unit = {
     adtDecls = newAdtDecls
   }
 
-  def sTypeDeclsUp(newSTypeDecls: ISZ[ST]): Unit = {
+  def sTypeDeclsUp(newSTypeDecls: HashSMap[AST.Typed.Name, ISZ[ST]]): Unit = {
     sTypeDecls = newSTypeDecls
   }
 
-  def typeDeclsUp(newTypeDecls: ISZ[ST]): Unit = {
+  def typeDeclsUp(newTypeDecls: HashSMap[AST.Typed, ISZ[ST]]): Unit = {
     typeDecls = newTypeDecls
   }
 
-  def constraintsUp(newConstraints: ISZ[ST]): Unit = {
+  def constraintsUp(newConstraints: HashSMap[AST.Typed, ISZ[ST]]): Unit = {
     constraints = newConstraints
   }
 
-  def typeHierarchyIdsUp(newTypeHierarchyIds: ISZ[ST]): Unit = {
+  def typeHierarchyIdsUp(newTypeHierarchyIds: HashSMap[AST.Typed, ST]): Unit = {
     typeHierarchyIds = newTypeHierarchyIds
   }
 
@@ -137,10 +159,7 @@ object Smt2Impl {
       p.mkdirAll()
     }
 
-    @strictpure def replaceChar(c: C): C =
-      if (('0' <= c && c <= '9') || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')) c else '-'
-
-    val fname = conversions.String.fromCis(for (c <- conversions.String.toCis(filename)) yield replaceChar(c))
+    val fname = Smt2Formatter.formatFilename(filename)
     val countOpt: Option[ST] = filenameCount.get(fname) match {
       case Some(n) =>
         filenameCount = filenameCount + fname ~> (n + 1)

@@ -354,6 +354,8 @@ object Smt2 {
 
   @pure def useReal: B
 
+  @pure def smt2Seq: B
+
   def configs: ISZ[Smt2Config]
 
   def types: HashSet[AST.Typed]
@@ -364,37 +366,33 @@ object Smt2 {
 
   def posetUp(newPoset: Poset[AST.Typed.Name]): Unit
 
-  def sorts: ISZ[ST]
+  def sorts: HashSMap[AST.Typed, ISZ[ST]]
 
-  def sortsUp(newSorts: ISZ[ST]): Unit
+  def sortsUp(newSorts: HashSMap[AST.Typed, ISZ[ST]]): Unit
 
   def seqLits: HashSSet[Smt2.SeqLit]
 
   def seqLitsUp(newSeqLits: HashSSet[Smt2.SeqLit]): Unit
 
-  def addSort(sort: ST): Unit = {
-    sortsUp(sorts :+ sort)
-  }
+  def adtDecls: HashSMap[AST.Typed.Name, ISZ[ST]]
 
-  def adtDecls: ISZ[ST]
+  def adtDeclsUp(newAdtDecls: HashSMap[AST.Typed.Name, ISZ[ST]]): Unit
 
-  def adtDeclsUp(newAdtDecls: ISZ[ST]): Unit
+  def typeDecls: HashSMap[AST.Typed, ISZ[ST]]
 
-  def typeDecls: ISZ[ST]
+  def typeDeclsUp(newTypeDecls: HashSMap[AST.Typed, ISZ[ST]]): Unit
 
-  def typeDeclsUp(newTypeDecls: ISZ[ST]): Unit
+  def sTypeDecls: HashSMap[AST.Typed.Name, ISZ[ST]]
 
-  def sTypeDecls: ISZ[ST]
-
-  def sTypeDeclsUp(newTypeDecls: ISZ[ST]): Unit
+  def sTypeDeclsUp(newTypeDecls: HashSMap[AST.Typed.Name, ISZ[ST]]): Unit
 
   def strictPureMethods: HashSMap[State.ProofFun, (ST, ST)]
 
   def strictPureMethodsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit
 
-  def constraints: ISZ[ST]
+  def constraints: HashSMap[AST.Typed, ISZ[ST]]
 
-  def constraintsUp(newConstraints: ISZ[ST]): Unit
+  def constraintsUp(newConstraints: HashSMap[AST.Typed, ISZ[ST]]): Unit
 
   def writeFile(dir: String, filename: String, content: String): Unit
 
@@ -405,6 +403,8 @@ object Smt2 {
   def filenameCount: HashMap[String, Z]
 
   def withConfig(isSat: B, options: String, timeout: Z, resourceLimit: Z, reporter: Reporter): MEither[Smt2, String]
+
+  def combineWith(that: Smt2): Unit
 
   def updateFrom(that: Smt2): Unit
 
@@ -565,40 +565,84 @@ object Smt2 {
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, claim)))
   }
 
-  def addAdtDecl(adtDecl: ST): Unit = {
-    adtDeclsUp(adtDecls :+ adtDecl)
+  def addSort(key: AST.Typed, d: ST): Unit = {
+    val decls = sorts
+    val newSorts: HashSMap[AST.Typed, ISZ[ST]] = decls.get(key) match {
+      case Some(sts) => decls + key ~> (sts :+ d)
+      case _ => decls + key ~> ISZ(d)
+    }
+    sortsUp(newSorts)
   }
 
-  def addAdtDecls(adtDecls: ISZ[ST]): Unit = {
-    adtDeclsUp(this.adtDecls ++ adtDecls)
+  def addAdtDecl(key: AST.Typed.Name, d: ST): Unit = {
+    val decls = adtDecls
+    val newAdtDecls: HashSMap[AST.Typed.Name, ISZ[ST]] = decls.get(key) match {
+      case Some(sts) => decls + key ~> (sts :+ d)
+      case _ => decls + key ~> ISZ(d)
+    }
+    adtDeclsUp(newAdtDecls)
   }
 
-  def addSTypeDecl(sTypeDecl: ST): Unit = {
-    sTypeDeclsUp(sTypeDecls :+ sTypeDecl)
+  def addAdtDecls(key: AST.Typed.Name, ds: ISZ[ST]): Unit = {
+    val decls = adtDecls
+    val newAdtDecls: HashSMap[AST.Typed.Name, ISZ[ST]] = decls.get(key) match {
+      case Some(sts) => decls + key ~> (sts ++ ds)
+      case _ => decls + key ~> ds
+    }
+    adtDeclsUp(newAdtDecls)
   }
 
-  def addSTypeDecls(sTypeDecls: ISZ[ST]): Unit = {
-    sTypeDeclsUp(this.sTypeDecls ++ sTypeDecls)
+  def addSTypeDecl(key: AST.Typed.Name, d: ST): Unit = {
+    val decls = sTypeDecls
+    val newSTypeDecls: HashSMap[AST.Typed.Name, ISZ[ST]] = decls.get(key) match {
+      case Some(sts) => decls + key ~> (sts :+ d)
+      case _ => decls + key ~> ISZ(d)
+    }
+    sTypeDeclsUp(newSTypeDecls)
   }
 
-  def addTypeDecl(typeDecl: ST): Unit = {
-    typeDeclsUp(typeDecls :+ typeDecl)
+  def addSTypeDecls(key: AST.Typed.Name, ds: ISZ[ST]): Unit = {
+    val decls = sTypeDecls
+    val newSTypeDecls: HashSMap[AST.Typed.Name, ISZ[ST]] = decls.get(key) match {
+      case Some(sts) => decls + key ~> (sts ++ ds)
+      case _ => decls + key ~> ds
+    }
+    sTypeDeclsUp(newSTypeDecls)
   }
 
-  def addTypeDecls(typeDecls: ISZ[ST]): Unit = {
-    typeDeclsUp(this.typeDecls ++ typeDecls)
+  def addTypeDecl(key: AST.Typed, d: ST): Unit = {
+    val decls = typeDecls
+    val newTypeDecls: HashSMap[AST.Typed, ISZ[ST]] = decls.get(key) match {
+      case Some(sts) => decls + key ~> (sts :+ d)
+      case _ => decls + key ~> ISZ(d)
+    }
+    typeDeclsUp(newTypeDecls)
   }
 
-  def addConstraint(constraint: ST): Unit = {
-    constraintsUp(constraints :+ constraint)
+  def addTypeDecls(key: AST.Typed, ds: ISZ[ST]): Unit = {
+    val decls = typeDecls
+    val newTypeDecls: HashSMap[AST.Typed, ISZ[ST]] = decls.get(key) match {
+      case Some(sts) => decls + key ~> (sts ++ ds)
+      case _ => decls + key ~> ds
+    }
+    typeDeclsUp(newTypeDecls)
   }
 
-  def typeHierarchyIds: ISZ[ST]
+  def addConstraint(key: AST.Typed, d: ST): Unit = {
+    val decls = constraints
+    val newConstraints: HashSMap[AST.Typed, ISZ[ST]] = decls.get(key) match {
+      case Some(sts) => decls + key ~> (sts :+ d)
+      case _ => decls + key ~> ISZ(d)
+    }
+    constraintsUp(newConstraints)
+  }
 
-  def typeHierarchyIdsUp(newTypeHierarchyIds: ISZ[ST]): Unit
+  def typeHierarchyIds: HashSMap[AST.Typed, ST]
 
-  def addTypeHiearchyId(tId: ST): Unit = {
-    typeHierarchyIdsUp(typeHierarchyIds :+ tId)
+  def typeHierarchyIdsUp(newTypeHierarchyIds: HashSMap[AST.Typed, ST]): Unit
+
+  def addTypeHierarchyId(key: AST.Typed, tId: ST): Unit = {
+    typeHierarchyIdsUp(typeHierarchyIds + key ~> tId)
   }
 
   def shortIds: HashMap[ISZ[String], ISZ[String]]
@@ -696,7 +740,7 @@ object Smt2 {
       return
     }
     val tid = typeId(t)
-    addSort(st"(define-sort $tid () Z)")
+    addSort(t, st"(define-sort $tid () Z)")
     val t2zId = typeOpId(t, "toZ")
     val oneId = typeOpId(t, "1")
     val minId = typeOpId(t, "Min")
@@ -705,7 +749,7 @@ object Smt2 {
     val neId = typeOpId(t, "!=")
     val addId = typeOpId(t, "+")
     val subId = typeOpId(t, "-")
-    addSort(
+    addSort(t,
       st"""(define-fun $eqId ((n1 $tid) (n2 $tid)) B (= n1 n2))
           |(define-fun $neId ((n1 $tid) (n2 $tid)) B (not (= n1 n2)))
           |(define-fun $leId ((n1 $tid) (n2 $tid)) B (<= n1 n2))
@@ -758,50 +802,50 @@ object Smt2 {
       val sname = t.ids(t.ids.size - 1)
       val typeofName = sTypeOfName(t)
       if (etAdt) {
-        addTypeHiearchyId(thId)
+        addTypeHierarchyId(t, thId)
         if (!typeOfSeqSet.contains((sname, it))) {
           typeOfSeqSetUp(typeOfSeqSet + ((sname, it)))
-          addSTypeDecl(st"""(declare-fun $typeofName ($tId) Type)""")
+          addSTypeDecl(t, st"""(declare-fun $typeofName ($tId) Type)""")
         }
-        addSort(st"""(declare-const $thId Type)""")
+        addSort(t, st"""(declare-const $thId Type)""")
       }
       @strictpure def etThidSubtypeOpt(x: String): Option[ST] = if (etAdt) Some(st"(sub-type (type-of $x) $etThid)") else None()
       @strictpure def thidTypeOpt(x: String): Option[ST] = if (etAdt) Some(st"(= ($typeofName $x) $thId)") else None()
-      addSort(st"(define-sort $tId () (Array $itId $etId))")
-      addSTypeDecl(st"(declare-fun $sizeId ($tId) Z)")
-      addSTypeDecl(st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
-      addSTypeDecl(st"(declare-fun $firstIndexId ($tId) $itId)")
-      addSTypeDecl(st"(declare-fun $lastIndexId ($tId) $itId)")
+      addSort(t, st"(define-sort $tId () (Array $itId $etId))")
+      addSTypeDecl(t, st"(declare-fun $sizeId ($tId) Z)")
+      addSTypeDecl(t, st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
+      addSTypeDecl(t, st"(declare-fun $firstIndexId ($tId) $itId)")
+      addSTypeDecl(t, st"(declare-fun $lastIndexId ($tId) $itId)")
       val (_, itOne): (ST, ST) = it match {
         case it: AST.Typed.Name =>
           if (it == AST.Typed.z) {
             val min = toVal(it, 0)
-            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
-            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($lastIndexId x) ($zSubId ($sizeId x) $zOne)))))")
-            addSTypeDecl(st"(define-fun $atZId ((x $tId) (y $itId)) $etId (select x y))")
+            addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
+            addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($lastIndexId x) ($zSubId ($sizeId x) $zOne)))))")
+            addSTypeDecl(t, st"(define-fun $atZId ((x $tId) (y $itId)) $etId (select x y))")
             (min, toVal(it, 1))
           } else {
             val ti = typeHierarchy.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.SubZ]
             val min: ST = if (ti.ast.isZeroIndex) toVal(it, 0) else typeOpId(it, "Min")
-            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
-            addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
-            addSTypeDecl(st"(declare-fun $atZId ($tId $itId) $etId)")
+            addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
+            addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
+            addSTypeDecl(t, st"(declare-fun $atZId ($tId $itId) $etId)")
             (min, toVal(it, 1))
           }
         case it: AST.Typed.TypeVar =>
           val min = typeOpId(it, "Min")
-          addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
-          addSTypeDecl(st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
-          addSTypeDecl(st"(declare-fun $atZId ($tId $itId) $etId)")
+          addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
+          addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
+          addSTypeDecl(t, st"(declare-fun $atZId ($tId $itId) $etId)")
           (min, typeOpId(it, "1"))
         case _ => halt(s"Infeasible: $it")
       }
-      addSTypeDecl(st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and (not ($zEqId ($sizeId x) 0)) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
-      addSTypeDecl(st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
+      addSTypeDecl(t, st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and (not ($zEqId ($sizeId x) 0)) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
+      addSTypeDecl(t, st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
       if (etAdt) {
-        addSTypeDecl(st"(assert (forall ((o $tId) (i $itId)) (=> ${thidTypeOpt("o")} ($isInBoundId o i) (sub-type (type-of ($atId o i)) $etThid))))")
+        addSTypeDecl(t, st"(assert (forall ((o $tId) (i $itId)) (=> ${thidTypeOpt("o")} ($isInBoundId o i) (sub-type (type-of ($atId o i)) $etThid))))")
       }
-      addSTypeDecl(
+      addSTypeDecl(t,
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
             |  (and
             |    ${thidTypeOpt("z")}
@@ -809,7 +853,7 @@ object Smt2 {
             |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                        (= ($atId z i) ($atId x i))))
             |    (= ($atId z ($lastIndexId z)) y)))""")
-      addSTypeDecl(
+      addSTypeDecl(t,
         st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
             |  (and
             |    ${thidTypeOpt("z")}
@@ -818,7 +862,7 @@ object Smt2 {
             |                            (= ($atId z i) ($atId x i))))
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId ($itAddId ($lastIndexId x) ($itSubId i ($firstIndexId y))) $itOne)) ($atId y i))))))""")
-      addSTypeDecl(
+      addSTypeDecl(t,
         st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
             |  (and
             |    ${thidTypeOpt("z")}
@@ -826,7 +870,7 @@ object Smt2 {
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId i $itOne)) ($atId y i))))
             |    (= ($atId z ($firstIndexId z)) x)))""")
-      addSTypeDecl(
+      addSTypeDecl(t,
         st"""(declare-fun $upId ($tId $itId $etId) $tId)
             |(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
             |  (=>
@@ -840,15 +884,15 @@ object Smt2 {
             |      (=> ($isInBoundId x y) (= x2 (store x y z))))
             |  )
             |))""")
-      addSTypeDecl(
+      addSTypeDecl(t,
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
             |    (= ($sizeId x) ($sizeId y))
             |    (=> (not (= 0 ($sizeId x))) ($itEqId ($lastIndexId x) ($lastIndexId y)))
             |    (forall ((i $itId)) (=> ($isInBoundId x i) (= (select x i) (select y i))))))""")
-      addSTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
+      addSTypeDecl(t, st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       if (typeHierarchy.isSubstitutable(et)) {
-        addSTypeDecl(
+        addSTypeDecl(t,
           st"""(assert (forall ((x $tId) (y $tId))
               |  (=>
               |    ${thidTypeOpt("x")}
@@ -857,7 +901,7 @@ object Smt2 {
               |    (= x y))))""")
       }
       if (etAdt) {
-        addSTypeDecl(
+        addSTypeDecl(t,
           st"""(assert (forall ((x $tId) (i $itId) (v $etId))
               |  (=> ${thidTypeOpt("x")}
               |      ($isInBoundId x i)
@@ -904,14 +948,14 @@ object Smt2 {
               children = children :+ childT
               addType(childT, reporter)
               val childThId = typeHierarchyId(childT)
-              addConstraint(
+              addConstraint(t,
                 st"""(assert (forall ((o1 ADT) (o2 ADT))
                     |  (=> (sub-type (type-of o1) $childThId)
                     |      (sub-type (type-of o2) $childThId)
                     |      (= (${typeOpId(t, "==")} o1 o2) (${typeOpId(childT, "==")} o1 o2)))
                     |))"""
               )
-              addConstraint(
+              addConstraint(t,
                 st"""(assert (forall ((o1 ADT) (o2 ADT))
                     |  (=> (sub-type (type-of o1) $childThId)
                     |      (not (sub-type (type-of o2) $childThId))
@@ -928,15 +972,15 @@ object Smt2 {
           reporter.warn(posOpt, Logika.kind, s"$t does not have any concrete implementation")
         }
         posetUp(poset.addChildren(t, children))
-        addTypeDecls(for (child <- children) yield st"(assert (sub-type ${typeHierarchyId(child)} $tId))")
+        addTypeDecls(t, for (child <- children) yield st"(assert (sub-type ${typeHierarchyId(child)} $tId))")
       }
     }
 
     def addAdt(t: AST.Typed.Name, ti: TypeInfo.Adt): Unit = {
       val sm = TypeChecker.buildTypeSubstMap(t.ids, None(), ti.ast.typeParams, t.args, reporter).get
       val thId = typeHierarchyId(t)
-      addTypeHiearchyId(thId)
-      addSort(st"(declare-const $thId Type)")
+      addTypeHierarchyId(t, thId)
+      addSort(t, st"(declare-const $thId Type)")
       addSub(ti.posOpt, ti.ast.isRoot, t, thId, ti.parents, sm)
       for (arg <- t.args) {
         addType(arg.subst(sm), reporter)
@@ -949,9 +993,9 @@ object Smt2 {
       }
       posetUp(poset.addNode(t))
       val tId = typeId(t)
-      addAdtDecl(st"(define-sort $tId () ADT)")
+      addAdtDecl(t, st"(define-sort $tId () ADT)")
       if (!ti.ast.isRoot) {
-        addAdtDecl(st"(assert (forall ((x ${typeId(t)})) (= (sub-type (type-of x) $thId) (= (type-of x) $thId))))")
+        addAdtDecl(t, st"(assert (forall ((x ${typeId(t)})) (= (sub-type (type-of x) $thId) (= (type-of x) $thId))))")
       }
 
       @pure def fieldInfo(isParam: B, f: Info.Var): Smt2.AdtFieldInfo = {
@@ -971,9 +1015,9 @@ object Smt2 {
       val neId = typeOpId(t, "!=")
       val parents = poset.parentsOf(t).elements
       if (ti.ast.isRoot) {
-        addAdtDecl(st"""(declare-fun $eqId ($tId $tId) B)""")
+        addAdtDecl(t, st"""(declare-fun $eqId ($tId $tId) B)""")
         if (typeHierarchy.isSubstitutable(t)) {
-          addAdtDecl(
+          addAdtDecl(t,
             st"""(assert (forall ((x $tId) (y $tId))
                 |  (=>
                 |    (sub-type (type-of x) $thId)
@@ -982,7 +1026,7 @@ object Smt2 {
                 |    (= x y))))"""
           )
         }
-        addAdtDecl(st"(define-fun $neId ((o1 $tId) (o2 $tId)) B (not ($eqId o1 o2)))")
+        addAdtDecl(t, st"(define-fun $neId ((o1 $tId) (o2 $tId)) B (not ($eqId o1 o2)))")
         var leaves: ISZ[ST] = ISZ()
         for (child <- poset.childrenOf(t).elements) {
           typeHierarchy.typeMap.get(child.ids) match {
@@ -991,7 +1035,7 @@ object Smt2 {
           }
         }
         if (leaves.nonEmpty) {
-          addAdtDecl(
+          addAdtDecl(t,
             st"""(assert (forall ((x $tId))
                 |  (let ((t (type-of x)))
                 |  (=> (sub-type t $thId)
@@ -1001,7 +1045,7 @@ object Smt2 {
         }
       } else {
         if (parents.nonEmpty) {
-          addAdtDecl(
+          addAdtDecl(t,
             st"""(assert (and
                 |  ${(for (p <- poset.parentsOf(t).elements) yield st"(sub-type $thId ${typeHierarchyId(p)})", "\n")}))"""
           )
@@ -1011,9 +1055,9 @@ object Smt2 {
         val fieldInfos: ISZ[Smt2.AdtFieldInfo] =
           (for (f <- ti.vars.values) yield fieldInfo(params.contains(f.ast.id.value), f)) ++ (for (f <- ti.specVars.values) yield specFieldInfo(f))
         for (q <- fieldInfos) {
-          addTypeDecl(st"(declare-fun ${q.fieldLookupId} ($tId) ${q.fieldTypeId})")
+          addTypeDecl(t, st"(declare-fun ${q.fieldLookupId} ($tId) ${q.fieldTypeId})")
           if (isAdtType(q.fieldType)) {
-            addTypeDecl(
+            addTypeDecl(t,
               st"""(assert (forall ((o $tId))
                   |  (=> (= (type-of o) $thId)
                   |      (sub-type (type-of (${q.fieldLookupId} o)) ${typeHierarchyId(q.fieldType)}))))""")
@@ -1028,7 +1072,7 @@ object Smt2 {
           val feqs: ISZ[ST] = for (q2 <- fieldInfos) yield
             if (q2.fieldId == q.fieldId) st"(= (${q2.fieldLookupId} x!2) x!1)"
             else st"(= (${q2.fieldLookupId} x!2) (${q2.fieldLookupId} x!0))"
-          addTypeDecl(
+          addTypeDecl(t,
             st"""(declare-fun $upOp ($tId ${q.fieldTypeId}) $tId)
                 |(assert (forall ((x!0 $tId) (x!1 ${q.fieldTypeId}) (x!2 $tId))
                 |  (=>
@@ -1042,7 +1086,7 @@ object Smt2 {
                 |))"""
           )
         }
-        addTypeDecl(
+        addTypeDecl(t,
           st"""(declare-fun $newId (${(for (q <- fieldInfos if q.isParam) yield q.fieldTypeId, " ")}) $tId)
               |(assert (forall (${(for (q <- fieldInfos if q.isParam) yield st"(${q.fieldId} ${q.fieldTypeId})", " ")} (x!0 $tId))
               |  (=>
@@ -1053,14 +1097,14 @@ object Smt2 {
               |      ${(for (q <- fieldInfos if q.isParam) yield st"(= (${q.fieldLookupId} x!0) ${q.fieldId})", "\n")})
               |  )
               |))""")
-        addTypeDecl(
+        addTypeDecl(t,
           st"""(define-fun $eqId ((x!0 $tId) (x!1 $tId)) B
               |  (and
               |    (= (type-of x!0) (type-of x!1) $thId)
               |    ${(for (q <- fieldInfos if q.isParam) yield st"(${if (isAdtType(q.fieldType)) st"${typeOpId(q.fieldType, "==")}" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
         if (typeHierarchy.isSubstitutable(t)) {
-          addTypeDecl(
+          addTypeDecl(t,
             st"""(assert (forall ((x!0 $tId) (x!1 $tId))
                 |  (=>
                 |    (= (type-of x!0) $thId)
@@ -1068,10 +1112,10 @@ object Smt2 {
                 |    ($eqId x!0 x!1)
                 |    (= x!0 x!1))))""")
         }
-        addTypeDecl(st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
+        addTypeDecl(t, st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       }
       for (parent <- parents) {
-        addTypeDecl(
+        addTypeDecl(t,
           st"""(assert (forall ((o1 $tId) (o2 $tId))
               |  (=>
               |    (sub-type (type-of o1) $thId)
@@ -1091,19 +1135,19 @@ object Smt2 {
       val tid = typeId(t)
       val isString = t.ids === AST.Typed.stringName
       if (!isString) {
-        addAdtDecl(st"(define-sort $tid () ADT)")
+        addAdtDecl(t, st"(define-sort $tid () ADT)")
       }
       val thId = typeHierarchyId(t)
-      addTypeHiearchyId(thId)
-      addSort(st"(declare-const $thId Type)")
+      addTypeHierarchyId(t, thId)
+      addSort(t, st"(declare-const $thId Type)")
       val eqId = typeOpId(t, "==")
       val neId = typeOpId(t, "!=")
       if (isString) {
-        addAdtDecl(st"(define-fun $eqId ((x $tid) (y $tid)) B (= x y))")
+        addAdtDecl(t, st"(define-fun $eqId ((x $tid) (y $tid)) B (= x y))")
       } else {
-        addAdtDecl(st"(declare-fun $eqId ($tid $tid) B)")
+        addAdtDecl(t, st"(declare-fun $eqId ($tid $tid) B)")
       }
-      addAdtDecl(st"(define-fun $neId ((o1 $tid) (o2 $tid)) B (not ($eqId o1 o2)))")
+      addAdtDecl(t, st"(define-fun $neId ((o1 $tid) (o2 $tid)) B (not ($eqId o1 o2)))")
       addSub(ti.posOpt, T, t, thId, ti.parents, sm)
       var ops = ISZ[(String, ST)]()
       for (info <- ti.specVars.values) {
@@ -1112,7 +1156,7 @@ object Smt2 {
         val opT = info.typedOpt.get.subst(sm)
         addType(opT, reporter)
         val opTid = typeId(opT)
-        addAdtDecl(st"(declare-fun $op ($tid) $opTid)")
+        addAdtDecl(t, st"(declare-fun $op ($tid) $opTid)")
         ops = ops :+ ((opId, opTid))
       }
       for (p <- ops) {
@@ -1120,7 +1164,7 @@ object Smt2 {
         val opAssignId = s"${opId}_="
         val op = typeOpId(t, opId)
         val opAssign = typeOpId(t, opAssignId)
-        addTypeDecl(
+        addTypeDecl(t,
           st"""(define-fun $opAssign ((o $tid) ($opId $opTid) (o2 $tid)) B
               |  (and
               |    ($eqId o2 o)
@@ -1129,7 +1173,7 @@ object Smt2 {
       }
       if (!isString) {
         for (parent <- poset.parentsOf(t).elements) {
-          addTypeDecl(
+          addTypeDecl(t,
             st"""(assert (forall ((o1 $tid) (o2 $tid))
                 |  (=>
                 |    (sub-type (type-of o1) $thId)
@@ -1168,7 +1212,7 @@ object Smt2 {
         else None()
       (ti.ast.isSigned, ti.ast.isBitVector) match {
         case (T, T) =>
-          addSort(
+          addSort(t,
             st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
                 |(declare-fun $t2ZId ($tId) Z)
                 |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
@@ -1190,7 +1234,7 @@ object Smt2 {
                 |$tMaxOpt
                 |$tMinOpt""")
         case (F, T) =>
-          addSort(
+          addSort(t,
             st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
                 |(declare-fun $t2ZId ($tId) Z)
                 |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
@@ -1212,7 +1256,7 @@ object Smt2 {
                 |$tMaxOpt
                 |$tMinOpt""")
         case (_, _) =>
-          addSort(
+          addSort(t,
             st"""(define-sort $tId () Int)
                 |(define-fun $t2ZId ((n $tId)) Z n)
                 |(define-fun $tNegId ((x $tId)) $tId (- x))
@@ -1238,7 +1282,7 @@ object Smt2 {
       val eqOp = typeOpId(t, "==")
       val neOp = typeOpId(t, "!=")
       val ordinalOp = typeOpId(t, "ordinal")
-      addSort(
+      addSort(t,
         st"""(declare-datatypes (($tid 0)) ((
             |  ${(for (element <- ti.elements.keys) yield st"(${typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})", " ")})))
             |(declare-fun $ordinalOp ($tid) Int)
@@ -1247,21 +1291,21 @@ object Smt2 {
       val elements: ISZ[ST] = for (element <- ti.elements.keys) yield enumId(owner, element)
       var ordinal = 0
       for (element <- elements) {
-        addSort(st"(declare-const $element $tid)")
-        addSort(st"(assert (= ($ordinalOp $element) $ordinal))")
+        addSort(t, st"(declare-const $element $tid)")
+        addSort(t, st"(assert (= ($ordinalOp $element) $ordinal))")
         ordinal = ordinal + 1
       }
       if (elements.size > 1) {
-        addSort(st"(assert (distinct ${(elements, " ")}))")
+        addSort(t, st"(assert (distinct ${(elements, " ")}))")
       }
     }
 
     def addTypeVar(t: AST.Typed.TypeVar): Unit = {
       val tid = typeId(t)
-      addSort(st"(declare-sort $tid 0)")
+      addSort(t, st"(declare-sort $tid 0)")
       val eqId = typeOpId(t, "==")
       val neId = typeOpId(t, "!=")
-      addSort(
+      addSort(t,
         st"""(declare-fun $eqId ($tid $tid) B)
             |${Smt2.eqProp(eqId, tid)}
             |(define-fun $neId ((x $tid) (y $tid)) B (not ($eqId x y)))"""
@@ -1275,8 +1319,8 @@ object Smt2 {
       val tId = typeId(t)
       val eqId = typeOpId(t, "==")
       val neId = typeOpId(t, "!=")
-      addSort(st"""(declare-datatypes (($tId 0)) (((${typeOpId(t, "new")} ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t, s"_$i")} ${adtId(t.args(i - 1))})", " ")}))))""")
-      addTypeDecl(
+      addSort(t, st"""(declare-datatypes (($tId 0)) (((${typeOpId(t, "new")} ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t, s"_$i")} ${adtId(t.args(i - 1))})", " ")}))))""")
+      addTypeDecl(t,
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
             |    ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
@@ -1291,11 +1335,11 @@ object Smt2 {
     }
     typesUp(types + t)
     t match {
-      case AST.Typed.z => sortsUp(sorts :+ Smt2.zST(intBitWidth))
-      case AST.Typed.c => sortsUp(sorts :+ Smt2.cST(charBitWidth))
-      case AST.Typed.f32 => sortsUp(sorts :+ f32ST)
-      case AST.Typed.f64 => sortsUp(sorts :+ f64ST)
-      case AST.Typed.r => sortsUp(sorts :+ Smt2.rST)
+      case AST.Typed.z => addSort(t, Smt2.zST(intBitWidth))
+      case AST.Typed.c => addSort(t, Smt2.cST(charBitWidth))
+      case AST.Typed.f32 => addSort(t, f32ST)
+      case AST.Typed.f64 => addSort(t, f64ST)
+      case AST.Typed.r => addSort(t, Smt2.rST)
       case t: AST.Typed.Name =>
         if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
           addS(t)
@@ -1474,11 +1518,11 @@ object Smt2 {
   }
 
   def query(funDecls: ISZ[ST], decls: ISZ[ST], claims: ISZ[ST]): ST = {
-    var ss: ISZ[ST] = sorts
+    var ss: ISZ[ST] = for (ds <- sorts.values; d <- ds) yield d
     if (typeHierarchyIds.size > 1) {
       ss = ss :+
         st"""(assert (distinct
-            |  ${(typeHierarchyIds, "\n")}))"""
+            |  ${(typeHierarchyIds.values, "\n")}))"""
     }
 
     val r =
@@ -1506,13 +1550,13 @@ object Smt2 {
           |
           |${(ss, "\n\n")}
           |
-          |${(adtDecls, "\n")}
+          |${(for (ds <- adtDecls.values; d <- ds) yield d, "\n")}
           |
-          |${(sTypeDecls, "\n")}
+          |${(for (ds <- sTypeDecls.values; d <- ds) yield d, "\n")}
           |
-          |${(typeDecls, "\n")}
+          |${(for (ds <- typeDecls.values; d <- ds) yield d, "\n")}
           |
-          |${(constraints, "\n")}
+          |${(for (ds <- constraints.values; d <- ds) yield d, "\n")}
           |
           |${(funDecls, "\n")}
           |
