@@ -31,6 +31,8 @@ object Smt2Invoke {
 
   val timeoutCodes: Set[Z] = Set.empty[Z] ++ ISZ(-101, -100, 3, 6, 132, 134, 142)
 
+  var haltOnError: B = F
+
   @pure def nameExePathMap(sireumHome: Os.Path): HashMap[String, String] = {
     val platform: String = Os.kind match {
       case Os.Kind.Mac => "mac"
@@ -138,22 +140,21 @@ object Smt2Invoke {
           case string"unknown" => Either.Right((config.exe, config.opts, Smt2Query.Result.Kind.Unknown))
           case string"cvc5 interrupted by timeout." => Either.Right((config.exe, config.opts, Smt2Query.Result.Kind.Timeout))
           case _ => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, queryString,
-            st"""Error encountered when running ${config.exe} query:
-                |; Result: Error (exit code ${pr.exitCode})
+            st"""; Result: Error (exit code ${pr.exitCode})
                 |; Solver: ${config.exe}
-                |; Arguments: ${(config.opts, " ")}""".render, pout, duration, F))        }
+                |; Arguments: ${(config.opts, " ")}
+                |; Output:
+                |${(for (line <- ops.StringOps(pout).split((c: C) => c === '\n')) yield st"; $line", "\n")}""".render, pout, duration, F))
+        }
       }
       rOpt
     }
     val r: Smt2Query.Result = ops.ISZOpsUtil.invokeAnyEither(fs, smt2Seq || fs.size == 1) match {
       case Either.Left(qr) =>
-        if (qr.kind == Smt2Query.Result.Kind.Error) {
+        if (haltOnError && qr.kind == Smt2Query.Result.Kind.Error) {
           halt(
             st"""${qr.info}
-                |${qr.query}
-                |
-                |Output:
-                |${qr.output}""".render
+                |${qr.query}""".render
           )
         }
         qr

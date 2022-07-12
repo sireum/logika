@@ -60,6 +60,7 @@ class LogikaRcTest extends SireumRcSpec {
   }
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
+    Smt2Invoke.haltOnError = T
     val isSimplified = path.last.endsWith(simplifiedPrefix)
     val p = if (isSimplified) path.dropRight(1) :+ path.last.replace(simplifiedPrefix, "") else path
     val reporter = Logika.Reporter.create

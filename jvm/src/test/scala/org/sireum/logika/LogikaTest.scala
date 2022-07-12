@@ -191,6 +191,7 @@ class LogikaTest extends TestSuite {
   }
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
+    Smt2Invoke.haltOnError = T
     Logika.checkScript(None(), input, config,
       th => Smt2Impl.create(config.smt2Configs, th, config.timeoutInMs, config.fpRoundingMode,
         config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, config.smt2Seq, reporter),
