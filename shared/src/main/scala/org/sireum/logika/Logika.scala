@@ -2988,7 +2988,8 @@ import Util._
     }
     def computeBranch(i: Z): (Option[(State.Claim, ISZ[ISZ[State.Claim]])], Z, ISZ[Message]) = {
       val rep = reporter.empty
-      val (nextFresh, lcsOpt) = evalBranch(isMatch, split, smt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
+      val lsmt2 = smt2
+      val (nextFresh, lcsOpt) = evalBranch(isMatch, split, lsmt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
       return (lcsOpt, nextFresh, rep.messages)
     }
     if (allReturns && config.branchPar != Config.BranchPar.Disabled) {
