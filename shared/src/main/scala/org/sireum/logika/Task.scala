@@ -142,7 +142,7 @@ object Task {
       for (tv <- itvc.s.elements) {
         csmt2.addTypeVarIndex(tv)
       }
-      for (state <- logika.evalStmts(Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.status) {
+      for (state <- logika.evalStmts(F, Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.status) {
         if (stmts.nonEmpty) {
           val lastPos = stmts(stmts.size - 1).posOpt.get
           logika.logPc(config.logPc, config.logRawPc, state(status = F), reporter, Some(lastPos))

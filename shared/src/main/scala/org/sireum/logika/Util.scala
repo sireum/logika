@@ -634,12 +634,14 @@ object Util {
       }
       val invs = logika.retrieveInvs(res.owner, res.isInObject)
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
-      val stmts = method.bodyOpt.get.stmts
+      val body = method.bodyOpt.get
+      val stmts = body.stmts
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
-        val body = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
-        logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, body, reporter)
+        val spBody = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
+        logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, spBody, reporter)
       } else {
-        logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
+        logika.evalStmts(!(body.allReturns && config.branchPar =!= Config.BranchPar.Disabled), Split.Default, smt2,
+          cache, None(), T, state, stmts, reporter)
       }
       checkMethodPost(logika, smt2, cache, reporter, ss, methodPosOpt, invs, ensures, mconfig.logPc, mconfig.logRawPc,
         if (stmts.nonEmpty) stmts(stmts.size - 1).posOpt else None())
