@@ -3026,7 +3026,8 @@ import Util._
           outputs(i)._1 match {
             case Some((cond, claimss)) =>
               smt2.combineWith(outputs(i)._3)
-              if (nextFreshGap > 0) {
+              val gap = outputs(i)._2 - s0.nextFresh
+              if (gap > 0) {
                 val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap)
                 val newCond = rw.transformStateClaim(cond).getOrElseEager(cond)
                 var newClaimss = ISZ[ISZ[State.Claim]]()
@@ -3035,10 +3036,10 @@ import Util._
                     rw.transformStateClaim(claim).getOrElseEager(claim))
                 }
                 leafClaims = leafClaims :+ ((newCond, newClaimss))
+                nextFreshGap = nextFreshGap + gap
               } else {
                 leafClaims = leafClaims :+ ((cond, claimss))
               }
-              nextFreshGap = nextFreshGap + outputs(i)._2 - s0.nextFresh
             case _ =>
           }
         }
