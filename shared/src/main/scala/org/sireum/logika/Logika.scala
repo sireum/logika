@@ -3002,7 +3002,7 @@ import Util._
           reporter.reports(outputs(i)._3)
         }
         return (s0, leafClaims)
-      } else {
+      } else if (!(branches.size == 2 && (branches(1).body.stmts.isEmpty || branches(0).body.stmts.isEmpty))) {
         def computeBranchSmt2(i: Z): (Option[(State.Claim, ISZ[ISZ[State.Claim]])], Z, Smt2, ISZ[Message]) = {
           val rep = reporter.empty
           val lsmt2 = smt2
