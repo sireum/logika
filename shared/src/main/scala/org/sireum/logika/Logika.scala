@@ -137,6 +137,7 @@ object Logika {
   val indexingFields: HashSet[String] = HashSet ++ ISZ[String]("firstIndex", "lastIndex")
   val eqOps: HashSet[String] = HashSet ++ ISZ(AST.Exp.BinaryOp.Eq, AST.Exp.BinaryOp.Eq3, AST.Exp.BinaryOp.Ne, AST.Exp.BinaryOp.Ne3)
   val emptyBindings: Bindings = Map.empty[String, (State.Value.Sym, AST.Typed, Position)]
+  val trueClaim: State.Claim = State.Claim.And(ISZ())
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
@@ -3062,6 +3063,10 @@ import Util._
   def mergeBranches(shouldSplit: B, s0: State, leafClaims: LeafClaims): ISZ[State] = {
     if (leafClaims.isEmpty) {
       return ISZ(s0(status = F))
+    } else if (leafClaims.size === 1) {
+      val (cond, claimss) = leafClaims(0)
+      val s1 = s0.addClaim(cond)
+      return for (claims <- claimss) yield s1.addClaims(claims)
     } else if (shouldSplit) {
       return for (p <- leafClaims; cs <- p._2) yield s0(claims = (ops.ISZOps(cs).slice(0, s0.claims.size) :+ p._1) ++
         ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size))
@@ -3083,6 +3088,7 @@ import Util._
         if (ok) {
           commonClaimPrefix = commonClaimPrefix :+ c
         } else {
+          commonClaimPrefix = commonClaimPrefix :+ trueClaim
           diffIndices = diffIndices + i
         }
       }
@@ -3192,93 +3198,30 @@ import Util._
     return evalBody(split, smt2, cache, rOpt, rtCheck, s0, block.body, block.attr.posOpt, reporter)
   }
 
-  def evalIf(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, s0: State,
-             ifStmt: AST.Stmt.If, reporter: Reporter): ISZ[State] = {
-    var r = ISZ[State]()
+  def evalIf(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
+             stmt: AST.Stmt.If, reporter: Reporter): ISZ[State] = {
+    var branches = ISZ[Branch]()
+    def evalConds(s0: State, ifStmt: AST.Stmt.If): State = {
+      val (s1, cond) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s0, ifStmt.cond, reporter))
+      val pos = ifStmt.cond.posOpt.get
+      val (s2, sym) = value2Sym(s1, cond, pos)
+      branches = branches :+ Branch("if-then", sym, ifStmt.thenBody, Map.empty)
+      ifStmt.elseBody.stmts match {
+        case ISZ(nif: AST.Stmt.If) => return evalConds(s2, nif)
+        case _ =>
+          val (s3, econd) = s2.freshSym(AST.Typed.b, pos)
+          branches = branches :+ Branch("if-else", econd, ifStmt.elseBody, Map.empty)
+          return s3.addClaim(State.Claim.Let.Eq(econd, State.Value.B(T, pos)))
+      }
+    }
+    val s4 = evalConds(state, stmt)
+    val (s5, leafClaims) = evalBranches(F, split, smt2, cache, rtCheck, rOpt, ISZ(), s4, branches, reporter)
     val shouldSplit: B = split match {
       case Split.Default => config.splitAll || config.splitIf
       case Split.Enabled => T
       case Split.Disabled => F
     }
-    for (p <- evalExp(split, smt2, cache, rtCheck, s0, ifStmt.cond, reporter)) {
-      val (s1, v) = p
-      if (s1.status) {
-        val pos = ifStmt.cond.posOpt.get
-        val (s1c, cond) = value2Sym(s1, v, pos)
-        if (!s1c.status) {
-          r = r :+ s1c
-        } else {
-          val s2 = s1c
-          val prop = State.Claim.Prop(T, cond)
-          val thenClaims = s2.claims :+ prop
-          val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-            s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
-          val s4s: ISZ[State] = if (thenSat) {
-            val s3s = evalBody(split, smt2, cache, rOpt, rtCheck, s2(claims = thenClaims), ifStmt.thenBody, ifStmt.posOpt, reporter)
-            s3s
-          } else {
-            ISZ(s2(status = F, claims = thenClaims))
-          }
-          val s4NextFresh = maxStatesNextFresh(s4s)
-          val negProp = State.Claim.Prop(F, cond)
-          val elseClaims = s2.claims :+ negProp
-          val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-            s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
-          val s6s: ISZ[State] = if (elseSat) {
-            val s5s = evalBody(split, smt2, cache, rOpt, rtCheck, s2(claims = elseClaims, nextFresh = s4NextFresh), ifStmt.elseBody, ifStmt.posOpt, reporter)
-            s5s
-          } else {
-            ISZ(s2(status = F, claims = elseClaims, nextFresh = s4NextFresh))
-          }
-          val s6NextFresh = maxStatesNextFresh(s6s)
-          (thenSat, elseSat) match {
-            case (T, T) =>
-              if (shouldSplit) {
-                for (s4t <- s4s) {
-                  val cs = ISZ[State.Claim](prop, State.Claim.And(ops.ISZOps(s4t.claims).slice(s2.claims.size + 1, s4t.claims.size)))
-                  val s4 = s4t(nextFresh = s6NextFresh, claims = ops.ISZOps(s4t.claims).slice(0, s2.claims.size) :+
-                    State.Claim.And(cs))
-                  r = r :+ s4
-                }
-                for (s6t <- s6s) {
-                  val cs = ISZ[State.Claim](negProp, State.Claim.And(ops.ISZOps(s6t.claims).slice(s2.claims.size + 1, s6t.claims.size)))
-                  val s6 = s6t(claims = ops.ISZOps(s6t.claims).slice(0, s2.claims.size) :+
-                    State.Claim.And(cs))
-                  r = r :+ s6
-                }
-              } else {
-                for (s4 <- s4s; s6 <- s6s) {
-                  (s4.status, s6.status) match {
-                    case (T, T) => r = r :+ mergeStates(s2, cond, s4, s6, s6NextFresh)
-                    case (T, F) => r = r :+ s4(nextFresh = s6NextFresh)
-                    case (F, T) => r = r :+ s6
-                    case _ =>
-                  }
-                }
-                if (r.isEmpty) {
-                  r = r :+ s2(status = F, nextFresh = s6NextFresh)
-                }
-              }
-            case (T, F) =>
-              for (s4 <- s4s) {
-                r = r :+ s4(status = s4.status && !reporter.hasError, nextFresh = s6NextFresh)
-              }
-            case (F, T) =>
-              for (s6 <- s6s) {
-                r = r :+ s6(status = s6.status && !reporter.hasError)
-              }
-            case _ =>
-              for (s4 <- s4s; s6 <- s6s) {
-                val s7 = mergeStates(s2, cond, s4, s6, s6NextFresh)
-                r = r :+ s7(status = F)
-              }
-          }
-        }
-      } else {
-        r = r :+ s1
-      }
-    }
-    return r
+    return mergeBranches(shouldSplit, s5, leafClaims)
   }
 
   def evalExprInvoke(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, stmt: AST.Stmt,
