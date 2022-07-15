@@ -785,7 +785,7 @@ object Smt2 {
       val neId = typeOpId(t, "!=")
       val isInBoundId = typeOpId(t, "isInBound")
       val itLeId = typeOpId(it, "<=")
-      val itEqId = typeOpId(it, "==")
+      val itEqId = st"="
       val itAddId = typeOpId(it, "+")
       val itSubId = typeOpId(it, "-")
       val it2zId = typeOpId(it, "toZ")
@@ -798,6 +798,7 @@ object Smt2 {
       val zGeId = typeOpId(AST.Typed.z, ">=")
       val zEqId = typeOpId(AST.Typed.z, "==")
       val etThid = typeHierarchyId(et)
+      val etEqId: ST = if (isBasicType(et)) st"=" else typeOpId(et, "==")
       val etAdt: B = isAdtType(et)
       val sname = t.ids(t.ids.size - 1)
       val typeofName = sTypeOfName(t)
@@ -847,7 +848,7 @@ object Smt2 {
       if (etAdt) {
         addSTypeDecl(t, st"(assert (forall ((o $tId) (i $itId)) (=> ${thidTypeOpt("o")} ($isInBoundId o i) (sub-type (type-of ($atId o i)) $etThid))))")
       }
-      addSTypeDecl(t,
+      addTypeDecl(t,
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
             |  (and
             |    ${thidTypeOpt("z")}
@@ -855,7 +856,7 @@ object Smt2 {
             |    (forall ((i $itId)) (=> ($isInBoundId x i)
             |                        (= ($atId z i) ($atId x i))))
             |    (= ($atId z ($lastIndexId z)) y)))""")
-      addSTypeDecl(t,
+      addTypeDecl(t,
         st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
             |  (and
             |    ${thidTypeOpt("z")}
@@ -864,7 +865,7 @@ object Smt2 {
             |                            (= ($atId z i) ($atId x i))))
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId ($itAddId ($lastIndexId x) ($itSubId i ($firstIndexId y))) $itOne)) ($atId y i))))))""")
-      addSTypeDecl(t,
+      addTypeDecl(t,
         st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
             |  (and
             |    ${thidTypeOpt("z")}
@@ -872,7 +873,7 @@ object Smt2 {
             |    (forall ((i $itId)) (=> ($isInBoundId y i)
             |                            (= ($atId z ($itAddId i $itOne)) ($atId y i))))
             |    (= ($atId z ($firstIndexId z)) x)))""")
-      addSTypeDecl(t,
+      addTypeDecl(t,
         st"""(declare-fun $upId ($tId $itId $etId) $tId)
             |(assert (forall ((x $tId) (y $itId) (z $etId) (x2 $tId))
             |  (=>
@@ -886,15 +887,15 @@ object Smt2 {
             |      (=> ($isInBoundId x y) (= x2 (store x y z))))
             |  )
             |))""")
-      addSTypeDecl(t,
+      addTypeDecl(t,
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
             |    (= ($sizeId x) ($sizeId y))
             |    (=> (not (= 0 ($sizeId x))) ($itEqId ($lastIndexId x) ($lastIndexId y)))
-            |    (forall ((i $itId)) (=> ($isInBoundId x i) (= (select x i) (select y i))))))""")
-      addSTypeDecl(t, st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
+            |    (forall ((i $itId)) (=> ($isInBoundId x i) ($etEqId (select x i) (select y i))))))""")
+      addTypeDecl(t, st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       if (typeHierarchy.isSubstitutable(et)) {
-        addSTypeDecl(t,
+        addTypeDecl(t,
           st"""(assert (forall ((x $tId) (y $tId))
               |  (=>
               |    ${thidTypeOpt("x")}
@@ -903,7 +904,7 @@ object Smt2 {
               |    (= x y))))""")
       }
       if (etAdt) {
-        addSTypeDecl(t,
+        addTypeDecl(t,
           st"""(assert (forall ((x $tId) (i $itId) (v $etId))
               |  (=> ${thidTypeOpt("x")}
               |      ($isInBoundId x i)
@@ -1103,7 +1104,7 @@ object Smt2 {
           st"""(define-fun $eqId ((x!0 $tId) (x!1 $tId)) B
               |  (and
               |    (= (type-of x!0) (type-of x!1) $thId)
-              |    ${(for (q <- fieldInfos if q.isParam) yield st"(${if (isAdtType(q.fieldType)) st"${typeOpId(q.fieldType, "==")}" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
+              |    ${(for (q <- fieldInfos if q.isParam) yield st"(${if (isBasicType(q.fieldType)) st"=" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
         if (typeHierarchy.isSubstitutable(t)) {
           addTypeDecl(t,
@@ -1325,7 +1326,7 @@ object Smt2 {
       addTypeDecl(t,
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
-            |    ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
+            |    ${(for (i <- 1 to t.args.size) yield st"(${if (isBasicType(t.args(i - 1))) st"=" else typeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
             |  )
             |)
             |(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
@@ -1515,6 +1516,24 @@ object Smt2 {
   @pure def isAdtType(t: AST.Typed): B = {
     t match {
       case t: AST.Typed.Name => return isAdt(t)
+      case _ => return F
+    }
+  }
+
+  @pure def isBasicType(t: AST.Typed): B = {
+    t match {
+      case t: AST.Typed.Name =>
+        if (AST.Typed.builtInTypes.contains(t)) {
+          return T
+        }
+        if (t.ids === AST.Typed.isName || t.ids === AST.Typed.msName) {
+          return F
+        }
+        typeHierarchy.typeMap.get(t.ids).get match {
+          case _: TypeInfo.SubZ => return T
+          case _: TypeInfo.Enum => return T
+          case _ => return F
+        }
       case _ => return F
     }
   }
