@@ -3557,17 +3557,39 @@ import Util._
         whileStmt.invariants, reporter)) {
         if (s0w.status) {
           val s1 = s0w
-          val modLocalVars = whileStmt.contract.modifiedLocalVars(context.receiverLocalTypeOpt)._2
-          if (whileStmt.contract.modifiedObjectVars.nonEmpty || whileStmt.contract.modifiedRecordVars.nonEmpty) {
-            halt("TODO: rewrite Vars/fields as well") // TODO
-          }
           val s0R: State = {
-            var srw = rewriteLocalVars(s0(nextFresh = s1.nextFresh), modLocalVars.keys, whileStmt.posOpt, reporter)
-            for (p <- modLocalVars.entries) {
+            val modObjectVars = whileStmt.contract.modifiedObjectVars
+            var srw = rewriteObjectVars(this, smt2, cache, rtCheck, s0(nextFresh = s1.nextFresh),
+              whileStmt.contract.modifiedObjectVars, whileStmt.posOpt.get, reporter)
+            for (p <- modObjectVars.entries) {
               val (res, (tipe, pos)) = p
               val (srw1, sym) = srw.freshSym(tipe, pos)
               val srw2 = assumeValueInv(this, smt2, cache, rtCheck, srw1, sym, pos, reporter)
-              srw = srw2.addClaim(State.Claim.Let.CurrentId(F, sym, res.context, res.id, Some(pos)))
+              srw = srw2.addClaim(State.Claim.Let.CurrentName(sym, res.owner :+ res.id, Some(pos)))
+            }
+            val (receiverModified, modLocalVars) = whileStmt.contract.modifiedLocalVars(context.receiverLocalTypeOpt)
+            val receiverOpt: Option[State.Value.Sym] = if (receiverModified) {
+              val (srw3, sym) = idIntro(whileStmt.posOpt.get, srw, context.methodName, "this",
+                context.receiverLocalTypeOpt.get._2, whileStmt.posOpt)
+              srw = srw3
+              Some(sym)
+            } else {
+              None()
+            }
+            srw = rewriteLocalVars(srw, modLocalVars.keys, whileStmt.posOpt, reporter)
+            for (p <- modLocalVars.entries) {
+              val (res, (tipe, pos)) = p
+              val (srw4, sym) = srw.freshSym(tipe, pos)
+              val srw5 = assumeValueInv(this, smt2, cache, rtCheck, srw4, sym, pos, reporter)
+              srw = srw5.addClaim(State.Claim.Let.CurrentId(F, sym, res.context, res.id, Some(pos)))
+            }
+            if (receiverModified) {
+              val srw6 = evalAssignReceiver(whileStmt.contract.modifies, this, this, smt2, cache, rtCheck, srw,
+                Some(AST.Exp.This(AST.TypedAttr(whileStmt.posOpt, Some(receiverOpt.get.tipe)))), receiverOpt,
+                HashMap.empty, reporter)
+              val (srw7, sym) = idIntro(whileStmt.posOpt.get, srw6, context.methodName, "this",
+                context.receiverLocalTypeOpt.get._2, whileStmt.posOpt)
+              srw = assumeValueInv(this, smt2, cache, rtCheck, srw7, sym, sym.pos, reporter)
             }
             srw
           }

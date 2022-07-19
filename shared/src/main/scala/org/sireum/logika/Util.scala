@@ -1219,16 +1219,22 @@ object Util {
       return state
     }
     val receiver = receiverOpt.get
-    if (!isLhs(receiver)) {
-      return state
-    }
     val pos = receiver.posOpt.get
     val (s0, sym) = idIntro(pos, state, logikaComp.context.methodName, "this", receiver.typedOpt.get, Some(pos))
-    val s1 = logika.assignRec(Split.Disabled, smt2, cache, rtCheck, s0, receiver, sym, reporter)(0)
-    val (s2, v) = logika.evalExp(Split.Disabled, smt2, cache, rtCheck, s1, receiver, reporter)(0)
     val rsym = receiverSymOpt.get
-    val (s3, newRsym) = logika.value2Sym(s2, v, pos)
-    var s4 = s3
+    val p: (State, State.Value.Sym) = receiver match {
+      case _: AST.Exp.This =>
+        (s0, sym)
+      case _ =>
+        if (!isLhs(receiver)) {
+          return state
+        }
+        val s1 = logika.assignRec(Split.Disabled, smt2, cache, rtCheck, s0, receiver, sym, reporter)(0)
+        val (s2, v) = logika.evalExp(Split.Disabled, smt2, cache, rtCheck, s1, receiver, reporter)(0)
+        val (s3, newRs) = logika.value2Sym(s2, v, pos)
+        (s3, newRs)
+    }
+    var (s4, newRsym) = p
     val owner = logikaComp.context.owner
     var modVars = ISZ[String]()
     for (m <- modifies) {
