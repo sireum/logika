@@ -1059,11 +1059,20 @@ object Smt2 {
           (for (f <- ti.vars.values) yield fieldInfo(params.contains(f.ast.id.value), f)) ++ (for (f <- ti.specVars.values) yield specFieldInfo(f))
         for (q <- fieldInfos) {
           addTypeDecl(t, st"(declare-fun ${q.fieldLookupId} ($tId) ${q.fieldTypeId})")
-          if (isAdtType(q.fieldType)) {
-            addTypeDecl(t,
-              st"""(assert (forall ((o $tId))
-                  |  (=> (= (type-of o) $thId)
-                  |      (sub-type (type-of (${q.fieldLookupId} o)) ${typeHierarchyId(q.fieldType)}))))""")
+          q.fieldType match {
+            case ft: AST.Typed.Name =>
+              if ((ft.ids === AST.Typed.isName || ft.ids === AST.Typed.msName) && isAdtType(ft.args(1))) {
+                addTypeDecl(t,
+                  st"""(assert (forall ((o $tId))
+                      |  (=> (= (type-of o) $thId)
+                      |      (= (${sTypeOfName(ft)} (${q.fieldLookupId} o)) ${typeHierarchyId(ft)}))))""")
+              } else if (isAdt(ft)) {
+                addTypeDecl(t,
+                  st"""(assert (forall ((o $tId))
+                      |  (=> (= (type-of o) $thId)
+                      |      (sub-type (type-of (${q.fieldLookupId} o)) ${typeHierarchyId(ft)}))))""")
+              }
+            case _ =>
           }
         }
         var hasParam = F
