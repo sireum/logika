@@ -91,8 +91,7 @@ object Smt2Invoke {
         config.name match {
           case string"cvc5" =>
             val poutOps = ops.StringOps(pout)
-            poutOps.contains("An uninterpreted constant was preregistered to the UF theory") ||
-              poutOps.contains("Array theory solver does not yet support write-chains connecting two different constant arrays")
+            poutOps.contains("Array theory solver does not yet support write-chains connecting two different constant arrays")
           case string"alt-ergo" => T
           case string"alt-ergo-open" => T
           case _ => F

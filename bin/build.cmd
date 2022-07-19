@@ -102,10 +102,12 @@ def installZ3(kind: Os.Kind.Type): Unit = {
     return
   }
 
-  val filename: String = Os.kind match {
+  val filename: String = kind match {
     case Os.Kind.Win => s"z3-$version-x64-win.zip"
     case Os.Kind.Linux => s"z3-$version-x64-glibc-2.31.zip"
-    case Os.Kind.Mac => s"z3-$version-x64-osx-10.16.zip"
+    case Os.Kind.Mac =>
+      if (ops.StringOps(proc"uname -m".run().out).trim === "arm64") s"z3-$version-arm64-osx-11.0.zip"
+      else s"z3-$version-x64-osx-10.16.zip"
     case _ => return
   }
 
@@ -120,14 +122,13 @@ def installZ3(kind: Os.Kind.Type): Unit = {
 
   println("Extracting Z3 ...")
   bundle.unzipTo(dir.up)
-  println()
 
   for (p <- dir.up.list if ops.StringOps(p.name).startsWith("z3-")) {
     dir.removeAll()
     p.moveTo(dir)
   }
 
-  Os.kind match {
+  kind match {
     case Os.Kind.Linux => (dir / "bin" / "z3").chmod("+x")
     case Os.Kind.Mac => (dir / "bin" / "z3").chmod("+x")
     case _ =>
@@ -152,7 +153,10 @@ def installCVC(kind: Os.Kind.Type): Unit = {
     val (sub, filename, dropname): (String, String, String) = (gen, kind) match {
       case (string"5", Os.Kind.Win) => (s"cvc$gen-$version", s"cvc$gen-Win64.exe", s"cvc$gen-$version-Win64.exe")
       case (string"5", Os.Kind.Linux) => (s"cvc$gen-$version", s"cvc$gen-Linux", s"cvc$gen-$version-Linux")
-      case (string"5", Os.Kind.Mac) => (s"cvc$gen-$version", s"cvc$gen-macOS", s"cvc$gen-$version-macOS")
+      case (string"5", Os.Kind.Mac) =>
+        if (ops.StringOps(proc"uname -m".run().out).trim === "arm64")
+          (s"cvc$gen-$version", s"cvc$gen-macOS-arm64", s"cvc$gen-$version-macOS-arm64")
+        else (s"cvc$gen-$version", s"cvc$gen-macOS", s"cvc$gen-$version-macOS")
       case (string"4", Os.Kind.Win) => (version, s"cvc$gen-$version-win64-opt.exe", s"cvc$gen-$version-win64-opt.exe")
       case (string"4", Os.Kind.Linux) => (version, s"cvc$gen-$version-x86_64-linux-opt", s"cvc$gen-$version-x86_64-linux-opt")
       case (string"4", Os.Kind.Mac) => (version, s"cvc$gen-$version-macos-opt", s"cvc$gen-$version-macos-opt")
@@ -165,6 +169,7 @@ def installCVC(kind: Os.Kind.Type): Unit = {
       println(s"Please wait while downloading CVC$gen $version ...")
       drop.up.mkdirAll()
       drop.downloadFrom(s"https://github.com/cvc5/cvc5/releases/download/$sub/$filename")
+      println()
     }
 
     drop.copyOverTo(exe)
