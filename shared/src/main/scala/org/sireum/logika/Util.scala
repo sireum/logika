@@ -605,8 +605,12 @@ object Util {
           mctx.modObjectVarMap(TypeChecker.emptySubstMap).entries).entries) {
           val (ids, (t, posOpt)) = p
           val pos = posOpt.get
-          val info = th.nameMap.get(ids).get.asInstanceOf[Info.Var]
-          objectNames = objectNames + info.owner ~> pos
+          val owner: ISZ[String] = th.nameMap.get(ids).get match {
+            case info: Info.Var => info.owner
+            case info: Info.SpecVar => info.owner
+            case info => halt(s"Unexpected: $info")
+          }
+          objectNames = objectNames + owner ~> pos
           val (s0, sym) = nameIntro(posOpt.get, state, ids, t, posOpt)
           state = assumeValueInv(l, smt2, cache, T, s0, sym, pos, reporter)
           objectVarInMap = objectVarInMap + ids ~> sym
