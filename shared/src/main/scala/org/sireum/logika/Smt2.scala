@@ -763,6 +763,11 @@ object Smt2 {
     case _ => halt("Infeasible")
   }
 
+  @strictpure def tupleTypeOfName(t: AST.Typed): ST = t match {
+    case t: AST.Typed.Tuple => st"|type-of-${typeIdRaw(t)}|"
+    case _ => halt("Infeasible")
+  }
+
   def addType(tipe: AST.Typed, reporter: Reporter): Unit = {
     def addS(t: AST.Typed.Name): Unit = {
       val it = t.args(0)
@@ -798,9 +803,10 @@ object Smt2 {
       val zEqId = typeOpId(AST.Typed.z, "==")
       val etThid = typeHierarchyId(et)
       val etEqId: ST = if (isBasicType(et)) st"=" else typeOpId(et, "==")
-      val (etAdt, etS): (B, B) = et match {
-        case et: AST.Typed.Name => (isAdt(et), et.ids === AST.Typed.isName || et.ids === AST.Typed.msName)
-        case _ => (F, F)
+      val (etAdt, etS, etTuple): (B, B, B) = et match {
+        case et: AST.Typed.Name => (isAdt(et), et.ids === AST.Typed.isName || et.ids === AST.Typed.msName, F)
+        case _: AST.Typed.Tuple => (F, F, T)
+        case _ => (F, F, F)
       }
       val typeofName = sTypeOfName(t)
       addTypeHierarchyId(t, thId)
@@ -810,6 +816,7 @@ object Smt2 {
       @strictpure def etThidSubtypeOpt(x: String): Option[ST] =
         if (etAdt) Some(st"(sub-type (type-of $x) $etThid)")
         else if (etS) Some(st"(= (${sTypeOfName(et)} $x) $etThid)")
+        else if (etTuple) Some(st"(= (${tupleTypeOfName(et)} $x) $etThid)")
         else None()
       @strictpure def thidTypeOpt(x: String): ST = st"(= ($typeofName $x) $thId)"
       addSTypeDecl(t, st"(declare-fun $sizeId ($tId) Z)")
@@ -1066,6 +1073,11 @@ object Smt2 {
                       |  (=> (= (type-of o) $thId)
                       |      (sub-type (type-of (${q.fieldLookupId} o)) ${typeHierarchyId(ft)}))))""")
               }
+            case ft: AST.Typed.Tuple =>
+              addTypeDecl(t,
+                st"""(assert (forall ((o $tId))
+                    |  (=> (= (type-of o) $thId)
+                    |      (= (${tupleTypeOfName(ft)} (${q.fieldLookupId} o)) ${typeHierarchyId(ft)}))))""")
             case _ =>
           }
         }
@@ -1325,10 +1337,53 @@ object Smt2 {
       val tId = typeId(t)
       val eqId = typeOpId(t, "==")
       val neId = typeOpId(t, "!=")
-      addSort(t, st"""(declare-datatypes (($tId 0)) (((${typeOpId(t, "new")} ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t, s"_$i")} ${adtId(t.args(i - 1))})", " ")}))))""")
+      val typeOfName = tupleTypeOfName(t)
+      val thId = typeHierarchyId(t)
+      val newId = typeOpId(t, "new")
+      addTypeHierarchyId(t, thId)
+      addSort(t, st"(declare-const $thId Type)")
+      addSort(t, st"(declare-datatypes (($tId 0)) ((($newId ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t, s"_$i")} ${adtId(t.args(i - 1))})", " ")}))))")
+      addSort(t, st"(declare-fun $typeOfName ($tId) Type)")
+      var eSTs = ISZ[ST]()
+      for (i <- 1 to t.args.size) {
+        val tArg = t.args(i - 1)
+        val eSTOpt: Option[ST] = tArg match {
+          case tArg: AST.Typed.Name =>
+            if (tArg.ids === AST.Typed.isName || tArg.ids === AST.Typed.msName) {
+              Some(st"(= (${sTypeOfName(tArg)} e$i) ${typeHierarchyId(tArg)})")
+            } else if (isAdt(tArg)) {
+              Some(st"(sub-type (type-of e$i) ${typeHierarchyId(tArg)})")
+            } else {
+              None()
+            }
+          case tArg: AST.Typed.Tuple => Some(st"(= (${tupleTypeOfName(tArg)} e$i) ${typeHierarchyId(tArg)})")
+          case _ => None()
+        }
+        eSTOpt match {
+          case Some(eST) =>
+            eSTs = eSTs :+ eST
+            addTypeDecl(t,
+              st"""(assert (forall ((o $tId) (e$i ${typeId(tArg)}))
+                  |  (=>
+                  |    (= ($typeOfName o) $thId)
+                  |    (= (${typeOpId(t, s"_$i")} o) e$i)
+                  |    $eST)))""")
+          case _ =>
+        }
+      }
+      addTypeDecl(t,
+        st"""(assert (forall ((o $tId) ${(for (i <- 1 to t.args.size) yield st"(e$i ${typeId(t.args(i - 1))})", " ")})
+            |  (=>
+            |    ${(eSTs, "\n")}
+            |    (= o ($newId ${(for (i <- 1 to t.args.size) yield st"e$i", " ")}))
+            |    (= ($typeOfName o) $thId)
+            |  )
+            |))"""
+      )
       addTypeDecl(t,
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
+            |    (= ($typeOfName x) ($typeOfName y))
             |    ${(for (i <- 1 to t.args.size) yield st"(${if (isBasicType(t.args(i - 1))) st"=" else typeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
             |  )
             |)
@@ -1872,6 +1927,8 @@ object Smt2 {
             typeConstraints = typeConstraints :+ st"(= (${sTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
           case tipe if isAdtType(tipe) =>
             typeConstraints = typeConstraints :+ st"(sub-type (type-of $x) ${typeHierarchyId(tipe)})"
+          case tipe: AST.Typed.Tuple =>
+            typeConstraints = typeConstraints :+ st"(= (${tupleTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
           case _ =>
         }
       }
@@ -2096,9 +2153,12 @@ object Smt2 {
   def c2DeclST(c: State.Claim): ISZ[(String, ST)] = {
     @pure def declareConst(n: ST, tipe: AST.Typed): ST = {
       val r: ST = tipe match {
-        case tipe: AST.Typed.Name if (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName) =>
+        case tipe: AST.Typed.Name if tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName =>
           st"""(declare-const $n ${typeId(tipe)})
               |(assert (= (${sTypeOfName(tipe)} $n) ${typeHierarchyId(tipe)}))"""
+        case tipe: AST.Typed.Tuple =>
+          st"""(declare-const $n ${typeId(tipe)})
+              |(assert (= (${tupleTypeOfName(tipe)} $n) ${typeHierarchyId(tipe)}))"""
         case _ =>
           if (isAdtType(tipe)) {
             st"""(declare-const $n ${typeId(tipe)})
