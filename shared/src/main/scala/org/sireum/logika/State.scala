@@ -774,7 +774,24 @@ object State {
         }
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
-          return Some(st"(${cond.toST(numMap, defs)} ? ${left.toST(numMap, defs)} : ${right.toST(numMap, defs)})")
+          left match {
+            case left: State.Value.B if left.value =>
+              return Some(st"(${cond.toST(numMap, defs)}) || (${right.toST(numMap, defs)})")
+            case _ =>
+          }
+          right match {
+            case right: State.Value.B =>
+              if (right.value) {
+                return Some(st"(${cond.toST(numMap, defs)}) -->: (${left.toST(numMap, defs)})")
+              } else {
+                return Some(st"(${cond.toST(numMap, defs)}) && (${left.toST(numMap, defs)})")
+              }
+            case _ =>
+              return Some(
+                st"""(if (${cond.toST(numMap, defs)})
+                    |   ${left.toST(numMap, defs)}
+                    | else ${right.toST(numMap, defs)})""")
+          }
         }
       }
 
