@@ -396,10 +396,6 @@ object Smt2 {
 
   def writeFile(dir: String, filename: String, content: String): Unit
 
-  def typeOfSeqSet: HashSet[(String, AST.Typed)]
-
-  def typeOfSeqSetUp(newTypeOfSeqSet: HashSet[(String, AST.Typed)]): Unit
-
   def filenameCount: HashMap[String, Z]
 
   def withConfig(isSat: B, options: String, timeout: Z, resourceLimit: Z, reporter: Reporter): MEither[Smt2, String]
@@ -762,7 +758,10 @@ object Smt2 {
     typesUp(types + t)
   }
 
-  @strictpure def sTypeOfName(t: AST.Typed.Name): ST = st"|type-of-${t.ids(t.ids.size - 1)}-${typeIdRaw(t.args(0))}|"
+  @strictpure def sTypeOfName(t: AST.Typed): ST = t match {
+    case t: AST.Typed.Name => st"|type-of-${t.ids(t.ids.size - 1)}-${typeIdRaw(t.args(0))}-${typeIdRaw(t.args(1))}|"
+    case _ => halt("Infeasible")
+  }
 
   def addType(tipe: AST.Typed, reporter: Reporter): Unit = {
     def addS(t: AST.Typed.Name): Unit = {
@@ -799,22 +798,20 @@ object Smt2 {
       val zEqId = typeOpId(AST.Typed.z, "==")
       val etThid = typeHierarchyId(et)
       val etEqId: ST = if (isBasicType(et)) st"=" else typeOpId(et, "==")
-      val etAdt: B = isAdtType(et)
-      val sname = t.ids(t.ids.size - 1)
-      val typeofName = sTypeOfName(t)
-      if (etAdt) {
-        addTypeHierarchyId(t, thId)
-        addSort(t, st"(define-sort $tId () (Array $itId $etId))")
-        addSort(t, st"""(declare-const $thId Type)""")
-        if (!typeOfSeqSet.contains((sname, it))) {
-          typeOfSeqSetUp(typeOfSeqSet + ((sname, it)))
-          addSort(t, st"""(declare-fun $typeofName ($tId) Type)""")
-        }
-      } else {
-        addSort(t, st"(define-sort $tId () (Array $itId $etId))")
+      val (etAdt, etS): (B, B) = et match {
+        case et: AST.Typed.Name => (isAdt(et), et.ids === AST.Typed.isName || et.ids === AST.Typed.msName)
+        case _ => (F, F)
       }
-      @strictpure def etThidSubtypeOpt(x: String): Option[ST] = if (etAdt) Some(st"(sub-type (type-of $x) $etThid)") else None()
-      @strictpure def thidTypeOpt(x: String): Option[ST] = if (etAdt) Some(st"(= ($typeofName $x) $thId)") else None()
+      val typeofName = sTypeOfName(t)
+      addTypeHierarchyId(t, thId)
+      addSort(t, st"(define-sort $tId () (Array $itId $etId))")
+      addSort(t, st"""(declare-const $thId Type)""")
+      addSort(t, st"""(declare-fun $typeofName ($tId) Type)""")
+      @strictpure def etThidSubtypeOpt(x: String): Option[ST] =
+        if (etAdt) Some(st"(sub-type (type-of $x) $etThid)")
+        else if (etS) Some(st"(= (${sTypeOfName(et)} $x) $etThid)")
+        else None()
+      @strictpure def thidTypeOpt(x: String): ST = st"(= ($typeofName $x) $thId)"
       addSTypeDecl(t, st"(declare-fun $sizeId ($tId) Z)")
       addSTypeDecl(t, st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
       addSTypeDecl(t, st"(declare-fun $firstIndexId ($tId) $itId)")
@@ -845,9 +842,6 @@ object Smt2 {
       }
       addSTypeDecl(t, st"(define-fun $isInBoundId ((x $tId) (y $itId)) B (and (not ($zEqId ($sizeId x) 0)) ($itLeId ($firstIndexId x) y) ($itLeId y ($lastIndexId x))))")
       addSTypeDecl(t, st"(define-fun $atId ((x $tId) (y $itId)) $etId (select x y))")
-      if (etAdt) {
-        addSTypeDecl(t, st"(assert (forall ((o $tId) (i $itId)) (=> ${thidTypeOpt("o")} ($isInBoundId o i) (sub-type (type-of ($atId o i)) $etThid))))")
-      }
       addTypeDecl(t,
         st"""(define-fun $appendId ((x $tId) (y $etId) (z $tId)) B
             |  (and
@@ -903,7 +897,7 @@ object Smt2 {
               |    ($eqId x y)
               |    (= x y))))""")
       }
-      if (etAdt) {
+      if (etAdt || etS) {
         addTypeDecl(t,
           st"""(assert (forall ((x $tId) (i $itId) (v $etId))
               |  (=> ${thidTypeOpt("x")}
@@ -1061,7 +1055,7 @@ object Smt2 {
           addTypeDecl(t, st"(declare-fun ${q.fieldLookupId} ($tId) ${q.fieldTypeId})")
           q.fieldType match {
             case ft: AST.Typed.Name =>
-              if ((ft.ids === AST.Typed.isName || ft.ids === AST.Typed.msName) && isAdtType(ft.args(1))) {
+              if (ft.ids === AST.Typed.isName || ft.ids === AST.Typed.msName) {
                 addTypeDecl(t,
                   st"""(assert (forall ((o $tId))
                       |  (=> (= (type-of o) $thId)
@@ -1395,7 +1389,6 @@ object Smt2 {
     val distinctOpt: Option[ST] =
       if (size > 1) Some(st"(distinct ${(for (i <- 0 until size) yield st"i$i", " ")})")
       else None()
-    val typeOfOpt: Option[ST] = if (isAdtType(et)) Some(st"(= (${sTypeOfName(t)} x) ${typeHierarchyId(t)})") else None()
     val r =
       st"""(declare-fun $seqLitId (${(for (_ <- 0 until size) yield st"$itId $etId", " ")}) $tId)
           |(assert (forall (${(for (i <- 0 until size) yield st"(i$i $itId) (v$i $etId)", " ")} (x $tId))
@@ -1403,7 +1396,7 @@ object Smt2 {
           |    $distinctOpt
           |    (= x ${if (size == 0) seqLitId else st"($seqLitId ${(for (i <- 0 until size) yield st"i$i v$i", " ")})"})
           |    (and
-          |      $typeOfOpt
+          |      (= (${sTypeOfName(t)} x) ${typeHierarchyId(t)})
           |      (= ($sizeId x) $size)
           |      $lastIndexOpt
           |      ${(for (i <- 0 until size) yield st"(=> ($inBoundId x i$i) (= ($atId x i$i) v$i))", "\n")})
@@ -1808,9 +1801,9 @@ object Smt2 {
       }
       val s = HashSSet.empty[State.Value.Sym] ++ syms -- lsyms
       if (s.nonEmpty) {
-          val (decls, body2) = addTypeConstraints(isImply,
-            (for (id <- lids.values) yield (localId(id), id.sym.tipe)) ++
-              (for (sym <- s.elements) yield (v2ST(sym), sym.tipe)),
+          val (decls, body2) = addTypeConstraintsH(isImply,
+            (for (id <- lids.values) yield (localId(id), id.sym.tipe, T)) ++
+              (for (sym <- s.elements) yield (v2ST(sym), sym.tipe, F)),
             body)
         body =
           st"""(${if (isImply) "forall" else "exists"} (${(decls, " ")})
@@ -1863,19 +1856,24 @@ object Smt2 {
     return if (simplifiedQuery) simplified else raw
   }
 
-  @pure def addTypeConstraints(isImply: B, ps: ISZ[(ST, AST.Typed)], claim: ST): (ISZ[ST], ST) = {
+  @strictpure def addTypeConstraints(isImply: B, ps: ISZ[(ST, AST.Typed)], claim: ST): (ISZ[ST], ST) =
+    addTypeConstraintsH(isImply, for (p <- ps) yield (p._1, p._2, T), claim)
+
+  @pure def addTypeConstraintsH(isImply: B, ps: ISZ[(ST, AST.Typed, B)], claim: ST): (ISZ[ST], ST) = {
     var varDecls = ISZ[ST]()
     var typeConstraints = ISZ[ST]()
     for (p <- ps) {
-      val (x, tipe) = p
+      val (x, tipe, addTypeConstraint) = p
       val t = typeId(tipe)
       varDecls = varDecls :+ st"($x $t)"
-      tipe match {
-        case tipe: AST.Typed.Name if (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName) && isAdtType(tipe.args(1)) =>
-          typeConstraints = typeConstraints :+ st"(= (${sTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
-        case tipe if isAdtType(tipe) =>
-          typeConstraints = typeConstraints :+ st"(sub-type (type-of $x) ${typeHierarchyId(tipe)})"
-        case _ =>
+      if (addTypeConstraint) {
+        tipe match {
+          case tipe: AST.Typed.Name if tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName =>
+            typeConstraints = typeConstraints :+ st"(= (${sTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
+          case tipe if isAdtType(tipe) =>
+            typeConstraints = typeConstraints :+ st"(sub-type (type-of $x) ${typeHierarchyId(tipe)})"
+          case _ =>
+        }
       }
     }
     return if (typeConstraints.nonEmpty)
@@ -2098,7 +2096,7 @@ object Smt2 {
   def c2DeclST(c: State.Claim): ISZ[(String, ST)] = {
     @pure def declareConst(n: ST, tipe: AST.Typed): ST = {
       val r: ST = tipe match {
-        case tipe: AST.Typed.Name if (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName) && isAdtType(tipe.args(1)) =>
+        case tipe: AST.Typed.Name if (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName) =>
           st"""(declare-const $n ${typeId(tipe)})
               |(assert (= (${sTypeOfName(tipe)} $n) ${typeHierarchyId(tipe)}))"""
         case _ =>

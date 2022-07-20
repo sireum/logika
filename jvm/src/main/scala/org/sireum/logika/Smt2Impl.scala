@@ -38,7 +38,7 @@ object Smt2Impl {
     val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, smt2Seq,
       fpRoundingMode, configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, HashSMap.empty, HashSMap.empty,
       HashSMap.empty, HashSMap.empty, HashSMap.empty, HashSMap.empty, HashMap.empty, HashSMap.empty, HashMap.empty,
-      HashSSet.empty, HashSet.empty)
+      HashSSet.empty)
     r.addType(AST.Typed.z, reporter)
     return r
   }
@@ -65,8 +65,7 @@ object Smt2Impl {
                        var shortIds: HashMap[ISZ[String], ISZ[String]],
                        var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)],
                        var filenameCount: HashMap[String, Z],
-                       var seqLits: HashSSet[Smt2.SeqLit],
-                       var typeOfSeqSet: HashSet[(String, AST.Typed)]) extends Smt2 {
+                       var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
 
   def combineWith(that: Smt2): Unit = {
     types = types ++ that.types.elements
@@ -86,7 +85,6 @@ object Smt2Impl {
       }
     }
     seqLits = seqLits ++ that.seqLits.elements
-    typeOfSeqSet = typeOfSeqSet ++ that.typeOfSeqSet.elements
   }
 
   def updateFrom(that: Smt2): Unit = {
@@ -102,7 +100,6 @@ object Smt2Impl {
     strictPureMethods = that.strictPureMethods
     filenameCount = that.filenameCount
     seqLits = that.seqLits
-    typeOfSeqSet = that.typeOfSeqSet
   }
 
   def shortIdsUp(newShortIds: HashMap[ISZ[String], ISZ[String]]): Unit = {
@@ -147,10 +144,6 @@ object Smt2Impl {
 
   def strictPureMethodsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit = {
     strictPureMethods = newProofFuns
-  }
-
-  def typeOfSeqSetUp(newTypeOfSeqSet: HashSet[(String, AST.Typed)]): Unit = {
-    typeOfSeqSet = newTypeOfSeqSet
   }
 
   def writeFile(dir: String, filename: String, content: String): Unit = {
