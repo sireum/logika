@@ -239,7 +239,8 @@ object Util {
                                var resultOpt: Option[(AST.Exp, AST.Exp.Ident)],
                                var map: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)],
                                var inputMap: HashSMap[AST.ResolvedInfo, (AST.Exp, AST.Exp.Ident)],
-                               var invokeIdents: HashSet[AST.Exp.Ident])
+                               var invokeIdents: HashSet[AST.Exp.Ident],
+                               var ignoreLocals: HashSet[ISZ[String]])
     extends AST.MTransformer {
     def introIdent(o: AST.Exp, res: AST.ResolvedInfo, id: AST.Id, typedOpt: Option[AST.Typed]): MOption[AST.Exp] = {
       map.get(res) match {
@@ -264,12 +265,22 @@ object Util {
       }
     }
 
+    override def preExpFun(o: AST.Exp.Fun): AST.MTransformer.PreResult[AST.Exp] = {
+      for (p <- o.params) {
+        p.idOpt match {
+          case Some(id) => ignoreLocals = ignoreLocals + (o.context :+ id.value)
+          case _ =>
+        }
+      }
+      return AST.MTransformer.PreResultExpFun
+    }
+
     override def preExpInput(o: AST.Exp.Input): AST.MTransformer.PreResult[AST.Exp] = {
       o.exp match {
         case exp: AST.Exp.Ident =>
           exp.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Var => return introInputIdent(o, res, exp.id, exp.typedOpt)
-            case res: AST.ResolvedInfo.LocalVar => return introInputIdent(o, res, exp.id, exp.typedOpt)
+            case res: AST.ResolvedInfo.LocalVar if res.context === context => return introInputIdent(o, res, exp.id, exp.typedOpt)
             case _ =>
           }
         case exp: AST.Exp.Select =>
@@ -316,7 +327,8 @@ object Util {
             val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), receiverTypeOpt))
             return MSome(AST.Exp.Select(Some(ident), o.id, o.targs, o.attr))
           }
-        case res: AST.ResolvedInfo.LocalVar => return introIdent(o, res, o.id, o.typedOpt)
+        case res: AST.ResolvedInfo.LocalVar if !ignoreLocals.contains(res.context :+ res.id) =>
+          return introIdent(o, res, o.id, o.typedOpt)
         case _ =>
       }
       return AST.MTransformer.PostResultExpIdent
@@ -876,7 +888,7 @@ object Util {
       }
 
       val s1 = state(status = status, nextFresh = maxFresh)
-      if (config.sat) {
+      if (config.sat && s1.status) {
         val title: String = s"the derived proof function of $id"
         if (!smt2.sat(cache, T, config.logVc, config.logVcDirOpt, title, pos, ISZ(), reporter)) {
           reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
@@ -905,7 +917,7 @@ object Util {
     val posOpt = exp.posOpt
     val tOpt = exp.typedOpt
     val t = tOpt.get
-    val vs = VarSubstitutor(owner :+ id, receiverTypeOpt, F, None(), HashSMap.empty, HashSMap.empty, HashSet.empty)
+    val vs = VarSubstitutor(owner :+ id, receiverTypeOpt, F, None(), HashSMap.empty, HashSMap.empty, HashSet.empty, HashSet.empty)
     val newExp = vs.transformExp(exp).getOrElse(exp)
     if (vs.hasThis || vs.map.nonEmpty) {
       var paramIds = ISZ[AST.Id]()

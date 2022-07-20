@@ -533,14 +533,16 @@ import Util._
         case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
         case _ => (None(), posOpt, None())
       }
-    val r = smt2.valid(cache, T, config.logVc, config.logVcDirOpt, st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
-      pos, s2.claims, claim, reporter)
-    r.kind match {
-      case Smt2Query.Result.Kind.Unsat => return s0
-      case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly out of bound sequence indexing$suffixOpt".render, reporter)
-      case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce that the sequence indexing is in bound$suffixOpt".render, reporter)
-      case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
-      case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+    if (s2.status) {
+      val r = smt2.valid(cache, T, config.logVc, config.logVcDirOpt, st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
+        pos, s2.claims, claim, reporter)
+      r.kind match {
+        case Smt2Query.Result.Kind.Unsat => return s0
+        case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly out of bound sequence indexing$suffixOpt".render, reporter)
+        case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce that the sequence indexing is in bound$suffixOpt".render, reporter)
+        case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+        case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+      }
     }
     return s2(status = F)
   }
@@ -846,7 +848,7 @@ import Util._
       }
 
       def checkNonZero(s0: State, op: String, value: State.Value, pos: Position): State = {
-        if (!rtCheck) {
+        if (!rtCheck || !s0.status) {
           return s0
         }
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
@@ -2555,7 +2557,7 @@ import Util._
   def evalAssumeH(reportQuery: B, smt2: Smt2, cache: Smt2.Cache, title: String, s0: State, sym: State.Value.Sym,
                   posOpt: Option[Position], reporter: Reporter): State = {
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
-    if (config.sat) {
+    if (config.sat && s1.status) {
       val pos = posOpt.get
       val sat = smt2.sat(cache, reportQuery, config.logVc, config.logVcDirOpt,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
@@ -2577,18 +2579,20 @@ import Util._
 
   def evalAssertH(reportQuery: B, smt2: Smt2, cache: Smt2.Cache, title: String, s0: State, sym: State.Value.Sym,
                   posOpt: Option[Position], reporter: Reporter): State = {
-    val conclusion = State.Claim.Prop(T, sym)
-    val pos = posOpt.get
-    val r = smt2.valid(cache, reportQuery, config.logVc, config.logVcDirOpt,
-      s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s0.claims, conclusion, reporter)
-    r.kind match {
-      case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
-      case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
-      case Smt2Query.Result.Kind.Unknown => error(posOpt, s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
-      case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower}", reporter)
-      case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}", reporter)
+    if (s0.status) {
+      val conclusion = State.Claim.Prop(T, sym)
+      val pos = posOpt.get
+      val r = smt2.valid(cache, reportQuery, config.logVc, config.logVcDirOpt,
+        s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s0.claims, conclusion, reporter)
+      r.kind match {
+        case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
+        case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
+        case Smt2Query.Result.Kind.Unknown => error(posOpt, s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
+        case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower}", reporter)
+        case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}", reporter)
+      }
     }
-    return s0(status = F, claims = s0.claims :+ conclusion)
+    return s0(status = F)
   }
 
   def evalAssert(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp,
@@ -2953,26 +2957,28 @@ import Util._
     val pos = sym.pos
     val posOpt: Option[Position] = Some(pos)
     val s10 = s1.addClaim(cond)
-    if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-      s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s10.claims, reporter)) {
-      val (s11, bindings) = addBindings(smt2, cache, rtCheck, s10, lcontext, m, reporter)
-      val s12: State = if (bindings.isEmpty) s11 else s11.addClaim(State.Claim.And(
-        for (b <- bindings) yield State.Claim.Prop(T, b)))
-      var claims = ISZ[ISZ[State.Claim]]()
-      for (s13 <- evalBody(split, smt2, cache, rOpt, rtCheck, s12, body, posOpt, reporter)) {
-        if (nextFresh < s13.nextFresh) {
-          nextFresh = s13.nextFresh
+    if (s10.status) {
+      if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+        s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s10.claims, reporter)) {
+        val (s11, bindings) = addBindings(smt2, cache, rtCheck, s10, lcontext, m, reporter)
+        val s12: State = if (bindings.isEmpty) s11 else s11.addClaim(State.Claim.And(
+          for (b <- bindings) yield State.Claim.Prop(T, b)))
+        var claims = ISZ[ISZ[State.Claim]]()
+        for (s13 <- evalBody(split, smt2, cache, rOpt, rtCheck, s12, body, posOpt, reporter)) {
+          if (nextFresh < s13.nextFresh) {
+            nextFresh = s13.nextFresh
+          }
+          if (s13.status) {
+            claims = claims :+ s13.claims
+          }
         }
-        if (s13.status) {
-          claims = claims :+ s13.claims
+        if (claims.nonEmpty) {
+          return (nextFresh, Some((cond, claims)))
         }
-      }
-      if (claims.nonEmpty) {
-        return (nextFresh, Some((cond, claims)))
-      }
-    } else {
-      if (isMatch && config.checkInfeasiblePatternMatch && !shouldSplit) {
-        warn(posOpt, "Infeasible pattern matching case", reporter)
+      } else {
+        if (isMatch && config.checkInfeasiblePatternMatch && !shouldSplit) {
+          warn(posOpt, "Infeasible pattern matching case", reporter)
+        }
       }
     }
     return (nextFresh, None())
@@ -3596,35 +3602,39 @@ import Util._
           val s2 = State(T, s0R.claims ++ (for (i <- s0.claims.size until s1.claims.size) yield s1.claims(i)), s0R.nextFresh)
           for (p <- evalExp(split, smt2, cache, rtCheck, s2, whileStmt.cond, reporter)) {
             val (s3, v) = p
-            val pos = whileStmt.cond.posOpt.get
-            val (s4, cond) = value2Sym(s3, v, pos)
-            val prop = State.Claim.Prop(T, cond)
-            val thenClaims = s4.claims :+ prop
-            val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-              s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
-            var nextFresh: Z = s4.nextFresh
-            if (thenSat) {
-              for (s5 <- evalStmts(!(whileStmt.body.allReturns && config.branchPar =!= Config.BranchPar.Disabled),
-                split, smt2, cache, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)) {
-                if (s5.status) {
-                  for (s6 <- checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop",
-                    s5, whileStmt.invariants, reporter)) {
-                    if (nextFresh < s6.nextFresh) {
-                      nextFresh = s6.nextFresh
+            if (s3.status) {
+              val pos = whileStmt.cond.posOpt.get
+              val (s4, cond) = value2Sym(s3, v, pos)
+              val prop = State.Claim.Prop(T, cond)
+              val thenClaims = s4.claims :+ prop
+              val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+                s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
+              var nextFresh: Z = s4.nextFresh
+              if (thenSat) {
+                for (s5 <- evalStmts(!(whileStmt.body.allReturns && config.branchPar =!= Config.BranchPar.Disabled),
+                  split, smt2, cache, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)) {
+                  if (s5.status) {
+                    for (s6 <- checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop",
+                      s5, whileStmt.invariants, reporter)) {
+                      if (nextFresh < s6.nextFresh) {
+                        nextFresh = s6.nextFresh
+                      }
                     }
-                  }
-                } else {
-                  if (nextFresh < s5.nextFresh) {
-                    nextFresh = s5.nextFresh
+                  } else {
+                    if (nextFresh < s5.nextFresh) {
+                      nextFresh = s5.nextFresh
+                    }
                   }
                 }
               }
+              val negProp = State.Claim.Prop(F, cond)
+              val elseClaims = s4.claims :+ negProp
+              val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+                s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
+              r = r :+ State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
+            } else {
+              r = r :+ s3
             }
-            val negProp = State.Claim.Prop(F, cond)
-            val elseClaims = s4.claims :+ negProp
-            val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-              s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
-            r = r :+ State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
           }
         } else {
           r = r :+ s0w
@@ -3650,53 +3660,61 @@ import Util._
           if (s1.status) {
             for (p <- evalExp(sp, smt2, cache, rtCheck, s1, whileStmt.cond, reporter)) {
               val (s2, v) = p
-              val pos = whileStmt.cond.posOpt.get
-              val (s2w, cond) = value2Sym(s2, v, pos)
-              val s3 = s2w
-              val prop = State.Claim.Prop(T, cond)
-              val thenClaims = s3.claims :+ prop
-              val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-                s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
-              for (s4 <- evalStmts(F, sp, smt2, cache, None(), rtCheck, s3(claims = thenClaims), whileStmt.body.stmts, reporter)) {
-                val s6s: ISZ[State] = if (s4.status) {
-                  val bound = loopBound(loopId)
-                  if (bound <= 0 || numLoops + 1 < loopBound(loopId)) {
-                    whileRec(s4(status = thenSat), numLoops + 1)
-                  } else {
-                    if (bound > 0) {
-                      warn(whileStmt.cond.posOpt, s"Under-approximation due to loop unrolling capped with bound $bound",
-                        reporter)
-                      ISZ(s4(status = F))
+              if (s2.status) {
+                val pos = whileStmt.cond.posOpt.get
+                val (s2w, cond) = value2Sym(s2, v, pos)
+                val s3 = s2w
+                val prop = State.Claim.Prop(T, cond)
+                val thenClaims = s3.claims :+ prop
+                val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+                  s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
+                for (s4 <- evalStmts(F, sp, smt2, cache, None(), rtCheck, s3(claims = thenClaims), whileStmt.body.stmts, reporter)) {
+                  val s6s: ISZ[State] = if (s4.status) {
+                    val bound = loopBound(loopId)
+                    if (bound <= 0 || numLoops + 1 < loopBound(loopId)) {
+                      whileRec(s4(status = thenSat), numLoops + 1)
                     } else {
-                      ISZ(s4)
+                      if (bound > 0) {
+                        warn(whileStmt.cond.posOpt, s"Under-approximation due to loop unrolling capped with bound $bound",
+                          reporter)
+                        ISZ(s4(status = F))
+                      } else {
+                        ISZ(s4)
+                      }
+                    }
+                  } else {
+                    ISZ(s4)
+                  }
+                  val nextFresh = maxStatesNextFresh(s6s)
+                  for (s6 <- s6s) {
+                    if (s6.status) {
+                      val negProp = State.Claim.Prop(F, cond)
+                      val elseClaims = s3.claims :+ negProp
+                      val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+                        s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
+                      (thenSat, elseSat) match {
+                        case (T, T) =>
+                          if (s6.status) {
+                            r = r :+ mergeStates(s3, cond, s6, s3, nextFresh)
+                          } else {
+                            val claimsOps = ops.ISZOps(s3.claims)
+                            r = r :+ s3(status = s3.status && !reporter.hasError, nextFresh = nextFresh,
+                              claims = claimsOps.slice(0, s3.claims.size - 1) :+
+                                State.Claim.Imply(ISZ(negProp, s3.claims(s3.claims.size - 1))))
+                          }
+                        case (T, F) => r = r :+ s6(status = s6.status && !reporter.hasError, nextFresh = nextFresh)
+                        case (F, T) => r = r :+ s3(status = s3.status && !reporter.hasError, nextFresh = nextFresh)
+                        case _ =>
+                          val s7 = mergeStates(s3, cond, s6, s3, nextFresh)
+                          r = r :+ s7(status = F)
+                      }
+                    } else {
+                      r = r :+ s6
                     }
                   }
-                } else {
-                  ISZ(s4)
                 }
-                val nextFresh = maxStatesNextFresh(s6s)
-                for (s6 <- s6s) {
-                  val negProp = State.Claim.Prop(F, cond)
-                  val elseClaims = s3.claims :+ negProp
-                  val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-                    s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
-                  (thenSat, elseSat) match {
-                    case (T, T) =>
-                      if (s6.status) {
-                        r = r :+ mergeStates(s3, cond, s6, s3, nextFresh)
-                      } else {
-                        val claimsOps = ops.ISZOps(s3.claims)
-                        r = r :+ s3(status = s3.status && !reporter.hasError, nextFresh = nextFresh,
-                          claims = claimsOps.slice(0, s3.claims.size - 1) :+
-                            State.Claim.Imply(ISZ(negProp, s3.claims(s3.claims.size - 1))))
-                      }
-                    case (T, F) => r = r :+ s6(status = s6.status && !reporter.hasError, nextFresh = nextFresh)
-                    case (F, T) => r = r :+ s3(status = s3.status && !reporter.hasError, nextFresh = nextFresh)
-                    case _ =>
-                      val s7 = mergeStates(s3, cond, s6, s3, nextFresh)
-                      r = r :+ s7(status = F)
-                  }
-                }
+              } else {
+                r = r :+ s2
               }
             }
           } else {
@@ -3998,20 +4016,22 @@ import Util._
       val pos = exp.posOpt.get
       val (s2, sym) = value2Sym(s1, v, pos)
       val prop = State.Claim.Prop(T, sym)
-      val rvalid = smt2.valid(cache, T, config.logVc, config.logVcDirOpt,
-        s"$title$titleSuffix at [${pos.beginLine}, ${pos.beginColumn}]", pos, s2.claims, prop, reporter)
       var ok = F
-      rvalid.kind match {
-        case Smt2Query.Result.Kind.Unsat => ok = T
-        case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
-        case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
-        case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
-        case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
+      if (s2.status) {
+        val rvalid = smt2.valid(cache, T, config.logVc, config.logVcDirOpt,
+          s"$title$titleSuffix at [${pos.beginLine}, ${pos.beginColumn}]", pos, s2.claims, prop, reporter)
+        rvalid.kind match {
+          case Smt2Query.Result.Kind.Unsat => ok = T
+          case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
+          case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
+          case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
+          case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
+        }
       }
       if (ok) {
         r = r :+ s2.addClaim(prop)
       } else {
-        r = r :+ s2(status = F, claims = s2.claims :+ prop)
+        r = r :+ s2(status = F)
       }
     }
     return r
