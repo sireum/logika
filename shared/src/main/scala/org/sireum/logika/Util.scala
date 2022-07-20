@@ -1232,15 +1232,16 @@ object Util {
     }
     val receiver = receiverOpt.get
     val pos = receiver.posOpt.get
-    val (s0, sym) = idIntro(pos, state, logikaComp.context.methodName, "this", receiver.typedOpt.get, Some(pos))
     val rsym = receiverSymOpt.get
     val p: (State, State.Value.Sym) = receiver match {
       case _: AST.Exp.This =>
+        val (s0, sym) = idIntro(pos, state, logikaComp.context.methodName, "this", receiver.typedOpt.get, None())
         (s0, sym)
       case _ =>
         if (!isLhs(receiver)) {
           return state
         }
+        val (s0, sym) = idIntro(pos, state, logikaComp.context.methodName, "this", receiver.typedOpt.get, Some(pos))
         val s1 = logika.assignRec(Split.Disabled, smt2, cache, rtCheck, s0, receiver, sym, reporter)(0)
         val (s2, v) = logika.evalExp(Split.Disabled, smt2, cache, rtCheck, s1, receiver, reporter)(0)
         val (s3, newRs) = logika.value2Sym(s2, v, pos)

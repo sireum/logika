@@ -3576,7 +3576,7 @@ import Util._
             val (receiverModified, modLocalVars) = whileStmt.contract.modifiedLocalVars(context.receiverLocalTypeOpt)
             val receiverOpt: Option[State.Value.Sym] = if (receiverModified) {
               val (srw3, sym) = idIntro(whileStmt.posOpt.get, srw, context.methodName, "this",
-                context.receiverLocalTypeOpt.get._2, whileStmt.posOpt)
+                context.receiverLocalTypeOpt.get._2, None())
               srw = srw3
               Some(sym)
             } else {
@@ -3594,7 +3594,7 @@ import Util._
                 Some(AST.Exp.This(AST.TypedAttr(whileStmt.posOpt, Some(receiverOpt.get.tipe)))), receiverOpt,
                 HashMap.empty, reporter)
               val (srw7, sym) = idIntro(whileStmt.posOpt.get, srw6, context.methodName, "this",
-                context.receiverLocalTypeOpt.get._2, whileStmt.posOpt)
+                context.receiverLocalTypeOpt.get._2, None())
               srw = assumeValueInv(this, smt2, cache, rtCheck, srw7, sym, sym.pos, reporter)
             }
             srw
