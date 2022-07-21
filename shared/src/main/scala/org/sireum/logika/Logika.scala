@@ -2721,10 +2721,30 @@ import Util._
 
   def assignRec(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, lhs: AST.Exp,
                 rhs: State.Value.Sym, reporter: Reporter): ISZ[State] = {
+    @pure def isSeqSelect(exp: AST.Exp.Invoke): B = {
+      exp.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.Method if res.mode === AST.MethodMode.Select => return T
+        case res: AST.ResolvedInfo.BuiltIn if res.kind === AST.ResolvedInfo.BuiltIn.Kind.Apply =>
+          exp.receiverOpt match {
+            case Some(receiver) => receiver.typedOpt.get match {
+              case t: AST.Typed.Name if t.ids === AST.Typed.isName || t.ids === AST.Typed.msName => return T
+              case _ =>
+            }
+            case _ =>
+          }
+        case _ =>
+      }
+      return F
+    }
     lhs match {
       case lhs: AST.Exp.Ident =>
         lhs.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar =>
+            context.methodOpt match {
+              case Some(mctx) if mctx.paramIds.contains(res.id) && !mctx.modLocalIds.contains(res.id) && res.context === mctx.name =>
+                reporter.error(lhs.posOpt, kind, s"Missing Modifies clause for ${res.id}")
+              case _ =>
+            }
             return ISZ(evalAssignLocalH(F, s0, res.context, res.id, rhs, lhs.posOpt, reporter))
           case res: AST.ResolvedInfo.Var =>
             if (res.isInObject) {
@@ -2735,6 +2755,9 @@ import Util._
           case _ => halt(s"Infeasible: $lhs")
         }
       case lhs: AST.Exp.Invoke =>
+        if (!isSeqSelect(lhs)) {
+          return ISZ(s0)
+        }
         val receiver = lhs.receiverOpt.get
         val t = receiver.typedOpt.get.asInstanceOf[AST.Typed.Name]
         val receiverPos = receiver.posOpt.get

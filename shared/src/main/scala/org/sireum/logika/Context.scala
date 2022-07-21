@@ -49,6 +49,21 @@ object Context {
 
     @strictpure def name: ISZ[String] = owner :+ id
 
+    @memoize def paramIds: HashSet[String] = {
+      return HashSet.empty[String] ++ (for (p <- params) yield p._1.value)
+    }
+
+    @memoize def modLocalIds: HashSet[String] = {
+      var r = HashSet.empty[String]
+      for (m <- modifies) {
+        m.attr.resOpt.get match {
+          case res: AST.ResolvedInfo.LocalVar => r = r + res.id
+          case _ =>
+        }
+      }
+      return r
+    }
+
     def modObjectVarMap(sm: HashMap[String, AST.Typed]): HashSMap[ISZ[String], (AST.Typed, Option[Position])] = {
       var r = HashSMap.empty[ISZ[String], (AST.Typed, Option[Position])]
       for (x <- modifies) {
