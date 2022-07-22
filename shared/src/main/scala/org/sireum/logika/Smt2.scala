@@ -278,6 +278,8 @@ object Smt2 {
         |(define-fun |F32.>=| ((x F32) (y F32)) B (>= x y))
         |(define-fun |F32.==| ((x F32) (y F32)) B (= x y))
         |(define-fun |F32.!=| ((x F32) (y F32)) B (not (= x y)))
+        |(define-fun |F32.~~| ((x F32) (y F32)) B (= x y))
+        |(define-fun |F32.!~| ((x F32) (y F32)) B (not (= x y)))
         |(define-fun |F32.+| ((x F32) (y F32)) F32 (+ x y))
         |(define-fun |F32.-| ((x F32) (y F32)) F32 (- x y))
         |(define-fun |F32.*| ((x F32) (y F32)) F32 (* x y))
@@ -295,8 +297,10 @@ object Smt2 {
         |(define-fun |F32.<| ((x F32) (y F32)) B (fp.lt x y))
         |(define-fun |F32.>| ((x F32) (y F32)) B (fp.gt x y))
         |(define-fun |F32.>=| ((x F32) (y F32)) B (fp.geq x y))
-        |(define-fun |F32.==| ((x F32) (y F32)) B (fp.eq x y))
-        |(define-fun |F32.!=| ((x F32) (y F32)) B (not (fp.eq x y)))
+        |(define-fun |F32.==| ((x F32) (y F32)) B (= x y))
+        |(define-fun |F32.!=| ((x F32) (y F32)) B (not (= x y)))
+        |(define-fun |F32.~~| ((x F32) (y F32)) B (fp.eq x y))
+        |(define-fun |F32.!~| ((x F32) (y F32)) B (not (fp.eq x y)))
         |(define-fun |F32.+| ((x F32) (y F32)) F32 (fp.add $fpRoundingMode x y))
         |(define-fun |F32.-| ((x F32) (y F32)) F32 (fp.sub $fpRoundingMode x y))
         |(define-fun |F32.*| ((x F32) (y F32)) F32 (fp.mul $fpRoundingMode x y))
@@ -318,6 +322,8 @@ object Smt2 {
         |(define-fun |F64.>=| ((x F64) (y F64)) B (>= x y))
         |(define-fun |F64.==| ((x F64) (y F64)) B (= x y))
         |(define-fun |F64.!=| ((x F64) (y F64)) B (not (= x y)))
+        |(define-fun |F64.~~| ((x F64) (y F64)) B (= x y))
+        |(define-fun |F64.!~| ((x F64) (y F64)) B (not (= x y)))
         |(define-fun |F64.+| ((x F64) (y F64)) F64 (+ x y))
         |(define-fun |F64.-| ((x F64) (y F64)) F64 (- x y))
         |(define-fun |F64.*| ((x F64) (y F64)) F64 (* x y))
@@ -335,8 +341,10 @@ object Smt2 {
         |(define-fun |F64.<| ((x F64) (y F64)) B (fp.lt x y))
         |(define-fun |F64.>| ((x F64) (y F64)) B (fp.gt x y))
         |(define-fun |F64.>=| ((x F64) (y F64)) B (fp.geq x y))
-        |(define-fun |F64.==| ((x F64) (y F64)) B (fp.eq x y))
-        |(define-fun |F64.!=| ((x F64) (y F64)) B (not (fp.eq x y)))
+        |(define-fun |F64.==| ((x F64) (y F64)) B (= x y))
+        |(define-fun |F64.!=| ((x F64) (y F64)) B (not (= x y)))
+        |(define-fun |F64.~~| ((x F64) (y F64)) B (fp.eq x y))
+        |(define-fun |F64.!~| ((x F64) (y F64)) B (not (fp.eq x y)))
         |(define-fun |F64.+| ((x F64) (y F64)) F64 (fp.add $fpRoundingMode x y))
         |(define-fun |F64.-| ((x F64) (y F64)) F64 (fp.sub $fpRoundingMode x y))
         |(define-fun |F64.*| ((x F64) (y F64)) F64 (fp.mul $fpRoundingMode x y))
@@ -802,7 +810,7 @@ object Smt2 {
       val zGeId = typeOpId(AST.Typed.z, ">=")
       val zEqId = typeOpId(AST.Typed.z, "==")
       val etThid = typeHierarchyId(et)
-      val etEqId: ST = if (isBasicType(et)) st"=" else typeOpId(et, "==")
+      val etEqId: ST = typeOpId(et, "==")
       val (etAdt, etS, etTuple): (B, B, B) = et match {
         case et: AST.Typed.Name => (isAdt(et), et.ids === AST.Typed.isName || et.ids === AST.Typed.msName, F)
         case _: AST.Typed.Tuple => (F, F, T)
@@ -1119,7 +1127,7 @@ object Smt2 {
           st"""(define-fun $eqId ((x!0 $tId) (x!1 $tId)) B
               |  (and
               |    (= (type-of x!0) (type-of x!1) $thId)
-              |    ${(for (q <- fieldInfos if q.isParam) yield st"(${if (isBasicType(q.fieldType)) st"=" else typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
+              |    ${(for (q <- fieldInfos if q.isParam) yield st"(${typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
         if (typeHierarchy.isSubstitutable(t)) {
           addTypeDecl(t,
@@ -1384,7 +1392,7 @@ object Smt2 {
         st"""(define-fun $eqId ((x $tId) (y $tId)) B
             |  (and
             |    (= ($typeOfName x) ($typeOfName y))
-            |    ${(for (i <- 1 to t.args.size) yield st"(${if (isBasicType(t.args(i - 1))) st"=" else typeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
+            |    ${(for (i <- 1 to t.args.size) yield st"(${typeOpId(t.args(i - 1), "==")} (${typeOpId(t, s"_$i")} x) (${typeOpId(t, s"_$i")} y))", "\n")}
             |  )
             |)
             |(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
@@ -1573,24 +1581,6 @@ object Smt2 {
   @pure def isAdtType(t: AST.Typed): B = {
     t match {
       case t: AST.Typed.Name => return isAdt(t)
-      case _ => return F
-    }
-  }
-
-  @pure def isBasicType(t: AST.Typed): B = {
-    t match {
-      case t: AST.Typed.Name =>
-        if (AST.Typed.builtInTypes.contains(t)) {
-          return T
-        }
-        if (t.ids === AST.Typed.isName || t.ids === AST.Typed.msName) {
-          return F
-        }
-        typeHierarchy.typeMap.get(t.ids).get match {
-          case _: TypeInfo.SubZ => return T
-          case _: TypeInfo.Enum => return T
-          case _ => return F
-        }
       case _ => return F
     }
   }
