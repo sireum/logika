@@ -547,12 +547,16 @@ import Util._
     return s2(status = F)
   }
 
-  def evalLit(lit: AST.Lit): State.Value = {
+  def evalLit(smt2: Smt2, lit: AST.Lit, reporter: Reporter): State.Value = {
     lit match {
       case e: AST.Exp.LitB => return State.Value.B(e.value, e.posOpt.get)
       case e: AST.Exp.LitC => return State.Value.C(e.value, e.posOpt.get)
-      case e: AST.Exp.LitF32 => return State.Value.F32(e.value, e.posOpt.get)
-      case e: AST.Exp.LitF64 => return State.Value.F64(e.value, e.posOpt.get)
+      case e: AST.Exp.LitF32 =>
+        smt2.addType(AST.Typed.f32, reporter)
+        return State.Value.F32(e.value, e.posOpt.get)
+      case e: AST.Exp.LitF64 =>
+        smt2.addType(AST.Typed.f64, reporter)
+        return State.Value.F64(e.value, e.posOpt.get)
       case e: AST.Exp.LitR => return State.Value.R(e.value, e.posOpt.get)
       case e: AST.Exp.LitString => return State.Value.String(e.value, e.posOpt.get)
       case e: AST.Exp.LitZ => return State.Value.Z(e.value, e.posOpt.get)
@@ -597,17 +601,24 @@ import Util._
     return r
   }
 
-  def evalInterpolate(lit: AST.Exp.StringInterpolate): State.Value = {
+  def evalInterpolate(smt2: Smt2, lit: AST.Exp.StringInterpolate, reporter: Reporter): State.Value = {
     lit.prefix match {
       case string"z" => return State.Value.Z(org.sireum.Z(lit.lits(0).value).get, lit.posOpt.get)
       case string"r" => return State.Value.R(org.sireum.R(lit.lits(0).value).get, lit.posOpt.get)
       case string"c" => return State.Value.C(conversions.String.toCis(lit.lits(0).value)(0), lit.posOpt.get)
-      case string"f32" => return State.Value.F32(org.sireum.F32(lit.lits(0).value).get, lit.posOpt.get)
-      case string"f64" => return State.Value.F64(org.sireum.F64(lit.lits(0).value).get, lit.posOpt.get)
+      case string"f32" =>
+        smt2.addType(AST.Typed.f32, reporter)
+        return State.Value.F32(org.sireum.F32(lit.lits(0).value).get, lit.posOpt.get)
+      case string"f64" =>
+        smt2.addType(AST.Typed.f64, reporter)
+        return State.Value.F64(org.sireum.F64(lit.lits(0).value).get, lit.posOpt.get)
       case _ =>
-        val t = lit.typedOpt.get.asInstanceOf[AST.Typed.Name].ids
-        th.typeMap.get(t).get match {
-          case ti: TypeInfo.SubZ => return text2SubZVal(ti, lit.lits(0).value, lit.posOpt.get)
+        val t = lit.typedOpt.get
+        val ids = t.asInstanceOf[AST.Typed.Name].ids
+        th.typeMap.get(ids).get match {
+          case ti: TypeInfo.SubZ =>
+            smt2.addType(t, reporter)
+            return text2SubZVal(ti, lit.lits(0).value, lit.posOpt.get)
           case _ =>
         }
         halt(s"TODO: $lit")
@@ -853,7 +864,9 @@ import Util._
         }
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
-        val claim = State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
+        val claim = State.Claim.Let.Binary(sym, value,
+          if (AST.Typed.floatingPointTypes.contains(tipe)) AST.Exp.BinaryOp.FpNe
+          else AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
         val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
           context.implicitCheckTitlePosOpt match {
             case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
@@ -2424,13 +2437,13 @@ import Util._
     def expH(s0: State): ISZ[(State, State.Value)] = {
       e match {
         case _: AST.Exp.LitStepId => return ISZ((s0(status = F), State.errorValue))
-        case lit: AST.Lit => return ISZ((s0, evalLit(lit)))
+        case lit: AST.Lit => return ISZ((s0, evalLit(smt2, lit, reporter)))
         case lit: AST.Exp.StringInterpolate =>
           lit.prefix match {
             case string"s" => return evalStringInterpolate(split, smt2, cache, rtCheck, s0, lit, reporter)
             case string"string" => return evalStringInterpolate(split, smt2, cache, rtCheck, s0, lit, reporter)
             case string"st" => return evalStringInterpolate(split, smt2, cache, rtCheck, s0, lit, reporter)
-            case _ => return ISZ((s0, evalInterpolate(lit)))
+            case _ => return ISZ((s0, evalInterpolate(smt2, lit, reporter)))
           }
         case e: AST.Exp.Ident => return evalIdent(e)
         case e: AST.Exp.Select => return evalSelect(e)
@@ -2817,10 +2830,10 @@ import Util._
     pattern match {
       case pattern: AST.Pattern.Literal =>
         val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
-        return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==", evalLit(pattern.lit), v.tipe)), cond, Map.empty)
+        return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==", evalLit(smt2, pattern.lit, reporter), v.tipe)), cond, Map.empty)
       case pattern: AST.Pattern.LitInterpolate =>
-        val lit = evalInterpolate(AST.Exp.StringInterpolate(pattern.prefix,
-          ISZ(AST.Exp.LitString(pattern.value, AST.Attr(pattern.posOpt))), ISZ(), pattern.attr))
+        val lit = evalInterpolate(smt2, AST.Exp.StringInterpolate(pattern.prefix,
+          ISZ(AST.Exp.LitString(pattern.value, AST.Attr(pattern.posOpt))), ISZ(), pattern.attr), reporter)
         val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
         return (s1.addClaim(State.Claim.Let.Binary(cond, v, "==", lit, v.tipe)), cond, Map.empty)
       case pattern: AST.Pattern.VarBinding =>
