@@ -1797,7 +1797,7 @@ import Util._
           s1 = s3.addClaim(State.Claim.Let.CurrentId(F, sym, l.context, l.id, arg.posOpt))
         }
 
-        val logikaComp: Logika = {
+        val lComp: Logika = {
           val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
             info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
             plugins, Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get))
@@ -1837,7 +1837,7 @@ import Util._
             localInMap = localInMap))))
         }
 
-        val (receiverModified, modLocals) = contract.modifiedLocalVars(logikaComp.context.receiverLocalTypeOpt)
+        val (receiverModified, modLocals) = contract.modifiedLocalVars(lComp.context.receiverLocalTypeOpt)
 
         def evalContractCase(logikaComp: Logika, callerReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
                              labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
@@ -2029,13 +2029,13 @@ import Util._
           case _ =>
         }
         s1 = {
-          val pis = Util.checkInvs(logikaComp, posOpt, F, "Pre-invariant", smt2, cache, rtCheck, s1,
-            logikaComp.context.receiverTypeOpt, receiverOpt, invs, typeSubstMap, reporter)
+          val pis = Util.checkInvs(lComp, posOpt, F, "Pre-invariant", smt2, cache, rtCheck, s1,
+            lComp.context.receiverTypeOpt, receiverOpt, invs, typeSubstMap, reporter)
           s1(status = pis.status, nextFresh = pis.nextFresh)
         }
         contract match {
           case contract: AST.MethodContract.Simple if s1.status =>
-            val ccr = evalContractCase(logikaComp, callerReceiverOpt, F, s1, None(), contract.requires, contract.ensures)
+            val ccr = evalContractCase(lComp, callerReceiverOpt, F, s1, None(), contract.requires, contract.ensures)
             reporter.reports(ccr.messages)
             r = r :+ ((ccr.state, ccr.retVal))
           case contract: AST.MethodContract.Cases if s1.status =>
@@ -2044,7 +2044,7 @@ import Util._
             var ccrs = ISZ[Context.ContractCaseResult]()
             var okCcrs = ISZ[Context.ContractCaseResult]()
             for (cas <- contract.cases) {
-              val ccr = evalContractCase(logikaComp, callerReceiverOpt, T, s1,
+              val ccr = evalContractCase(lComp, callerReceiverOpt, T, s1,
                 if (cas.label.value == "") None() else Some(cas.label), cas.requires, cas.ensures)
               ccrs = ccrs :+ ccr
               isPreOK = isPreOK || ccr.isPreOK
