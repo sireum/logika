@@ -1797,10 +1797,51 @@ import Util._
           s1 = s3.addClaim(State.Claim.Let.CurrentId(F, sym, l.context, l.id, arg.posOpt))
         }
 
+        val logikaComp: Logika = {
+          val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
+            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
+            plugins, Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get))
+          )
+          val mctx = l.context.methodOpt.get
+          var objectVarInMap = mctx.objectVarInMap
+          for (p <- mctx.modObjectVarMap(typeSubstMap).entries) {
+            val (ids, (t, _)) = p
+            val (s4, sym) = nameIntro(pos, s1, ids, t, None())
+            objectVarInMap = objectVarInMap + ids ~> sym
+            s1 = s4
+          }
+          var fieldVarInMap = mctx.fieldVarInMap
+          mctx.receiverTypeOpt match {
+            case Some(receiverType) =>
+              val fieldVarMap = mctx.fieldVarMap(typeSubstMap)
+              if (fieldVarMap.nonEmpty) {
+                val (s5, thiz) = idIntro(mctx.posOpt.get, s1, mctx.name, "this", receiverType, mctx.posOpt)
+                s1 = s5
+                for (p <- mctx.fieldVarMap(typeSubstMap).entries) {
+                  val (id, (t, posOpt)) = p
+                  val (s6, sym) = s1.freshSym(t, posOpt.get)
+                  s1 = s6.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
+                  fieldVarInMap = fieldVarInMap + id ~> sym
+                }
+              }
+            case _ =>
+          }
+          var localInMap = mctx.localInMap
+          for (p <- mctx.localMap(typeSubstMap).entries) {
+            val (id, (ctx, _, t)) = p
+            val (s7, sym) = idIntro(pos, s1, ctx, id, t, None())
+            localInMap = localInMap + id ~> sym
+            s1 = s7
+          }
+          l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
+            localInMap = localInMap))))
+        }
+
+        val (receiverModified, modLocals) = contract.modifiedLocalVars(logikaComp.context.receiverLocalTypeOpt)
+
         def evalContractCase(logikaComp: Logika, callerReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
                              labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
                              ensures: ISZ[AST.Exp]): Context.ContractCaseResult = {
-          val (receiverModified, modLocals) = contract.modifiedLocalVars(logikaComp.context.receiverLocalTypeOpt)
 
           def modVarsResult(ms0: State, mposOpt: Option[Position]): (State, State.Value) = {
             var ms1 = ms0
@@ -1968,52 +2009,15 @@ import Util._
           return Context.ContractCaseResult(T, cs15, result, State.Claim.Prop(T, rsym), rep.messages)
         }
 
-        val logikaComp: Logika = {
-          val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
-            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
-            plugins, Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get))
-          )
-          val mctx = l.context.methodOpt.get
-          var objectVarInMap = mctx.objectVarInMap
-          for (p <- mctx.modObjectVarMap(typeSubstMap).entries) {
-            val (ids, (t, _)) = p
-            val (s4, sym) = nameIntro(pos, s1, ids, t, None())
-            objectVarInMap = objectVarInMap + ids ~> sym
-            s1 = s4
-          }
-          var fieldVarInMap = mctx.fieldVarInMap
-          mctx.receiverTypeOpt match {
-            case Some(receiverType) =>
-              val fieldVarMap = mctx.fieldVarMap(typeSubstMap)
-              if (fieldVarMap.nonEmpty) {
-                val (s5, thiz) = idIntro(mctx.posOpt.get, s1, mctx.name, "this", receiverType, mctx.posOpt)
-                s1 = s5
-                for (p <- mctx.fieldVarMap(typeSubstMap).entries) {
-                  val (id, (t, posOpt)) = p
-                  val (s6, sym) = s1.freshSym(t, posOpt.get)
-                  s1 = s6.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
-                  fieldVarInMap = fieldVarInMap + id ~> sym
-                }
-              }
-            case _ =>
-          }
-          var localInMap = mctx.localInMap
-          for (p <- mctx.localMap(typeSubstMap).entries) {
-            val (id, (ctx, _, t)) = p
-            val (s7, sym) = idIntro(pos, s1, ctx, id, t, None())
-            localInMap = localInMap + id ~> sym
-            s1 = s7
-          }
-          l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
-            localInMap = localInMap))))
-        }
         val callerReceiverOpt: Option[State.Value.Sym] = context.methodOpt match {
           case Some(m) => m.receiverTypeOpt match {
             case Some(currentReceiverType) =>
               val lcontext = context.methodOpt.get.name
               val p = idIntro(posOpt.get, s1, lcontext, "this", currentReceiverType, None())
               s1 = p._1
-              s1 = rewriteLocal(s1, lcontext, "this", posOpt, reporter)
+              if (receiverModified && context.methodName == lcontext) {
+                s1 = rewriteLocal(s1, lcontext, "this", posOpt, reporter)
+              }
               Some(p._2)
             case _ => None()
           }
