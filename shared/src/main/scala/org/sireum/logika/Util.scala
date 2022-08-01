@@ -528,10 +528,11 @@ object Util {
                    params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position],
                    reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ident],
                    ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
-                   implicitContext: Option[(String, Position)]): Logika = {
+                   implicitContext: Option[(String, Position)], compMethods: HashSet[ISZ[String]]): Logika = {
     val mctx = Context.Method(owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
       HashMap.empty, HashMap.empty, HashMap.empty, posOpt)
-    val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext)
+    val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext,
+      compMethods = compMethods)
     return Logika(th, config, ctx, plugins)
   }
 
@@ -609,7 +610,7 @@ object Util {
         }
         val l = logikaMethod(th, mconfig, res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes,
           method.sig.returnType.typedOpt.get, methodPosOpt, reads, requires, modifies, ensures,
-          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None())
+          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None(), HashSet.empty)
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
         var objectNames = HashSMap.empty[ISZ[String], Position]
@@ -848,7 +849,7 @@ object Util {
         val context = pf.context :+ pf.id
         val logika: Logika = logikaMethod(th, config, pf.context, pf.id,  pf.receiverTypeOpt,
           ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins,
-          implicitContextOpt)
+          implicitContextOpt, HashSet.empty)
         var s0 = state(claims = ISZ())
         val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
         val s2 = assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)

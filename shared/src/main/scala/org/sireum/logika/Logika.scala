@@ -1790,6 +1790,13 @@ import Util._
                         receiverOpt: Option[State.Value.Sym],
                         paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)],
                         oldVars: HashSMap[String, State.Value.Sym]): Unit = {
+        if (context.compMethods.contains(res.owner :+ res.id)) {
+          reporter.error(posOpt, kind, st"Cannot use ${(res.owner :+ res.id, ".")}'s contracts cyclicly".render)
+          r = r :+ ((s(status = F), State.errorValue))
+          return
+        }
+
+
         var s1 = s
         for (q <- paramArgs) {
           val (l, _, arg, v) = q
@@ -1800,7 +1807,8 @@ import Util._
         val lComp: Logika = {
           val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
             info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
-            plugins, Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get))
+            plugins, Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get)),
+            this.context.compMethods + (res.owner :+ res.id)
           )
           val mctx = l.context.methodOpt.get
           var objectVarInMap = mctx.objectVarInMap

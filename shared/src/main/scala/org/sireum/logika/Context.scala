@@ -133,13 +133,14 @@ object Context {
     @strictpure def isOK: B = state.status
   }
 
-  @strictpure def empty: Context = Context(ISZ(), None(), ISZ(), None())
+  @strictpure def empty: Context = Context(ISZ(), None(), ISZ(), None(), HashSet.empty)
 }
 
 @datatype class Context(val typeParams: ISZ[AST.TypeParam],
                         val methodOpt: Option[Context.Method],
                         val caseLabels: ISZ[AST.Exp.LitString],
-                        val implicitCheckTitlePosOpt: Option[(String, Position)]) {
+                        val implicitCheckTitlePosOpt: Option[(String, Position)],
+                        val compMethods: HashSet[ISZ[String]]) {
 
   @pure def owner: ISZ[String] = {
     methodOpt match {
