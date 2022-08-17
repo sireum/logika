@@ -1270,7 +1270,7 @@ import Util._
                 }
               case _ =>
             }
-            val s4 = s3.addClaim(State.Claim.Let.AdtLit(sym, args.toIS.map((vOpt: Option[State.Value]) => vOpt.get)))
+            val s4 = s3.addClaim(State.Claim.Let.AdtLit(sym, args.toIS[Option[State.Value]].map((vOpt: Option[State.Value]) => vOpt.get)))
             val (s5, vs) = addValueInv(this, smt2, cache, T, s4, sym, attr.posOpt.get, reporter)
             var s6 = s5
             for (v <- vs if s6.status) {
@@ -3064,7 +3064,7 @@ import Util._
           return (lcsOpt, nextFresh, lsmt2, rep.messages)
         }
         var first: Z = -1
-        val outputs = ops.ISZOps(inputs).mParMapCores(computeBranchSmt2 _, config.branchParCores)
+        val outputs = ops.MSZOps(inputs.toMS).mParMapCores(computeBranchSmt2 _, config.branchParCores)
         for (i <- 0 until outputs.size if first < 0) {
           reporter.reports(outputs(i)._4)
           if (outputs(i)._1.nonEmpty) {

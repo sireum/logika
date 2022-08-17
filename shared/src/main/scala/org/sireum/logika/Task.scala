@@ -58,7 +58,7 @@ object Task {
     override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       for (tp <- fact.typeParams) {
-        smt2.addType(AST.Typed.TypeVar(tp.id.value), reporter)
+        smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.isImmutable), reporter)
       }
       var s0 = State.create
       val claims: ISZ[AST.Exp] = if (fact.isFun) {
@@ -99,7 +99,7 @@ object Task {
     override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       for (tp <- theorem.typeParams) {
-        smt2.addType(AST.Typed.TypeVar(tp.id.value), reporter)
+        smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.isImmutable), reporter)
       }
       var p = (State.create, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
       for (step <- theorem.proof.steps if p._1.status) {
