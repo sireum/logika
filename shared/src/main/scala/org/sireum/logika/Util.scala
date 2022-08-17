@@ -1297,4 +1297,214 @@ object Util {
     }
     return s4
   }
+
+  @pure def toExps(pos: Position, claims: ISZ[State.Claim], th: TypeHierarchy): ISZ[AST.Exp] = {
+    @strictpure def isLetNameId(let: State.Claim.Let): B = let match {
+      case _: State.Claim.Let.Id => T
+      case _: State.Claim.Let.CurrentId => T
+      case _: State.Claim.Let.Name => T
+      case _: State.Claim.Let.CurrentName => T
+      case _ => F
+    }
+
+    val posOpt: Option[Position] = Some(pos)
+    val letsMap: HashMap[Z, ISZ[State.Claim.Let]] = {
+      var m = HashMap.empty[Z, ISZ[State.Claim.Let]]
+      for (p <- Util.collectLetClaims(T, claims)._1.entries) {
+        val (num, lets) = p
+        if (lets.size > 1) {
+          var newLets = ISZ[State.Claim.Let]()
+          for (let <- lets if !isLetNameId(let)) {
+            newLets = newLets :+ let
+          }
+          assert(newLets.nonEmpty)
+          m = m + num ~> newLets
+        } else {
+          m = m + num ~> lets
+        }
+      }
+      m
+    }
+
+    @pure def toBinaryExp(cs: ISZ[State.Claim], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
+      if (cs.isEmpty) {
+        return dflt
+      }
+      var r = toExp(cs(0))
+      for (i <- 1 to cs.size) {
+        r = AST.Exp.Binary(r, op, toExp(cs(i)), AST.ResolvedAttr(posOpt, Some(res), tOpt))
+      }
+      return r
+    }
+
+    @pure def nameResTypeOpts(ids: ISZ[String]): (Option[AST.ResolvedInfo], Option[AST.Typed]) = {
+      th.nameMap.get(ids).get match {
+        case info: Info.Object => return (Some(AST.ResolvedInfo.Object(ids)),
+          Some(AST.Typed.Object(info.owner, info.ast.id.value)))
+        case _: Info.Package => return (Some(AST.ResolvedInfo.Package(ids)),
+          Some(AST.Typed.Package(ids)))
+        case _: Info.Enum => return (Some(AST.ResolvedInfo.Enum(ids)),
+          Some(AST.Typed.Enum(ids)))
+        case info: Info.EnumElement => return (th.nameMap.get(info.owner).get.asInstanceOf[Info.Enum].elements.get(info.id),
+          Some(AST.Typed.Name(ids, ISZ())))
+        case info => halt(s"Infeasible: $info")
+      }
+    }
+
+    @pure def nameToExp(ids: ISZ[String], p: Position): AST.Exp = {
+      val pOpt: Option[Position] = Some(p)
+      val first = ids(0)
+      val firstResTypedOpts = nameResTypeOpts(ISZ(first))
+      var r: AST.Exp = AST.Exp.Ident(AST.Id(first, AST.Attr(pOpt)),
+        AST.ResolvedAttr(pOpt, firstResTypedOpts._1, firstResTypedOpts._2))
+      for (i <- 1 until ids.size) {
+        val iResTypedOpts = nameResTypeOpts(for (j <- 0 to i) yield ids(j))
+        r = AST.Exp.Select(Some(r), AST.Id(ids(i), AST.Attr(pOpt)), ISZ(),
+          AST.ResolvedAttr(pOpt, iResTypedOpts._1, iResTypedOpts._2))
+      }
+      return r
+    }
+
+    @pure def letToExp(let: State.Claim.Let): AST.Exp = {
+      let match {
+        case let: State.Claim.Let.CurrentId =>
+        case let: State.Claim.Let.CurrentName =>
+        case let: State.Claim.Let.Id =>
+        case let: State.Claim.Let.Name =>
+        case let: State.Claim.Let.Unary =>
+        case let: State.Claim.Let.Binary =>
+        case let: State.Claim.Let.Eq =>
+        case let: State.Claim.Let.And =>
+        case let: State.Claim.Let.Or =>
+        case let: State.Claim.Let.Imply =>
+        case let: State.Claim.Let.Ite =>
+        case let: State.Claim.Let.TupleLit =>
+        case let: State.Claim.Let.AdtLit =>
+        case let: State.Claim.Let.SeqLit =>
+        case let: State.Claim.Let.Quant =>
+        case let: State.Claim.Let.Random =>
+        case let: State.Claim.Let.FieldLookup =>
+        case let: State.Claim.Let.FieldStore =>
+        case let: State.Claim.Let.SeqStore =>
+        case let: State.Claim.Let.SeqLookup =>
+        case let: State.Claim.Let.SeqInBound =>
+        case let: State.Claim.Let.TypeTest =>
+        case let: State.Claim.Let.ProofFunApply =>
+        case let: State.Claim.Let.Apply =>
+        case let: State.Claim.Let.IApply =>
+      }
+      halt("TODO")
+    }
+
+    @pure def valueToExp(value: State.Value): AST.Exp = {
+      @strictpure def subZPrefix(t: AST.Typed.Name): String = ops.StringOps(t.ids(t.ids.size - 1)).firstToLower
+
+      value match {
+        case value: State.Value.Sym =>
+          letsMap.get(value.num) match {
+            case Some(lets) if lets.size === 1 => letToExp(lets(0))
+            case _ => return AST.Exp.Sym(value.num, AST.TypedAttr(Some(value.pos), Some(value.tipe)))
+          }
+        case value: State.Value.B => return AST.Exp.LitB(value.value, AST.Attr(Some(value.pos)))
+        case value: State.Value.Z => return AST.Exp.LitZ(value.value, AST.Attr(Some(value.pos)))
+        case value: State.Value.R => return AST.Exp.LitR(value.value, AST.Attr(Some(value.pos)))
+        case value: State.Value.C => return AST.Exp.LitC(value.value, AST.Attr(Some(value.pos)))
+        case value: State.Value.F32 => return AST.Exp.LitF32(value.value, AST.Attr(Some(value.pos)))
+        case value: State.Value.F64 => return AST.Exp.LitF64(value.value, AST.Attr(Some(value.pos)))
+        case value: State.Value.String => return AST.Exp.LitString(value.value, AST.Attr(Some(value.pos)))
+        case value: State.Value.Enum => return nameToExp(value.owner :+ value.id, value.pos)
+        case value: State.Value.S8 =>
+          val vPosOpt: Option[Position] = Some(value.pos)
+          return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.S8.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
+            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+        case value: State.Value.S16 =>
+          val vPosOpt: Option[Position] = Some(value.pos)
+          return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.S16.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
+            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+        case value: State.Value.S32 =>
+          val vPosOpt: Option[Position] = Some(value.pos)
+          return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.S32.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
+            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+        case value: State.Value.S64 =>
+          val vPosOpt: Option[Position] = Some(value.pos)
+          return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.S64.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
+            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+        case value: State.Value.U8 =>
+          val vPosOpt: Option[Position] = Some(value.pos)
+          return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.U8.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
+            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+        case value: State.Value.U16 =>
+          val vPosOpt: Option[Position] = Some(value.pos)
+          return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.U16.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
+            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+        case value: State.Value.U32 =>
+          val vPosOpt: Option[Position] = Some(value.pos)
+          return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.U32.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
+            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+        case value: State.Value.U64 =>
+          val vPosOpt: Option[Position] = Some(value.pos)
+          return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.U64.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
+            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+        case value: State.Value.Range =>
+          val vPosOpt: Option[Position] = Some(value.pos)
+          return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(value.value.string, AST.Attr(vPosOpt))), ISZ(),
+            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+        case value: State.Value.Unit => halt(s"Infeasible: $value")
+      }
+    }
+
+    @pure def toExp(claim: State.Claim): AST.Exp = {
+      claim match {
+        case claim: State.Claim.And =>
+          return toBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.And,
+            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
+        case claim: State.Claim.Or =>
+          return toBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Or,
+            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+        case claim: State.Claim.Imply =>
+          assert(claim.claims.size > 1)
+          return toBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Imply,
+            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+        case claim: State.Claim.Prop =>
+          return if (claim.isPos) valueToExp(claim.value)
+          else AST.Exp.Unary(AST.Exp.UnaryOp.Not,
+            valueToExp(claim.value), AST.ResolvedAttr(posOpt,
+              Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)), AST.Typed.bOpt)
+          )
+        case claim: State.Claim.If =>
+          return AST.Exp.If(valueToExp(claim.cond), toExp(State.Claim.And(claim.tClaims)), toExp(State.Claim.And(claim.fClaims)),
+            AST.TypedAttr(posOpt, AST.Typed.bOpt))
+        case claim: State.Claim.Let => return letToExp(claim)
+        case claim => halt(s"Infeasible: $claim")
+      }
+    }
+
+    var r = ISZ[AST.Exp]()
+    for (claim <- claims) {
+      claim match {
+        case claim: State.Claim.And => r = r :+ toExp(claim)
+        case claim: State.Claim.Or => r = r :+ toExp(claim)
+        case claim: State.Claim.Imply => r = r :+ toExp(claim)
+        case claim: State.Claim.Prop => r = r :+ toExp(claim)
+        case claim: State.Claim.If => r = r :+ toExp(claim)
+        case claim: State.Claim.Let.CurrentId => r = r :+ toExp(claim)
+        case claim: State.Claim.Let.CurrentName => r = r :+ toExp(claim)
+        case claim: State.Claim.Let.Id => r = r :+ toExp(claim)
+        case claim: State.Claim.Let.Name => r = r :+ toExp(claim)
+        case _: State.Claim.Let =>
+        case _: State.Claim.Label =>
+      }
+    }
+    return r
+  }
+
 }
