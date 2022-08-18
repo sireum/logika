@@ -1384,39 +1384,33 @@ import Util._
     }
 
     def evalInput(input: AST.Exp.Input): (State, State.Value) = {
-      input.exp match {
-        case exp: AST.Exp.Ident =>
-          exp.attr.resOpt.get match {
-            case res: AST.ResolvedInfo.LocalVar =>
-              context.methodOpt.get.localInMap.get(res.id) match {
-                case Some(sym) => return (state, sym)
-                case _ =>
-                  error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
-                  return (state(status = F), State.Value.B(F, e.posOpt.get))
-              }
-            case res: AST.ResolvedInfo.Var =>
-              if (res.isInObject) {
-                val ids = res.owner :+ res.id
-                context.methodOpt.get.objectVarInMap.get(ids) match {
-                  case Some(sym) => return (state, sym)
-                  case _ =>
-                    error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
-                    return (state(status = F), State.Value.B(F, e.posOpt.get))
-                }
-              } else {
-                context.methodOpt.get.fieldVarInMap.get(res.id) match {
-                  case Some(sym) =>
-                    return (state, sym)
-                  case _ =>
-                    error(exp.posOpt, s"Identifier ${exp.id.value} was not declared to be read/modified", reporter)
-                    return (state(status = F), State.Value.B(F, e.posOpt.get))
-                }
-              }
-            case _ => halt(s"Infeasible: $exp")
+      input.ref.resOpt.get match {
+        case res: AST.ResolvedInfo.LocalVar =>
+          context.methodOpt.get.localInMap.get(res.id) match {
+            case Some(sym) => return (state, sym)
+            case _ =>
+              error(input.ref.posOpt, s"Variable ${input.ref} was not declared to be read/modified", reporter)
+              return (state(status = F), State.Value.B(F, e.posOpt.get))
           }
-        case _ =>
-          reporter.warn(e.posOpt, kind, s"Non-simple inputs are not currently supported: $input")
-          return (state(status = F), State.errorValue)
+        case res: AST.ResolvedInfo.Var =>
+          if (res.isInObject) {
+            val ids = res.owner :+ res.id
+            context.methodOpt.get.objectVarInMap.get(ids) match {
+              case Some(sym) => return (state, sym)
+              case _ =>
+                error(input.ref.posOpt, s"Variable ${input.ref} was not declared to be read/modified", reporter)
+                return (state(status = F), State.Value.B(F, e.posOpt.get))
+            }
+          } else {
+            context.methodOpt.get.fieldVarInMap.get(res.id) match {
+              case Some(sym) =>
+                return (state, sym)
+              case _ =>
+                error(input.ref.posOpt, s"Variable ${input.ref} was not declared to be read/modified", reporter)
+                return (state(status = F), State.Value.B(F, e.posOpt.get))
+            }
+          }
+        case _ => halt(s"Infeasible: ${input.ref}")
       }
     }
 

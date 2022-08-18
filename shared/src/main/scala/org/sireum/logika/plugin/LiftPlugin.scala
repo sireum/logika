@@ -80,7 +80,7 @@ import org.sireum.message.Position
     val posOpt = invoke.ident.attr.posOpt
 
     val mi = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
-    val (reads, requires, modifies, ensures): (ISZ[AST.Exp.Ident], ISZ[AST.Exp], ISZ[AST.Exp.Ident], ISZ[AST.Exp]) = {
+    val (reads, requires, modifies, ensures): (ISZ[AST.Exp.Ref], ISZ[AST.Exp], ISZ[AST.Exp.Ref], ISZ[AST.Exp]) = {
       mi.ast.contract match {
         case c: AST.MethodContract.Simple => (c.reads, c.requires, c.modifies, c.ensures)
         case _: AST.MethodContract.Cases =>

@@ -36,9 +36,9 @@ object Context {
                          val receiverTypeOpt: Option[AST.Typed],
                          val params: ISZ[(AST.Id, AST.Typed)],
                          val retType: AST.Typed,
-                         val reads: ISZ[AST.Exp.Ident],
+                         val reads: ISZ[AST.Exp.Ref],
                          val requires: ISZ[AST.Exp],
-                         val modifies: ISZ[AST.Exp.Ident],
+                         val modifies: ISZ[AST.Exp.Ref],
                          val ensures: ISZ[AST.Exp],
                          val objectVarInMap: HashMap[ISZ[String], State.Value.Sym],
                          val fieldVarInMap: HashMap[String, State.Value.Sym],
@@ -56,7 +56,7 @@ object Context {
     @memoize def modLocalIds: HashSet[String] = {
       var r = HashSet.empty[String]
       for (m <- modifies) {
-        m.attr.resOpt.get match {
+        m.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar => r = r + res.id
           case _ =>
         }
@@ -67,10 +67,10 @@ object Context {
     def modObjectVarMap(sm: HashMap[String, AST.Typed]): HashSMap[ISZ[String], (AST.Typed, Option[Position])] = {
       var r = HashSMap.empty[ISZ[String], (AST.Typed, Option[Position])]
       for (x <- modifies) {
-        x.attr.resOpt.get match {
+        x.resOpt.get match {
           case res: AST.ResolvedInfo.Var if res.isInObject && !r.contains(res.owner :+ res.id) =>
             val ids = res.owner :+ res.id
-            r = r + ids ~> ((x.typedOpt.get.subst(sm), x.attr.posOpt))
+            r = r + ids ~> ((x.typedOpt.get.subst(sm), x.posOpt))
           case _ =>
         }
       }
@@ -80,10 +80,10 @@ object Context {
     def readObjectVarMap(sm: HashMap[String, AST.Typed]): HashSMap[ISZ[String], (AST.Typed, Option[Position])] = {
       var r = HashSMap.empty[ISZ[String], (AST.Typed, Option[Position])]
       for (x <- reads) {
-        x.attr.resOpt.get match {
+        x.resOpt.get match {
           case res: AST.ResolvedInfo.Var if res.isInObject && !r.contains(res.owner :+ res.id) =>
             val ids = res.owner :+ res.id
-            r = r + ids ~> ((x.typedOpt.get.subst(sm), x.attr.posOpt))
+            r = r + ids ~> ((x.typedOpt.get.subst(sm), x.posOpt))
           case _ =>
         }
       }
@@ -93,7 +93,7 @@ object Context {
     def fieldVarMap(sm: HashMap[String, AST.Typed]): HashSMap[String, (AST.Typed, Option[Position])] = {
       var r = HashSMap.empty[String, (AST.Typed, Option[Position])]
       for (x <- reads ++ modifies) {
-        x.attr.resOpt.get match {
+        x.resOpt.get match {
           case res: AST.ResolvedInfo.Var if !res.isInObject && !r.contains(res.id) =>
             r = r + res.id ~> ((x.typedOpt.get.subst(sm), x.posOpt))
           case _ =>
@@ -109,9 +109,9 @@ object Context {
         r = r + id.value ~> ((name, id, t.subst(sm)))
       }
       for (x <- reads ++ modifies) {
-        x.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.LocalVar if !r.contains(x.id.value) =>
-            r = r + x.id.value ~> ((res.context, x.id, x.typedOpt.get.subst(sm)))
+        x.resOpt.get match {
+          case res: AST.ResolvedInfo.LocalVar if !r.contains(res.id) =>
+            r = r + res.id ~> ((res.context, AST.Id(res.id, AST.Attr(x.posOpt)), x.typedOpt.get.subst(sm)))
           case _ =>
         }
       }

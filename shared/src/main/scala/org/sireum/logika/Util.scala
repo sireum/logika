@@ -276,7 +276,7 @@ object Util {
     }
 
     override def preExpInput(o: AST.Exp.Input): AST.MTransformer.PreResult[AST.Exp] = {
-      o.exp match {
+      o.ref match {
         case exp: AST.Exp.Ident =>
           exp.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Var => return introInputIdent(o, res, exp.id, exp.typedOpt)
@@ -526,7 +526,7 @@ object Util {
 
   def logikaMethod(th: TypeHierarchy, config: Config, owner: ISZ[String], id: String, receiverTypeOpt: Option[AST.Typed],
                    params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position],
-                   reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ident],
+                   reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ref],
                    ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
                    implicitContext: Option[(String, Position)], compMethods: HashSet[ISZ[String]]): Logika = {
     val mctx = Context.Method(owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
@@ -588,8 +588,8 @@ object Util {
                   cache: Smt2.Cache,
                   reporter: Reporter): Unit = {
     val mconfig: Config = if (caseIndex >= 0) config(checkInfeasiblePatternMatch = F) else config
-    def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ident], requires: ISZ[AST.Exp],
-                  modifies: ISZ[AST.Exp.Ident], ensures: ISZ[AST.Exp]): Unit = {
+    def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp],
+                  modifies: ISZ[AST.Exp.Ref], ensures: ISZ[AST.Exp]): Unit = {
       var state = State.create
       labelOpt match {
         case Some(label) if label.value != "" => state = state.addClaim(State.Claim.Label(label.value, label.posOpt.get))
@@ -1195,7 +1195,7 @@ object Util {
     return s4
   }
 
-  def evalAssignReceiver(modifies: ISZ[AST.Exp.Ident], logika: Logika, logikaComp: Logika, smt2: Smt2, cache: Smt2.Cache,
+  def evalAssignReceiver(modifies: ISZ[AST.Exp.Ref], logika: Logika, logikaComp: Logika, smt2: Smt2, cache: Smt2.Cache,
                          rtCheck: B, state: State, receiverOpt: Option[AST.Exp], receiverSymOpt: Option[State.Value.Sym],
                          typeSubstMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     def isLhs(exp: AST.Exp): B = {
@@ -1252,7 +1252,7 @@ object Util {
     val owner = logikaComp.context.owner
     var modVars = ISZ[String]()
     for (m <- modifies) {
-      m.attr.resOpt.get match {
+      m.resOpt.get match {
         case res: AST.ResolvedInfo.Var if !res.isInObject => modVars = modVars :+ res.id
         case _ =>
       }
