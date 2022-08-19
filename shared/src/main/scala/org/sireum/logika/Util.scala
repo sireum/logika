@@ -276,7 +276,7 @@ object Util {
     }
 
     override def preExpInput(o: AST.Exp.Input): AST.MTransformer.PreResult[AST.Exp] = {
-      o.ref match {
+      o.exp match {
         case exp: AST.Exp.Ident =>
           exp.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Var => return introInputIdent(o, res, exp.id, exp.typedOpt)
@@ -289,6 +289,7 @@ object Util {
               return introInputIdent(o, res, exp.id, exp.typedOpt)
             case _ =>
           }
+        case _: AST.Exp.This => return AST.MTransformer.PreResultExpInput
         case _ =>
       }
       halt("Non-simple input")
@@ -649,9 +650,15 @@ object Util {
         for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
           val (mname, id, t) = v
           val posOpt = id.attr.posOpt
-          val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
-          state = assumeValueInv(l, smt2, cache, T, s0, sym, posOpt.get, reporter)
-          localInMap = localInMap + id.value ~> sym
+          if (id.value =!= "this") {
+            val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
+            state = assumeValueInv(l, smt2, cache, T, s0, sym, posOpt.get, reporter)
+            localInMap = localInMap + id.value ~> sym
+          } else {
+            val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, None())
+            state = s0
+            localInMap = localInMap + id.value ~> sym
+          }
         }
         l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
           localInMap = localInMap))))

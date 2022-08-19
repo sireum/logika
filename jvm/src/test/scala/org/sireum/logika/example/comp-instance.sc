@@ -14,7 +14,7 @@ import org.sireum._
       Ensures(
         Res == n + 1,
         y == In(y) + 2,
-        z == In(z) + 3
+        z == In(this).z + 3
       )
     )
     Spec {

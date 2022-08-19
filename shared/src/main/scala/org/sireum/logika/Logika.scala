@@ -1384,34 +1384,46 @@ import Util._
     }
 
     def evalInput(input: AST.Exp.Input): (State, State.Value) = {
-      input.ref.resOpt.get match {
-        case res: AST.ResolvedInfo.LocalVar =>
-          context.methodOpt.get.localInMap.get(res.id) match {
+      input.exp match {
+        case e: AST.Exp.Ref =>
+          e.resOpt.get match {
+            case res: AST.ResolvedInfo.LocalVar =>
+              context.methodOpt.get.localInMap.get(res.id) match {
+                case Some(sym) => return (state, sym)
+                case _ =>
+                  error(e.posOpt, s"Variable $e was not declared to be read/modified", reporter)
+                  return (state(status = F), State.Value.B(F, e.posOpt.get))
+              }
+            case res: AST.ResolvedInfo.Var =>
+              if (res.isInObject) {
+                val ids = res.owner :+ res.id
+                context.methodOpt.get.objectVarInMap.get(ids) match {
+                  case Some(sym) => return (state, sym)
+                  case _ =>
+                    error(e.posOpt, s"Variable $e was not declared to be read/modified", reporter)
+                    return (state(status = F), State.Value.B(F, e.posOpt.get))
+                }
+              } else {
+                context.methodOpt.get.fieldVarInMap.get(res.id) match {
+                  case Some(sym) =>
+                    return (state, sym)
+                  case _ =>
+                    error(e.posOpt, s"Variable $e was not declared to be read/modified", reporter)
+                    return (state(status = F), State.Value.B(F, e.posOpt.get))
+                }
+              }
+            case _ =>
+          }
+        case e: AST.Exp.This =>
+          context.methodOpt.get.localInMap.get("this") match {
             case Some(sym) => return (state, sym)
             case _ =>
-              error(input.ref.posOpt, s"Variable ${input.ref} was not declared to be read/modified", reporter)
+              error(e.posOpt, s"this was not declared to be modified", reporter)
               return (state(status = F), State.Value.B(F, e.posOpt.get))
           }
-        case res: AST.ResolvedInfo.Var =>
-          if (res.isInObject) {
-            val ids = res.owner :+ res.id
-            context.methodOpt.get.objectVarInMap.get(ids) match {
-              case Some(sym) => return (state, sym)
-              case _ =>
-                error(input.ref.posOpt, s"Variable ${input.ref} was not declared to be read/modified", reporter)
-                return (state(status = F), State.Value.B(F, e.posOpt.get))
-            }
-          } else {
-            context.methodOpt.get.fieldVarInMap.get(res.id) match {
-              case Some(sym) =>
-                return (state, sym)
-              case _ =>
-                error(input.ref.posOpt, s"Variable ${input.ref} was not declared to be read/modified", reporter)
-                return (state(status = F), State.Value.B(F, e.posOpt.get))
-            }
-          }
-        case _ => halt(s"Infeasible: ${input.ref}")
+        case _ =>
       }
+      halt(s"Infeasible: $e")
     }
 
     def evalQuantType(quant: AST.Exp.QuantType): (State, State.Value) = {
@@ -1831,7 +1843,7 @@ import Util._
           var localInMap = mctx.localInMap
           for (p <- mctx.localMap(typeSubstMap).entries) {
             val (id, (ctx, _, t)) = p
-            val (s7, sym) = idIntro(pos, s1, ctx, id, t, None())
+            val (s7, sym): (State, State.Value.Sym) = idIntro(pos, s1, ctx, id, t, None())
             localInMap = localInMap + id ~> sym
             s1 = s7
           }
