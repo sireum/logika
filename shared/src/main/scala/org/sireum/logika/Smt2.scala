@@ -1845,7 +1845,7 @@ object Smt2 {
         }
       }
       val s = HashSSet.empty[State.Value.Sym] ++ syms -- lsyms
-      if (s.nonEmpty) {
+      if (s.nonEmpty || lids.nonEmpty) {
           val (decls, body2) = addTypeConstraintsH(isImply,
             (for (id <- lids.values) yield (localId(id), id.sym.tipe, T)) ++
               (for (sym <- s.elements) yield (v2ST(sym), sym.tipe, F)),
