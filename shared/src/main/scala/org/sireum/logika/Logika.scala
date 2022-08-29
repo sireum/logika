@@ -1383,6 +1383,43 @@ import Util._
       return (s, sym)
     }
 
+    def evalAt(exp: AST.Exp.At): (State, State.Value) = {
+      val lines: ISZ[Z] = for (line <- exp.lines) yield line.value
+      def local(res: AST.ResolvedInfo.LocalVar): (State, State.Value) = {
+        val finder = Util.LocalVarIdFinder(res, lines, None())
+        finder.transformState(state)
+        finder.rOpt match {
+          case Some(r) =>
+            return (state, r.sym)
+          case _ =>
+            reporter.error(exp.posOpt, kind, st"Could not find ${res.id} defined at line(s) ${(lines, ", ")}".render)
+            return (state(status = F), State.errorValue)
+        }
+      }
+      def global(res: AST.ResolvedInfo.Var): (State, State.Value) = {
+        val finder = Util.VarNameFinder(res, lines, None())
+        finder.transformState(state)
+        finder.rOpt match {
+          case Some(r) =>
+            return (state, r.sym)
+          case _ =>
+            reporter.error(exp.posOpt, kind, st"Could not find ${(res.owner :+ res.id, ".")} defined at line(s) ${(lines, ", ")}".render)
+            return (state(status = F), State.errorValue)
+        }
+      }
+      exp.exp match {
+        case e: AST.Exp.Ref =>
+          e.resOpt.get match {
+            case res: AST.ResolvedInfo.LocalVar => return local(res)
+            case res: AST.ResolvedInfo.Var if res.isInObject => return global(res)
+            case res => halt(s"Infeasible: $res")
+          }
+        case _: AST.Exp.This => return local(AST.ResolvedInfo.LocalVar(context.methodName,
+          AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"))
+        case e => halt(s"Infeasible: $e")
+      }
+    }
+
     def evalInput(input: AST.Exp.Input): (State, State.Value) = {
       input.exp match {
         case e: AST.Exp.Ref =>
@@ -2548,6 +2585,7 @@ import Util._
           }
           return evalQuantEach(e)
         case e: AST.Exp.This => return ISZ(evalThis(e))
+        case e: AST.Exp.At => return ISZ(evalAt(e))
         case e: AST.Exp.TypeCond => return evalTypeCond(e)
         case e: AST.Exp.Sym => return ISZ[(State, State.Value)]((state, State.Value.Sym(e.num, e.typedOpt.get, e.posOpt.get)))
         case _ =>

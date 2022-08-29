@@ -32,7 +32,6 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{Reporter, Split}
-import org.sireum.logika.State.Value
 
 object Util {
 
@@ -475,8 +474,38 @@ object Util {
   }
 
   @record class SymAddRewriter(val min: Z, val add: Z) extends MStateTransformer {
-    override def postStateValueSym(o: Value.Sym): MOption[State.Value] = {
+    override def postStateValueSym(o: State.Value.Sym): MOption[State.Value] = {
       return if (o.num < min) MNone() else MSome(o(num = o.num + add))
+    }
+  }
+
+  @record class LocalVarIdFinder(val res: AST.ResolvedInfo.LocalVar,
+                                 val lines: ISZ[Z],
+                                 var rOpt: Option[State.Claim.Let.Id]) extends MStateTransformer {
+    override def postStateClaimLetId(o: State.Claim.Let.Id): MOption[State.Claim.Let] = {
+      if (rOpt.isEmpty && o.id === res.id && o.context === res.context && lines === (for (pos <- o.poss) yield pos.beginLine)) {
+        rOpt = Some(o)
+      }
+      return MNone()
+    }
+
+    override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
+      return MStateTransformer.PreResult(rOpt.isEmpty, MNone())
+    }
+  }
+
+  @record class VarNameFinder(val res: AST.ResolvedInfo.Var,
+                              val lines: ISZ[Z],
+                              var rOpt: Option[State.Claim.Let.Name]) extends MStateTransformer {
+    override def postStateClaimLetName(o: State.Claim.Let.Name): MOption[State.Claim.Let] = {
+      if (rOpt.isEmpty && o.ids === (res.owner :+ res.id) && lines === (for (pos <- o.poss) yield pos.beginLine)) {
+        rOpt = Some(o)
+      }
+      return MNone()
+    }
+
+    override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
+      return MStateTransformer.PreResult(rOpt.isEmpty, MNone())
     }
   }
 
