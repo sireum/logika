@@ -594,7 +594,7 @@ import Util._
       val s0 = p._1
       val pos = lit.posOpt.get
       val (s1, v) = s0.freshSym(if (isST) AST.Typed.st else AST.Typed.string, pos)
-      r = r :+ ((s1, v))
+      r = r :+ ((s1.addClaim(State.Claim.Let.Random(v, pos)), v))
     }
     val tOpt: String = if (isST) " template" else ""
     reporter.warn(lit.posOpt, kind, s"String$tOpt interpolation is currently over-approximated to produce an unconstrained string$tOpt")
@@ -1802,12 +1802,13 @@ import Util._
           return
         }
 
-
         var s1 = s
         for (q <- paramArgs) {
           val (l, _, arg, v) = q
-          val (s3, sym) = value2Sym(s1, v, arg.posOpt.get)
-          s1 = s3.addClaim(State.Claim.Let.CurrentId(F, sym, l.context, l.id, arg.posOpt))
+          val argPosOpt = arg.posOpt
+          val (s3, sym) = idIntro(arg.posOpt.get, s1, l.context, l.id, v.tipe, argPosOpt)
+          val (s4, vSym) = value2Sym(s3, v, argPosOpt.get)
+          s1 = s4.addClaim(State.Claim.Let.Eq(sym, vSym))
         }
 
         val lComp: Logika = {
@@ -1931,8 +1932,8 @@ import Util._
             }
             callerReceiverOpt match {
               case Some(receiver) =>
-                ms1 = ms1.addClaim(State.Claim.Let.CurrentId(F, receiver, context.methodOpt.get.name, "this",
-                  context.methodOpt.get.posOpt))
+                val (ms2, receiverSym) = idIntro(receiver.pos, ms1, context.methodOpt.get.name, "this", receiver.tipe, Some(receiver.pos))
+                ms1 = ms2.addClaim(State.Claim.Let.Eq(receiverSym, receiver))
               case _ =>
             }
             return ms1
@@ -2039,7 +2040,8 @@ import Util._
         }
         receiverOpt match {
           case Some(receiver) =>
-            s1 = s1.addClaim(State.Claim.Let.CurrentId(F, receiver, res.owner :+ res.id, "this", receiverPosOpt))
+            val (s2, receiverSym) = idIntro(receiver.pos, s1, res.owner :+ res.id, "this", receiver.tipe, receiverPosOpt)
+            s1 = s2.addClaim(State.Claim.Let.Eq(receiverSym, receiver))
           case _ =>
         }
         s1 = {
