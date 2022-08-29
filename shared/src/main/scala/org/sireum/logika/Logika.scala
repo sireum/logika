@@ -3192,13 +3192,11 @@ import Util._
         case Some(cond) =>
           val (s4, ccond) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s3, cond, reporter))
           if (bindings.nonEmpty) {
-            val (s5, icond) = s4.freshSym(AST.Typed.b, c.pattern.posOpt.get)
-            conds = conds :+ icond
-            s5.addClaim(State.Claim.Let.Imply(icond, (for (b <- bindings) yield b.asInstanceOf[State.Value]) :+ ccond))
+            conds = conds ++ (for (b <- bindings) yield b.asInstanceOf[State.Value]) :+ ccond
           } else {
             conds = conds :+ ccond
-            s4
           }
+          s4
         case _ =>
           s3
       }
