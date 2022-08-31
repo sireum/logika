@@ -1001,8 +1001,8 @@ object State {
           args(args.size - 1).toSTOpt(numMap, defs) match {
             case Some(conclusion) =>
               var premises = ISZ[ST]()
-              for (arg <- args) {
-                arg.toSTOpt(numMap, defs) match {
+              for (i <- 0 until args.size - 1) {
+                args(i).toSTOpt(numMap, defs) match {
                   case Some(premise) => premises = premises :+ premise
                   case _ =>
                 }
