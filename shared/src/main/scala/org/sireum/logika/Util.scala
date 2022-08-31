@@ -1334,7 +1334,7 @@ object Util {
     return s4
   }
 
-  @pure def toExps(pos: Position, claims: ISZ[State.Claim], th: TypeHierarchy): ISZ[AST.Exp] = {
+  @pure def toExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy): ISZ[AST.Exp] = {
     @strictpure def isLetNameId(let: State.Claim.Let): B = let match {
       case _: State.Claim.Let.Id => T
       case _: State.Claim.Let.CurrentId => T

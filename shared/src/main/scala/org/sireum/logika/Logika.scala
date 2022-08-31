@@ -1417,6 +1417,11 @@ import Util._
           }
         case _: AST.Exp.This => return local(AST.ResolvedInfo.LocalVar(context.methodName,
           AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"))
+        case e: AST.Exp.LitString =>
+          val ids = ops.StringOps(e.value).split((c: C) => c === '.').map((s: String) => ops.StringOps(s).trim)
+          val lcontext = ops.ISZOps(ids).dropRight(1)
+          val id = ids(ids.size - 1)
+          return local(AST.ResolvedInfo.LocalVar(lcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id))
         case e => halt(s"Infeasible: $e")
       }
     }
