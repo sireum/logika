@@ -760,11 +760,11 @@ object Util {
     return s2
   }
 
-  def rewriteLocals(s0: State, lcontext: ISZ[String], ids: ISZ[String]): State = {
-    if (ids.isEmpty) {
-      return s0
-    }
+  def rewriteLocals(s0: State, lcontext: ISZ[String], ids: ISZ[String]): (State, HashMap[(ISZ[String], String), (ISZ[Position], Z)]) = {
     var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)]
+    if (ids.isEmpty) {
+      return (s0, locals)
+    }
     var s1 = s0
     for (id <- ids) {
       val poss = collectLocalPoss(s0, lcontext, id)
@@ -775,7 +775,7 @@ object Util {
       }
     }
     val r = StateTransformer(CurrentIdRewriter(locals)).transformState(F, s1)
-    return r.resultOpt.getOrElse(s1)
+    return (r.resultOpt.getOrElse(s1), locals)
   }
 
   def rewriteLocalVars(state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar], posOpt: Option[Position], reporter: Reporter): State = {

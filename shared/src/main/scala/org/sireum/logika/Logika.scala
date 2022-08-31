@@ -50,7 +50,8 @@ object Logika {
   @datatype class Branch(val title: String,
                          val sym: State.Value.Sym,
                          val body: AST.Body,
-                         val bindings: Bindings)
+                         val bindings: Bindings,
+                         val bindingIdMap: HashMap[String, (Z, ISZ[Position])])
 
   object Reporter {
     object Info {
@@ -2245,7 +2246,7 @@ import Util._
                       oldVars = oldVars + id ~> sym
                       s2 = s3
                     }
-                    s2 = rewriteLocals(s2, ctx, oldVars.keys ++ (if (receiverOpt.isEmpty) ISZ[String]() else ISZ[String]("this")))
+                    s2 = rewriteLocals(s2, ctx, oldVars.keys ++ (if (receiverOpt.isEmpty) ISZ[String]() else ISZ[String]("this")))._1
                   }
 
                   compositional(s2, typeSubstMap, retType, receiverOpt, paramArgs, oldVars)
@@ -3020,7 +3021,7 @@ import Util._
   def addBindings(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, lcontext: ISZ[String],
                   m: Bindings, reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     val ids = m.keys
-    val s1 = rewriteLocals(s0, lcontext, ids)
+    val s1 = rewriteLocals(s0, lcontext, ids)._1
     var s2 = s1
     var bindings = ISZ[State.Value.Sym]()
     for (p <- m.entries) {
@@ -3034,6 +3035,24 @@ import Util._
     return (s2, bindings)
   }
 
+  def assumeBindings(s0: State, lcontext: ISZ[String], m: Bindings, bidMap: HashMap[String, (Z, ISZ[Position])]): State = {
+    var s1 = s0
+    for (p <- m.entries) {
+      val (id, (v, t, pos)) = p
+      val (num, poss) = bidMap.get(id).get
+      val (s2, x) = idIntro(pos, s1, lcontext, id, t, Some(pos))
+      val (s3, reX) = s2.freshSym(t, pos)
+      val (s4, sym) = s3.freshSym(AST.Typed.b, pos)
+      s1 = s4.addClaims(ISZ(
+        State.Claim.Let.Id(reX, lcontext, id, num, poss),
+        State.Claim.Let.Eq(reX, x),
+        State.Claim.Let.Binary(sym, x, "==", v, t),
+        State.Claim.Prop(T, sym)
+      ))
+    }
+    return s1
+  }
+
   def evalBranch(isMatch: B, split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State,
                  lcontext: ISZ[String], branches: ISZ[Branch], i: Z, rOpt: Option[State.Value.Sym],
                  reporter: Reporter): (Z, Option[(State.Claim, ISZ[ISZ[State.Claim]])]) = {
@@ -3044,7 +3063,7 @@ import Util._
     }
     var nextFresh = s0.nextFresh
     val s1 = s0
-    val Branch(title, sym, body, m) = branches(i)
+    val Branch(title, sym, body, m, bidMap) = branches(i)
     val cond = State.Claim.And(
       (for (j <- 0 until i) yield State.Claim.Prop(F, branches(j).sym).asInstanceOf[State.Claim]) :+
         State.Claim.Prop(T, sym))
@@ -3054,11 +3073,10 @@ import Util._
     if (s10.status) {
       if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s10.claims, reporter)) {
-        val (s11, bindings) = addBindings(smt2, cache, rtCheck, s10, lcontext, m, reporter)
-        val s12: State = if (bindings.isEmpty) s11 else s11.addClaim(State.Claim.And(
-          for (b <- bindings) yield State.Claim.Prop(T, b)))
+        val s11 = assumeBindings(s10, lcontext, m, bidMap)
         var claims = ISZ[ISZ[State.Claim]]()
-        for (s13 <- evalBody(split, smt2, cache, rOpt, rtCheck, s12, body, posOpt, reporter)) {
+        for (s12 <- evalBody(split, smt2, cache, rOpt, rtCheck, s11, body, posOpt, reporter)) {
+          val s13 = rewriteLocals(s12, lcontext, m.keys)._1
           if (nextFresh < s13.nextFresh) {
             nextFresh = s13.nextFresh
           }
@@ -3224,7 +3242,7 @@ import Util._
   def evalMatch(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
                 stmt: AST.Stmt.Match, reporter: Reporter): ISZ[State] = {
 
-    def evalCasePattern(s1: State, lcontext: ISZ[String], c: AST.Case, v: State.Value): (State, State.Value.Sym, Bindings) = {
+    def evalCasePattern(s1: State, lcontext: ISZ[String], c: AST.Case, v: State.Value): (State, State.Value.Sym, Bindings, HashMap[String, (Z, ISZ[Position])]) = {
       val (s2, pcond, m) = evalPattern(smt2, cache, rtCheck, s1, v, c.pattern, reporter)
       val (s3, bindings) = addBindings(smt2, cache, rtCheck, s2, lcontext, m, reporter)
       var conds = ISZ(pcond)
@@ -3232,19 +3250,21 @@ import Util._
         case Some(cond) =>
           val (s4, ccond) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s3, cond, reporter))
           if (bindings.nonEmpty) {
-            conds = conds ++ (for (b <- bindings) yield b.asInstanceOf[State.Value]) :+ ccond
+            val (s5, sym) = s4.freshSym(AST.Typed.b, cond.posOpt.get)
+            conds = conds :+ sym
+            s5.addClaim(State.Claim.Let.Imply(sym, (for (b <- bindings) yield b.asInstanceOf[State.Value]) :+ ccond))
           } else {
             conds = conds :+ ccond
+            s4
           }
-          s4
         case _ =>
           s3
       }
       val pos = c.pattern.posOpt.get
       val (s7, sym) = s6.freshSym(AST.Typed.b, pos)
       val s8 = s7.addClaim(State.Claim.Let.And(sym, conds))
-      val s9 = rewriteLocals(s8, lcontext, m.keys)
-      return (s9, sym, m)
+      val (s9, locals) = rewriteLocals(s8, lcontext, m.keys)
+      return (s9, sym, m, HashMap.empty[String, (Z, ISZ[Position])] ++ (for (p <- locals.entries) yield (p._1._2, (p._2._2, p._2._1))))
     }
 
     var r = ISZ[State]()
@@ -3259,9 +3279,9 @@ import Util._
         var branches = ISZ[Branch]()
         var s1 = s0
         for (c <- stmt.cases) {
-          val (s2, sym, m) = evalCasePattern(s1, lcontext, c, v)
+          val (s2, sym, m, bidMap) = evalCasePattern(s1, lcontext, c, v)
           s1 = s2
-          branches = branches :+ Branch("match case pattern", sym, c.body, m)
+          branches = branches :+ Branch("match case pattern", sym, c.body, m, bidMap)
         }
         val stmtPos = stmt.posOpt.get
         if (smt2.satResult(cache, T, config.logVc, config.logVcDirOpt,
@@ -3303,12 +3323,12 @@ import Util._
       val (s1, cond) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s0, ifStmt.cond, reporter))
       val pos = ifStmt.cond.posOpt.get
       val (s2, sym) = value2Sym(s1, cond, pos)
-      branches = branches :+ Branch("if-then", sym, ifStmt.thenBody, Map.empty)
+      branches = branches :+ Branch("if-then", sym, ifStmt.thenBody, Map.empty, HashMap.empty)
       ifStmt.elseBody.stmts match {
         case ISZ(nif: AST.Stmt.If) => return evalConds(s2, nif)
         case _ =>
           val (s3, econd) = s2.freshSym(AST.Typed.b, pos)
-          branches = branches :+ Branch("if-else", econd, ifStmt.elseBody, Map.empty)
+          branches = branches :+ Branch("if-else", econd, ifStmt.elseBody, Map.empty, HashMap.empty)
           return s3.addClaim(State.Claim.Let.Eq(econd, State.Value.B(T, pos)))
       }
     }
