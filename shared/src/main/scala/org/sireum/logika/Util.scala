@@ -480,10 +480,12 @@ object Util {
   }
 
   @record class LocalVarIdFinder(val res: AST.ResolvedInfo.LocalVar,
+                                 val num: Z,
                                  val lines: ISZ[Z],
                                  var rOpt: Option[State.Claim.Let.Id]) extends MStateTransformer {
     override def postStateClaimLetId(o: State.Claim.Let.Id): MOption[State.Claim.Let] = {
-      if (rOpt.isEmpty && o.id === res.id && o.context === res.context && lines === (for (pos <- o.poss) yield pos.beginLine)) {
+      if (rOpt.isEmpty && (num < 0 || o.num === num) && o.id === res.id && o.context === res.context &&
+        lines === (for (pos <- o.poss) yield pos.beginLine)) {
         rOpt = Some(o)
       }
       return MNone()

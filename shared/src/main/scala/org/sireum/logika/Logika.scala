@@ -1386,8 +1386,8 @@ import Util._
 
     def evalAt(exp: AST.Exp.At): (State, State.Value) = {
       val lines: ISZ[Z] = for (line <- exp.lines) yield line.value
-      def local(res: AST.ResolvedInfo.LocalVar): (State, State.Value) = {
-        val finder = Util.LocalVarIdFinder(res, lines, None())
+      def local(res: AST.ResolvedInfo.LocalVar, num: Z): (State, State.Value) = {
+        val finder = Util.LocalVarIdFinder(res, num, lines, None())
         finder.transformState(state)
         finder.rOpt match {
           case Some(r) =>
@@ -1411,17 +1411,23 @@ import Util._
       exp.exp match {
         case e: AST.Exp.Ref =>
           e.resOpt.get match {
-            case res: AST.ResolvedInfo.LocalVar => return local(res)
+            case res: AST.ResolvedInfo.LocalVar => return local(res, -1)
             case res: AST.ResolvedInfo.Var if res.isInObject => return global(res)
             case res => halt(s"Infeasible: $res")
           }
         case _: AST.Exp.This => return local(AST.ResolvedInfo.LocalVar(context.methodName,
-          AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"))
+          AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), -1)
         case e: AST.Exp.LitString =>
           val ids = ops.StringOps(e.value).split((c: C) => c === '.').map((s: String) => ops.StringOps(s).trim)
           val lcontext = ops.ISZOps(ids).dropRight(1)
-          val id = ids(ids.size - 1)
-          return local(AST.ResolvedInfo.LocalVar(lcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id))
+          ops.StringOps(ids(ids.size - 1)).split((c: C) => c === '#') match {
+            case ISZ(id, num) =>
+              return local(AST.ResolvedInfo.LocalVar(lcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
+                ops.StringOps(id).trim), Z(ops.StringOps(num).trim).getOrElseEager(-1))
+            case _ =>
+              return local(AST.ResolvedInfo.LocalVar(lcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
+                ids(ids.size - 1)), -1)
+          }
         case e => halt(s"Infeasible: $e")
       }
     }
