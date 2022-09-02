@@ -1336,7 +1336,7 @@ object Util {
     return s4
   }
 
-  @pure def toExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy): ISZ[AST.Exp] = {
+  @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy): HashSSet[AST.Exp] = {
     @strictpure def isLetNameId(let: State.Claim.Let): B = let match {
       case _: State.Claim.Let.Id => T
       case _: State.Claim.Let.CurrentId => T
@@ -1363,17 +1363,7 @@ object Util {
       }
       m
     }
-
-    @pure def toBinaryExp(cs: ISZ[State.Claim], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
-      if (cs.isEmpty) {
-        return dflt
-      }
-      var r = toExp(cs(0))
-      for (i <- 1 to cs.size) {
-        r = AST.Exp.Binary(r, op, toExp(cs(i)), AST.ResolvedAttr(posOpt, Some(res), tOpt))
-      }
-      return r
-    }
+    var nameMap = HashSet.empty[String]
 
     @pure def nameResTypeOpts(ids: ISZ[String]): (Option[AST.ResolvedInfo], Option[AST.Typed]) = {
       th.nameMap.get(ids).get match {
@@ -1387,6 +1377,28 @@ object Util {
           Some(AST.Typed.Name(ids, ISZ())))
         case info => halt(s"Infeasible: $info")
       }
+    }
+
+    def cToBinaryExp(cs: ISZ[State.Claim], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
+      if (cs.isEmpty) {
+        return dflt
+      }
+      var r = toExp(cs(0))
+      for (i <- 1 to cs.size) {
+        r = AST.Exp.Binary(r, op, toExp(cs(i)), AST.ResolvedAttr(posOpt, Some(res), tOpt))
+      }
+      return r
+    }
+
+    def vToBinaryExp(vs: ISZ[State.Value], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
+      if (vs.isEmpty) {
+        return dflt
+      }
+      var r = valueToExp(vs(0))
+      for (i <- 1 to vs.size) {
+        r = AST.Exp.Binary(r, op, valueToExp(vs(i)), AST.ResolvedAttr(posOpt, Some(res), tOpt))
+      }
+      return r
     }
 
     @pure def nameToExp(ids: ISZ[String], p: Position): AST.Exp = {
@@ -1403,44 +1415,200 @@ object Util {
       return r
     }
 
-    @pure def letToExp(let: State.Claim.Let): AST.Exp = {
-      let match {
-        case let: State.Claim.Let.CurrentId =>
-        case let: State.Claim.Let.CurrentName =>
-        case let: State.Claim.Let.Id =>
-        case let: State.Claim.Let.Name =>
-        case let: State.Claim.Let.Unary =>
-        case let: State.Claim.Let.Binary =>
-        case let: State.Claim.Let.Eq =>
-        case let: State.Claim.Let.And =>
-        case let: State.Claim.Let.Or =>
-        case let: State.Claim.Let.Imply =>
-        case let: State.Claim.Let.Ite =>
-        case let: State.Claim.Let.TupleLit =>
-        case let: State.Claim.Let.AdtLit =>
-        case let: State.Claim.Let.SeqLit =>
-        case let: State.Claim.Let.Quant =>
-        case let: State.Claim.Let.Random =>
-        case let: State.Claim.Let.FieldLookup =>
-        case let: State.Claim.Let.FieldStore =>
-        case let: State.Claim.Let.SeqStore =>
-        case let: State.Claim.Let.SeqLookup =>
-        case let: State.Claim.Let.SeqInBound =>
-        case let: State.Claim.Let.TypeTest =>
-        case let: State.Claim.Let.ProofFunApply =>
-        case let: State.Claim.Let.Apply =>
-        case let: State.Claim.Let.IApply =>
-      }
+    def typedToType(t: AST.Typed): AST.Type = {
       halt("TODO")
     }
 
-    @pure def valueToExp(value: State.Value): AST.Exp = {
+    def letToExp(let: State.Claim.Let): AST.Exp = {
+      val sym = let.sym
+      val symPos = sym.pos
+      val symPosOpt = Option.some(symPos)
+      let match {
+        case let: State.Claim.Let.CurrentId =>
+          assert(let.context === context)
+          return AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
+            symPosOpt,
+            Some(AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+            Some(sym.tipe)))
+        case let: State.Claim.Let.CurrentName =>
+          return nameToExp(let.ids, symPos)
+        case let: State.Claim.Let.Id =>
+          if (let.context === context) {
+            return AST.Exp.At(
+              AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
+                symPosOpt,
+                Some(AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+                Some(sym.tipe))),
+              for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos))),
+              Some(typedToType(sym.tipe)),
+              AST.Attr(symPosOpt)
+            )
+          } else {
+            val name: String = {
+              val n = st"${(let.context :+ let.id, ".")}".render
+              if (nameMap.contains(n)) {
+                s"$n#${let.num}"
+              } else {
+                nameMap = nameMap + n
+                n
+              }
+            }
+            return AST.Exp.At(
+              AST.Exp.LitString(name, AST.Attr(symPosOpt)),
+              for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos))),
+              Some(typedToType(sym.tipe)),
+              AST.Attr(symPosOpt)
+            )
+          }
+        case let: State.Claim.Let.Name =>
+          return AST.Exp.At(
+            nameToExp(let.ids, symPos),
+            for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos))),
+            None(),
+            AST.Attr(symPosOpt)
+          )
+        case let: State.Claim.Let.Unary =>
+          val (op, kind): (AST.Exp.UnaryOp.Type, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
+            case string"+" => (AST.Exp.UnaryOp.Plus, AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus)
+            case string"-" => (AST.Exp.UnaryOp.Minus, AST.ResolvedInfo.BuiltIn.Kind.UnaryMinus)
+            case string"~" => (AST.Exp.UnaryOp.Complement, AST.ResolvedInfo.BuiltIn.Kind.UnaryComplement)
+            case string"~" => (AST.Exp.UnaryOp.Not, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)
+            case _ => halt(s"Infeasible: ${let.op}")
+          }
+          return AST.Exp.Unary(op, valueToExp(let.value), AST.ResolvedAttr(
+            symPosOpt,
+            Some(AST.ResolvedInfo.BuiltIn(kind)),
+            Some(sym.tipe)
+          ))
+        case let: State.Claim.Let.Binary =>
+          val kind: AST.ResolvedInfo.BuiltIn.Kind.Type = let.op match {
+            case string"+" => AST.ResolvedInfo.BuiltIn.Kind.BinaryAdd
+            case string"-" => AST.ResolvedInfo.BuiltIn.Kind.BinarySub
+            case string"*" => AST.ResolvedInfo.BuiltIn.Kind.BinaryMul
+            case string"/" => AST.ResolvedInfo.BuiltIn.Kind.BinaryDiv
+            case string"%" => AST.ResolvedInfo.BuiltIn.Kind.BinaryRem
+            case string"&" => AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd
+            case string"|" => AST.ResolvedInfo.BuiltIn.Kind.BinaryOr
+            case string"|^" => AST.ResolvedInfo.BuiltIn.Kind.BinaryXor
+            case string"->:" => AST.ResolvedInfo.BuiltIn.Kind.BinaryImply
+            case string"==" => AST.ResolvedInfo.BuiltIn.Kind.BinaryEq
+            case string"~~" => AST.ResolvedInfo.BuiltIn.Kind.BinaryFpEq
+            case string"!=" => AST.ResolvedInfo.BuiltIn.Kind.BinaryNe
+            case string"!~" => AST.ResolvedInfo.BuiltIn.Kind.BinaryFpNe
+            case string"<" => AST.ResolvedInfo.BuiltIn.Kind.BinaryLt
+            case string"<=" => AST.ResolvedInfo.BuiltIn.Kind.BinaryLe
+            case string">" => AST.ResolvedInfo.BuiltIn.Kind.BinaryGt
+            case string">=" => AST.ResolvedInfo.BuiltIn.Kind.BinaryGe
+            case string"<<" => AST.ResolvedInfo.BuiltIn.Kind.BinaryShl
+            case string">>" => AST.ResolvedInfo.BuiltIn.Kind.BinaryShr
+            case string">>>" => AST.ResolvedInfo.BuiltIn.Kind.BinaryUshr
+            case _ => halt(s"Infeasible: ${let.op}")
+          }
+          return AST.Exp.Binary(valueToExp(let.left), let.op, valueToExp(let.right), AST.ResolvedAttr(
+            symPosOpt,
+            Some(AST.ResolvedInfo.BuiltIn(kind)),
+            Some(sym.tipe)
+          ))
+        case let: State.Claim.Let.Eq =>
+          return AST.Exp.Binary(valueToExp(sym), "==", valueToExp(let.value), AST.ResolvedAttr(
+            symPosOpt,
+            Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)),
+            Some(sym.tipe)
+          ))
+        case let: State.Claim.Let.And =>
+          return vToBinaryExp(let.args, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.And,
+            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
+        case let: State.Claim.Let.Or =>
+          return vToBinaryExp(let.args, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Or,
+            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+        case let: State.Claim.Let.Imply =>
+          assert(let.args.size > 1)
+          return vToBinaryExp(let.args, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Imply,
+            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+        case let: State.Claim.Let.Ite =>
+          return AST.Exp.If(
+            valueToExp(let.cond),
+            valueToExp(let.left),
+            valueToExp(let.right),
+            AST.TypedAttr(symPosOpt, Some(sym.tipe))
+          )
+        case let: State.Claim.Let.TupleLit =>
+          return AST.Exp.Tuple(
+            for (arg <- let.args) yield valueToExp(arg),
+            AST.TypedAttr(symPosOpt, Some(sym.tipe))
+          )
+        case let: State.Claim.Let.AdtLit =>
+          val info = th.typeMap.get(let.tipe.ids).get.asInstanceOf[TypeInfo.Adt]
+          return AST.Exp.Invoke(
+            Some(nameToExp(ops.ISZOps(let.tipe.ids).dropRight(1), symPos)),
+            AST.Exp.Ident(AST.Id(let.tipe.ids(let.tipe.ids.size - 1), AST.Attr(symPosOpt)), AST.ResolvedAttr(
+              symPosOpt,
+              info.constructorResOpt,
+              info.constructorTypeOpt
+            )),
+            for (targ <- let.tipe.args) yield typedToType(targ),
+            for (arg <- let.args) yield valueToExp(arg),
+            AST.ResolvedAttr(
+              symPosOpt,
+              info.constructorResOpt,
+              Some(sym.tipe)
+            )
+          )
+        case let: State.Claim.Let.SeqLit =>
+          val t = sym.tipe.asInstanceOf[AST.Typed.Name]
+          halt("TODO")
+        case let: State.Claim.Let.Quant =>
+          halt("TODO")
+        case let: State.Claim.Let.FieldLookup =>
+          val info = th.typeMap.get(let.adt.tipe.asInstanceOf[AST.Typed.Name].ids).get.asInstanceOf[TypeInfo.Adt].vars.get(let.id).get
+          return AST.Exp.Select(
+            Some(valueToExp(let.adt)),
+            AST.Id(let.id, AST.Attr(symPosOpt)),
+            ISZ(),
+            AST.ResolvedAttr(
+              symPosOpt,
+              Some(AST.ResolvedInfo.Var(info.isInObject, info.ast.isSpec, info.ast.isVal, info.owner, let.id)),
+              Some(sym.tipe)
+            )
+          )
+        case let: State.Claim.Let.FieldStore =>
+          halt("TODO")
+        case let: State.Claim.Let.SeqStore =>
+          halt("TODO")
+        case let: State.Claim.Let.SeqLookup =>
+          halt("TODO")
+        case let: State.Claim.Let.SeqInBound =>
+          halt("TODO")
+        case let: State.Claim.Let.TypeTest =>
+          return AST.Exp.Select(
+            Some(valueToExp(let.value)),
+            AST.Id("isInstanceOf", AST.Attr(symPosOpt)),
+            ISZ(),
+            AST.ResolvedAttr(
+              symPosOpt,
+              lang.tipe.TypeChecker.isInstanceOfResOpt,
+              AST.Typed.bOpt,
+            )
+          )
+        case let: State.Claim.Let.ProofFunApply =>
+          halt("TODO")
+        case let: State.Claim.Let.Apply =>
+          halt("TODO")
+        case let: State.Claim.Let.Random =>
+          return AST.Exp.Sym(sym.num, AST.TypedAttr(symPosOpt, Some(sym.tipe)))
+        case let: State.Claim.Let.IApply =>
+          halt(s"Infeasible: $let")
+      }
+
+    }
+
+    def valueToExp(value: State.Value): AST.Exp = {
       @strictpure def subZPrefix(t: AST.Typed.Name): String = ops.StringOps(t.ids(t.ids.size - 1)).firstToLower
 
       value match {
         case value: State.Value.Sym =>
           letsMap.get(value.num) match {
-            case Some(lets) if lets.size === 1 => letToExp(lets(0))
+            case Some(lets) if lets.size === 1 => return letToExp(lets(0))
             case _ => return AST.Exp.Sym(value.num, AST.TypedAttr(Some(value.pos), Some(value.tipe)))
           }
         case value: State.Value.B => return AST.Exp.LitB(value.value, AST.Attr(Some(value.pos)))
@@ -1500,17 +1668,17 @@ object Util {
       }
     }
 
-    @pure def toExp(claim: State.Claim): AST.Exp = {
+    def toExp(claim: State.Claim): AST.Exp = {
       claim match {
         case claim: State.Claim.And =>
-          return toBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.And,
+          return cToBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.And,
             AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
         case claim: State.Claim.Or =>
-          return toBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Or,
+          return cToBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Or,
             AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
         case claim: State.Claim.Imply =>
           assert(claim.claims.size > 1)
-          return toBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Imply,
+          return cToBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Imply,
             AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
         case claim: State.Claim.Prop =>
           return if (claim.isPos) valueToExp(claim.value)
@@ -1526,18 +1694,18 @@ object Util {
       }
     }
 
-    var r = ISZ[AST.Exp]()
+    var r = HashSSet.empty[AST.Exp]
     for (claim <- claims) {
       claim match {
-        case claim: State.Claim.And => r = r :+ toExp(claim)
-        case claim: State.Claim.Or => r = r :+ toExp(claim)
-        case claim: State.Claim.Imply => r = r :+ toExp(claim)
-        case claim: State.Claim.Prop => r = r :+ toExp(claim)
-        case claim: State.Claim.If => r = r :+ toExp(claim)
-        case claim: State.Claim.Let.CurrentId => r = r :+ toExp(claim)
-        case claim: State.Claim.Let.CurrentName => r = r :+ toExp(claim)
-        case claim: State.Claim.Let.Id => r = r :+ toExp(claim)
-        case claim: State.Claim.Let.Name => r = r :+ toExp(claim)
+        case claim: State.Claim.And => r = r + toExp(claim)
+        case claim: State.Claim.Or => r = r + toExp(claim)
+        case claim: State.Claim.Imply => r = r + toExp(claim)
+        case claim: State.Claim.Prop => r = r + toExp(claim)
+        case claim: State.Claim.If => r = r + toExp(claim)
+        case claim: State.Claim.Let.CurrentId => r = r + toExp(claim)
+        case claim: State.Claim.Let.CurrentName => r = r + toExp(claim)
+        case claim: State.Claim.Let.Id => r = r + toExp(claim)
+        case claim: State.Claim.Let.Name => r = r + toExp(claim)
         case _: State.Claim.Let =>
         case _: State.Claim.Label =>
       }
