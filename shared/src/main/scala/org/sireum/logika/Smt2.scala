@@ -424,59 +424,6 @@ object Smt2 {
     else st"|${(pf.context, ".")}$targs${pf.id}$pTypes|"
   }
 
-  def injectAdditionalClaims(v: State.Value.Sym, claims: ISZ[State.Claim],
-                             additionalClaims: ISZ[State.Claim]): Option[ISZ[State.Claim]] = {
-    if (claims.size == 0) {
-      return None()
-    }
-    var newClaims = ISZ[State.Claim]()
-    var changed = F
-    for (c <- claims) {
-      c match {
-        case c: State.Claim.And =>
-          injectAdditionalClaims(v, c.claims, additionalClaims) match {
-            case Some(cs) =>
-              newClaims = newClaims :+ State.Claim.And(cs)
-              changed = T
-            case _ => newClaims = newClaims :+ c
-          }
-        case c: State.Claim.Imply =>
-          injectAdditionalClaims(v, c.claims, additionalClaims) match {
-            case Some(cs) =>
-              newClaims = newClaims :+ State.Claim.Imply(cs)
-              changed = T
-            case _ => newClaims = newClaims :+ c
-          }
-        case c: State.Claim.Or =>
-          injectAdditionalClaims(v, c.claims, additionalClaims) match {
-            case Some(cs) =>
-              newClaims = newClaims :+ State.Claim.Or(cs)
-              changed = T
-            case _ => newClaims = newClaims :+ c
-          }
-        case c: State.Claim.If =>
-          val newTClaimsOpt = injectAdditionalClaims(v, c.tClaims, additionalClaims)
-          val newFClaimsOpt = injectAdditionalClaims(v, c.fClaims, additionalClaims)
-          if (newTClaimsOpt.isEmpty && newFClaimsOpt.isEmpty) {
-            newClaims = newClaims :+ c
-          } else {
-            newClaims = newClaims :+ c(tClaims = newTClaimsOpt.getOrElse(c.tClaims), fClaims = newFClaimsOpt.getOrElse(c.fClaims))
-            changed = T
-          }
-        case c: State.Claim.Prop => newClaims = newClaims :+ c
-        case c: State.Claim.Let =>
-          if (c.sym.num == v.num) {
-            newClaims = newClaims :+ State.Claim.And(c +: additionalClaims)
-            changed = T
-          } else {
-            newClaims = newClaims :+ c
-          }
-        case c: State.Claim.Label => newClaims = newClaims :+ c
-      }
-    }
-    return if (changed) Some(newClaims) else None()
-  }
-
   def addStrictPureMethodDecl(pf: State.ProofFun, sym: State.Value.Sym, invClaims: ISZ[State.Claim], reporter: Reporter): Unit = {
     pf.receiverTypeOpt match {
       case Some(rt) => addType(rt, reporter)
@@ -541,7 +488,7 @@ object Smt2 {
       s1 = s3.addClaim(State.Claim.Let.ProofFunApply(v3, pf, args))
       val claims = State.Claim.Imply(ISZ(
         State.Claim.And(ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)),
-        State.Claim.Let.Eq(v, v3)
+        State.Claim.Let.Def(v, v3)
       ))
       ecs = ecs :+ embeddedClaims(T, ISZ(claims), ISZ(), None(), HashSMap.empty)
     }
@@ -1481,6 +1428,7 @@ object Smt2 {
           case _: State.Claim.Let =>
           case _: State.Claim.Label =>
           case _: State.Claim.Prop =>
+          case _: State.Claim.Eq =>
         }
       }
     }
@@ -1807,6 +1755,7 @@ object Smt2 {
           return r
         case _: State.Claim.Label => return acc
         case _: State.Claim.Prop => return acc
+        case _: State.Claim.Eq => return acc
       }
     }
     val lids = collectLids(claims) -- declIds.keys
@@ -1827,6 +1776,7 @@ object Smt2 {
           case claim: State.Claim.Imply => syms = collectSyms(claim, syms); rest = rest :+ claim
           case claim: State.Claim.Label => rest = rest :+ claim
           case claim: State.Claim.Prop => rest = rest :+ claim
+          case claim: State.Claim.Eq => rest = rest :+ claim
         }
       }
       var body: ST =
@@ -1954,7 +1904,7 @@ object Smt2 {
         return currentLocalId(c)
       case c: State.Claim.Let.Id =>
         return localId(c)
-      case c: State.Claim.Let.Eq =>
+      case c: State.Claim.Let.Def =>
         return v2st(c.value)
       case c: State.Claim.Let.TypeTest =>
         return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2st(c.value)}) ${typeHierarchyId(c.tipe)})"
@@ -1973,6 +1923,7 @@ object Smt2 {
         val op: String = c.op match {
           case AST.Exp.BinaryOp.Eq3 => AST.Exp.BinaryOp.Eq
           case AST.Exp.BinaryOp.Ne3 => AST.Exp.BinaryOp.Ne
+          case Logika.exactEqOp => return st"(= ${v2st(c.left)} ${v2st(c.right)})"
           case _ => c.op
         }
         return if (Smt2.isSimpsOp(c)) v2ST(c.sym) else st"(${typeOpId(c.tipe, op)} ${v2st(c.left)} ${v2st(c.right)})"
@@ -2006,8 +1957,6 @@ object Smt2 {
           if (c.args.size == 1) v2st(c.args(0))
           else st"(${typeOpId(AST.Typed.Tuple(for (arg <- c.args) yield arg.tipe), c.id)} ${(for (arg <- c.args) yield v2st(arg), " ")})"
         return st"(select ${if (c.isLocal) currentLocalIdString(c.context, c.id) else currentNameIdString(c.context :+ c.id)} $args)"
-      case _: State.Claim.Let.IApply =>
-        halt("TODO") // TODO
       case _: State.Claim.Let.Random =>
         halt("Infeasible")
     }
@@ -2028,20 +1977,11 @@ object Smt2 {
               case _ =>
             }
         }
-        val rhs: ST = c match {
-          case c: State.Claim.Let.CurrentName =>
-            return Some(st"(= ${currentNameId(c)} ${v2st(c.sym)})")
-          case c: State.Claim.Let.Name =>
-            return Some(st"(= ${nameId(c)} ${v2st(c.sym)})")
-          case c: State.Claim.Let.CurrentId =>
-            return Some(st"(= ${currentLocalId(c)} ${v2st(c.sym)})")
-          case c: State.Claim.Let.Id =>
-            return Some(st"(= ${localId(c)} ${v2st(c.sym)})")
-          case _ => l2RhsST(c, v2st, lets, declIds)
-        }
-        return Some(st"(= ${v2st(c.sym)} $rhs)")
+        return Some(st"(= ${v2st(c.sym)} ${l2RhsST(c, v2st, lets, declIds)})")
       case c: State.Claim.Prop =>
         return Some(if (c.isPos) v2st(c.value) else st"(not ${v2st(c.value)})")
+      case c: State.Claim.Eq =>
+        return Some(st"(= ${v2st(c.v1)} ${v2st(c.v2)})")
       case _: State.Claim.Label =>
         return None()
       case c: State.Claim.If =>
@@ -2166,6 +2106,7 @@ object Smt2 {
     }
     c match {
       case _: State.Claim.Label => return ISZ()
+      case c: State.Claim.Eq => return ISZ()
       case c: State.Claim.Prop =>
         val vST = v2ST(c.value)
         return ISZ[(String, ST)](vST.render ~> st"(declare-const $vST B)")

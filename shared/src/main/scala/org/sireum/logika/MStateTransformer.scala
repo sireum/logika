@@ -149,6 +149,10 @@ object MStateTransformer {
 
   val PostResultStateClaimProp: MOption[State.Claim] = MNone()
 
+  val PreResultStateClaimEq: PreResult[State.Claim] = PreResult(T, MNone())
+
+  val PostResultStateClaimEq: MOption[State.Claim] = MNone()
+
   val PreResultStateClaimAnd: PreResult[State.Claim.Composite] = PreResult(T, MNone())
 
   val PostResultStateClaimAnd: MOption[State.Claim.Composite] = MNone()
@@ -205,9 +209,9 @@ object MStateTransformer {
 
   val PostResultStateClaimLetId: MOption[State.Claim.Let] = MNone()
 
-  val PreResultStateClaimLetEq: PreResult[State.Claim.Let] = PreResult(T, MNone())
+  val PreResultStateClaimLetDef: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
-  val PostResultStateClaimLetEq: MOption[State.Claim.Let] = MNone()
+  val PostResultStateClaimLetDef: MOption[State.Claim.Let] = MNone()
 
   val PreResultStateClaimLetTypeTest: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
@@ -256,10 +260,6 @@ object MStateTransformer {
   val PreResultStateClaimLetApply: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
   val PostResultStateClaimLetApply: MOption[State.Claim.Let] = MNone()
-
-  val PreResultStateClaimLetIApply: PreResult[State.Claim.Let] = PreResult(T, MNone())
-
-  val PostResultStateClaimLetIApply: MOption[State.Claim.Let] = MNone()
 
   val PreResultStateClaimLetTupleLit: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
@@ -478,6 +478,7 @@ import MStateTransformer._
     o match {
       case o: State.Claim.Label => return preStateClaimLabel(o)
       case o: State.Claim.Prop => return preStateClaimProp(o)
+      case o: State.Claim.Eq => return preStateClaimEq(o)
       case o: State.Claim.And =>
         val r: PreResult[State.Claim] = preStateClaimAnd(o) match {
          case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
@@ -569,8 +570,8 @@ import MStateTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
-      case o: State.Claim.Let.Eq =>
-        val r: PreResult[State.Claim] = preStateClaimLetEq(o) match {
+      case o: State.Claim.Let.Def =>
+        val r: PreResult[State.Claim] = preStateClaimLetDef(o) match {
          case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
@@ -646,13 +647,6 @@ import MStateTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
-      case o: State.Claim.Let.IApply =>
-        val r: PreResult[State.Claim] = preStateClaimLetIApply(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
-        }
-        return r
       case o: State.Claim.Let.TupleLit =>
         val r: PreResult[State.Claim] = preStateClaimLetTupleLit(o) match {
          case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
@@ -692,6 +686,10 @@ import MStateTransformer._
     return PreResultStateClaimProp
   }
 
+  def preStateClaimEq(o: State.Claim.Eq): PreResult[State.Claim] = {
+    return PreResultStateClaimEq
+  }
+
   def preStateClaimAnd(o: State.Claim.And): PreResult[State.Claim.Composite] = {
     return PreResultStateClaimAnd
   }
@@ -719,7 +717,7 @@ import MStateTransformer._
       case o: State.Claim.Let.Name => return preStateClaimLetName(o)
       case o: State.Claim.Let.CurrentId => return preStateClaimLetCurrentId(o)
       case o: State.Claim.Let.Id => return preStateClaimLetId(o)
-      case o: State.Claim.Let.Eq => return preStateClaimLetEq(o)
+      case o: State.Claim.Let.Def => return preStateClaimLetDef(o)
       case o: State.Claim.Let.TypeTest => return preStateClaimLetTypeTest(o)
       case o: State.Claim.Let.Quant => return preStateClaimLetQuant(o)
       case o: State.Claim.Let.Ite => return preStateClaimLetIte(o)
@@ -730,7 +728,6 @@ import MStateTransformer._
       case o: State.Claim.Let.FieldLookup => return preStateClaimLetFieldLookup(o)
       case o: State.Claim.Let.ProofFunApply => return preStateClaimLetProofFunApply(o)
       case o: State.Claim.Let.Apply => return preStateClaimLetApply(o)
-      case o: State.Claim.Let.IApply => return preStateClaimLetIApply(o)
       case o: State.Claim.Let.TupleLit => return preStateClaimLetTupleLit(o)
       case o: State.Claim.Let.And => return preStateClaimLetAnd(o)
       case o: State.Claim.Let.Or => return preStateClaimLetOr(o)
@@ -778,8 +775,8 @@ import MStateTransformer._
     return PreResultStateClaimLetId
   }
 
-  def preStateClaimLetEq(o: State.Claim.Let.Eq): PreResult[State.Claim.Let] = {
-    return PreResultStateClaimLetEq
+  def preStateClaimLetDef(o: State.Claim.Let.Def): PreResult[State.Claim.Let] = {
+    return PreResultStateClaimLetDef
   }
 
   def preStateClaimLetTypeTest(o: State.Claim.Let.TypeTest): PreResult[State.Claim.Let] = {
@@ -835,10 +832,6 @@ import MStateTransformer._
 
   def preStateClaimLetApply(o: State.Claim.Let.Apply): PreResult[State.Claim.Let] = {
     return PreResultStateClaimLetApply
-  }
-
-  def preStateClaimLetIApply(o: State.Claim.Let.IApply): PreResult[State.Claim.Let] = {
-    return PreResultStateClaimLetIApply
   }
 
   def preStateClaimLetTupleLit(o: State.Claim.Let.TupleLit): PreResult[State.Claim.Let] = {
@@ -1052,6 +1045,7 @@ import MStateTransformer._
     o match {
       case o: State.Claim.Label => return postStateClaimLabel(o)
       case o: State.Claim.Prop => return postStateClaimProp(o)
+      case o: State.Claim.Eq => return postStateClaimEq(o)
       case o: State.Claim.And =>
         val r: MOption[State.Claim] = postStateClaimAnd(o) match {
          case MSome(result: State.Claim) => MSome[State.Claim](result)
@@ -1143,8 +1137,8 @@ import MStateTransformer._
          case _ => MNone[State.Claim]()
         }
         return r
-      case o: State.Claim.Let.Eq =>
-        val r: MOption[State.Claim] = postStateClaimLetEq(o) match {
+      case o: State.Claim.Let.Def =>
+        val r: MOption[State.Claim] = postStateClaimLetDef(o) match {
          case MSome(result: State.Claim) => MSome[State.Claim](result)
          case MSome(_) => halt("Can only produce object of type State.Claim")
          case _ => MNone[State.Claim]()
@@ -1220,13 +1214,6 @@ import MStateTransformer._
          case _ => MNone[State.Claim]()
         }
         return r
-      case o: State.Claim.Let.IApply =>
-        val r: MOption[State.Claim] = postStateClaimLetIApply(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
-         case _ => MNone[State.Claim]()
-        }
-        return r
       case o: State.Claim.Let.TupleLit =>
         val r: MOption[State.Claim] = postStateClaimLetTupleLit(o) match {
          case MSome(result: State.Claim) => MSome[State.Claim](result)
@@ -1266,6 +1253,10 @@ import MStateTransformer._
     return PostResultStateClaimProp
   }
 
+  def postStateClaimEq(o: State.Claim.Eq): MOption[State.Claim] = {
+    return PostResultStateClaimEq
+  }
+
   def postStateClaimAnd(o: State.Claim.And): MOption[State.Claim.Composite] = {
     return PostResultStateClaimAnd
   }
@@ -1293,7 +1284,7 @@ import MStateTransformer._
       case o: State.Claim.Let.Name => return postStateClaimLetName(o)
       case o: State.Claim.Let.CurrentId => return postStateClaimLetCurrentId(o)
       case o: State.Claim.Let.Id => return postStateClaimLetId(o)
-      case o: State.Claim.Let.Eq => return postStateClaimLetEq(o)
+      case o: State.Claim.Let.Def => return postStateClaimLetDef(o)
       case o: State.Claim.Let.TypeTest => return postStateClaimLetTypeTest(o)
       case o: State.Claim.Let.Quant => return postStateClaimLetQuant(o)
       case o: State.Claim.Let.Ite => return postStateClaimLetIte(o)
@@ -1304,7 +1295,6 @@ import MStateTransformer._
       case o: State.Claim.Let.FieldLookup => return postStateClaimLetFieldLookup(o)
       case o: State.Claim.Let.ProofFunApply => return postStateClaimLetProofFunApply(o)
       case o: State.Claim.Let.Apply => return postStateClaimLetApply(o)
-      case o: State.Claim.Let.IApply => return postStateClaimLetIApply(o)
       case o: State.Claim.Let.TupleLit => return postStateClaimLetTupleLit(o)
       case o: State.Claim.Let.And => return postStateClaimLetAnd(o)
       case o: State.Claim.Let.Or => return postStateClaimLetOr(o)
@@ -1352,8 +1342,8 @@ import MStateTransformer._
     return PostResultStateClaimLetId
   }
 
-  def postStateClaimLetEq(o: State.Claim.Let.Eq): MOption[State.Claim.Let] = {
-    return PostResultStateClaimLetEq
+  def postStateClaimLetDef(o: State.Claim.Let.Def): MOption[State.Claim.Let] = {
+    return PostResultStateClaimLetDef
   }
 
   def postStateClaimLetTypeTest(o: State.Claim.Let.TypeTest): MOption[State.Claim.Let] = {
@@ -1409,10 +1399,6 @@ import MStateTransformer._
 
   def postStateClaimLetApply(o: State.Claim.Let.Apply): MOption[State.Claim.Let] = {
     return PostResultStateClaimLetApply
-  }
-
-  def postStateClaimLetIApply(o: State.Claim.Let.IApply): MOption[State.Claim.Let] = {
-    return PostResultStateClaimLetIApply
   }
 
   def postStateClaimLetTupleLit(o: State.Claim.Let.TupleLit): MOption[State.Claim.Let] = {
@@ -1704,6 +1690,13 @@ import MStateTransformer._
             MSome(o2(value = r0.getOrElse(o2.value)))
           else
             MNone()
+        case o2: State.Claim.Eq =>
+          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.v1)
+          val r1: MOption[State.Value.Sym] = transformStateValueSym(o2.v2)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(v1 = r0.getOrElse(o2.v1), v2 = r1.getOrElse(o2.v2)))
+          else
+            MNone()
         case o2: State.Claim.And =>
           val r0: MOption[IS[Z, State.Claim]] = transformISZ(o2.claims, transformStateClaim _)
           if (hasChanged || r0.nonEmpty)
@@ -1791,7 +1784,7 @@ import MStateTransformer._
             MSome(o2(sym = r0.getOrElse(o2.sym)))
           else
             MNone()
-        case o2: State.Claim.Let.Eq =>
+        case o2: State.Claim.Let.Def =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           val r1: MOption[State.Value] = transformStateValue(o2.value)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
@@ -1873,14 +1866,6 @@ import MStateTransformer._
           val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
             MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Let.IApply =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.o)
-          val r2: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), o = r1.getOrElse(o2.o), args = r2.getOrElse(o2.args)))
           else
             MNone()
         case o2: State.Claim.Let.TupleLit =>
@@ -1997,7 +1982,7 @@ import MStateTransformer._
             MSome(o2(sym = r0.getOrElse(o2.sym)))
           else
             MNone()
-        case o2: State.Claim.Let.Eq =>
+        case o2: State.Claim.Let.Def =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           val r1: MOption[State.Value] = transformStateValue(o2.value)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
@@ -2079,14 +2064,6 @@ import MStateTransformer._
           val r1: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
             MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
-          else
-            MNone()
-        case o2: State.Claim.Let.IApply =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          val r1: MOption[State.Value] = transformStateValue(o2.o)
-          val r2: MOption[IS[Z, State.Value]] = transformISZ(o2.args, transformStateValue _)
-          if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym), o = r1.getOrElse(o2.o), args = r2.getOrElse(o2.args)))
           else
             MNone()
         case o2: State.Claim.Let.TupleLit =>

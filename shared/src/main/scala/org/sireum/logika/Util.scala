@@ -481,35 +481,107 @@ object Util {
 
   @record class LocalVarIdFinder(val res: AST.ResolvedInfo.LocalVar,
                                  val num: Z,
-                                 val lines: ISZ[Z],
+                                 var numMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
                                  var rOpt: Option[State.Claim.Let.Id]) extends MStateTransformer {
-    override def postStateClaimLetId(o: State.Claim.Let.Id): MOption[State.Claim.Let] = {
-      if (rOpt.isEmpty && (num < 0 || o.num === num) && o.id === res.id && o.context === res.context &&
-        lines === (for (pos <- o.poss) yield pos.beginLine)) {
+    override def preStateClaimLetId(o: State.Claim.Let.Id): MStateTransformer.PreResult[State.Claim.Let] = {
+      val key = (o.context, o.id)
+      val n: Z = {
+        var map = numMap.get(key).getOrElse(HashMap.empty)
+        val key2 = (o.num, o.poss)
+        map.get(key2) match {
+          case Some(m) => m
+          case _ =>
+            map = map + key2 ~> map.size
+            numMap = numMap + key ~> map
+            map.size - 1
+        }
+      }
+      if ((n === num) && rOpt.isEmpty && o.id === res.id && o.context === res.context) {
         rOpt = Some(o)
       }
-      return MNone()
+      return MStateTransformer.PreResultStateClaimLetId
     }
 
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
-      return MStateTransformer.PreResult(rOpt.isEmpty, MNone())
+      if (rOpt.isEmpty) {
+        return super.preStateClaim(o)
+      }
+      return MStateTransformer.PreResult(F, MNone())
     }
   }
 
   @record class VarNameFinder(val res: AST.ResolvedInfo.Var,
-                              val lines: ISZ[Z],
+                              val num: Z,
+                              var numMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]],
                               var rOpt: Option[State.Claim.Let.Name]) extends MStateTransformer {
-    override def postStateClaimLetName(o: State.Claim.Let.Name): MOption[State.Claim.Let] = {
-      if (rOpt.isEmpty && o.ids === (res.owner :+ res.id) && lines === (for (pos <- o.poss) yield pos.beginLine)) {
+    override def preStateClaimLetName(o: State.Claim.Let.Name): MStateTransformer.PreResult[State.Claim.Let] = {
+      val key = o.ids
+      val n: Z = {
+        var map = numMap.get(key).getOrElse(HashMap.empty)
+        val key2 = (o.num, o.poss)
+        map.get(key2) match {
+          case Some(m) => m
+          case _ =>
+            map = map + key2 ~> map.size
+            numMap = numMap + key ~> map
+            map.size - 1
+        }
+      }
+      if ((n === num) && rOpt.isEmpty && o.ids === (res.owner :+ res.id)) {
         rOpt = Some(o)
       }
-      return MNone()
+      return MStateTransformer.PreResultStateClaimLetName
     }
 
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
-      return MStateTransformer.PreResult(rOpt.isEmpty, MNone())
+      if (rOpt.isEmpty) {
+        return super.preStateClaim(o)
+      }
+      return MStateTransformer.PreResult(F, MNone())
     }
   }
+
+  @record class LetEqNumMapCollector(var letMap: HashMap[Z, HashSet[State.Claim.Let]],
+                                     var eqMap: HashMap[Z, State.Claim.Eq],
+                                     var lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
+                                     var vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]]) extends MStateTransformer {
+    override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
+      o match {
+        case o: State.Claim.Eq =>
+          val key = o.v2.num
+          assert(!eqMap.contains(key))
+          eqMap = eqMap + key ~> o
+        case o: State.Claim.Let.Id =>
+          val key = (o.context, o.id)
+          var map = lNumMap.get(key).getOrElse(HashMap.empty)
+          val key2 = (o.num, o.poss)
+          map.get(key2) match {
+            case Some(_) =>
+            case _ =>
+              map = map + key2 ~> map.size
+              lNumMap = lNumMap + key ~> map
+          }
+          letMap = letMap + o.sym.num ~> (letMap.get(o.sym.num).getOrElse(HashSet.empty) + o)
+        case o: State.Claim.Let.Name =>
+          val key = o.ids
+          var map = vNumMap.get(key).getOrElse(HashMap.empty)
+          val key2 = (o.num, o.poss)
+          map.get(key2) match {
+            case Some(_) =>
+            case _ =>
+              map = map + key2 ~> map.size
+              vNumMap = vNumMap + key ~> map
+          }
+          letMap = letMap + o.sym.num ~> (letMap.get(o.sym.num).getOrElse(HashSet.empty) + o)
+        case o: State.Claim.Let =>
+          val key = o.sym.num
+          letMap = letMap + key ~> (letMap.get(key).getOrElse(HashSet.empty) + o)
+        case _ =>
+      }
+      return MStateTransformer.PreResultStateClaimProp
+    }
+  }
+
 
   val builtInTypeNames: HashSet[ISZ[String]] = HashSet ++ ISZ(
     AST.Typed.bName, AST.Typed.zName, AST.Typed.cName, AST.Typed.stringName, AST.Typed.f32Name, AST.Typed.f64Name,
@@ -1336,35 +1408,25 @@ object Util {
     return s4
   }
 
-  @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy): HashSSet[AST.Exp] = {
-    @strictpure def isLetNameId(let: State.Claim.Let): B = let match {
-      case _: State.Claim.Let.Id => T
-      case _: State.Claim.Let.CurrentId => T
-      case _: State.Claim.Let.Name => T
-      case _: State.Claim.Let.CurrentName => T
-      case _ => F
+  @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): Option[HashSSet[AST.Exp]] = {
+
+    var ok = T
+
+    def TODO_Type(): AST.Type = {
+      ok = F
+      return AST.Type.Tuple(ISZ(), AST.TypedAttr(None(), None()))
+    }
+
+    def TODO_Exp(): AST.Exp = {
+      ok = F
+      return AST.Exp.LitZ(0, AST.Attr(None()))
     }
 
     val posOpt: Option[Position] = Some(pos)
-    val letsMap: HashMap[Z, ISZ[State.Claim.Let]] = {
-      var m = HashMap.empty[Z, ISZ[State.Claim.Let]]
-      for (p <- Util.collectLetClaims(T, claims)._1.entries) {
-        val (num, lets) = p
-        if (lets.size > 1) {
-          var newLets = ISZ[State.Claim.Let]()
-          for (let <- lets if !isLetNameId(let)) {
-            newLets = newLets :+ let
-          }
-          assert(newLets.nonEmpty)
-          m = m + num ~> newLets
-        } else {
-          m = m + num ~> lets
-        }
-      }
-      m
+    val collector = LetEqNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty, HashMap.empty)
+    for (claim <- claims) {
+      collector.transformStateClaim(claim)
     }
-    var nameMap = HashSet.empty[String]
-
     @pure def nameResTypeOpts(ids: ISZ[String]): (Option[AST.ResolvedInfo], Option[AST.Typed]) = {
       th.nameMap.get(ids).get match {
         case info: Info.Object => return (Some(AST.ResolvedInfo.Object(ids)),
@@ -1375,27 +1437,29 @@ object Util {
           Some(AST.Typed.Enum(ids)))
         case info: Info.EnumElement => return (th.nameMap.get(info.owner).get.asInstanceOf[Info.Enum].elements.get(info.id),
           Some(AST.Typed.Name(ids, ISZ())))
+        case info: Info.Var => return (info.resOpt, info.typedOpt)
+        case info: Info.SpecVar => return (info.resOpt, info.typedOpt)
         case info => halt(s"Infeasible: $info")
       }
     }
 
-    def cToBinaryExp(cs: ISZ[State.Claim], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
+    @pure def cToBinaryExp(cs: ISZ[State.Claim], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
       if (cs.isEmpty) {
         return dflt
       }
       var r = toExp(cs(0))
-      for (i <- 1 to cs.size) {
+      for (i <- 1 until cs.size) {
         r = AST.Exp.Binary(r, op, toExp(cs(i)), AST.ResolvedAttr(posOpt, Some(res), tOpt))
       }
       return r
     }
 
-    def vToBinaryExp(vs: ISZ[State.Value], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
+    @pure def vToBinaryExp(vs: ISZ[State.Value], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
       if (vs.isEmpty) {
         return dflt
       }
       var r = valueToExp(vs(0))
-      for (i <- 1 to vs.size) {
+      for (i <- 1 until vs.size) {
         r = AST.Exp.Binary(r, op, valueToExp(vs(i)), AST.ResolvedAttr(posOpt, Some(res), tOpt))
       }
       return r
@@ -1416,7 +1480,7 @@ object Util {
     }
 
     def typedToType(t: AST.Typed): AST.Type = {
-      halt("TODO")
+      return TODO_Type()
     }
 
     def letToExp(let: State.Claim.Let): AST.Exp = {
@@ -1425,47 +1489,54 @@ object Util {
       val symPosOpt = Option.some(symPos)
       let match {
         case let: State.Claim.Let.CurrentId =>
-          assert(let.context === context)
           return AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
             symPosOpt,
-            Some(AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+            Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
             Some(sym.tipe)))
         case let: State.Claim.Let.CurrentName =>
           return nameToExp(let.ids, symPos)
         case let: State.Claim.Let.Id =>
-          if (let.context === context) {
+          val n = collector.lNumMap.get((let.context, let.id)).get.get((let.num, let.poss)).get
+          val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
+            (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
+          } else {
+            ISZ()
+          }
+          val attr = AST.Attr(symPosOpt)
+          if (let.context === context || let.context.isEmpty) {
             return AST.Exp.At(
-              AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
+              None(),
+              AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(
                 symPosOpt,
-                Some(AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+                Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
                 Some(sym.tipe))),
-              for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos))),
-              Some(typedToType(sym.tipe)),
-              AST.Attr(symPosOpt)
+              AST.Exp.LitZ(n, attr),
+              linesFresh,
+              attr
             )
           } else {
-            val name: String = {
-              val n = st"${(let.context :+ let.id, ".")}".render
-              if (nameMap.contains(n)) {
-                s"$n#${let.num}"
-              } else {
-                nameMap = nameMap + n
-                n
-              }
-            }
             return AST.Exp.At(
-              AST.Exp.LitString(name, AST.Attr(symPosOpt)),
-              for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos))),
               Some(typedToType(sym.tipe)),
-              AST.Attr(symPosOpt)
+              AST.Exp.LitString(st"${(let.context :+ let.id, ".")}".render, AST.Attr(symPosOpt)),
+              AST.Exp.LitZ(n, attr),
+              linesFresh,
+              attr
             )
           }
         case let: State.Claim.Let.Name =>
+          val n = collector.vNumMap.get(let.ids).get.get((let.num, let.poss)).get
+          val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
+            (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
+          } else {
+            ISZ()
+          }
+          val attr = AST.Attr(symPosOpt)
           return AST.Exp.At(
-            nameToExp(let.ids, symPos),
-            for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos))),
             None(),
-            AST.Attr(symPosOpt)
+            nameToExp(let.ids, symPos),
+            AST.Exp.LitZ(n, attr),
+            linesFresh,
+            attr
           )
         case let: State.Claim.Let.Unary =>
           val (op, kind): (AST.Exp.UnaryOp.Type, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
@@ -1481,40 +1552,39 @@ object Util {
             Some(sym.tipe)
           ))
         case let: State.Claim.Let.Binary =>
-          val kind: AST.ResolvedInfo.BuiltIn.Kind.Type = let.op match {
-            case string"+" => AST.ResolvedInfo.BuiltIn.Kind.BinaryAdd
-            case string"-" => AST.ResolvedInfo.BuiltIn.Kind.BinarySub
-            case string"*" => AST.ResolvedInfo.BuiltIn.Kind.BinaryMul
-            case string"/" => AST.ResolvedInfo.BuiltIn.Kind.BinaryDiv
-            case string"%" => AST.ResolvedInfo.BuiltIn.Kind.BinaryRem
-            case string"&" => AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd
-            case string"|" => AST.ResolvedInfo.BuiltIn.Kind.BinaryOr
-            case string"|^" => AST.ResolvedInfo.BuiltIn.Kind.BinaryXor
-            case string"->:" => AST.ResolvedInfo.BuiltIn.Kind.BinaryImply
-            case string"==" => AST.ResolvedInfo.BuiltIn.Kind.BinaryEq
-            case string"~~" => AST.ResolvedInfo.BuiltIn.Kind.BinaryFpEq
-            case string"!=" => AST.ResolvedInfo.BuiltIn.Kind.BinaryNe
-            case string"!~" => AST.ResolvedInfo.BuiltIn.Kind.BinaryFpNe
-            case string"<" => AST.ResolvedInfo.BuiltIn.Kind.BinaryLt
-            case string"<=" => AST.ResolvedInfo.BuiltIn.Kind.BinaryLe
-            case string">" => AST.ResolvedInfo.BuiltIn.Kind.BinaryGt
-            case string">=" => AST.ResolvedInfo.BuiltIn.Kind.BinaryGe
-            case string"<<" => AST.ResolvedInfo.BuiltIn.Kind.BinaryShl
-            case string">>" => AST.ResolvedInfo.BuiltIn.Kind.BinaryShr
-            case string">>>" => AST.ResolvedInfo.BuiltIn.Kind.BinaryUshr
+          val (op, kind): (String, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
+            case AST.Exp.BinaryOp.Add => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryAdd)
+            case AST.Exp.BinaryOp.Sub => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinarySub)
+            case AST.Exp.BinaryOp.Mul => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryMul)
+            case AST.Exp.BinaryOp.Div => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryDiv)
+            case AST.Exp.BinaryOp.Rem => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryRem)
+            case AST.Exp.BinaryOp.And => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd)
+            case AST.Exp.BinaryOp.Or => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)
+            case AST.Exp.BinaryOp.Xor => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryXor)
+            case AST.Exp.BinaryOp.Imply => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
+            case AST.Exp.BinaryOp.Eq => (AST.Exp.BinaryOp.Eq3, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
+            case AST.Exp.BinaryOp.Eq3 => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
+            case AST.Exp.BinaryOp.FpEq => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryFpEq)
+            case AST.Exp.BinaryOp.Ne => (AST.Exp.BinaryOp.Ne3, AST.ResolvedInfo.BuiltIn.Kind.BinaryNe)
+            case AST.Exp.BinaryOp.Ne3 => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryNe)
+            case AST.Exp.BinaryOp.FpNe => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryFpNe)
+            case AST.Exp.BinaryOp.Lt => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryLt)
+            case AST.Exp.BinaryOp.Le => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryLe)
+            case AST.Exp.BinaryOp.Gt => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryGt)
+            case AST.Exp.BinaryOp.Ge => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryGe)
+            case AST.Exp.BinaryOp.Shl => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryShl)
+            case AST.Exp.BinaryOp.Shr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryShr)
+            case AST.Exp.BinaryOp.Ushr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryUshr)
+            case Logika.exactEqOp => (AST.Exp.BinaryOp.Eq3, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
             case _ => halt(s"Infeasible: ${let.op}")
           }
-          return AST.Exp.Binary(valueToExp(let.left), let.op, valueToExp(let.right), AST.ResolvedAttr(
+          return AST.Exp.Binary(valueToExp(let.left), op, valueToExp(let.right), AST.ResolvedAttr(
             symPosOpt,
             Some(AST.ResolvedInfo.BuiltIn(kind)),
             Some(sym.tipe)
           ))
-        case let: State.Claim.Let.Eq =>
-          return AST.Exp.Binary(valueToExp(sym), "==", valueToExp(let.value), AST.ResolvedAttr(
-            symPosOpt,
-            Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)),
-            Some(sym.tipe)
-          ))
+        case let: State.Claim.Let.Def =>
+          return valueToExp(let.value)
         case let: State.Claim.Let.And =>
           return vToBinaryExp(let.args, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.And,
             AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
@@ -1556,9 +1626,9 @@ object Util {
           )
         case let: State.Claim.Let.SeqLit =>
           val t = sym.tipe.asInstanceOf[AST.Typed.Name]
-          halt("TODO")
+          return TODO_Exp()
         case let: State.Claim.Let.Quant =>
-          halt("TODO")
+          return TODO_Exp()
         case let: State.Claim.Let.FieldLookup =>
           val info = th.typeMap.get(let.adt.tipe.asInstanceOf[AST.Typed.Name].ids).get.asInstanceOf[TypeInfo.Adt].vars.get(let.id).get
           return AST.Exp.Select(
@@ -1572,13 +1642,13 @@ object Util {
             )
           )
         case let: State.Claim.Let.FieldStore =>
-          halt("TODO")
+          return TODO_Exp()
         case let: State.Claim.Let.SeqStore =>
-          halt("TODO")
+          return TODO_Exp()
         case let: State.Claim.Let.SeqLookup =>
-          halt("TODO")
+          return TODO_Exp()
         case let: State.Claim.Let.SeqInBound =>
-          halt("TODO")
+          return TODO_Exp()
         case let: State.Claim.Let.TypeTest =>
           return AST.Exp.Select(
             Some(valueToExp(let.value)),
@@ -1591,13 +1661,11 @@ object Util {
             )
           )
         case let: State.Claim.Let.ProofFunApply =>
-          halt("TODO")
+          return TODO_Exp()
         case let: State.Claim.Let.Apply =>
-          halt("TODO")
+          return TODO_Exp()
         case let: State.Claim.Let.Random =>
           return AST.Exp.Sym(sym.num, AST.TypedAttr(symPosOpt, Some(sym.tipe)))
-        case let: State.Claim.Let.IApply =>
-          halt(s"Infeasible: $let")
       }
 
     }
@@ -1607,9 +1675,13 @@ object Util {
 
       value match {
         case value: State.Value.Sym =>
-          letsMap.get(value.num) match {
-            case Some(lets) if lets.size === 1 => return letToExp(lets(0))
-            case _ => return AST.Exp.Sym(value.num, AST.TypedAttr(Some(value.pos), Some(value.tipe)))
+          collector.letMap.get(value.num) match {
+            case Some(lets) if lets.size === 1 => return letToExp(lets.elements(0))
+            case _ =>
+              collector.eqMap.get(value.num) match {
+                case Some(eq) => return valueToExp(eq.v1)
+                case _ => return AST.Exp.Sym(value.num, AST.TypedAttr(Some(value.pos), Some(value.tipe)))
+              }
           }
         case value: State.Value.B => return AST.Exp.LitB(value.value, AST.Attr(Some(value.pos)))
         case value: State.Value.Z => return AST.Exp.LitZ(value.value, AST.Attr(Some(value.pos)))
@@ -1689,28 +1761,35 @@ object Util {
         case claim: State.Claim.If =>
           return AST.Exp.If(valueToExp(claim.cond), toExp(State.Claim.And(claim.tClaims)), toExp(State.Claim.And(claim.fClaims)),
             AST.TypedAttr(posOpt, AST.Typed.bOpt))
+        case claim: State.Claim.Eq =>
+          return AST.Exp.Binary(valueToExp(claim.v1), "===", valueToExp(claim.v2), AST.ResolvedAttr(
+            posOpt,
+            Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)),
+            Some(claim.v1.tipe)
+          ))
         case claim: State.Claim.Let => return letToExp(claim)
         case claim => halt(s"Infeasible: $claim")
       }
     }
 
     var r = HashSSet.empty[AST.Exp]
-    for (claim <- claims) {
+    for (claim <- claims if ok) {
       claim match {
-        case claim: State.Claim.And => r = r + toExp(claim)
-        case claim: State.Claim.Or => r = r + toExp(claim)
-        case claim: State.Claim.Imply => r = r + toExp(claim)
-        case claim: State.Claim.Prop => r = r + toExp(claim)
-        case claim: State.Claim.If => r = r + toExp(claim)
-        case claim: State.Claim.Let.CurrentId => r = r + toExp(claim)
-        case claim: State.Claim.Let.CurrentName => r = r + toExp(claim)
-        case claim: State.Claim.Let.Id => r = r + toExp(claim)
-        case claim: State.Claim.Let.Name => r = r + toExp(claim)
+        case claim: State.Claim.And => r = r + AST.Util.normalizeExp(toExp(claim))
+        case claim: State.Claim.Or => r = r + AST.Util.normalizeExp(toExp(claim))
+        case claim: State.Claim.Imply => r = r + AST.Util.normalizeExp(toExp(claim))
+        case claim: State.Claim.Prop => r = r + AST.Util.normalizeExp(toExp(claim))
+        case claim: State.Claim.If => r = r + AST.Util.normalizeExp(toExp(claim))
+        case claim: State.Claim.Eq =>
+          collector.letMap.get(claim.v2.num) match {
+            case Some(lets) if lets.size > 1 =>
+            case _ => r = r + AST.Util.normalizeExp(toExp(claim))
+          }
         case _: State.Claim.Let =>
         case _: State.Claim.Label =>
       }
     }
-    return r
+    return if (ok) Some(r) else None()
   }
 
 }

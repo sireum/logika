@@ -365,6 +365,19 @@ object State {
       }
     }
 
+    @datatype class Eq(val v1: Value.Sym, val v2: Value.Sym) extends Claim {
+      @pure override def toRawST: ST = {
+        return st"${v1.toRawST} ≜ ${v2.toRawST}"
+      }
+
+      override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
+        claimSTs.add(st"${v1.toST(numMap, defs)} === ${v2.toST(numMap, defs)}")
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return ISZ(v1.tipe, v2.tipe)
+      }
+    }
 
     @datatype class And(val claims: ISZ[Claim]) extends Composite {
       @pure def toRawST: ST = {
@@ -687,7 +700,7 @@ object State {
         }
       }
 
-      @datatype class Eq(val sym: Value.Sym, val value: Value) extends Let {
+      @datatype class Def(val sym: Value.Sym, val value: Value) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${value.toRawST}"
         }
@@ -698,7 +711,7 @@ object State {
 
         override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
           if (defs.get(sym.num).get.size > 1) {
-            claimSTs.add(st"${sym.toRawST} ≜ ${value.toST(numMap, defs)}")
+            claimSTs.add(st"${sym.toRawST} === ${value.toST(numMap, defs)}")
           }
         }
       }
@@ -797,7 +810,13 @@ object State {
 
       @datatype class Binary(val sym: Value.Sym, val left: Value, val op: String, val right: Value, val tipe: AST.Typed) extends Let {
         @pure override def toRawST: ST = {
-          return st"${sym.toRawST} ≜ ${left.toRawST} $op ${right.toRawST}"
+          val opString: String = op match {
+            case AST.Exp.BinaryOp.Eq => AST.Exp.BinaryOp.Eq3
+            case AST.Exp.BinaryOp.Ne => AST.Exp.BinaryOp.Ne3
+            case Logika.exactEqOp => AST.Exp.BinaryOp.Eq3
+            case _ => op
+          }
+          return st"${sym.toRawST} ≜ ${left.toRawST} $opString ${right.toRawST}"
         }
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
@@ -829,7 +848,13 @@ object State {
           }
           val leftST: ST = if (leftParen) st"(${left.toST(numMap, defs)})" else st"${left.toST(numMap, defs)}"
           val rightST: ST = if (rightParen) st"(${right.toST(numMap, defs)})" else st"${right.toST(numMap, defs)}"
-          return Some(st"$leftST $op $rightST")
+          val opString: String = op match {
+            case AST.Exp.BinaryOp.Eq => AST.Exp.BinaryOp.Eq3
+            case AST.Exp.BinaryOp.Ne => AST.Exp.BinaryOp.Ne3
+            case Logika.exactEqOp => AST.Exp.BinaryOp.Eq3
+            case _ => op
+          }
+          return Some(st"$leftST $opString $rightST")
         }
       }
 
@@ -904,20 +929,6 @@ object State {
 
         @pure override def funs: ISZ[Fun] = {
           return ISZ(OFun(name))
-        }
-      }
-
-      @datatype class IApply(val sym: Value.Sym, val o: Value, val oTipe: AST.Typed.Name, val id: String, val args: ISZ[Value]) extends Let {
-        @pure override def toRawST: ST = {
-          return st"${sym.toRawST} ≜ ${o.toRawST}.$id(${(for (arg <- args) yield arg.toRawST, ", ")})"
-        }
-
-        override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
-          return Some(st"${o.toST(numMap, defs)}.$id(${(for (arg <- args) yield arg.toST(numMap, defs), ", ")})")
-        }
-
-        @pure override def funs: ISZ[Fun] = {
-          return ISZ(IFun(oTipe, id))
         }
       }
 
