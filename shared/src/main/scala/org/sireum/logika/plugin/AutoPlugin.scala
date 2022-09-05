@@ -116,20 +116,22 @@ import org.sireum.logika.Logika.Reporter
           if (id === "Premise") {
             org.sireum.logika.Util.claimsToExps(pos, logika.context.methodName, state.claims, logika.th, T) match {
               case Some(pathConditions) =>
-                if (pathConditions.contains(claimNorm)) {
+                val set = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield e)
+                val normSet = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield AST.Util.normalizeExp(e))
+                if (normSet.contains(claimNorm)) {
                   val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
                   val (status, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
                   reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
                     st"""Accepted because the stated claim is in the path conditions:
                         |{
-                        |  ${(for (e <- pathConditions.elements) yield e.prettyST, ";\n")}
+                        |  ${(for (e <- set.elements) yield e.prettyST, ";\n")}
                         |}""".render)
                   return Plugin.Result(status, nextFresh, claims)
                 } else {
                   reporter.error(posOpt, Logika.kind,
                     st"""The stated claim has not been proven before nor is a premise in:
                         |{
-                        |  ${(for (e <- pathConditions.elements) yield e.prettyST, ";\n")}
+                        |  ${(for (e <- set.elements) yield e.prettyST, ";\n")}
                         |}""".render)
                   return Plugin.Result(F, state.nextFresh, state.claims)
                 }

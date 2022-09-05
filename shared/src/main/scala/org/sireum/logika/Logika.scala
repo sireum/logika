@@ -4106,7 +4106,7 @@ import Util._
           State.Claim.claimsRawSTs(state.claims)
         } else {
           Util.claimsToExps(posOpt.get, context.methodName, state.claims, th, T) match {
-            case Some(es) => for (e <- es.elements) yield e.prettyST
+            case Some(es) => for (e <- (HashSSet.empty[AST.Exp] ++ es).elements) yield e.prettyST
             case _ => State.Claim.claimsSTs(state.claims, ClaimDefs.empty)
           }
         }
@@ -4115,8 +4115,8 @@ import Util._
       } else {
         reporter.info(posOpt, Logika.kind,
           st"""Path conditions = {
-              |      ${(sts, ",\n")}
-              |    }""".
+              |  ${(sts, ",\n")}
+              |}""".
             render
         )
       }

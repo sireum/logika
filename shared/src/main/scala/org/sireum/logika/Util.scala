@@ -1408,14 +1408,9 @@ object Util {
     return s4
   }
 
-  @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): Option[HashSSet[AST.Exp]] = {
+  @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): Option[ISZ[AST.Exp]] = {
 
     var ok = T
-
-    def TODO_Type(): AST.Type = {
-      ok = F
-      return AST.Type.Tuple(ISZ(), AST.TypedAttr(None(), None()))
-    }
 
     def TODO_Exp(): AST.Exp = {
       ok = F
@@ -1469,18 +1464,48 @@ object Util {
       val pOpt: Option[Position] = Some(p)
       val first = ids(0)
       val firstResTypedOpts = nameResTypeOpts(ISZ(first))
-      var r: AST.Exp = AST.Exp.Ident(AST.Id(first, AST.Attr(pOpt)),
+      val attr = AST.Attr(pOpt)
+      var r: AST.Exp = AST.Exp.Ident(AST.Id(first, attr),
         AST.ResolvedAttr(pOpt, firstResTypedOpts._1, firstResTypedOpts._2))
       for (i <- 1 until ids.size) {
-        val iResTypedOpts = nameResTypeOpts(for (j <- 0 to i) yield ids(j))
-        r = AST.Exp.Select(Some(r), AST.Id(ids(i), AST.Attr(pOpt)), ISZ(),
-          AST.ResolvedAttr(pOpt, iResTypedOpts._1, iResTypedOpts._2))
+        val name: ISZ[String] = for (j <- 0 to i) yield ids(j)
+        val (rOpt, tOpt) = nameResTypeOpts(name)
+        val resolvedAttr = AST.ResolvedAttr(pOpt, rOpt, tOpt)
+        name match {
+          case ISZ("org", "sireum", _*) if i === 2 => r = AST.Exp.Ident(AST.Id(ids(i), attr), resolvedAttr)
+          case _ => r = AST.Exp.Select(Some(r), AST.Id(ids(i), attr), ISZ(), resolvedAttr)
+        }
       }
       return r
     }
 
     def typedToType(t: AST.Typed): AST.Type = {
-      return TODO_Type()
+      val attr = AST.Attr(posOpt)
+      val typedAttr = AST.TypedAttr(Some(pos), Some(t))
+
+      @pure def toName(ids: ISZ[String]): AST.Name = {
+        ids match {
+          case ISZ("org", "sireum", _*) if ids.size > 2 =>
+            return AST.Name(for (i <- 2 until ids.size) yield AST.Id(ids(i), attr), attr)
+          case _ => return AST.Name(for (id <- ids) yield AST.Id(id, attr), attr)
+        }
+      }
+      t match {
+        case t: AST.Typed.Name => return AST.Type.Named(toName(t.ids),
+          for (arg <- t.args) yield typedToType(arg), typedAttr)
+        case t: AST.Typed.TypeVar => return AST.Type.Named(toName(ISZ(t.id)), ISZ(), typedAttr)
+        case t: AST.Typed.Tuple => return AST.Type.Tuple(for (arg <- t.args) yield typedToType(arg), typedAttr)
+        case t: AST.Typed.Enum => return AST.Type.Named(toName(t.name), ISZ(), typedAttr)
+        case t: AST.Typed.Fun => return AST.Type.Fun(t.isPure, t.isByName, for (arg <- t.args) yield typedToType(arg),
+          typedToType(t.ret), typedAttr)
+        case t: AST.Typed.Method => halt(s"Infeasible: $t")
+        case t: AST.Typed.Object => halt(s"Infeasible: $t")
+        case t: AST.Typed.Methods => halt(s"Infeasible: $t")
+        case t: AST.Typed.Package => halt(s"Infeasible: $t")
+        case t: AST.Typed.Fact =>  halt(s"Infeasible: $t")
+        case t: AST.Typed.Theorem => halt(s"Infeasible: $t")
+        case t: AST.Typed.Inv => halt(s"Infeasible: $t")
+      }
     }
 
     def letToExp(let: State.Claim.Let): AST.Exp = {
@@ -1772,18 +1797,18 @@ object Util {
       }
     }
 
-    var r = HashSSet.empty[AST.Exp]
+    var r = ISZ[AST.Exp]()
     for (claim <- claims if ok) {
       claim match {
-        case claim: State.Claim.And => r = r + AST.Util.normalizeExp(toExp(claim))
-        case claim: State.Claim.Or => r = r + AST.Util.normalizeExp(toExp(claim))
-        case claim: State.Claim.Imply => r = r + AST.Util.normalizeExp(toExp(claim))
-        case claim: State.Claim.Prop => r = r + AST.Util.normalizeExp(toExp(claim))
-        case claim: State.Claim.If => r = r + AST.Util.normalizeExp(toExp(claim))
+        case claim: State.Claim.And => r = r :+ toExp(claim)
+        case claim: State.Claim.Or => r = r :+ toExp(claim)
+        case claim: State.Claim.Imply => r = r :+ toExp(claim)
+        case claim: State.Claim.Prop => r = r :+ toExp(claim)
+        case claim: State.Claim.If => r = r :+ toExp(claim)
         case claim: State.Claim.Eq =>
           collector.letMap.get(claim.v2.num) match {
             case Some(lets) if lets.size > 1 =>
-            case _ => r = r + AST.Util.normalizeExp(toExp(claim))
+            case _ => r = r :+ toExp(claim)
           }
         case _: State.Claim.Let =>
         case _: State.Claim.Label =>
