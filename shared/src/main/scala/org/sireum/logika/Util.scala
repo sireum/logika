@@ -582,7 +582,6 @@ object Util {
     }
   }
 
-
   val builtInTypeNames: HashSet[ISZ[String]] = HashSet ++ ISZ(
     AST.Typed.bName, AST.Typed.zName, AST.Typed.cName, AST.Typed.stringName, AST.Typed.f32Name, AST.Typed.f64Name,
     AST.Typed.rName, AST.Typed.stName, AST.Typed.isName, AST.Typed.msName
@@ -1410,6 +1409,8 @@ object Util {
 
   @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): Option[ISZ[AST.Exp]] = {
 
+    val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
+    val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
     var ok = T
 
     def TODO_Exp(): AST.Exp = {
@@ -1438,26 +1439,64 @@ object Util {
       }
     }
 
-    @pure def cToBinaryExp(cs: ISZ[State.Claim], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
-      if (cs.isEmpty) {
+    @pure def esToBinaryExp(es: ISZ[AST.Exp], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
+      if (es.isEmpty) {
         return dflt
       }
-      var r = toExp(cs(0))
-      for (i <- 1 until cs.size) {
-        r = AST.Exp.Binary(r, op, toExp(cs(i)), AST.ResolvedAttr(posOpt, Some(res), tOpt))
+      var r = es(0)
+      for (i <- 1 until es.size) {
+        r = AST.Exp.Binary(r, op, es(i), AST.ResolvedAttr(None(), Some(res), tOpt))
       }
       return r
     }
 
-    @pure def vToBinaryExp(vs: ISZ[State.Value], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
-      if (vs.isEmpty) {
-        return dflt
+    @pure def bigAnd(exps: ISZ[AST.Exp]): AST.Exp = {
+      var set = HashSSet.empty[AST.Exp]
+      for (exp <- exps) {
+        if (exp === trueLit) {
+          // skip
+        } else if (exp === falseLit) {
+          return falseLit
+        } else {
+          set = set + exp
+        }
       }
-      var r = valueToExp(vs(0))
-      for (i <- 1 until vs.size) {
-        r = AST.Exp.Binary(r, op, valueToExp(vs(i)), AST.ResolvedAttr(posOpt, Some(res), tOpt))
+      return esToBinaryExp(set.elements, trueLit, AST.Exp.BinaryOp.And,
+        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
+    }
+
+    @pure def bigOr(exps: ISZ[AST.Exp]): AST.Exp = {
+      var set = HashSSet.empty[AST.Exp]
+      for (exp <- exps) {
+        if (exp === trueLit) {
+          return trueLit
+        } else if (exp === falseLit) {
+          // skip
+        } else {
+          set = set + exp
+        }
       }
-      return r
+      return esToBinaryExp(set.elements, falseLit, AST.Exp.BinaryOp.Or,
+        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+    }
+
+    @pure def bigImply(exps: ISZ[AST.Exp]): AST.Exp = {
+      assert(exps.size >= 2)
+      var set = HashSSet.empty[AST.Exp]
+      for (i <- 0 until exps.size - 1) {
+        val exp = exps(i)
+        if (exp === trueLit) {
+          // skip
+        } else if (exp === falseLit) {
+          return trueLit
+        } else {
+          set = set + exp
+        }
+      }
+      set = set + exps(exps.size - 1)
+      assert(set.size >= 2)
+      return esToBinaryExp(set.elements, trueLit, AST.Exp.BinaryOp.Imply,
+        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply))
     }
 
     @pure def nameToExp(ids: ISZ[String], p: Position): AST.Exp = {
@@ -1480,8 +1519,8 @@ object Util {
     }
 
     def typedToType(t: AST.Typed): AST.Type = {
-      val attr = AST.Attr(posOpt)
-      val typedAttr = AST.TypedAttr(Some(pos), Some(t))
+      val attr = AST.Attr(Some(pos))
+      val typedAttr = AST.TypedAttr(attr.posOpt, Some(t))
 
       @pure def toName(ids: ISZ[String]): AST.Name = {
         ids match {
@@ -1577,6 +1616,43 @@ object Util {
             Some(sym.tipe)
           ))
         case let: State.Claim.Let.Binary =>
+          @pure def isS(t: AST.Typed): B = {
+            t match {
+              case t: AST.Typed.Name => return (t.ids == AST.Typed.isName || t.ids === AST.Typed.msName)
+              case _ => return F
+            }
+          }
+          @pure def sOp(op: String): AST.Exp = {
+            var left = valueToExp(let.left)
+            var right = valueToExp(let.right)
+            val sType: AST.Typed.Name = if (op === AST.Exp.BinaryOp.Prepend) {
+              left match {
+                case l: AST.Exp.Tuple if l.args.size >= 2 => left = AST.Exp.Tuple(ISZ(left), l.attr)
+                case _ =>
+              }
+              let.right.tipe.asInstanceOf[AST.Typed.Name]
+            } else if (op === AST.Exp.BinaryOp.Append) {
+              right match {
+                case r: AST.Exp.Tuple if r.args.size >= 2 => right = AST.Exp.Tuple(ISZ(right), r.attr)
+                case _ =>
+              }
+              let.left.tipe.asInstanceOf[AST.Typed.Name]
+            } else {
+              let.left.tipe.asInstanceOf[AST.Typed.Name]
+            }
+            val info = th.typeMap.get(sType.ids).get.asInstanceOf[TypeInfo.Sig].methods.get(op).asInstanceOf[Info.Method]
+            return AST.Exp.Invoke(
+              Some(left),
+              AST.Exp.Ident(AST.Id(op, AST.Attr(symPosOpt)), AST.ResolvedAttr(
+                symPosOpt,
+                info.resOpt,
+                info.typedOpt
+              )),
+              ISZ(),
+              ISZ(right),
+              AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))
+            )
+          }
           val (op, kind): (String, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
             case AST.Exp.BinaryOp.Add => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryAdd)
             case AST.Exp.BinaryOp.Sub => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinarySub)
@@ -1601,6 +1677,10 @@ object Util {
             case AST.Exp.BinaryOp.Shr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryShr)
             case AST.Exp.BinaryOp.Ushr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryUshr)
             case Logika.exactEqOp => (AST.Exp.BinaryOp.Eq3, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
+            case AST.Exp.BinaryOp.Append if isS(let.left.tipe) => return sOp(let.op)
+            case AST.Exp.BinaryOp.AppendAll if isS(let.left.tipe) => return sOp(let.op)
+            case AST.Exp.BinaryOp.Prepend if isS(let.right.tipe) => return sOp(let.op)
+            case AST.Exp.BinaryOp.RemoveAll if isS(let.left.tipe)=> return sOp(let.op)
             case _ => halt(s"Infeasible: ${let.op}")
           }
           return AST.Exp.Binary(valueToExp(let.left), op, valueToExp(let.right), AST.ResolvedAttr(
@@ -1611,15 +1691,11 @@ object Util {
         case let: State.Claim.Let.Def =>
           return valueToExp(let.value)
         case let: State.Claim.Let.And =>
-          return vToBinaryExp(let.args, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.And,
-            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
+          return bigAnd(for (v <- let.args) yield valueToExp(v))
         case let: State.Claim.Let.Or =>
-          return vToBinaryExp(let.args, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Or,
-            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+          return bigOr(for (v <- let.args) yield valueToExp(v))
         case let: State.Claim.Let.Imply =>
-          assert(let.args.size > 1)
-          return vToBinaryExp(let.args, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Imply,
-            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+          return bigImply(for (v <- let.args) yield valueToExp(v))
         case let: State.Claim.Let.Ite =>
           return AST.Exp.If(
             valueToExp(let.cond),
@@ -1698,6 +1774,7 @@ object Util {
     def valueToExp(value: State.Value): AST.Exp = {
       @strictpure def subZPrefix(t: AST.Typed.Name): String = ops.StringOps(t.ids(t.ids.size - 1)).firstToLower
 
+      val attr = AST.Attr(Some(value.pos))
       value match {
         case value: State.Value.Sym =>
           collector.letMap.get(value.num) match {
@@ -1708,59 +1785,51 @@ object Util {
                 case _ => return AST.Exp.Sym(value.num, AST.TypedAttr(Some(value.pos), Some(value.tipe)))
               }
           }
-        case value: State.Value.B => return AST.Exp.LitB(value.value, AST.Attr(Some(value.pos)))
-        case value: State.Value.Z => return AST.Exp.LitZ(value.value, AST.Attr(Some(value.pos)))
-        case value: State.Value.R => return AST.Exp.LitR(value.value, AST.Attr(Some(value.pos)))
-        case value: State.Value.C => return AST.Exp.LitC(value.value, AST.Attr(Some(value.pos)))
-        case value: State.Value.F32 => return AST.Exp.LitF32(value.value, AST.Attr(Some(value.pos)))
-        case value: State.Value.F64 => return AST.Exp.LitF64(value.value, AST.Attr(Some(value.pos)))
-        case value: State.Value.String => return AST.Exp.LitString(value.value, AST.Attr(Some(value.pos)))
+        case value: State.Value.B => return AST.Exp.LitB(value.value, attr)
+        case value: State.Value.Z => return AST.Exp.LitZ(value.value, attr)
+        case value: State.Value.R => return AST.Exp.LitR(value.value, attr)
+        case value: State.Value.C => return AST.Exp.LitC(value.value, attr)
+        case value: State.Value.F32 => return AST.Exp.LitF32(value.value, attr)
+        case value: State.Value.F64 => return AST.Exp.LitF64(value.value, attr)
+        case value: State.Value.String => return AST.Exp.LitString(value.value, attr)
         case value: State.Value.Enum => return nameToExp(value.owner :+ value.id, value.pos)
         case value: State.Value.S8 =>
-          val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.S8.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
-            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+            ISZ(AST.Exp.LitString(conversions.S8.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.S16 =>
-          val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.S16.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
-            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+            ISZ(AST.Exp.LitString(conversions.S16.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.S32 =>
-          val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.S32.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
-            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+            ISZ(AST.Exp.LitString(conversions.S32.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.S64 =>
           val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.S64.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
-            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+            ISZ(AST.Exp.LitString(conversions.S64.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.U8 =>
-          val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.U8.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
-            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+            ISZ(AST.Exp.LitString(conversions.U8.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.U16 =>
-          val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.U16.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
-            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+            ISZ(AST.Exp.LitString(conversions.U16.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.U32 =>
-          val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.U32.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
-            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+            ISZ(AST.Exp.LitString(conversions.U32.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.U64 =>
-          val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.U64.toZ(value.value).string, AST.Attr(vPosOpt))), ISZ(),
-            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+            ISZ(AST.Exp.LitString(conversions.U64.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.Range =>
-          val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(value.value.string, AST.Attr(vPosOpt))), ISZ(),
-            AST.TypedAttr(vPosOpt, Some(value.tipe)))
+            ISZ(AST.Exp.LitString(value.value.string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.Unit => halt(s"Infeasible: $value")
       }
     }
@@ -1768,15 +1837,11 @@ object Util {
     def toExp(claim: State.Claim): AST.Exp = {
       claim match {
         case claim: State.Claim.And =>
-          return cToBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.And,
-            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
+          return bigAnd(for (c <- claim.claims) yield toExp(c))
         case claim: State.Claim.Or =>
-          return cToBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Or,
-            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+          return bigOr(for (c <- claim.claims) yield toExp(c))
         case claim: State.Claim.Imply =>
-          assert(claim.claims.size > 1)
-          return cToBinaryExp(claim.claims, AST.Exp.LitB(T, AST.Attr(posOpt)), AST.Exp.BinaryOp.Imply,
-            AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+          return bigImply(for (c <- claim.claims) yield toExp(c))
         case claim: State.Claim.Prop =>
           return if (claim.isPos) valueToExp(claim.value)
           else AST.Exp.Unary(AST.Exp.UnaryOp.Not,
