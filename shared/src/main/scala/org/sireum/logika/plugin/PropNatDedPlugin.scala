@@ -34,7 +34,7 @@ import org.sireum.logika.Logika.Reporter
 
   val name: String = "PropNatDedPlugin"
 
-  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("OrE", "ImplyI", "NegI", "BottomE", "PbC")
+  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("OrE", "ImplyI", "SImplyI", "NegI", "BottomE", "PbC")
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification", "natded", "prop")
 
@@ -98,6 +98,28 @@ import org.sireum.logika.Logika.Reporter
       return emptyResult
     }
     val args = argsOpt.get
+
+    def implyH(opKind: AST.ResolvedInfo.BuiltIn.Kind.Type, opDesc: String): B = {
+      val claim: AST.Exp.Binary = step.claim match {
+        case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.BinaryImply) => stepClaim
+        case _ =>
+          reporter.error(step.claim.posOpt, Logika.kind, s"Expecting an $opDesc")
+          return F
+      }
+      val ISZ(subProofNo) = args
+      val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo) match {
+        case Some(sp: StepProofContext.SubProof) if sp.assumption == AST.Util.normalizeExp(claim.left) => HashSet ++ sp.claims + sp.assumption
+        case _ =>
+          reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the antecedent of step ${step.id}'s claim")
+          return F
+      }
+      if (!subProof.contains(AST.Util.normalizeExp(claim.right))) {
+        reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find the consequent of step ${step.id}'s claim in sub-proof $subProofNo")
+        return F
+      }
+      return T
+    }
+
     res.id match {
       case string"OrE" =>
         val ISZ(orClaimNo, leftSubProofNo, rightSubProofNo) = args
@@ -130,21 +152,11 @@ import org.sireum.logika.Logika.Reporter
           }
         }
       case string"ImplyI" =>
-        val claim: AST.Exp.Binary = step.claim match {
-          case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.BinaryImply) => stepClaim
-          case _ =>
-            reporter.error(step.claim.posOpt, Logika.kind, s"Expecting an implication")
-            return emptyResult
+        if(!implyH(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply, "implication")) {
+          return emptyResult
         }
-        val ISZ(subProofNo) = args
-        val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo) match {
-          case Some(sp: StepProofContext.SubProof) if sp.assumption == AST.Util.normalizeExp(claim.left) => HashSet ++ sp.claims + sp.assumption
-          case _ =>
-            reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the antecedent of step ${step.id}'s claim")
-            return emptyResult
-        }
-        if (!subProof.contains(AST.Util.normalizeExp(claim.right))) {
-          reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find the consequent of step ${step.id}'s claim in sub-proof $subProofNo")
+      case string"SImplyI" =>
+        if (!implyH(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply, "conditional implication")) {
           return emptyResult
         }
       case string"NegI" =>
