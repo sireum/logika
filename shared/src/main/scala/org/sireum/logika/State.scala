@@ -813,7 +813,6 @@ object State {
           val opString: String = op match {
             case AST.Exp.BinaryOp.Eq => AST.Exp.BinaryOp.Eq3
             case AST.Exp.BinaryOp.Ne => AST.Exp.BinaryOp.Ne3
-            case Logika.exactEqOp => AST.Exp.BinaryOp.Eq3
             case _ => op
           }
           return st"${sym.toRawST} ≜ ${left.toRawST} $opString ${right.toRawST}"
@@ -851,7 +850,6 @@ object State {
           val opString: String = op match {
             case AST.Exp.BinaryOp.Eq => AST.Exp.BinaryOp.Eq3
             case AST.Exp.BinaryOp.Ne => AST.Exp.BinaryOp.Ne3
-            case Logika.exactEqOp => AST.Exp.BinaryOp.Eq3
             case _ => op
           }
           return Some(st"$leftST $opString $rightST")

@@ -136,10 +136,8 @@ object Logika {
     (F, AST.Typed.f64Name, "isNaN"), (F, AST.Typed.f64Name, "isInfinite"),
   )
   val indexingFields: HashSet[String] = HashSet ++ ISZ[String]("firstIndex", "lastIndex")
-  val eqOps: HashSet[String] = HashSet ++ ISZ(AST.Exp.BinaryOp.Eq, AST.Exp.BinaryOp.Eq3, AST.Exp.BinaryOp.Ne, AST.Exp.BinaryOp.Ne3)
   val emptyBindings: Bindings = Map.empty[String, (State.Value.Sym, AST.Typed, Position)]
   val trueClaim: State.Claim = State.Claim.And(ISZ())
-  val exactEqOp: String = "="
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
@@ -1018,7 +1016,7 @@ import Util._
                   }
                   r = r :+ svs2
                 }
-              } else if (eqOps.contains(exp.op) || isBasic(smt2, v1.tipe)) {
+              } else if (TypeChecker.eqBinops.contains(exp.op) || isBasic(smt2, v1.tipe)) {
                 for (svs2 <-evalBasic(s1, kind, v1)) {
                   if (maxFresh < svs2._1.nextFresh) {
                     maxFresh = svs2._1.nextFresh
@@ -2902,12 +2900,13 @@ import Util._
     pattern match {
       case pattern: AST.Pattern.Literal =>
         val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
-        return (s1.addClaim(State.Claim.Let.Binary(cond, v, exactEqOp, evalLit(smt2, pattern.lit, reporter), v.tipe)), cond, Map.empty)
+        return (s1.addClaim(State.Claim.Let.Binary(cond, v, AST.Exp.BinaryOp.Equiv,
+          evalLit(smt2, pattern.lit, reporter), v.tipe)), cond, Map.empty)
       case pattern: AST.Pattern.LitInterpolate =>
         val lit = evalInterpolate(smt2, AST.Exp.StringInterpolate(pattern.prefix,
           ISZ(AST.Exp.LitString(pattern.value, AST.Attr(pattern.posOpt))), ISZ(), pattern.attr), reporter)
         val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
-        return (s1.addClaim(State.Claim.Let.Binary(cond, v, exactEqOp, lit, v.tipe)), cond, Map.empty)
+        return (s1.addClaim(State.Claim.Let.Binary(cond, v, AST.Exp.BinaryOp.Equiv, lit, v.tipe)), cond, Map.empty)
       case pattern: AST.Pattern.VarBinding =>
         pattern.tipeOpt match {
           case Some(tipe) =>
@@ -2952,7 +2951,7 @@ import Util._
             val s4 = s3.addClaim(State.Claim.Let.FieldLookup(sizeSym, v, "size"))
             val (s5, cond) = s4.freshSym(AST.Typed.b, pos)
             val (op, size): (String, Z) =
-              if (hasWildcard) (">=", pattern.patterns.size - 1) else (exactEqOp, pattern.patterns.size)
+              if (hasWildcard) (">=", pattern.patterns.size - 1) else (AST.Exp.BinaryOp.Equiv, pattern.patterns.size)
             var s6 = s5.addClaim(State.Claim.Let.Binary(cond, sizeSym, op, State.Value.Z(size, pos), AST.Typed.z))
             var conds = ISZ[State.Value](cond)
             val offset: Z = if (it == AST.Typed.z) 0 else th.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast.index
@@ -3010,7 +3009,7 @@ import Util._
         pattern.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Var =>
             if (res.owner == AST.Typed.sireumName && res.id == "T" || res.id == "F") {
-              return (s1.addClaim(State.Claim.Let.Binary(cond, v, exactEqOp,
+              return (s1.addClaim(State.Claim.Let.Binary(cond, v, AST.Exp.BinaryOp.Equiv,
                 State.Value.B(res.id == "T", pos), AST.Typed.b)), cond, Map.empty)
             }
             val t = pattern.attr.typedOpt.get
@@ -3020,10 +3019,10 @@ import Util._
             } else {
               evalThisIdH(smt2, cache, rtCheck, s1, res.id, t, pos, reporter)
             }
-            return (s2.addClaim(State.Claim.Let.Binary(cond, v, exactEqOp, sym, t)), cond, Map.empty)
+            return (s2.addClaim(State.Claim.Let.Binary(cond, v, AST.Exp.BinaryOp.Equiv, sym, t)), cond, Map.empty)
           case res: AST.ResolvedInfo.EnumElement =>
             val t = pattern.attr.typedOpt.get.asInstanceOf[AST.Typed.Name]
-            return (s1.addClaim(State.Claim.Let.Binary(cond, v, exactEqOp,
+            return (s1.addClaim(State.Claim.Let.Binary(cond, v, AST.Exp.BinaryOp.Equiv,
               State.Value.Enum(t, res.owner, res.name, res.ordinal, pos), t)), cond, Map.empty)
           case _ => halt(s"Infeasible: $pattern")
         }
@@ -3042,7 +3041,7 @@ import Util._
       val (s3, x) = idIntro(pos, s2, lcontext, id, t, Some(pos))
       val s4 = Util.assumeValueInv(this, smt2, cache, rtCheck, s3, x, pos, reporter)
       val (s5, sym) = s4.freshSym(AST.Typed.b, pos)
-      s2 = s5.addClaim(State.Claim.Let.Binary(sym, x, exactEqOp, v, t))
+      s2 = s5.addClaim(State.Claim.Let.Binary(sym, x, AST.Exp.BinaryOp.Equiv, v, t))
       bindings = bindings :+ sym
     }
     return (s2, bindings)

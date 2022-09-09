@@ -1923,7 +1923,7 @@ object Smt2 {
         val op: String = c.op match {
           case AST.Exp.BinaryOp.Eq3 => AST.Exp.BinaryOp.Eq
           case AST.Exp.BinaryOp.Ne3 => AST.Exp.BinaryOp.Ne
-          case Logika.exactEqOp => return st"(= ${v2st(c.left)} ${v2st(c.right)})"
+          case AST.Exp.BinaryOp.Equiv => return st"(= ${v2st(c.left)} ${v2st(c.right)})"
           case _ => c.op
         }
         return if (Smt2.isSimpsOp(c)) v2ST(c.sym) else st"(${typeOpId(c.tipe, op)} ${v2st(c.left)} ${v2st(c.right)})"
