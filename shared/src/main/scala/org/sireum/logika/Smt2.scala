@@ -64,16 +64,6 @@ object Smt2 {
     AST.Typed.f64Name :+ "NaN", AST.Typed.f64Name :+ "PInf", AST.Typed.f64Name :+ "NInf",
   )
 
-  val basicTypes: HashSet[AST.Typed] = HashSet ++ ISZ[AST.Typed](
-    AST.Typed.b,
-    AST.Typed.z,
-    AST.Typed.c,
-    AST.Typed.f32,
-    AST.Typed.f64,
-    AST.Typed.r,
-    AST.Typed.string,
-  )
-
   val imsOps: HashSet[String] =
     HashSet.empty[String] ++
       ISZ(
@@ -1513,16 +1503,13 @@ object Smt2 {
   }
 
   @memoize def isAdt(t: AST.Typed.Name): B = {
-    typeHierarchy.typeMap.get(t.ids).get match {
-      case _: TypeInfo.Adt => return T
-      case _: TypeInfo.Sig =>
-        if (Smt2.basicTypes.contains(t)) {
-          return F
-        } else if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
-          return F
-        }
-        return T
-      case _ => return F
+    if (typeHierarchy.isGroundType(t)) {
+      return F
+    }
+    t.ids match {
+      case AST.Typed.isName => return F
+      case AST.Typed.msName => return F
+      case _ => return T
     }
   }
 
