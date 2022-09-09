@@ -1551,6 +1551,16 @@ object Util {
       val sym = let.sym
       val symPos = sym.pos
       val symPosOpt = Option.some(symPos)
+
+      def rcvOptIdent(v: State.Value): (Option[AST.Exp], AST.Exp.Ident) = {
+        valueToExp(v) match {
+          case o: AST.Exp.Ident => return (None(), o)
+          case o: AST.Exp.Select => return (o.receiverOpt, AST.Exp.Ident(o.id, o.attr))
+          case o => return (Some(o), AST.Exp.Ident(AST.Id("apply", AST.Attr(symPosOpt)), AST.ResolvedAttr(
+            symPosOpt, TypeChecker.applyResOpt, o.typedOpt)))
+        }
+      }
+
       let match {
         case let: State.Claim.Let.CurrentId =>
           return AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
@@ -1729,27 +1739,51 @@ object Util {
           )
         case let: State.Claim.Let.SeqLit =>
           val t = sym.tipe.asInstanceOf[AST.Typed.Name]
-          return TODO_Exp()
+          val (name, targs): (ISZ[String], ISZ[AST.Type]) =
+            if (t.args(0) === AST.Typed.z) {
+              if (t.ids === AST.Typed.msName) {
+                if (t.args(1) === AST.Typed.z) (AST.Typed.zsName, ISZ())
+                else (AST.Typed.mszName, ISZ(typedToType(t.args(1))))
+              } else {
+                (AST.Typed.iszName, ISZ(typedToType(t.args(1))))
+              }
+            } else {
+              (t.ids, ISZ(typedToType(t.args(0)), typedToType(t.args(1))))
+            }
+          val (tOpt, resOpt) = TypeChecker.sConstructorTypedResOpt(name, let.args.size)
+          val ident = AST.Exp.Ident(AST.Id(name(name.size - 1), AST.Attr(symPosOpt)),
+            AST.ResolvedAttr(symPosOpt, resOpt, tOpt))
+          return AST.Exp.Invoke(None(), ident, targs, for (arg <- let.args) yield valueToExp(arg.value),
+            AST.ResolvedAttr(symPosOpt, resOpt, Some(t)))
         case let: State.Claim.Let.Quant =>
           return TODO_Exp()
         case let: State.Claim.Let.FieldLookup =>
           val info = th.typeMap.get(let.adt.tipe.asInstanceOf[AST.Typed.Name].ids).get.asInstanceOf[TypeInfo.Adt].vars.get(let.id).get
-          return AST.Exp.Select(
-            Some(valueToExp(let.adt)),
-            AST.Id(let.id, AST.Attr(symPosOpt)),
-            ISZ(),
-            AST.ResolvedAttr(
-              symPosOpt,
-              Some(AST.ResolvedInfo.Var(info.isInObject, info.ast.isSpec, info.ast.isVal, info.owner, let.id)),
-              Some(sym.tipe)
-            )
-          )
+          return AST.Exp.Select(Some(valueToExp(let.adt)), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+            AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, info.ast.isSpec, info.ast.isVal,
+              info.owner, let.id)), Some(sym.tipe)))
         case let: State.Claim.Let.FieldStore =>
-          return TODO_Exp()
+          val (rcvOpt, ident) = rcvOptIdent(let.adt)
+          val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(th, symPosOpt,
+            let.adt.tipe.asInstanceOf[AST.Typed.Name], ISZ(let.id), Reporter.create)
+          val paramNames = resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames
+          val index = ops.ISZOps(paramNames).indexOf(let.id)
+          return AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(),
+            ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)), valueToExp(let.value), index)),
+            AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
         case let: State.Claim.Let.SeqStore =>
-          return TODO_Exp()
+          val (rcvOpt, ident) = rcvOptIdent(let.seq)
+          val (_, resOpt) = TypeChecker.sStoreTypedResOpt(let.seq.tipe.asInstanceOf[AST.Typed.Name], 1)
+          return AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(AST.Exp.Binary(valueToExp(let.index),
+            AST.Exp.BinaryOp.MapsTo, valueToExp(let.element), AST.ResolvedAttr(symPosOpt,
+              Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo)), Some(AST.Typed.Tuple(ISZ(
+                let.index.tipe, let.element.tipe)))))),
+            AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
         case let: State.Claim.Let.SeqLookup =>
-          return TODO_Exp()
+          val (rcvOpt, ident) = rcvOptIdent(let.seq)
+          val (_, resOpt) = TypeChecker.sSelectTypedResOpt(let.seq.tipe.asInstanceOf[AST.Typed.Name], F)
+          return AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(valueToExp(let.index)), AST.ResolvedAttr(symPosOpt, resOpt,
+            Some(sym.tipe)))
         case let: State.Claim.Let.SeqInBound =>
           return TODO_Exp()
         case let: State.Claim.Let.TypeTest =>
@@ -1767,7 +1801,7 @@ object Util {
           return TODO_Exp()
         case let: State.Claim.Let.Apply =>
           return TODO_Exp()
-        case let: State.Claim.Let.Random =>
+        case _: State.Claim.Let.Random =>
           return AST.Exp.Sym(sym.num, AST.TypedAttr(symPosOpt, Some(sym.tipe)))
       }
 
