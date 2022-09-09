@@ -1666,7 +1666,7 @@ object Util {
             case AST.Exp.BinaryOp.Eq => (AST.Exp.BinaryOp.Eq3, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
             case AST.Exp.BinaryOp.Eq3 => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
             case AST.Exp.BinaryOp.Equiv =>
-              if (th.isSubstitutable(let.tipe)) (AST.Exp.BinaryOp.Eq3, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
+              if (th.isGroundType(let.tipe)) (AST.Exp.BinaryOp.Eq3, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
               else (AST.Exp.BinaryOp.Equiv, AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)
             case AST.Exp.BinaryOp.FpEq => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryFpEq)
             case AST.Exp.BinaryOp.Ne => (AST.Exp.BinaryOp.Ne3, AST.ResolvedInfo.BuiltIn.Kind.BinaryNe)
@@ -1854,9 +1854,7 @@ object Util {
           return AST.Exp.If(valueToExp(claim.cond), toExp(State.Claim.And(claim.tClaims)), toExp(State.Claim.And(claim.fClaims)),
             AST.TypedAttr(posOpt, AST.Typed.bOpt))
         case claim: State.Claim.Eq =>
-          val op: String =
-            if (th.isSubstitutable(claim.v1.tipe) && th.isSubstitutable(claim.v2.tipe)) AST.Exp.BinaryOp.Eq3
-            else AST.Exp.BinaryOp.Equiv
+          val op: String = if (th.isGroundType(claim.v1.tipe)) AST.Exp.BinaryOp.Eq3 else AST.Exp.BinaryOp.Equiv
           return AST.Exp.Binary(valueToExp(claim.v1), op, valueToExp(claim.v2), AST.ResolvedAttr(
             posOpt,
             Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)),

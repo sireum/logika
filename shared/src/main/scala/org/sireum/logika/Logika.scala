@@ -492,21 +492,6 @@ import Util._
                        val context: Context,
                        val plugins: ISZ[Plugin]) {
 
-  @pure def isBasic(smt2: Smt2, t: AST.Typed): B = {
-    if (Smt2.basicTypes.contains(t)) {
-      return T
-    }
-    t match {
-      case t: AST.Typed.Name =>
-        smt2.typeHierarchy.typeMap.get(t.ids) match {
-          case Some(_: TypeInfo.SubZ) => return T
-          case _ => return F
-        }
-      case _ => return F
-    }
-    return T
-  }
-
   def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
     tipe match {
       case AST.Typed.z => return State.Value.Z(0, pos)
@@ -804,7 +789,7 @@ import Util._
       val s0 = state
 
       exp.attr.resOpt.get match {
-        case AST.ResolvedInfo.BuiltIn(kind) if isBasic(smt2, exp.typedOpt.get) =>
+        case AST.ResolvedInfo.BuiltIn(kind) if th.isGroundType(exp.typedOpt.get) =>
           def evalUnaryExpH(p: (State, State.Value)): (State, State.Value) = {
             val (s1, v) = p
             if (!s1.status) {
@@ -1016,8 +1001,8 @@ import Util._
                   }
                   r = r :+ svs2
                 }
-              } else if (TypeChecker.eqBinops.contains(exp.op) || isBasic(smt2, v1.tipe)) {
-                for (svs2 <-evalBasic(s1, kind, v1)) {
+              } else if (TypeChecker.eqBinops.contains(exp.op) || th.isGroundType(v1.tipe)) {
+                for (svs2 <- evalBasic(s1, kind, v1)) {
                   if (maxFresh < svs2._1.nextFresh) {
                     maxFresh = svs2._1.nextFresh
                   }
@@ -2726,7 +2711,6 @@ import Util._
   def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym,
                        idPosOpt: Option[Position], reporter: Reporter): State = {
     val s1: State = if (decl) s0 else rewriteLocal(s0, lcontext, id, idPosOpt, reporter)
-    val idPos = idPosOpt.get
     val (s2, lhs) = idIntro(idPosOpt.get, s1, lcontext, id, rhs.tipe, idPosOpt)
     return s2.addClaim(State.Claim.Eq(lhs, rhs))
   }
