@@ -1785,7 +1785,10 @@ object Util {
           return AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(valueToExp(let.index)), AST.ResolvedAttr(symPosOpt, resOpt,
             Some(sym.tipe)))
         case let: State.Claim.Let.SeqInBound =>
-          return TODO_Exp()
+          val info = th.typeMap.get(let.seq.tipe.asInstanceOf[AST.Typed.Name].ids).get.asInstanceOf[TypeInfo.Sig].methods.get("isInBound").get
+          val ident = AST.Exp.Ident(AST.Id("isInBound", AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt, info.resOpt, info.typedOpt))
+          return AST.Exp.Invoke(Some(valueToExp(let.seq)), ident, ISZ(), ISZ(valueToExp(let.index)), AST.ResolvedAttr(
+            symPosOpt, info.resOpt, Some(sym.tipe)))
         case let: State.Claim.Let.TypeTest =>
           return AST.Exp.Select(
             Some(valueToExp(let.value)),
@@ -1798,9 +1801,41 @@ object Util {
             )
           )
         case let: State.Claim.Let.ProofFunApply =>
-          return TODO_Exp()
+          if (let.pf.receiverTypeOpt.nonEmpty) {
+            val rcv = let.args(0)
+            val infoOpt: Option[Info.Method] = th.typeMap.get(rcv.tipe.asInstanceOf[AST.Typed.Name].ids).get match {
+              case info: TypeInfo.Sig => info.methods.get(let.pf.id)
+              case info: TypeInfo.Adt => info.methods.get(let.pf.id)
+              case _ => halt("Infeasible")
+            }
+            infoOpt match {
+              case Some(info) =>
+                return AST.Exp.Invoke(Some(valueToExp(rcv)), AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
+                  AST.ResolvedAttr(symPosOpt, info.resOpt, info.typedOpt)), ISZ(),
+                  for (i <- 1 until let.args.size) yield valueToExp(let.args(i)), AST.ResolvedAttr(symPosOpt,
+                    info.resOpt, Some(sym.tipe)))
+              case _ => return trueLit
+            }
+          } else {
+            val name = let.pf.context :+ let.pf.id
+            th.nameMap.get(name) match {
+              case Some(info: Info.Method) =>
+                val rcvOpt: Option[AST.Exp] = if (let.pf.context.nonEmpty)
+                Some(nameToExp(let.pf.context, symPos)) else None()
+                return AST.Exp.Invoke(rcvOpt, AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
+                  AST.ResolvedAttr(symPosOpt, info.resOpt, info.typedOpt)), ISZ(),
+                  for (arg <- let.args) yield valueToExp(arg), AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe)))
+              case _ =>
+                return trueLit
+            }
+          }
         case let: State.Claim.Let.Apply =>
-          return TODO_Exp()
+          assert(let.isLocal && let.context === context)
+          val ident = AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt,
+            Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, let.id)),
+            Some(let.tipe)))
+          return AST.Exp.Invoke(None(), ident, ISZ(), for (arg <- let.args) yield valueToExp(arg),
+            AST.ResolvedAttr(symPosOpt, ident.resOpt, Some(sym.tipe)))
         case _: State.Claim.Let.Random =>
           return AST.Exp.Sym(sym.num, AST.TypedAttr(symPosOpt, Some(sym.tipe)))
       }
