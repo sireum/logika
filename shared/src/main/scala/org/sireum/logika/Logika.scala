@@ -2406,7 +2406,7 @@ import Util._
         val (s0, valueOpts) = p
         if (s0.status && ops.ISZOps(valueOpts).forall((vOpt: Option[State.Value]) => vOpt.nonEmpty)) {
           val (s1, sym) = s0.freshSym(t.ret, pos)
-          r = r :+ ((s1.addClaim(State.Claim.Let.Apply(sym, isLocal, context, id, for (vOpt <- valueOpts) yield vOpt.get)), sym))
+          r = r :+ ((s1.addClaim(State.Claim.Let.Apply(sym, isLocal, context, id, for (vOpt <- valueOpts) yield vOpt.get, t)), sym))
         } else {
           r = r :+ ((s0(nextFresh = s0.nextFresh + 1), State.errorValue))
         }

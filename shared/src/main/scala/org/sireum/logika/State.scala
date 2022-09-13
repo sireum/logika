@@ -914,7 +914,7 @@ object State {
 
       }
 
-      @datatype class Apply(val sym: Value.Sym, val isLocal: B, val context: ISZ[String], val id: String, val args: ISZ[Value]) extends Let {
+      @datatype class Apply(val sym: Value.Sym, val isLocal: B, val context: ISZ[String], val id: String, val args: ISZ[Value], val tipe: AST.Typed.Fun) extends Let {
         @strictpure def name: ISZ[String] = context :+ id
 
         @pure override def toRawST: ST = {
