@@ -1483,7 +1483,7 @@ import Util._
         }
       }
       val vars: ISZ[State.Claim.Let.Quant.Var] =
-        for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var.Id(quant.fun.context, p.idOpt.get.value, p.typedOpt.get)
+        for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var(quant.fun.context, p.idOpt.get.value, p.typedOpt.get)
       if (quantClaims.isEmpty) {
         return (s0(status = F), State.errorValue)
       }
@@ -1518,7 +1518,7 @@ import Util._
           val s7 = s6.addClaim(State.Claim.Let.Binary(hiSym, ident,
             if (quant.hiExact) AST.Exp.BinaryOp.Le else AST.Exp.BinaryOp.Lt, hi, qVarType))
           val (s8, sym) = s7.freshSym(AST.Typed.b, quant.attr.posOpt.get)
-          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(quant.fun.context, qVarRes.id, qVarType))
+          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var(quant.fun.context, qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s8.nextFresh
           for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s8.addClaims(ISZ(loProp, hiProp)), quant.fun.exp, reporter)) {
@@ -1564,7 +1564,7 @@ import Util._
           val s5 = s4.addClaim(State.Claim.Let.SeqInBound(inBoundSym, s, ident))
           val inBoundProp = State.Claim.Prop(T, inBoundSym)
           val (s6, sym) = s5.freshSym(AST.Typed.b, quant.attr.posOpt.get)
-          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Id(quant.fun.context, qVarRes.id, qVarType))
+          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var(quant.fun.context, qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
           var nextFresh: Z = s6.nextFresh
           for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s6.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)) {
@@ -1611,42 +1611,42 @@ import Util._
       for (p <- evalExp(sp, smt2, cache, rtCheck, state, quant.seq, reporter)) {
         val (s0, seq) = p
         if (s0.status) {
-          val (s1, qvar) = idIntro(pos, s0, qVarRes.context, s"${qVarRes.id}$$Idx", iType, Some(pos))
-          val (s2, size) = s1.freshSym(AST.Typed.z, pos)
-          val s3 = s2.addClaim(State.Claim.Let.FieldLookup(size, seq, "size"))
-          val (s4, nonEmpty) = s3.freshSym(AST.Typed.b, pos)
-          val s5 = s4.addClaim(State.Claim.Let.Binary(nonEmpty, size, AST.Exp.BinaryOp.Gt, zero(AST.Typed.z, pos), AST.Typed.z))
-          val nonEmptyProp = State.Claim.Prop(T, nonEmpty)
-          val (s6, inBound) = s5.freshSym(AST.Typed.b, pos)
-          val s7 = s6.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvar))
+          val idx = s"${qVarRes.id}$$Idx"
+          val (s1, qvarIdx) = idIntro(pos, s0, qVarRes.context, idx, iType, Some(pos))
+          val (s2, inBound) = s1.freshSym(AST.Typed.b, pos)
+          val s3 = s2.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvarIdx))
           val inBoundProp = State.Claim.Prop(T, inBound)
-          val (s8, select) = s7.freshSym(eType, pos)
-          val s9 = s8.addClaim(State.Claim.Let.SeqLookup(select, seq, qvar))
-          val s10 = s9.addClaim(State.Claim.Let.CurrentId(T, select, qVarRes.context, qVarRes.id, None()))
-          val (s11, sym) = s10.freshSym(AST.Typed.b, quant.attr.posOpt.get)
-          val s12 = Util.assumeValueInv(this, smt2, cache, rtCheck, s11, select, pos, reporter)
-          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var.Sym(qvar))
+          val (s4, select) = s3.freshSym(eType, pos)
+          val s5 = s4.addClaim(State.Claim.Let.SeqLookup(select, seq, qvarIdx))
+          val (s6, qvar) = idIntro(pos, s5, qVarRes.context, qVarRes.id, eType, Some(pos))
+          val s7 = s6.addClaim(State.Claim.Eq(select, qvar))
+          val (s8, sym) = s7.freshSym(AST.Typed.b, quant.attr.posOpt.get)
+          val s9 = Util.assumeValueInv(this, smt2, cache, rtCheck, s8, select, pos, reporter)
+          val vars = ISZ[State.Claim.Let.Quant.Var](
+            State.Claim.Let.Quant.Var(qVarRes.context, idx, iType),
+            State.Claim.Let.Quant.Var(qVarRes.context, qVarRes.id, eType)
+          )
           var quantClaims = ISZ[State.Claim]()
-          var nextFresh: Z = s12.nextFresh
-          for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s12.addClaims(ISZ(nonEmptyProp, inBoundProp)), quant.fun.exp, reporter)) {
-            val (s15, v) = p
-            val (s16, expSym) = value2Sym(s15, v, quant.fun.exp.asStmt.posOpt.get)
-            if (s16.status) {
-              val props: ISZ[State.Claim] = ISZ(nonEmptyProp, inBoundProp, State.Claim.Prop(T, expSym))
-              val s9ClaimsOps = ops.ISZOps(s16.claims)
-              val quantClaim = (s9ClaimsOps.slice(s1.claims.size, s11.claims.size) ++ s9ClaimsOps.slice(s12.claims.size + 2, s16.claims.size)) :+
+          var nextFresh: Z = s9.nextFresh
+          for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s9.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)) {
+            val (s10, v) = p
+            val (s11, expSym) = value2Sym(s10, v, quant.fun.exp.asStmt.posOpt.get)
+            if (s11.status) {
+              val props: ISZ[State.Claim] = ISZ(inBoundProp, State.Claim.Prop(T, expSym))
+              val s9ClaimsOps = ops.ISZOps(s11.claims)
+              val quantClaim = (s9ClaimsOps.slice(s0.claims.size, s9.claims.size) ++ s9ClaimsOps.slice(s9.claims.size + 1, s11.claims.size)) :+
                 (if (quant.isForall) State.Claim.Imply(props) else State.Claim.And(props))
               quantClaims = quantClaims :+ State.Claim.And(quantClaim)
             }
-            if (nextFresh < s16.nextFresh) {
-              nextFresh = s16.nextFresh
+            if (nextFresh < s11.nextFresh) {
+              nextFresh = s11.nextFresh
             }
           }
           if (quantClaims.isEmpty) {
             r = r :+ ((s0(status = F), State.errorValue))
           } else {
-            val qcs: ISZ[State.Claim] = if (s11.claims.size != s12.claims.size) {
-              val prem = s12.claims(s11.claims.size)
+            val qcs: ISZ[State.Claim] = if (s8.claims.size != s9.claims.size) {
+              val prem = s9.claims(s8.claims.size)
               val c: State.Claim = if (quantClaims.size == 1) quantClaims(0) else State.Claim.And(quantClaims)
               ISZ(if (quant.isForall) State.Claim.Imply(ISZ(prem, c)) else State.Claim.And(ISZ(prem, c)))
             } else {

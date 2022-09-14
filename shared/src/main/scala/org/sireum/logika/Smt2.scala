@@ -1690,10 +1690,7 @@ object Smt2 {
   }
 
   def qvar2ST(x: State.Claim.Let.Quant.Var): ST = {
-    x match {
-      case x: State.Claim.Let.Quant.Var.Id => return st"${currentLocalIdString(x.context, x.id)}"
-      case x: State.Claim.Let.Quant.Var.Sym => return st"${v2ST(x.sym)}"
-    }
+    return st"${currentLocalIdString(x.context, x.id)}"
   }
 
   def enumId(owner: ISZ[String], id: String): ST = {

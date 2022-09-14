@@ -729,34 +729,15 @@ object State {
       }
 
       object Quant {
-        @datatype trait Var {
-          @pure def toRawST: ST
-          @pure def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST]
-          @pure def tipe: AST.Typed
-        }
-
-        object Var {
-
-          @datatype class Id(val context: ISZ[String], val id: String, val tipe: AST.Typed) extends Var {
-            @pure def toRawST: ST = {
-              return st"$id: $tipe"
-            }
-
-            override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
-              return Some(toRawST)
-            }
-
+        @datatype class Var(val context: ISZ[String], val id: String, val tipe: AST.Typed) {
+          @pure def toRawST: ST = {
+            return st"$id: $tipe"
           }
 
-          @datatype class Sym(val sym: Value.Sym) extends Var {
-            @pure def toRawST: ST = {
-              return sym.toRawST
-            }
-            override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
-              return sym.toSTOpt(numMap, defs)
-            }
-            @strictpure def tipe: AST.Typed = sym.tipe
+          @pure def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
+            return Some(toRawST)
           }
+
         }
       }
 

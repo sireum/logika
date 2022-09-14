@@ -217,13 +217,9 @@ object MStateTransformer {
 
   val PostResultStateClaimLetTypeTest: MOption[State.Claim.Let] = MNone()
 
-  val PreResultStateClaimLetQuantVarId: PreResult[State.Claim.Let.Quant.Var] = PreResult(T, MNone())
+  val PreResultStateClaimLetQuantVar: PreResult[State.Claim.Let.Quant.Var] = PreResult(T, MNone())
 
-  val PostResultStateClaimLetQuantVarId: MOption[State.Claim.Let.Quant.Var] = MNone()
-
-  val PreResultStateClaimLetQuantVarSym: PreResult[State.Claim.Let.Quant.Var] = PreResult(T, MNone())
-
-  val PostResultStateClaimLetQuantVarSym: MOption[State.Claim.Let.Quant.Var] = MNone()
+  val PostResultStateClaimLetQuantVar: MOption[State.Claim.Let.Quant.Var] = MNone()
 
   val PreResultStateClaimLetQuant: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
@@ -784,18 +780,7 @@ import MStateTransformer._
   }
 
   def preStateClaimLetQuantVar(o: State.Claim.Let.Quant.Var): PreResult[State.Claim.Let.Quant.Var] = {
-    o match {
-      case o: State.Claim.Let.Quant.Var.Id => return preStateClaimLetQuantVarId(o)
-      case o: State.Claim.Let.Quant.Var.Sym => return preStateClaimLetQuantVarSym(o)
-    }
-  }
-
-  def preStateClaimLetQuantVarId(o: State.Claim.Let.Quant.Var.Id): PreResult[State.Claim.Let.Quant.Var] = {
-    return PreResultStateClaimLetQuantVarId
-  }
-
-  def preStateClaimLetQuantVarSym(o: State.Claim.Let.Quant.Var.Sym): PreResult[State.Claim.Let.Quant.Var] = {
-    return PreResultStateClaimLetQuantVarSym
+    return PreResultStateClaimLetQuantVar
   }
 
   def preStateClaimLetQuant(o: State.Claim.Let.Quant): PreResult[State.Claim.Let] = {
@@ -1351,18 +1336,7 @@ import MStateTransformer._
   }
 
   def postStateClaimLetQuantVar(o: State.Claim.Let.Quant.Var): MOption[State.Claim.Let.Quant.Var] = {
-    o match {
-      case o: State.Claim.Let.Quant.Var.Id => return postStateClaimLetQuantVarId(o)
-      case o: State.Claim.Let.Quant.Var.Sym => return postStateClaimLetQuantVarSym(o)
-    }
-  }
-
-  def postStateClaimLetQuantVarId(o: State.Claim.Let.Quant.Var.Id): MOption[State.Claim.Let.Quant.Var] = {
-    return PostResultStateClaimLetQuantVarId
-  }
-
-  def postStateClaimLetQuantVarSym(o: State.Claim.Let.Quant.Var.Sym): MOption[State.Claim.Let.Quant.Var] = {
-    return PostResultStateClaimLetQuantVarSym
+    return PostResultStateClaimLetQuantVar
   }
 
   def postStateClaimLetQuant(o: State.Claim.Let.Quant): MOption[State.Claim.Let] = {
@@ -2146,20 +2120,10 @@ import MStateTransformer._
     val r: MOption[State.Claim.Let.Quant.Var] = if (preR.continu) {
       val o2: State.Claim.Let.Quant.Var = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val rOpt: MOption[State.Claim.Let.Quant.Var] = o2 match {
-        case o2: State.Claim.Let.Quant.Var.Id =>
-          if (hasChanged)
-            MSome(o2)
-          else
-            MNone()
-        case o2: State.Claim.Let.Quant.Var.Sym =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym)))
-          else
-            MNone()
-      }
-      rOpt
+      if (hasChanged)
+        MSome(o2)
+      else
+        MNone()
     } else if (preR.resultOpt.nonEmpty) {
       MSome(preR.resultOpt.getOrElse(o))
     } else {
