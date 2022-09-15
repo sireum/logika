@@ -1408,6 +1408,17 @@ object Util {
   }
 
   @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ISZ[AST.Exp] = {
+    def ignore(claim: State.Claim): B = {
+      claim match {
+        case _: State.Claim.And => return F
+        case _: State.Claim.Or => return F
+        case _: State.Claim.Imply => return F
+        case _: State.Claim.Prop => return F
+        case _: State.Claim.If => return F
+        case _: State.Claim.Eq => return F
+        case _ => return T
+      }
+    }
 
     val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
     val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
@@ -1475,22 +1486,26 @@ object Util {
     }
 
     @pure def bigImply(exps: ISZ[AST.Exp]): AST.Exp = {
-      assert(exps.size >= 2)
-      var set = HashSSet.empty[AST.Exp]
+      var es = ISZ[AST.Exp]()
       for (i <- 0 until exps.size - 1) {
         val exp = exps(i)
-        if (exp === trueLit) {
-          // skip
-        } else if (exp === falseLit) {
+        if (exp === falseLit) {
           return trueLit
         } else {
-          set = set + exp
+          es = es :+ exp
         }
       }
-      set = set + exps(exps.size - 1)
-      assert(set.size >= 2)
-      return esToBinaryExp(set.elements, trueLit, AST.Exp.BinaryOp.Imply,
-        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply))
+      es = es :+ exps(exps.size - 1)
+      assert(es.size >= 2)
+      var r = es(es.size - 1)
+      val op = AST.Exp.BinaryOp.Imply
+      val res = AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
+      var i = es.size - 2
+      while (i >= 0) {
+        r = AST.Exp.Binary(es(i), op, r, AST.ResolvedAttr(None(), Some(res), AST.Typed.bOpt))
+        i = i - 1
+      }
+      return r
     }
 
     @pure def nameToExp(ids: ISZ[String], p: Position): AST.Exp = {
@@ -1539,6 +1554,20 @@ object Util {
         case t: AST.Typed.Theorem => halt(s"Infeasible: $t")
         case t: AST.Typed.Inv => halt(s"Infeasible: $t")
       }
+    }
+
+    def constructIf(cond: AST.Exp, left: AST.Exp, right: AST.Exp, pOpt: Option[Position], tOpt: Option[AST.Typed]): AST.Exp = {
+      if (right === trueLit) {
+        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondImply, left, AST.ResolvedAttr(pOpt,
+          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)), AST.Typed.bOpt))
+      } else if (right === falseLit) {
+        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondAnd, left, AST.ResolvedAttr(pOpt,
+          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)), AST.Typed.bOpt))
+      } else if (left === trueLit) {
+        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondOr, right, AST.ResolvedAttr(pOpt,
+          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr)), AST.Typed.bOpt))
+      }
+      return AST.Exp.If(cond, left, right, AST.TypedAttr(pOpt, tOpt))
     }
 
     def letToExp(let: State.Claim.Let): AST.Exp = {
@@ -1703,12 +1732,10 @@ object Util {
         case let: State.Claim.Let.Imply =>
           return bigImply(for (v <- let.args) yield valueToExp(v))
         case let: State.Claim.Let.Ite =>
-          return AST.Exp.If(
-            valueToExp(let.cond),
-            valueToExp(let.left),
-            valueToExp(let.right),
-            AST.TypedAttr(symPosOpt, Some(sym.tipe))
-          )
+          val cond = valueToExp(let.cond)
+          val left = valueToExp(let.left)
+          val right = valueToExp(let.right)
+          return constructIf(cond, left, right, symPosOpt, Some(sym.tipe))
         case let: State.Claim.Let.TupleLit =>
           return AST.Exp.Tuple(
             for (arg <- let.args) yield valueToExp(arg),
@@ -1750,7 +1777,7 @@ object Util {
           return AST.Exp.Invoke(None(), ident, targs, for (arg <- let.args) yield valueToExp(arg.value),
             AST.ResolvedAttr(symPosOpt, resOpt, Some(t)))
         case let: State.Claim.Let.Quant =>
-          val exp = bigAnd(for (c <- let.claims) yield toExp(c))
+          val exp = toExp(State.Claim.And(let.claims))
           var params = ISZ[AST.Exp.Fun.Param]()
           var fcontext = ISZ[String]()
           val attr = AST.Attr(symPosOpt)
@@ -1936,11 +1963,15 @@ object Util {
     def toExp(claim: State.Claim): AST.Exp = {
       claim match {
         case claim: State.Claim.And =>
-          return bigAnd(for (c <- claim.claims) yield toExp(c))
+          return bigAnd(for (c <- claim.claims if !ignore(c)) yield toExp(c))
         case claim: State.Claim.Or =>
-          return bigOr(for (c <- claim.claims) yield toExp(c))
+          return bigOr(for (c <- claim.claims if !ignore(c)) yield toExp(c))
         case claim: State.Claim.Imply =>
-          return bigImply(for (c <- claim.claims) yield toExp(c))
+          val es: ISZ[AST.Exp] = for (c <- claim.claims if !ignore(c)) yield toExp(c)
+          if (es.size < 2) {
+            return trueLit
+          }
+          return bigImply(es)
         case claim: State.Claim.Prop =>
           return if (claim.isPos) valueToExp(claim.value)
           else AST.Exp.Unary(AST.Exp.UnaryOp.Not,
@@ -1948,8 +1979,10 @@ object Util {
               Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)), AST.Typed.bOpt)
           )
         case claim: State.Claim.If =>
-          return AST.Exp.If(valueToExp(claim.cond), toExp(State.Claim.And(claim.tClaims)), toExp(State.Claim.And(claim.fClaims)),
-            AST.TypedAttr(posOpt, AST.Typed.bOpt))
+          val cond = valueToExp(claim.cond)
+          val left = toExp(State.Claim.And(claim.tClaims))
+          val right = toExp(State.Claim.And(claim.fClaims))
+          return constructIf(cond, left, right, posOpt, AST.Typed.bOpt)
         case claim: State.Claim.Eq =>
           val op: String = if (th.isGroundType(claim.v1.tipe)) AST.Exp.BinaryOp.Eq3 else AST.Exp.BinaryOp.Equiv
           return AST.Exp.Binary(valueToExp(claim.v1), op, valueToExp(claim.v2), AST.ResolvedAttr(
@@ -1965,27 +1998,10 @@ object Util {
 
     var r = ISZ[AST.Exp]()
 
-    def addClaim(claim: State.Claim): Unit = {
+    for (claim <- claims if !ignore(claim)) {
       val exp = toExp(claim)
       if (exp =!= trueLit) {
         r = r :+ exp
-      }
-    }
-
-    for (claim <- claims) {
-      claim match {
-        case claim: State.Claim.And => addClaim(claim)
-        case claim: State.Claim.Or => addClaim(claim)
-        case claim: State.Claim.Imply => addClaim(claim)
-        case claim: State.Claim.Prop => addClaim(claim)
-        case claim: State.Claim.If => addClaim(claim)
-        case claim: State.Claim.Eq =>
-          collector.letMap.get(claim.v2.num) match {
-            case Some(lets) if lets.size > 1 =>
-            case _ => addClaim(claim)
-          }
-        case _: State.Claim.Let =>
-        case _: State.Claim.Label =>
       }
     }
     return r

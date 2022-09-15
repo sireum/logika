@@ -134,3 +134,21 @@ def testNameString(): Unit = {
   )
 }
 
+
+def testQuant(a: ZS): Unit = {
+  Contract(
+    Requires(
+      ∀{j: Z => (0 <= j & j < a.size) -->: (a(j) > 0) },
+      ∀(0 until a.size)(j => a(j) =!= 0),
+      //∀(a.indices)(j => a(j) >= 1)
+    )
+  )
+
+  Deduce(
+    //@formatter:off
+    ∀((j: Z) => (0 <= j & j < a.size) -->: (a(j) > 0))     by Premise,
+    ∀((j: Z) => (0 <= j & j < a.size) -->: (a(j) =!= 0))   by Premise,
+    //∀((j: Z) => a.isInBound(j) -->: (a(j) >= 1))           by Premise
+    //@formatter:on
+  )
+}
