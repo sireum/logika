@@ -1611,7 +1611,7 @@ object Util {
             case string"+" => (AST.Exp.UnaryOp.Plus, AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus)
             case string"-" => (AST.Exp.UnaryOp.Minus, AST.ResolvedInfo.BuiltIn.Kind.UnaryMinus)
             case string"~" => (AST.Exp.UnaryOp.Complement, AST.ResolvedInfo.BuiltIn.Kind.UnaryComplement)
-            case string"~" => (AST.Exp.UnaryOp.Not, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)
+            case string"!" => (AST.Exp.UnaryOp.Not, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)
             case _ => halt(s"Infeasible: ${let.op}")
           }
           return AST.Exp.Unary(op, valueToExp(let.value), AST.ResolvedAttr(
@@ -1765,10 +1765,32 @@ object Util {
             AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
           return AST.Exp.QuantType(let.isAll, fun, AST.Attr(symPosOpt))
         case let: State.Claim.Let.FieldLookup =>
-          val info = th.typeMap.get(let.adt.tipe.asInstanceOf[AST.Typed.Name].ids).get.asInstanceOf[TypeInfo.Adt].vars.get(let.id).get
-          return AST.Exp.Select(Some(valueToExp(let.adt)), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-            AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, info.ast.isSpec, info.ast.isVal,
-              info.owner, let.id)), Some(sym.tipe)))
+          let.adt.tipe match {
+            case t: AST.Typed.Name =>
+              th.typeMap.get(t.ids).get match {
+                case ti: TypeInfo.Adt =>
+                  val info = ti.vars.get(let.id).get
+                  return AST.Exp.Select(Some(valueToExp(let.adt)), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                    AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, info.ast.isSpec, info.ast.isVal,
+                      info.owner, let.id)), Some(sym.tipe)))
+                case ti: TypeInfo.Sig =>
+                  assert(let.id === "size" && (t.ids === AST.Typed.isName || t.ids === AST.Typed.msName))
+                  val info = ti.methods.get(let.id).get
+                  val tOpt: Option[AST.Typed.Fun] = info.typedOpt match {
+                    case Some(_: AST.Typed.Method) => Some(AST.Typed.Fun(T, T, ISZ(), sym.tipe))
+                    case Some(t) => halt(s"Infeasible: $t")
+                    case _ => None()
+                  }
+                  return AST.Exp.Select(Some(valueToExp(let.adt)), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                    AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Method(info.isInObject, AST.MethodMode.Method, ISZ(),
+                      info.owner, let.id, ISZ(), tOpt, ISZ(), ISZ())), Some(sym.tipe)))
+                case ti => halt(s"Infeasible: $ti")
+              }
+            case t: AST.Typed.Tuple =>
+              return AST.Exp.Select(Some(valueToExp(let.adt)), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Tuple(t.args.size, Z(ops.StringOps(let.id).substring(1, let.id.size)).get)), Some(sym.tipe)))
+            case t => halt(s"Infeasible: $t")
+          }
         case let: State.Claim.Let.FieldStore =>
           val (rcvOpt, ident) = rcvOptIdent(let.adt)
           val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(th, symPosOpt,
@@ -1884,7 +1906,6 @@ object Util {
             ISZ(AST.Exp.LitString(conversions.S32.toZ(value.value).string, attr)), ISZ(),
             AST.TypedAttr(attr.posOpt, Some(value.tipe)))
         case value: State.Value.S64 =>
-          val vPosOpt: Option[Position] = Some(value.pos)
           return AST.Exp.StringInterpolate(subZPrefix(value.tipe),
             ISZ(AST.Exp.LitString(conversions.S64.toZ(value.value).string, attr)), ISZ(),
             AST.TypedAttr(attr.posOpt, Some(value.tipe)))
@@ -1937,6 +1958,7 @@ object Util {
             Some(claim.v1.tipe)
           ))
         case claim: State.Claim.Let => return letToExp(claim)
+        case _: State.Claim.Label => return trueLit
         case claim => halt(s"Infeasible: $claim")
       }
     }
