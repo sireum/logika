@@ -1407,16 +1407,10 @@ object Util {
     return s4
   }
 
-  @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): Option[ISZ[AST.Exp]] = {
+  @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ISZ[AST.Exp] = {
 
     val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
     val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
-    var ok = T
-
-    def TODO_Exp(): AST.Exp = {
-      ok = F
-      return AST.Exp.LitZ(0, AST.Attr(None()))
-    }
 
     val posOpt: Option[Position] = Some(pos)
     val collector = LetEqNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty, HashMap.empty)
@@ -1756,7 +1750,20 @@ object Util {
           return AST.Exp.Invoke(None(), ident, targs, for (arg <- let.args) yield valueToExp(arg.value),
             AST.ResolvedAttr(symPosOpt, resOpt, Some(t)))
         case let: State.Claim.Let.Quant =>
-          return TODO_Exp()
+          val exp = bigAnd(for (c <- let.claims) yield toExp(c))
+          var params = ISZ[AST.Exp.Fun.Param]()
+          var fcontext = ISZ[String]()
+          val attr = AST.Attr(symPosOpt)
+          var argTypes = ISZ[AST.Typed]()
+          for (x <- let.vars) {
+            fcontext = x.context
+            argTypes = argTypes :+ x.tipe
+            val t = typedToType(x.tipe)
+            params = params :+ AST.Exp.Fun.Param(Some(AST.Id(x.id, attr)), Some(t), Some(x.tipe))
+          }
+          val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(exp, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
+            AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
+          return AST.Exp.QuantType(let.isAll, fun, AST.Attr(symPosOpt))
         case let: State.Claim.Let.FieldLookup =>
           val info = th.typeMap.get(let.adt.tipe.asInstanceOf[AST.Typed.Name].ids).get.asInstanceOf[TypeInfo.Adt].vars.get(let.id).get
           return AST.Exp.Select(Some(valueToExp(let.adt)), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
@@ -1935,23 +1942,31 @@ object Util {
     }
 
     var r = ISZ[AST.Exp]()
-    for (claim <- claims if ok) {
+
+    def addClaim(claim: State.Claim): Unit = {
+      val exp = toExp(claim)
+      if (exp =!= trueLit) {
+        r = r :+ exp
+      }
+    }
+
+    for (claim <- claims) {
       claim match {
-        case claim: State.Claim.And => r = r :+ toExp(claim)
-        case claim: State.Claim.Or => r = r :+ toExp(claim)
-        case claim: State.Claim.Imply => r = r :+ toExp(claim)
-        case claim: State.Claim.Prop => r = r :+ toExp(claim)
-        case claim: State.Claim.If => r = r :+ toExp(claim)
+        case claim: State.Claim.And => addClaim(claim)
+        case claim: State.Claim.Or => addClaim(claim)
+        case claim: State.Claim.Imply => addClaim(claim)
+        case claim: State.Claim.Prop => addClaim(claim)
+        case claim: State.Claim.If => addClaim(claim)
         case claim: State.Claim.Eq =>
           collector.letMap.get(claim.v2.num) match {
             case Some(lets) if lets.size > 1 =>
-            case _ => r = r :+ toExp(claim)
+            case _ => addClaim(claim)
           }
         case _: State.Claim.Let =>
         case _: State.Claim.Label =>
       }
     }
-    return if (ok) Some(r) else None()
+    return r
   }
 
 }

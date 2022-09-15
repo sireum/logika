@@ -1611,7 +1611,7 @@ import Util._
       for (p <- evalExp(sp, smt2, cache, rtCheck, state, quant.seq, reporter)) {
         val (s0, seq) = p
         if (s0.status) {
-          val idx = s"${qVarRes.id}$$Idx"
+          val idx = s"${qVarRes.id}_Idx"
           val (s1, qvarIdx) = idIntro(pos, s0, qVarRes.context, idx, iType, Some(pos))
           val (s2, inBound) = s1.freshSym(AST.Typed.b, pos)
           val s3 = s2.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvarIdx))
@@ -4088,10 +4088,8 @@ import Util._
         if (raw) {
           State.Claim.claimsRawSTs(state.claims)
         } else {
-          Util.claimsToExps(posOpt.get, context.methodName, state.claims, th, T) match {
-            case Some(es) => for (e <- (HashSSet.empty[AST.Exp] ++ es).elements) yield e.prettyST
-            case _ => State.Claim.claimsSTs(state.claims, ClaimDefs.empty)
-          }
+          val es = Util.claimsToExps(posOpt.get, context.methodName, state.claims, th, T)
+          for (e <- (HashSSet.empty[AST.Exp] ++ es).elements) yield e.prettyST
         }
       if (sts.isEmpty) {
         reporter.info(posOpt, Logika.kind, "Path conditions = {}")

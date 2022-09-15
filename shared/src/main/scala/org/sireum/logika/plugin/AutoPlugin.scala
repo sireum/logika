@@ -114,31 +114,25 @@ import org.sireum.logika.Logika.Reporter
           return Plugin.Result(T, state.nextFresh, spc.claims)
         case _ =>
           if (id === "Premise") {
-            org.sireum.logika.Util.claimsToExps(pos, logika.context.methodName, state.claims, logika.th, T) match {
-              case Some(pathConditions) =>
-                val set = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield e)
-                val normSet = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield AST.Util.normalizeExp(e))
-                if (normSet.contains(claimNorm)) {
-                  val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-                  val (status, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
-                  reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
-                    st"""Accepted because the stated claim is in the path conditions:
-                        |{
-                        |  ${(for (e <- set.elements) yield e.prettyST, ";\n")}
-                        |}""".render)
-                  return Plugin.Result(status, nextFresh, claims)
-                } else {
-                  reporter.error(posOpt, Logika.kind,
-                    st"""The stated claim has not been proven before nor is a premise in:
-                        |{
-                        |  ${(for (e <- set.elements) yield e.prettyST, ";\n")}
-                        |}""".render)
-                  return Plugin.Result(F, state.nextFresh, state.claims)
-                }
-              case _ =>
-                reporter.warn(posOpt, Logika.kind,
-                  st"""Could not find the stated claim in the enclosing context; switching to Auto mode ...
-                      |(this will be disabled in the future, so please change to use Auto justification instead)""".render)
+            val pathConditions = org.sireum.logika.Util.claimsToExps(pos, logika.context.methodName, state.claims, logika.th, T)
+            val set = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield e)
+            val normSet = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield AST.Util.normalizeExp(e))
+            if (normSet.contains(claimNorm)) {
+              val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+              val (status, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
+              reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+                st"""Accepted because the stated claim is in the path conditions:
+                    |{
+                    |  ${(for (e <- set.elements) yield e.prettyST, ";\n")}
+                    |}""".render)
+              return Plugin.Result(status, nextFresh, claims)
+            } else {
+              reporter.error(posOpt, Logika.kind,
+                st"""The stated claim has not been proven before nor is a premise in:
+                    |{
+                    |  ${(for (e <- set.elements) yield e.prettyST, ";\n")}
+                    |}""".render)
+              return Plugin.Result(F, state.nextFresh, state.claims)
             }
           }
       }
