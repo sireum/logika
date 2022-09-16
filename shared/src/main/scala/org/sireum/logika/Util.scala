@@ -541,16 +541,11 @@ object Util {
     }
   }
 
-  @record class LetEqNumMapCollector(var letMap: HashMap[Z, HashSet[State.Claim.Let]],
-                                     var eqMap: HashMap[Z, State.Claim.Eq],
-                                     var lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
-                                     var vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]]) extends MStateTransformer {
+  @record class LetNumMapCollector(var letMap: HashMap[Z, HashSet[State.Claim.Let]],
+                                   var lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
+                                   var vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]]) extends MStateTransformer {
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
       o match {
-        case o: State.Claim.Eq =>
-          val key = o.v2.num
-          assert(!eqMap.contains(key))
-          eqMap = eqMap + key ~> o
         case o: State.Claim.Let.Id =>
           val key = (o.context, o.id)
           var map = lNumMap.get(key).getOrElse(HashMap.empty)
@@ -1424,7 +1419,7 @@ object Util {
     val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
 
     val posOpt: Option[Position] = Some(pos)
-    val collector = LetEqNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty, HashMap.empty)
+    val collector = LetNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty)
     for (claim <- claims) {
       collector.transformStateClaim(claim)
     }
@@ -1502,7 +1497,9 @@ object Util {
       val res = AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
       var i = es.size - 2
       while (i >= 0) {
-        r = AST.Exp.Binary(es(i), op, r, AST.ResolvedAttr(None(), Some(res), AST.Typed.bOpt))
+        if (r =!= trueLit) {
+          r = AST.Exp.Binary(es(i), op, r, AST.ResolvedAttr(None(), Some(res), AST.Typed.bOpt))
+        }
         i = i - 1
       }
       return r
@@ -1906,13 +1903,20 @@ object Util {
       value match {
         case value: State.Value.Sym =>
           collector.letMap.get(value.num) match {
-            case Some(lets) if lets.size === 1 => return letToExp(lets.elements(0))
-            case _ =>
-              collector.eqMap.get(value.num) match {
-                case Some(eq) => return valueToExp(eq.v1)
-                case _ => return AST.Exp.Sym(value.num, AST.TypedAttr(Some(value.pos), Some(value.tipe)))
+            case Some(lets) =>
+              if (lets.size === 1) {
+                return letToExp(lets.elements(0))
               }
+              for (let <- lets.elements) {
+                let match {
+                  case _: State.Claim.Let.Id => return letToExp(let)
+                  case _: State.Claim.Let.Name => return letToExp(let)
+                  case _ =>
+                }
+              }
+            case _ =>
           }
+          return AST.Exp.Sym(value.num, AST.TypedAttr(Some(value.pos), Some(value.tipe)))
         case value: State.Value.B => return AST.Exp.LitB(value.value, attr)
         case value: State.Value.Z => return AST.Exp.LitZ(value.value, attr)
         case value: State.Value.R => return AST.Exp.LitR(value.value, attr)
