@@ -1972,12 +1972,12 @@ object Util {
         case claim: State.Claim.Or =>
           return bigOr(for (c <- claim.claims if !ignore(c)) yield toExp(c))
         case claim: State.Claim.Imply =>
-          val claims: ISZ[State.Claim] = claim.claims match {
+          val cs: ISZ[State.Claim] = claim.claims match {
             case ISZ(c1: State.Claim.Prop, c2: State.Claim.Let.Def) if c2.value.isInstanceOf[State.Value.Sym] =>
               ISZ[State.Claim](c1, State.Claim.Eq(c2.sym, c2.value.asInstanceOf[State.Value.Sym]))
             case _ => claim.claims
           }
-          val es: ISZ[AST.Exp] = for (c <- claims if !ignore(c)) yield toExp(c)
+          val es: ISZ[AST.Exp] = for (c <- cs if !ignore(c)) yield toExp(c)
           if (es.size < 2) {
             return trueLit
           }
