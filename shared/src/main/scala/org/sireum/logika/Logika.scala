@@ -1903,7 +1903,7 @@ import Util._
                              labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
                              ensures: ISZ[AST.Exp]): Context.ContractCaseResult = {
 
-          def modVarsResult(ms0: State, mposOpt: Option[Position]): (State, State.Value) = {
+          def modVarsResult(ms0: State, mposOpt: Option[Position]): (State, State.Value.Sym) = {
             var ms1 = ms0
             val modObjectVars = contract.modifiedObjectVars
             val mpos = mposOpt.get
@@ -1937,7 +1937,7 @@ import Util._
               }
             }
             if (isUnit) {
-              return (ms1, State.Value.Unit(mpos))
+              return ms1.freshSym(AST.Typed.unit, mpos)
             } else {
               val (ms2, v) = resIntro(mpos, ms1, ctx, retType, mposOpt)
               ms1 = ms2
@@ -2152,17 +2152,23 @@ import Util._
                 }
               } else {
                 var claims = ISZ[State.Claim]()
+                var map = HashMap.empty[State.Claim.Prop, ISZ[State.Claim]]
                 for (i <- 0 until root.claims.size) {
                   val rootClaim = root.claims(i)
                   if (ops.ISZOps(okCcrs).forall((ccr: Context.ContractCaseResult) => ccr.state.claims(i) == rootClaim)) {
                     claims = claims :+ rootClaim
                   } else {
-                    val implies: ISZ[State.Claim] = for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim, ccr.state.claims(i)))
-                    claims = claims ++ implies
+                    for (ccr <- okCcrs) {
+                      val l = map.get(ccr.requiresClaim).getOrElse(ISZ())
+                      map = map + ccr.requiresClaim ~> (l :+ ccr.state.claims(i))
+                    }
                   }
                 }
                 val implies: ISZ[State.Claim] = for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
-                  State.Claim.And(for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i))))
+                  State.Claim.And(
+                    map.get(ccr.requiresClaim).getOrElse(ISZ()) ++
+                      (for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i)))
+                ))
                 claims = claims ++ implies
                 claims = claims :+ State.Claim.Or(for (ccr <- okCcrs) yield ccr.requiresClaim)
                 s1 = s1(claims = claims)

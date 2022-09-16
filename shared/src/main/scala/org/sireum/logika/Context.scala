@@ -129,7 +129,7 @@ object Context {
 
   @datatype class ContractCaseResult(val isPreOK: B,
                                      val state: State,
-                                     val retVal: State.Value,
+                                     val retVal: State.Value.Sym,
                                      val requiresClaim: State.Claim.Prop,
                                      val messages: ISZ[message.Message]) {
     @strictpure def isOK: B = state.status
