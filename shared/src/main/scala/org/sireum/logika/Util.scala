@@ -1556,6 +1556,9 @@ object Util {
 
     def constructIf(cond: AST.Exp, left: AST.Exp, right: AST.Exp, pOpt: Option[Position], tOpt: Option[AST.Typed]): AST.Exp = {
       if (right === trueLit) {
+        if (left === trueLit) {
+          return trueLit
+        }
         return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondImply, left, AST.ResolvedAttr(pOpt,
           Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)), AST.Typed.bOpt))
       } else if (right === falseLit) {
@@ -1879,7 +1882,7 @@ object Util {
           val linesFresh: ISZ[AST.Exp.LitZ] =
             if (includeFreshLines) ISZ(AST.Exp.LitZ(let.pos.beginLine, attr), AST.Exp.LitZ(let.sym.num, attr))
             else ISZ()
-          return AST.Exp.At(Some(typedToType(sym.tipe)), AST.Exp.LitString("random", attr),
+          return AST.Exp.At(Some(typedToType(sym.tipe)), AST.Exp.LitString(".random", attr),
             AST.Exp.LitZ(n, attr), linesFresh, attr)
       }
 
@@ -1965,22 +1968,29 @@ object Util {
       }
     }
 
+    def defsToEqs(cs: ISZ[State.Claim]): ISZ[State.Claim] = {
+      var r = ISZ[State.Claim]()
+      for (c <- cs) {
+        c match {
+          case c: State.Claim.Let.Def => r = r :+ State.Claim.Eq(c.sym, c.value)
+          case _ =>
+            if (!ignore(c)) {
+              r = r :+ c
+            }
+        }
+      }
+      return r
+    }
+
     def toExp(claim: State.Claim): AST.Exp = {
       claim match {
         case claim: State.Claim.And =>
-          return bigAnd(for (c <- claim.claims if !ignore(c)) yield toExp(c))
+          return bigAnd(for (c <- defsToEqs(claim.claims)) yield toExp(c))
         case claim: State.Claim.Or =>
-          return bigOr(for (c <- claim.claims if !ignore(c)) yield toExp(c))
+          return bigOr(for (c <- defsToEqs(claim.claims)) yield toExp(c))
         case claim: State.Claim.Imply =>
-          val cs: ISZ[State.Claim] = claim.claims match {
-            case ISZ(c1: State.Claim.Prop, c2: State.Claim.Let.Def) if c2.value.isInstanceOf[State.Value.Sym] =>
-              ISZ[State.Claim](c1, State.Claim.Eq(c2.sym, c2.value.asInstanceOf[State.Value.Sym]))
-            case _ => claim.claims
-          }
-          val es: ISZ[AST.Exp] = for (c <- cs if !ignore(c)) yield toExp(c)
-          if (es.size < 2) {
-            return trueLit
-          }
+          val es: ISZ[AST.Exp] = for (c <- defsToEqs(claim.claims)) yield toExp(c)
+          assert(es.size >= 2)
           return bigImply(es)
         case claim: State.Claim.Prop =>
           return if (claim.isPos) valueToExp(claim.value)

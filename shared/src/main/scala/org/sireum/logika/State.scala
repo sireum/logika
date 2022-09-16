@@ -365,7 +365,7 @@ object State {
       }
     }
 
-    @datatype class Eq(val v1: Value.Sym, val v2: Value.Sym) extends Claim {
+    @datatype class Eq(val v1: Value.Sym, val v2: Value) extends Claim {
       @pure override def toRawST: ST = {
         return st"${v1.toRawST} ≜ ${v2.toRawST}"
       }

@@ -1666,7 +1666,7 @@ import MStateTransformer._
             MNone()
         case o2: State.Claim.Eq =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.v1)
-          val r1: MOption[State.Value.Sym] = transformStateValueSym(o2.v2)
+          val r1: MOption[State.Value] = transformStateValue(o2.v2)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
             MSome(o2(v1 = r0.getOrElse(o2.v1), v2 = r1.getOrElse(o2.v2)))
           else

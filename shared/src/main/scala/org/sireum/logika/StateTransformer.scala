@@ -1452,7 +1452,7 @@ import StateTransformer._
             TPostResult(r0.ctx, None())
         case o2: State.Claim.Eq =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.v1)
-          val r1: TPostResult[Context, State.Value.Sym] = transformStateValueSym(r0.ctx, o2.v2)
+          val r1: TPostResult[Context, State.Value] = transformStateValue(r0.ctx, o2.v2)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
             TPostResult(r1.ctx, Some(o2(v1 = r0.resultOpt.getOrElse(o2.v1), v2 = r1.resultOpt.getOrElse(o2.v2))))
           else
