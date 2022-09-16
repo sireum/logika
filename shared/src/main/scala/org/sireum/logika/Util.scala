@@ -1743,8 +1743,9 @@ object Util {
           )
         case let: State.Claim.Let.AdtLit =>
           val info = th.typeMap.get(let.tipe.ids).get.asInstanceOf[TypeInfo.Adt]
+          val name = ops.ISZOps(let.tipe.ids).dropRight(1)
           return AST.Exp.Invoke(
-            Some(nameToExp(ops.ISZOps(let.tipe.ids).dropRight(1), symPos)),
+            if (name.isEmpty) None() else Some(nameToExp(ops.ISZOps(let.tipe.ids).dropRight(1), symPos)),
             AST.Exp.Ident(AST.Id(let.tipe.ids(let.tipe.ids.size - 1), AST.Attr(symPosOpt)), AST.ResolvedAttr(
               symPosOpt,
               info.constructorResOpt,
@@ -1996,15 +1997,15 @@ object Util {
       }
     }
 
-    var r = ISZ[AST.Exp]()
+    var r = HashSSet.empty[AST.Exp]
 
     for (claim <- claims if !ignore(claim)) {
       val exp = toExp(claim)
       if (exp =!= trueLit) {
-        r = r :+ exp
+        r = r + exp
       }
     }
-    return r
+    return r.elements
   }
 
 }
