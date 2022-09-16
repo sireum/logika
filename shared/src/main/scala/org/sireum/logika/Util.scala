@@ -1418,6 +1418,7 @@ object Util {
     val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
     val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
 
+    var symNumMap = HashMap.empty[Z, Z]
     val posOpt: Option[Position] = Some(pos)
     val collector = LetNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty)
     for (claim <- claims) {
@@ -1598,24 +1599,13 @@ object Util {
           }
           val attr = AST.Attr(symPosOpt)
           if (let.context === context || let.context.isEmpty) {
-            return AST.Exp.At(
-              None(),
-              AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(
-                symPosOpt,
-                Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
-                Some(sym.tipe))),
-              AST.Exp.LitZ(n, attr),
-              linesFresh,
-              attr
-            )
+            return AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
+              Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+              Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr)
           } else {
-            return AST.Exp.At(
-              Some(typedToType(sym.tipe)),
+            return AST.Exp.At(Some(typedToType(sym.tipe)),
               AST.Exp.LitString(st"${(let.context :+ let.id, ".")}".render, AST.Attr(symPosOpt)),
-              AST.Exp.LitZ(n, attr),
-              linesFresh,
-              attr
-            )
+              AST.Exp.LitZ(n, attr), linesFresh, attr)
           }
         case let: State.Claim.Let.Name =>
           val n = collector.vNumMap.get(let.ids).get.get((let.num, let.poss)).get
@@ -1625,13 +1615,7 @@ object Util {
             ISZ()
           }
           val attr = AST.Attr(symPosOpt)
-          return AST.Exp.At(
-            None(),
-            nameToExp(let.ids, symPos),
-            AST.Exp.LitZ(n, attr),
-            linesFresh,
-            attr
-          )
+          return AST.Exp.At(None(), nameToExp(let.ids, symPos), AST.Exp.LitZ(n, attr), linesFresh, attr)
         case let: State.Claim.Let.Unary =>
           val (op, kind): (AST.Exp.UnaryOp.Type, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
             case string"+" => (AST.Exp.UnaryOp.Plus, AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus)
@@ -1640,11 +1624,8 @@ object Util {
             case string"!" => (AST.Exp.UnaryOp.Not, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)
             case _ => halt(s"Infeasible: ${let.op}")
           }
-          return AST.Exp.Unary(op, valueToExp(let.value), AST.ResolvedAttr(
-            symPosOpt,
-            Some(AST.ResolvedInfo.BuiltIn(kind)),
-            Some(sym.tipe)
-          ))
+          return AST.Exp.Unary(op, valueToExp(let.value), AST.ResolvedAttr(symPosOpt,
+            Some(AST.ResolvedInfo.BuiltIn(kind)), Some(sym.tipe)))
         case let: State.Claim.Let.Binary =>
           @pure def isS(t: AST.Typed): B = {
             t match {
@@ -1673,11 +1654,7 @@ object Util {
             val info = th.typeMap.get(sType.ids).get.asInstanceOf[TypeInfo.Sig].methods.get(op).asInstanceOf[Info.Method]
             return AST.Exp.Invoke(
               Some(left),
-              AST.Exp.Ident(AST.Id(op, AST.Attr(symPosOpt)), AST.ResolvedAttr(
-                symPosOpt,
-                info.resOpt,
-                info.typedOpt
-              )),
+              AST.Exp.Ident(AST.Id(op, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt, info.resOpt, info.typedOpt)),
               ISZ(),
               ISZ(right),
               AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))
@@ -1890,8 +1867,20 @@ object Util {
             Some(let.tipe)))
           return AST.Exp.Invoke(None(), ident, ISZ(), for (arg <- let.args) yield valueToExp(arg),
             AST.ResolvedAttr(symPosOpt, ident.resOpt, Some(sym.tipe)))
-        case _: State.Claim.Let.Random =>
-          return AST.Exp.Sym(sym.num, AST.TypedAttr(symPosOpt, Some(sym.tipe)))
+        case let: State.Claim.Let.Random =>
+          val attr = AST.Attr(symPosOpt)
+          val n: Z = symNumMap.get(let.sym.num) match {
+            case Some(m) => m
+            case _ =>
+              val m = symNumMap.size
+              symNumMap = symNumMap + let.sym.num ~> m
+              m
+          }
+          val linesFresh: ISZ[AST.Exp.LitZ] =
+            if (includeFreshLines) ISZ(AST.Exp.LitZ(let.pos.beginLine, attr), AST.Exp.LitZ(let.sym.num, attr))
+            else ISZ()
+          return AST.Exp.At(Some(typedToType(sym.tipe)), AST.Exp.LitString("random", attr),
+            AST.Exp.LitZ(n, attr), linesFresh, attr)
       }
 
     }
@@ -1916,7 +1905,18 @@ object Util {
               }
             case _ =>
           }
-          return AST.Exp.Sym(value.num, AST.TypedAttr(Some(value.pos), Some(value.tipe)))
+          val n: Z = symNumMap.get(value.num) match {
+            case Some(m) => m
+            case _ =>
+              val m = symNumMap.size
+              symNumMap = symNumMap + value.num ~> m
+              m
+          }
+          val linesFresh: ISZ[AST.Exp.LitZ] =
+            if (includeFreshLines) ISZ(AST.Exp.LitZ(value.pos.beginLine, attr), AST.Exp.LitZ(value.num, attr))
+            else ISZ()
+          return AST.Exp.At(Some(typedToType(value.tipe)), AST.Exp.LitString(".cx", attr),
+            AST.Exp.LitZ(n, attr), linesFresh, attr)
         case value: State.Value.B => return AST.Exp.LitB(value.value, attr)
         case value: State.Value.Z => return AST.Exp.LitZ(value.value, attr)
         case value: State.Value.R => return AST.Exp.LitR(value.value, attr)
