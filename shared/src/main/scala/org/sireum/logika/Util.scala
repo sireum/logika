@@ -1913,12 +1913,19 @@ object Util {
 
     }
 
+    def eqOpResOpt(t: AST.Typed): (String, Option[AST.ResolvedInfo]) = {
+      if (th.isGroundType(t)) {
+        return (AST.Exp.BinaryOp.Eq3, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)))
+      } else {
+        return (AST.Exp.BinaryOp.Equiv, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)))
+      }
+    }
+
     def fieldStoreToExp(left: AST.Exp, let: State.Claim.Let.FieldStore): AST.Exp = {
       val sym = let.sym
       val symPosOpt = Option.some(sym.pos)
       val (rcvOpt, ident) = rcvOptIdent(let.adt, symPosOpt)
       val t = let.adt.tipe.asInstanceOf[AST.Typed.Name]
-      val equivResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv))
       val (vars, specVars, idResOpt, sm): (ISZ[Info.Var], ISZ[Info.SpecVar], Option[AST.ResolvedInfo], HashMap[String, AST.Typed]) =
         th.typeMap.get(t.ids).get match {
           case info: TypeInfo.Adt =>
@@ -1929,8 +1936,8 @@ object Util {
               val index = ops.ISZOps(paramNames).indexOf(let.id)
               return AST.Exp.Binary(left, AST.Exp.BinaryOp.Equiv, AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(),
                 ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)), valueToExp(let.value), index)),
-                AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe))), AST.ResolvedAttr(symPosOpt, equivResOpt,
-                Some(sym.tipe)))
+                AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe))), AST.ResolvedAttr(symPosOpt,
+                Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)), Some(sym.tipe)))
             }
             ((info.vars -- (paramIds.elements :+ let.id)).values, (info.specVars -- ISZ(let.id)).values,
               info.vars.get(let.id).map((x: Info.Var) => x.resOpt).getOrElse(info.specVars.get(let.id).get.resOpt),
@@ -1942,13 +1949,14 @@ object Util {
         }
       val o1 = valueToExp(let.adt)
       val attr = AST.Attr(symPosOpt)
+      val (idEqOp, idEqResOpt) = eqOpResOpt(let.value.tipe)
       var exps = ISZ[AST.Exp](
         AST.Exp.Binary(left, AST.Exp.BinaryOp.Eq3, o1, AST.ResolvedAttr(symPosOpt,
           Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)), Some(sym.tipe))),
         AST.Exp.Binary(
           AST.Exp.Select(Some(left), AST.Id(let.id, attr), ISZ(), AST.ResolvedAttr(symPosOpt, idResOpt,
-            Some(let.value.tipe))), AST.Exp.BinaryOp.Equiv, valueToExp(let.value),
-          AST.ResolvedAttr(symPosOpt, equivResOpt, Some(let.value.tipe)))
+            Some(let.value.tipe))), idEqOp, valueToExp(let.value),
+          AST.ResolvedAttr(symPosOpt, idEqResOpt, Some(let.value.tipe)))
       )
       for (x <- vars) {
         val id = AST.Id(x.ast.id.value, attr)
@@ -1956,7 +1964,8 @@ object Util {
         val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
         val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
         val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
-        exps = exps :+ AST.Exp.Binary(l, AST.Exp.BinaryOp.Equiv, r, AST.ResolvedAttr(symPosOpt, equivResOpt, tOpt))
+        val (op, eqResOpt) = eqOpResOpt(tOpt.get)
+        exps = exps :+ AST.Exp.Binary(l, op, r, AST.ResolvedAttr(symPosOpt, eqResOpt, tOpt))
       }
       for (x <- specVars) {
         val id = AST.Id(x.ast.id.value, attr)
@@ -1964,7 +1973,8 @@ object Util {
         val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
         val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
         val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
-        exps = exps :+ AST.Exp.Binary(l, AST.Exp.BinaryOp.Equiv, r, AST.ResolvedAttr(symPosOpt, equivResOpt, tOpt))
+        val (op, eqResOpt) = eqOpResOpt(tOpt.get)
+        exps = exps :+ AST.Exp.Binary(l, op, r, AST.ResolvedAttr(symPosOpt, eqResOpt, tOpt))
       }
       return bigAnd(exps)
     }
