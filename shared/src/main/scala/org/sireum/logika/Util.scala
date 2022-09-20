@@ -585,6 +585,7 @@ object Util {
   val condImplyResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply))
   val condAndResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd))
   val andResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
+  val implyResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply))
   val leResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLe))
   val ltResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLt))
   val eqResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq))
@@ -1897,6 +1898,24 @@ object Util {
             }
             return (F, F)
           }
+          @pure def paramIdx(idOpt1: Option[AST.Id], idOpt2: Option[AST.Id]): B = {
+            (idOpt1, idOpt2) match {
+              case (Some(id1), Some(id2)) => return id1.value === s"${id2.value}${Logika.idxSuffix}"
+              case _ =>
+            }
+            return F
+          }
+          @pure def isIdent(fcontext: ISZ[String], id: AST.Id, e: AST.Exp): B = {
+            e match {
+              case e: AST.Exp.Ident =>
+                e.resOpt match {
+                  case Some(res: AST.ResolvedInfo.LocalVar) => return res.id === id.value && res.context === fcontext
+                  case _ =>
+                }
+              case _ =>
+            }
+            return F
+          }
 
           val exp: AST.Exp = toExp(State.Claim.And(let.claims)) match {
             case Some(e) => e
@@ -1913,12 +1932,38 @@ object Util {
             params = params :+ AST.Exp.Fun.Param(Some(AST.Id(x.id, attr)), Some(t), Some(x.tipe))
           }
           exp match {
-            case exp: AST.Exp.Binary if (let.isAll && exp.attr.resOpt === condImplyResOpt) || (!let.isAll && exp.attr.resOpt === condAndResOpt) =>
+            case exp: AST.Exp.Binary if (let.isAll && exp.attr.resOpt === condImplyResOpt) ||
+              (!let.isAll && exp.attr.resOpt === condAndResOpt) =>
               exp.left match {
-                case left: AST.Exp.Invoke if params.size === 1 && left.receiverOpt.nonEmpty && isInBoundResOpt(left.ident.attr.resOpt) =>
+                case left: AST.Exp.Invoke if left.receiverOpt.nonEmpty && isInBoundResOpt(left.ident.attr.resOpt) =>
                   val seq = left.receiverOpt.get
                   val t = seq.typedOpt.get.asInstanceOf[AST.Typed.Name]
-                  if (isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
+                  if (params.size === 2 && paramIdx(params(0).idOpt, params(1).idOpt) &&
+                    isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
+                    exp.right match {
+                      case right: AST.Exp.Binary if right.attr.resOpt === implyResOpt =>
+                        right.left match {
+                          case rl: AST.Exp.Binary if isIdent(fcontext, params(1).idOpt.get, rl.right) &&
+                            rl.attr.resOpt === eqResOpt || rl.attr.resOpt === equivResOpt =>
+                            rl.left match {
+                              case rll: AST.Exp.Invoke if rll.args.size === 1 &&
+                                isIdent(fcontext, params(0).idOpt.get, rll.args(0)) =>
+                                if (left.receiverOpt === Some[AST.Exp](rll.ident)) {
+                                  val fun = AST.Exp.Fun(fcontext, ISZ(params(1)(tipeOpt = None())),
+                                    AST.Stmt.Expr(right.right, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
+                                    AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, ISZ(argTypes(1)), AST.Typed.b))))
+                                  return Some(AST.Exp.QuantEach(let.isAll, rll.ident, fun, AST.ResolvedAttr(symPosOpt,
+                                    Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current,
+                                      F, T, params(1).idOpt.get.value)),
+                                    AST.Typed.bOpt)))
+                                }
+                              case _ =>
+                            }
+                          case _ =>
+                        }
+                      case _ =>
+                    }
+                  } else if (params.size === 1 && isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
                     val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = {
                       val info = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Sig].methods.get("indices").get
                       (info.resOpt, info.typedOpt)

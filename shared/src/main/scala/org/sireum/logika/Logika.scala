@@ -138,6 +138,7 @@ object Logika {
   val indexingFields: HashSet[String] = HashSet ++ ISZ[String]("firstIndex", "lastIndex")
   val emptyBindings: Bindings = Map.empty[String, (State.Value.Sym, AST.Typed, Position)]
   val trueClaim: State.Claim = State.Claim.And(ISZ())
+  val idxSuffix: String = "$Idx"
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
@@ -1621,7 +1622,7 @@ import Util._
       for (p <- evalExp(sp, smt2, cache, rtCheck, state, quant.seq, reporter)) {
         val (s0, seq) = p
         if (s0.status) {
-          val idx = s"${qVarRes.id}_Idx"
+          val idx = s"${qVarRes.id}$idxSuffix"
           val (s1, qvarIdx) = idIntro(pos, s0, qVarRes.context, idx, iType, Some(pos))
           val (s2, inBound) = s1.freshSym(AST.Typed.b, pos)
           val s3 = s2.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvarIdx))
