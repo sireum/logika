@@ -1525,8 +1525,8 @@ import Util._
             val (s10, v) = p
             val (s11, qSym) = s10.freshSym(AST.Typed.b, range.pos)
             val s12 = s11.addClaims(ISZ(
-              if (quant.isForall) State.Claim.Let.Ite(qSym, range, v, State.Value.B(T, range.pos))
-              else State.Claim.Let.Ite(qSym, range, v, State.Value.B(F, range.pos)),
+              if (quant.isForall) State.Claim.Let.Binary(qSym, range, AST.Exp.BinaryOp.CondImply, v, AST.Typed.b)
+              else State.Claim.Let.Binary(qSym, range, AST.Exp.BinaryOp.CondAnd, v, AST.Typed.b),
               State.Claim.Prop(T, qSym)
             ))
             if (s12.status) {
@@ -1576,8 +1576,8 @@ import Util._
             val (s7, v) = p
             val (s8, qSym) = s7.freshSym(AST.Typed.b, quant.fun.exp.asStmt.posOpt.get)
             val s9 = s8.addClaims(ISZ(
-              if (quant.isForall) State.Claim.Let.Ite(qSym, inBoundSym, v, State.Value.B(T, qSym.pos))
-              else State.Claim.Let.Ite(qSym, inBoundSym, v, State.Value.B(F, qSym.pos)),
+              if (quant.isForall) State.Claim.Let.Binary(qSym, inBoundSym, AST.Exp.BinaryOp.CondImply, v, AST.Typed.b)
+              else State.Claim.Let.Binary(qSym, inBoundSym, AST.Exp.BinaryOp.CondAnd, v, AST.Typed.b),
               State.Claim.Prop(T, qSym)
             ))
             if (s9.status) {
@@ -1644,10 +1644,10 @@ import Util._
             val (s12, qSym) = s11.freshSym(AST.Typed.b, quant.fun.exp.asStmt.posOpt.get)
             val (s13, qSym2) = s12.freshSym(AST.Typed.b, qSym.pos)
             val s14 = s13.addClaims(ISZ(
-              if (quant.isForall) State.Claim.Let.Ite(qSym, eqSym, v, State.Value.B(T, qSym.pos))
-              else State.Claim.Let.Ite(qSym, eqSym, v, State.Value.B(F, qSym.pos)),
-              if (quant.isForall) State.Claim.Let.Ite(qSym2, inBound, qSym, State.Value.B(T, qSym.pos))
-              else State.Claim.Let.Ite(qSym2, inBound, qSym, State.Value.B(T, qSym.pos)),
+              if (quant.isForall) State.Claim.Let.Binary(qSym, eqSym, AST.Exp.BinaryOp.Imply, v, AST.Typed.b)
+              else State.Claim.Let.Binary(qSym, eqSym, AST.Exp.BinaryOp.And, v, AST.Typed.b),
+              if (quant.isForall) State.Claim.Let.Binary(qSym2, inBound, AST.Exp.BinaryOp.CondImply, qSym, AST.Typed.b)
+              else State.Claim.Let.Binary(qSym2, inBound, AST.Exp.BinaryOp.CondAnd, qSym, AST.Typed.b),
               State.Claim.Prop(T, qSym2),
             ))
             if (s14.status) {
