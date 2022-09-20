@@ -149,7 +149,7 @@ def testQuant(a: ZS): Unit = {
     //@formatter:off
     ∀((j: Z) => (0 <= j & j < a.size) -->: (a(j) > 0))                              by Premise,
     ∀((j: Z) => (0 <= j & j < a.size) -->: (a(j) =!= 0))                            by Premise,
-    ∀((j: Z) => a.isInBound(j) -->: (a(j) >= 1))                                    by Premise,
+    ∀(a.indices)(j => a(j) >= 1)                                                    by Premise,
     ∀((e_Idx: Z, e: Z) => a.isInBound(e_Idx) -->: (a(e_Idx) === e) ->: (e >= 2))    by Premise
     //@formatter:on
   )

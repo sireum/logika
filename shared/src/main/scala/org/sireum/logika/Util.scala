@@ -582,6 +582,9 @@ object Util {
     AST.Typed.rName, AST.Typed.stName, AST.Typed.isName, AST.Typed.msName
   )
 
+  val condImplyResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply))
+  val condAndResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd))
+
   def collectLetClaims(enabled: B, claims: ISZ[State.Claim]): (HashMap[Z, ISZ[State.Claim.Let]], HashSSet[State.Value.Sym]) = {
     if (enabled) {
       val lc = LetCollector(HashMap.empty, HashSSet.empty)
@@ -1831,6 +1834,33 @@ object Util {
             AST.ResolvedAttr(symPosOpt, resOpt, tOpt))
           return Some(AST.Exp.Invoke(None(), ident, targs, es, AST.ResolvedAttr(symPosOpt, resOpt, Some(t))))
         case let: State.Claim.Let.Quant =>
+          @pure def isInBoundResOpt(resOpt: Option[AST.ResolvedInfo]): B = {
+            if (resOpt.isEmpty) {
+              return F
+            }
+            resOpt.get match {
+              case res: AST.ResolvedInfo.Method =>
+                return res.id === "isInBound" && (res.owner === AST.Typed.isName || res.owner === AST.Typed.msName)
+              case _ =>
+            }
+            return F
+          }
+          @pure def isQuantParamIndex(fcontext: ISZ[String], idOpt: Option[AST.Id], arg: AST.Exp): B = {
+            if (idOpt.isEmpty) {
+              return F
+            }
+            arg match {
+              case arg: AST.Exp.Ident =>
+                arg.attr.resOpt match {
+                  case Some(res: AST.ResolvedInfo.LocalVar) =>
+                    return res.id === idOpt.get.value && res.context === fcontext
+                  case _ =>
+                }
+              case _ =>
+            }
+            return F
+          }
+
           val exp: AST.Exp = toExp(State.Claim.And(let.claims)) match {
             case Some(e) => e
             case _ => return None()
@@ -1845,9 +1875,31 @@ object Util {
             val t = typedToType(x.tipe)
             params = params :+ AST.Exp.Fun.Param(Some(AST.Id(x.id, attr)), Some(t), Some(x.tipe))
           }
+          exp match {
+            case exp: AST.Exp.Binary if (let.isAll && exp.attr.resOpt === condImplyResOpt) || (!let.isAll && exp.attr.resOpt === condAndResOpt) =>
+              exp.left match {
+                case left: AST.Exp.Invoke if params.size === 1 && left.receiverOpt.nonEmpty && isInBoundResOpt(left.ident.attr.resOpt) && isQuantParamIndex(fcontext, params(0).idOpt, left.args(0)) =>
+                  val seq = left.receiverOpt.get
+                  val t = seq.typedOpt.get.asInstanceOf[AST.Typed.Name]
+                  val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = {
+                    val info = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Sig].methods.get("indices").get
+                    (info.resOpt, info.typedOpt)
+                  }
+                  val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(exp.right,
+                    AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), AST.TypedAttr(symPosOpt,
+                    Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
+                  return Some(AST.Exp.QuantEach(let.isAll, AST.Exp.Select(left.receiverOpt, AST.Id("indices", attr),
+                    ISZ(), AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), fun, AST.ResolvedAttr(symPosOpt,
+                    Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
+                      params(0).idOpt.get.value)),
+                    AST.Typed.bOpt)))
+                case _ =>
+              }
+            case _ =>
+          }
           val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(exp, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
             AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
-          return Some(AST.Exp.QuantType(let.isAll, fun, AST.Attr(symPosOpt)))
+          return Some(AST.Exp.QuantType(let.isAll, fun, attr))
         case let: State.Claim.Let.FieldLookup =>
           valueToExp(let.adt) match {
             case Some(o) =>
