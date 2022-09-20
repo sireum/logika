@@ -138,7 +138,7 @@ def testNameString(): Unit = {
 def testQuant(a: ZS): Unit = {
   Contract(
     Requires(
-      ∀{j: Z => (0 <= j & j < a.size) -->: (a(j) > 0) },
+      ∀{j: Z => (0 <= j & j < a.size - 1) -->: (a(j) > 0) },
       ∀(0 until a.size)(j => a(j) =!= 0),
       ∀(a.indices)(j => a(j) >= 1),
       ∀(a)(e => e >= 2)
@@ -147,8 +147,8 @@ def testQuant(a: ZS): Unit = {
 
   Deduce(
     //@formatter:off
-    ∀((j: Z) => (0 <= j & j < a.size) -->: (a(j) > 0))                              by Premise,
-    ∀((j: Z) => (0 <= j & j < a.size) -->: (a(j) =!= 0))                            by Premise,
+    ∀(0 until a.size - 1)(j => a(j) > 0)                                            by Premise,
+    ∀(0 until a.size)(j => a(j) =!= 0)                                              by Premise,
     ∀(a.indices)(j => a(j) >= 1)                                                    by Premise,
     ∀((e_Idx: Z, e: Z) => a.isInBound(e_Idx) -->: (a(e_Idx) === e) ->: (e >= 2))    by Premise
     //@formatter:on
