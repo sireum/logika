@@ -112,7 +112,8 @@ import org.sireum.logika.Logika.Reporter
           return Plugin.Result(T, state.nextFresh, spc.claims)
         case _ =>
           if (id === "Premise") {
-            val pathConditions = org.sireum.logika.Util.claimsToExps(pos, logika.context.methodName, state.claims, logika.th, T)
+            val pathConditions = org.sireum.logika.Util.claimsToExps(pos, logika.context.methodName, state.claims,
+              logika.th, logika.config.atLinesFresh)
             val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield AST.Util.normalizeExp(e))
             if (normPathConditions.contains(claimNorm)) {
               val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)

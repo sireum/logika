@@ -53,7 +53,8 @@ import org.sireum._
                        val caching: B,
                        val smt2Seq: B,
                        val branchPar: Config.BranchPar.Type,
-                       val branchParCores: Z)
+                       val branchParCores: Z,
+                       val atLinesFresh: B)
 
 object Config {
   @enum object BranchPar {

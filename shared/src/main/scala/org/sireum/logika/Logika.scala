@@ -65,7 +65,7 @@ object Logika {
   }
 
   @msig trait Reporter extends message.Reporter {
-    def state(posOpt: Option[Position], context: ISZ[String], th: TypeHierarchy, s: State): Unit
+    def state(posOpt: Option[Position], context: ISZ[String], th: TypeHierarchy, s: State, atLinesFresh: B): Unit
 
     def query(pos: Position, title: String, time: Z, r: Smt2Query.Result): Unit
 
@@ -81,7 +81,7 @@ object Logika {
   @record class ReporterImpl(var _messages: ISZ[Message]) extends Reporter {
     var _ignore: B = F
 
-    override def state(posOpt: Option[Position], context: ISZ[String], th: TypeHierarchy, s: State): Unit = {
+    override def state(posOpt: Option[Position], context: ISZ[String], th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
     }
 
     override def query(pos: Position, title: String, time: Z, r: Smt2Query.Result): Unit = {
@@ -4129,13 +4129,13 @@ import Util._
   }
 
   def logPc(enabled: B, raw: B, state: State, reporter: Reporter, posOpt: Option[Position]): Unit = {
-    reporter.state(posOpt, context.methodName, th, state)
+    reporter.state(posOpt, context.methodName, th, state, config.atLinesFresh)
     if (enabled || raw) {
       val sts: ISZ[ST] =
         if (raw) {
           State.Claim.claimsRawSTs(state.claims)
         } else {
-          val es = Util.claimsToExps(posOpt.get, context.methodName, state.claims, th, T)
+          val es = Util.claimsToExps(posOpt.get, context.methodName, state.claims, th, config.atLinesFresh)
           for (e <- es) yield e.prettyST
         }
       if (sts.isEmpty) {
