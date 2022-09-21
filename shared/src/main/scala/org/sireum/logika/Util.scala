@@ -1695,7 +1695,7 @@ object Util {
                 } else {
                   let.left.tipe.asInstanceOf[AST.Typed.Name]
                 }
-                val info = th.typeMap.get(sType.ids).get.asInstanceOf[TypeInfo.Sig].methods.get(op).asInstanceOf[Info.Method]
+                val info = th.typeMap.get(sType.ids).get.asInstanceOf[TypeInfo.Sig].methods.get(op).get
                 return Some(AST.Exp.Invoke(
                   Some(left),
                   AST.Exp.Ident(AST.Id(op, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt, info.resOpt, info.typedOpt)),
