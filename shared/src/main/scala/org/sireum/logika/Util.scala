@@ -541,11 +541,17 @@ object Util {
     }
   }
 
-  @record class LetNumMapCollector(var letMap: HashMap[Z, HashSet[State.Claim.Let]],
-                                   var lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
-                                   var vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]]) extends MStateTransformer {
+  @record class LetEqNumMapCollector(var letMap: HashMap[Z, HashSet[State.Claim.Let]],
+                                     var eqMap: HashMap[Z, HashSet[State.Claim.Eq]],
+                                     var lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
+                                     var vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]]) extends MStateTransformer {
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
       o match {
+        case o: State.Claim.Eq =>
+          o.v2 match {
+            case v2: State.Value.Sym => eqMap = eqMap + v2.num ~> (eqMap.get(v2.num).getOrElse(HashSet.empty) + o)
+            case _ =>
+          }
         case o: State.Claim.Let.Id =>
           val key = (o.context, o.id)
           var map = lNumMap.get(key).getOrElse(HashMap.empty)
@@ -1429,7 +1435,7 @@ object Util {
 
     var symNumMap = HashMap.empty[Z, Z]
     val posOpt: Option[Position] = Some(pos)
-    val collector = LetNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty)
+    val collector = LetEqNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty, HashMap.empty)
     for (claim <- claims) {
       collector.transformStateClaim(claim)
     }
@@ -2164,8 +2170,8 @@ object Util {
             Some(let.tipe)))
           return Some(AST.Exp.Invoke(None(), ident, ISZ(), es, AST.ResolvedAttr(symPosOpt, ident.resOpt,
             Some(sym.tipe))))
-        case _: State.Claim.Let.Random =>
-          return None()
+        case let: State.Claim.Let.Random =>
+          return Some(symAt(".random", let.sym))
         case let: State.Claim.Let.FieldStore =>
           halt(s"Infeasible: $let")
       }
@@ -2397,6 +2403,24 @@ object Util {
             case (_, _, _) => return None()
           }
         case claim: State.Claim.Eq =>
+          collector.letMap.get(claim.v1.num) match {
+            case Some(lets) if lets.size > 1 &&
+              ops.ISZOps(lets.elements).forall((let: State.Claim.Let) => let.isInstanceOf[State.Claim.Let.Def]) =>
+              collector.eqMap.get(claim.v1.num) match {
+                case Some(eqs) if eqs.size === 1 =>
+                  val v1 = eqs.elements(0).v1
+                  (valueToExp(v1), valueToExp(claim.v2)) match {
+                    case (Some(e1), Some(e2)) =>
+                      val (op, resOpt): (String, Option[AST.ResolvedInfo]) =
+                        if (th.isGroundType(claim.v1.tipe)) (AST.Exp.BinaryOp.Eq3, eqResOpt)
+                        else (AST.Exp.BinaryOp.Equiv, equivResOpt)
+                      return Some(AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, resOpt, Some(v1.tipe))))
+                    case (_, _) => return None()
+                  }
+                case _ =>
+              }
+            case _ =>
+          }
           claim.v2 match {
             case right: State.Value.Sym =>
               collector.letMap.get(right.num).getOrElse(HashSet.empty[State.Claim.Let]).elements match {
@@ -2409,15 +2433,12 @@ object Util {
               }
             case _ =>
           }
-          val v1Opt = valueToExp(claim.v1)
-          val v2Opt = valueToExp(claim.v2)
-          (v1Opt, v2Opt) match {
-            case (Some(v1), Some(v2)) =>
-              val op: String = if (th.isGroundType(claim.v1.tipe)) AST.Exp.BinaryOp.Eq3 else AST.Exp.BinaryOp.Equiv
-              return Some(AST.Exp.Binary(v1, op, v2, AST.ResolvedAttr(
-                posOpt,
-                Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)),
-                Some(claim.v1.tipe)
+          (valueToExp(claim.v1), valueToExp(claim.v2)) match {
+            case (Some(e1), Some(e2)) =>
+              val (op, resOpt): (String, Option[AST.ResolvedInfo]) =
+                if (th.isGroundType(claim.v1.tipe)) (AST.Exp.BinaryOp.Eq3, eqResOpt)
+                else (AST.Exp.BinaryOp.Equiv, equivResOpt)
+              return Some(AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, resOpt, Some(claim.v1.tipe)
               )))
             case _ => return None()
           }
