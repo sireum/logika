@@ -46,16 +46,42 @@ object Plugin {
 
 @sig trait Plugin {
   @pure def name: String
+}
+
+@sig trait JustificationPlugin extends Plugin {
 
   @pure def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B
 
   def handle(logika: Logika,
              smt2: Smt2,
              cache: Smt2.Cache,
-             log: B,
-             logDirOpt: Option[String],
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,
              reporter: Reporter): Plugin.Result
+}
+
+@sig trait ExpPlugin extends Plugin {
+
+  @pure def canHandle(logika: Logika, exp: AST.Exp): B
+
+  def handle(logika: Logika,
+             smt2: Smt2,
+             cache: Smt2.Cache,
+             state: State,
+             exp: AST.Exp,
+             reporter: Reporter): ISZ[(State, State.Value)]
+
+}
+
+@sig trait StmtPlugin extends Plugin {
+
+  @pure def canHandle(logika: Logika, exp: AST.Stmt): B
+
+  def handle(logika: Logika,
+             smt2: Smt2,
+             cache: Smt2.Cache,
+             state: State,
+             stmt: AST.Stmt,
+             reporter: Reporter): ISZ[State]
 }

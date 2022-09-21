@@ -636,7 +636,6 @@ object Util {
     return sv2ST _
   }
 
-
   def logikaMethod(th: TypeHierarchy, config: Config, owner: ISZ[String], id: String, receiverTypeOpt: Option[AST.Typed],
                    params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position],
                    reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ref],

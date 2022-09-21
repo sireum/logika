@@ -31,7 +31,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
-@datatype class AutoPlugin extends Plugin {
+@datatype class AutoPlugin extends JustificationPlugin {
 
   val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("Auto", "Auto_*", "Premise")
 
@@ -57,8 +57,6 @@ import org.sireum.logika.Logika.Reporter
   override def handle(logika: Logika,
                       smt2: Smt2,
                       cache: Smt2.Cache,
-                      log: B,
-                      logDirOpt: Option[String],
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
@@ -167,7 +165,8 @@ import org.sireum.logika.Logika.Reporter
 
     var status = stat
     if (status) {
-      val r = smt2.valid(cache, T, log, logDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
+      val r = smt2.valid(cache, T, logika.config.logVc, logika.config.logVcDirOpt, s"$id Justification", pos, premises,
+        conclusion, reporter)
 
       def error(msg: String): B = {
         reporter.error(posOpt, Logika.kind, msg)

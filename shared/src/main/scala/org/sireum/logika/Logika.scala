@@ -493,6 +493,21 @@ import Util._
                        val context: Context,
                        val plugins: ISZ[Plugin]) {
 
+  val jesPlugins: (ISZ[plugin.JustificationPlugin], ISZ[plugin.ExpPlugin], ISZ[plugin.StmtPlugin]) = {
+    var jps = ISZ[plugin.JustificationPlugin]()
+    var eps = ISZ[plugin.ExpPlugin]()
+    var sps = ISZ[plugin.StmtPlugin]()
+    for (p <- plugins) {
+      p match {
+        case p: plugin.JustificationPlugin => jps = jps :+ p
+        case p: plugin.ExpPlugin => eps = eps :+ p
+        case p: plugin.StmtPlugin => sps = sps :+ p
+        case _ => halt(s"Unexpected plugin: $p")
+      }
+    }
+    (jps, eps, sps)
+  }
+
   def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
     tipe match {
       case AST.Typed.z => return State.Value.Z(0, pos)
@@ -706,6 +721,12 @@ import Util._
               reporter: Reporter): ISZ[(State, State.Value)] = {
     if (!state.status) {
       return ISZ((state, State.errorValue))
+    }
+    val ePlugins = jesPlugins._2
+    if (jesPlugins._2.nonEmpty) {
+      for (p <- ePlugins if p.canHandle(this, e)) {
+        return p.handle(this, smt2, cache, state, e, reporter)
+      }
     }
 
     def checkRange(s0: State, value: State.Value, pos: Position): State = {
@@ -3445,9 +3466,9 @@ import Util._
     var (s0, m) = stateMap
     step match {
       case step: AST.ProofAst.Step.Regular =>
-        for (plugin <- plugins if plugin.canHandle(this, step.just)) {
+        for (plugin <- jesPlugins._1 if plugin.canHandle(this, step.just)) {
           val Plugin.Result(r, nextFresh, claims) =
-            plugin.handle(this, smt2, cache, config.logVc, config.logVcDirOpt, m, s0, step, reporter)
+            plugin.handle(this, smt2, cache, m, s0, step, reporter)
           return (s0(status = r, nextFresh = nextFresh).addClaim(State.Claim.And(claims)),
             m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims))
         }
@@ -3583,6 +3604,12 @@ import Util._
   def evalStmt(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, stmt: AST.Stmt, reporter: Reporter): ISZ[State] = {
     if (!state.status) {
       return ISZ(state)
+    }
+    val sPlugins = jesPlugins._3
+    if (sPlugins.nonEmpty) {
+      for (p <- sPlugins if p.canHandle(this, stmt)) {
+        return p.handle(this, smt2, cache, state, stmt, reporter)
+      }
     }
 
     def evalAssignLocal(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: AST.AssignExp, lhsType: AST.Typed,

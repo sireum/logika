@@ -34,7 +34,7 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.message.Position
 
 
-@datatype class LiftPlugin extends Plugin {
+@datatype class LiftPlugin extends JustificationPlugin {
 
   val name: String = "LiftPlugin"
 
@@ -65,8 +65,6 @@ import org.sireum.message.Position
   def handle(logika: Logika,
              smt2: Smt2,
              cache: Smt2.Cache,
-             log: B,
-             logDirOpt: Option[String],
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,

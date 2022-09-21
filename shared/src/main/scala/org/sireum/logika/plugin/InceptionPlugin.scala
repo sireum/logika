@@ -34,7 +34,7 @@ import org.sireum.lang.tipe.TypeChecker
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
-@datatype class InceptionPlugin extends Plugin {
+@datatype class InceptionPlugin extends JustificationPlugin {
 
   val name: String = "InceptionPlugin"
 
@@ -60,8 +60,6 @@ import org.sireum.logika.Logika.Reporter
   def handle(logika: Logika,
              smt2: Smt2,
              cache: Smt2.Cache,
-             log: B,
-             logDirOpt: Option[String],
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,

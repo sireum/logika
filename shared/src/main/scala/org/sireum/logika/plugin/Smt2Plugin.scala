@@ -32,7 +32,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Reporter
 import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 
-@datatype class Smt2Plugin extends Plugin {
+@datatype class Smt2Plugin extends JustificationPlugin {
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
@@ -54,8 +54,6 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
   override def handle(logika: Logika,
                       smt2: Smt2,
                       cache: Smt2.Cache,
-                      log: B,
-                      logDirOpt: Option[String],
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
@@ -121,7 +119,8 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
     }
 
     val status: B = if (stat) {
-      val r = lsmt2.valid(cache, T, log, logDirOpt, s"${just.invokeIdent.id.value} Justification", posOpt.get, premises, conclusion, reporter)
+      val r = lsmt2.valid(cache, T, logika.config.logVc, logika.config.logVcDirOpt,
+        s"${just.invokeIdent.id.value} Justification", posOpt.get, premises, conclusion, reporter)
       def error(msg: String): B = {
         reporter.error(posOpt, Logika.kind, msg)
         return F

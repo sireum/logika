@@ -32,7 +32,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
-@datatype class ClaimOfPlugin extends Plugin {
+@datatype class ClaimOfPlugin extends JustificationPlugin {
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
@@ -52,8 +52,6 @@ import org.sireum.logika.Logika.Reporter
   override def handle(logika: Logika,
                       smt2: Smt2,
                       cache: Smt2.Cache,
-                      log: B,
-                      logDirOpt: Option[String],
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,

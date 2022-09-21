@@ -47,7 +47,7 @@ object PredNatDedPlugin {
   }
 }
 
-@datatype class PredNatDedPlugin extends Plugin {
+@datatype class PredNatDedPlugin extends JustificationPlugin {
 
   val name: String = "PredNatDedPlugin"
 
@@ -69,8 +69,6 @@ object PredNatDedPlugin {
   override def handle(logika: Logika,
                       smt2: Smt2,
                       cache: Smt2.Cache,
-                      log: B,
-                      logDirOpt: Option[String],
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
