@@ -1524,11 +1524,10 @@ import Util._
           var nextFresh: Z = s8.nextFresh
           for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s9.addClaim(rangeProp), quant.fun.exp, reporter)) {
             val (s10, v) = p
-            val (s11, qSym) = s10.freshSym(AST.Typed.b, range.pos)
+            val (s11, vSym) = value2Sym(s10, v, quant.fun.exp.asStmt.posOpt.get)
             val s12 = s11.addClaims(ISZ(
-              if (quant.isForall) State.Claim.Let.Binary(qSym, range, AST.Exp.BinaryOp.CondImply, v, AST.Typed.b)
-              else State.Claim.Let.Binary(qSym, range, AST.Exp.BinaryOp.CondAnd, v, AST.Typed.b),
-              State.Claim.Prop(T, qSym)
+              if (quant.isForall) State.Claim.Imply(ISZ(rangeProp, State.Claim.Prop(T, vSym)))
+              else State.Claim.And(ISZ(rangeProp, State.Claim.Prop(T, vSym)))
             ))
             if (s12.status) {
               val s12ClaimsOps = ops.ISZOps(s12.claims)
@@ -1575,11 +1574,10 @@ import Util._
           var nextFresh: Z = s6.nextFresh
           for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s6.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)) {
             val (s7, v) = p
-            val (s8, qSym) = s7.freshSym(AST.Typed.b, quant.fun.exp.asStmt.posOpt.get)
+            val (s8, vSym) = value2Sym(s7, v, quant.fun.exp.asStmt.posOpt.get)
             val s9 = s8.addClaims(ISZ(
-              if (quant.isForall) State.Claim.Let.Binary(qSym, inBoundSym, AST.Exp.BinaryOp.CondImply, v, AST.Typed.b)
-              else State.Claim.Let.Binary(qSym, inBoundSym, AST.Exp.BinaryOp.CondAnd, v, AST.Typed.b),
-              State.Claim.Prop(T, qSym)
+              if (quant.isForall) State.Claim.Imply(ISZ(inBoundProp, State.Claim.Prop(T, vSym)))
+              else State.Claim.And(ISZ(inBoundProp, State.Claim.Prop(T, vSym)))
             ))
             if (s9.status) {
               val s9ClaimsOps = ops.ISZOps(s9.claims)
@@ -1642,24 +1640,20 @@ import Util._
           var nextFresh: Z = s10.nextFresh
           for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s10.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)) {
             val (s11, v) = p
-            val (s12, qSym) = s11.freshSym(AST.Typed.b, quant.fun.exp.asStmt.posOpt.get)
-            val (s13, qSym2) = s12.freshSym(AST.Typed.b, qSym.pos)
-            val s14 = s13.addClaims(ISZ(
-              if (quant.isForall) State.Claim.Let.Binary(qSym, eqSym, AST.Exp.BinaryOp.Imply, v, AST.Typed.b)
-              else State.Claim.Let.Binary(qSym, eqSym, AST.Exp.BinaryOp.And, v, AST.Typed.b),
-              if (quant.isForall) State.Claim.Let.Binary(qSym2, inBound, AST.Exp.BinaryOp.CondImply, qSym, AST.Typed.b)
-              else State.Claim.Let.Binary(qSym2, inBound, AST.Exp.BinaryOp.CondAnd, qSym, AST.Typed.b),
-              State.Claim.Prop(T, qSym2),
+            val (s12, vSym) = value2Sym(s11, v, quant.fun.exp.asStmt.posOpt.get)
+            val s13 = s12.addClaims(ISZ(
+              if (quant.isForall) State.Claim.Imply(ISZ(inBoundProp, State.Claim.Prop(T, eqSym), State.Claim.Prop(T, vSym)))
+              else State.Claim.And(ISZ(inBoundProp, State.Claim.Prop(T, eqSym), State.Claim.Prop(T, vSym)))
             ))
-            if (s14.status) {
-              val s14ClaimsOps = ops.ISZOps(s14.claims)
+            if (s13.status) {
+              val s13ClaimsOps = ops.ISZOps(s13.claims)
               quantClaims = quantClaims :+ State.Claim.And(
-                s14ClaimsOps.slice(s0.claims.size, s10.claims.size) ++
-                  s14ClaimsOps.slice(s10.claims.size + 1, s14.claims.size)
+                s13ClaimsOps.slice(s0.claims.size, s10.claims.size) ++
+                  s13ClaimsOps.slice(s10.claims.size + 1, s13.claims.size)
               )
             }
-            if (nextFresh < s14.nextFresh) {
-              nextFresh = s14.nextFresh
+            if (nextFresh < s13.nextFresh) {
+              nextFresh = s13.nextFresh
             }
           }
           if (quantClaims.isEmpty) {

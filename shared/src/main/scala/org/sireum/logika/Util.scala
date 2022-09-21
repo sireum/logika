@@ -1771,7 +1771,11 @@ object Util {
             }
           }
           valueToExp(let.args(let.args.size - 1)) match {
-            case Some(e) => es = es :+ e
+            case Some(e) =>
+              if (es.isEmpty) {
+                return Some(e)
+              }
+              es = es :+ e
             case _ => return None()
           }
           return Some(bigImply(es))
@@ -1932,8 +1936,9 @@ object Util {
             params = params :+ AST.Exp.Fun.Param(Some(AST.Id(x.id, attr)), Some(t), Some(x.tipe))
           }
           exp match {
-            case exp: AST.Exp.Binary if (let.isAll && exp.attr.resOpt === condImplyResOpt) ||
-              (!let.isAll && exp.attr.resOpt === condAndResOpt) =>
+            case exp: AST.Exp.Binary if (let.isAll && (exp.attr.resOpt === implyResOpt ||
+              exp.attr.resOpt === condImplyResOpt)) || (!let.isAll && (exp.attr.resOpt === andResOpt ||
+              exp.attr.resOpt === condAndResOpt)) =>
               exp.left match {
                 case left: AST.Exp.Invoke if left.receiverOpt.nonEmpty && isInBoundResOpt(left.ident.attr.resOpt) =>
                   val seq = left.receiverOpt.get
@@ -1941,7 +1946,8 @@ object Util {
                   if (params.size === 2 && paramIdx(params(0).idOpt, params(1).idOpt) &&
                     isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
                     exp.right match {
-                      case right: AST.Exp.Binary if right.attr.resOpt === implyResOpt =>
+                      case right: AST.Exp.Binary if (let.isAll && right.attr.resOpt === implyResOpt) ||
+                        (!let.isAll && right.attr.resOpt === andResOpt) =>
                         right.left match {
                           case rl: AST.Exp.Binary if isIdent(fcontext, params(1).idOpt.get, rl.right) &&
                             rl.attr.resOpt === eqResOpt || rl.attr.resOpt === equivResOpt =>
@@ -2365,10 +2371,13 @@ object Util {
             }
           }
           toExp(cs(cs.size - 1)) match {
-            case Some(e) => es = es :+ e
+            case Some(e) =>
+              if (es.isEmpty) {
+                return Some(e)
+              }
+              es = es :+ e
             case _ => return None()
           }
-          assert(es.size >= 2)
           return Some(bigImply(es))
         case claim: State.Claim.Prop =>
           valueToExp(claim.value) match {
