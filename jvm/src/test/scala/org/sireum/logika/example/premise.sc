@@ -1,6 +1,6 @@
 // #Sireum #Logika
 import org.sireum._
-import org.sireum.justification.Premise
+import org.sireum.justification.{Auto, Premise}
 
 var y: Z = 0
 
@@ -134,7 +134,6 @@ def testNameString(): Unit = {
   )
 }
 
-
 def testQuant(a: ZS): Unit = {
   Contract(
     Requires(
@@ -151,6 +150,30 @@ def testQuant(a: ZS): Unit = {
     ∀(0 until a.size)(j => a(j) =!= 0)     by Premise,
     ∀(a.indices)(j => a(j) >= 1)           by Premise,
     ∀(a)(e => e >= 2)                      by Premise
+    //@formatter:on
+  )
+}
+
+@datatype class Foo(val x: Z) {
+  @spec def inv = Invariant(
+    x >= 0
+  )
+}
+
+def testQuant2(foos: ISZ[Foo], i: Z): Unit = {
+  Contract(
+    Requires(
+      0 <= i,
+      i < foos.size,
+      ∀(foos)(foo => foo.x > -1)
+    )
+  )
+  Deduce(
+    //@formatter:off
+    foos(i).x >= 0               by Auto,
+    0 <= i                       by Premise,
+    i < foos.size                by Premise,
+    ∀(foos)(foo => foo.x > -1)   by Premise,
     //@formatter:on
   )
 }
