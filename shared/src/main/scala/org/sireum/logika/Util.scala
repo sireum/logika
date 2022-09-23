@@ -1520,12 +1520,12 @@ object Util {
       return r
     }
 
-    @pure def nameToExp(ids: ISZ[String], p: Position): AST.Exp = {
+    @pure def nameToExp(ids: ISZ[String], p: Position): AST.Exp.Ref = {
       val pOpt: Option[Position] = Some(p)
       val first = ids(0)
       val firstResTypedOpts = nameResTypeOpts(ISZ(first))
       val attr = AST.Attr(pOpt)
-      var r: AST.Exp = AST.Exp.Ident(AST.Id(first, attr),
+      var r: AST.Exp.Ref = AST.Exp.Ident(AST.Id(first, attr),
         AST.ResolvedAttr(pOpt, firstResTypedOpts._1, firstResTypedOpts._2))
       for (i <- 1 until ids.size) {
         val name: ISZ[String] = for (j <- 0 to i) yield ids(j)
@@ -1533,7 +1533,7 @@ object Util {
         val resolvedAttr = AST.ResolvedAttr(pOpt, rOpt, tOpt)
         name match {
           case ISZ("org", "sireum", _*) if i === 2 => r = AST.Exp.Ident(AST.Id(ids(i), attr), resolvedAttr)
-          case _ => r = AST.Exp.Select(Some(r), AST.Id(ids(i), attr), ISZ(), resolvedAttr)
+          case _ => r = AST.Exp.Select(Some(r.asExp), AST.Id(ids(i), attr), ISZ(), resolvedAttr)
         }
       }
       return r
@@ -1626,7 +1626,7 @@ object Util {
             Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
             Some(sym.tipe))))
         case let: State.Claim.Let.CurrentName =>
-          return Some(nameToExp(let.ids, symPos))
+          return Some(nameToExp(let.ids, symPos).asExp)
         case let: State.Claim.Let.Id =>
           val n = collector.lNumMap.get((let.context, let.id)).get.get((let.num, let.poss)).get
           val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
@@ -1652,7 +1652,7 @@ object Util {
             ISZ()
           }
           val attr = AST.Attr(symPosOpt)
-          return Some(AST.Exp.At(None(), nameToExp(let.ids, symPos), AST.Exp.LitZ(n, attr), linesFresh, attr))
+          return Some(AST.Exp.At(None(), nameToExp(let.ids, symPos).asExp, AST.Exp.LitZ(n, attr), linesFresh, attr))
         case let: State.Claim.Let.Unary =>
           val (op, kind): (AST.Exp.UnaryOp.Type, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
             case string"+" => (AST.Exp.UnaryOp.Plus, AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus)
@@ -1801,7 +1801,7 @@ object Util {
           return Some(AST.Exp.Tuple(es, AST.TypedAttr(symPosOpt, Some(sym.tipe))))
         case let: State.Claim.Let.AdtLit =>
           val info = th.typeMap.get(let.tipe.ids).get.asInstanceOf[TypeInfo.Adt]
-          val name = ops.ISZOps(let.tipe.ids).dropRight(1)
+          val ownerName = ops.ISZOps(let.tipe.ids).dropRight(1)
           var es = ISZ[AST.Exp]()
           for (arg <- let.args) {
             valueToExp(arg) match {
@@ -1809,12 +1809,14 @@ object Util {
               case _ => return None()
             }
           }
+          val nameExp = nameToExp(let.tipe.ids, symPos)
           return Some(AST.Exp.Invoke(
-            if (name.isEmpty) None() else Some(nameToExp(ops.ISZOps(let.tipe.ids).dropRight(1), symPos)),
+            if (ownerName.isEmpty || ownerName === AST.Typed.sireumName) None()
+            else Some(nameToExp(ownerName, symPos).asExp),
             AST.Exp.Ident(AST.Id(let.tipe.ids(let.tipe.ids.size - 1), AST.Attr(symPosOpt)), AST.ResolvedAttr(
               symPosOpt,
-              info.constructorResOpt,
-              info.constructorTypeOpt
+              nameExp.resOpt,
+              nameExp.typedOpt
             )),
             for (targ <- let.tipe.args) yield typedToType(targ),
             es,
@@ -2142,7 +2144,7 @@ object Util {
               }
             }
             val name = let.pf.context :+ let.pf.id
-            val rcvOpt: Option[AST.Exp] = if (let.pf.context.nonEmpty) Some(nameToExp(let.pf.context, symPos)) else None()
+            val rcvOpt: Option[AST.Exp] = if (let.pf.context.nonEmpty) Some(nameToExp(let.pf.context, symPos).asExp) else None()
             val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = th.nameMap.get(name) match {
               case Some(info: Info.Method) => (info.resOpt, info.typedOpt)
               case Some(info: Info.SpecMethod) => (info.resOpt, info.typedOpt)
@@ -2291,7 +2293,7 @@ object Util {
         case value: State.Value.F32 => return Some(AST.Exp.LitF32(value.value, attr))
         case value: State.Value.F64 => return Some(AST.Exp.LitF64(value.value, attr))
         case value: State.Value.String => return Some(AST.Exp.LitString(value.value, attr))
-        case value: State.Value.Enum => return Some(nameToExp(value.owner :+ value.id, value.pos))
+        case value: State.Value.Enum => return Some(nameToExp(value.owner :+ value.id, value.pos).asExp)
         case value: State.Value.S8 =>
           return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
             ISZ(AST.Exp.LitString(conversions.S8.toZ(value.value).string, attr)), ISZ(),
