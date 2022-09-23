@@ -177,3 +177,13 @@ def testQuant2(foos: ISZ[Foo], i: Z): Unit = {
     //@formatter:on
   )
 }
+
+def testAdtLit[T](o: Option[T], v: T): Unit = {
+  Contract(Requires(o === Some(v)))
+  Deduce(o === Some(v) by Auto)
+}
+
+def testSeqLit[T](o: ISZ[T], v: T): Unit = {
+  Contract(Requires(o === ISZ(v)))
+  Deduce(o === ISZ(v) by Auto)
+}
