@@ -180,10 +180,15 @@ def testQuant2(foos: ISZ[Foo], i: Z): Unit = {
 
 def testAdtLit[T](o: Option[T], v: T): Unit = {
   Contract(Requires(o === Some(v)))
-  Deduce(o === Some(v) by Auto)
+  Deduce(o === Some(v) by Premise)
 }
 
 def testSeqLit[T](o: ISZ[T], v: T): Unit = {
   Contract(Requires(o === ISZ(v)))
-  Deduce(o === ISZ(v) by Auto)
+  Deduce(o === ISZ(v) by Premise)
+}
+
+def testFieldLookup(o: Some[Z]): Unit = {
+  Contract(Requires(o.value === 3))
+  Deduce(o.value === 3 by Premise)
 }

@@ -1846,10 +1846,11 @@ object Util {
             } else {
               (t.ids, ISZ(typedToType(t.args(0)), typedToType(t.args(1))))
             }
-          val (tOpt, resOpt) = TypeChecker.sConstructorTypedResOpt(name, let.args.size)
+          val nameExp = nameToExp(name, symPos)
           val ident = AST.Exp.Ident(AST.Id(name(name.size - 1), AST.Attr(symPosOpt)),
-            AST.ResolvedAttr(symPosOpt, resOpt, tOpt))
-          return Some(AST.Exp.Invoke(None(), ident, targs, es, AST.ResolvedAttr(symPosOpt, resOpt, Some(t))))
+            AST.ResolvedAttr(symPosOpt, nameExp.resOpt, nameExp.typedOpt))
+          return Some(AST.Exp.Invoke(None(), ident, targs, es, AST.ResolvedAttr(symPosOpt,
+            TypeChecker.sConstructorTypedResOpt(name, let.args.size)._2, Some(t))))
         case let: State.Claim.Let.Quant =>
           @pure def isInBoundResOpt(resOpt: Option[AST.ResolvedInfo]): B = {
             if (resOpt.isEmpty) {
