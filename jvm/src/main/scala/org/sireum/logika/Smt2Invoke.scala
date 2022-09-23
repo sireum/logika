@@ -33,6 +33,14 @@ object Smt2Invoke {
 
   var haltOnError: B = F
 
+  @strictpure def isSupportedPlatform: B = Os.kind match {
+    case Os.Kind.Mac => T
+    case Os.Kind.Linux => T
+    case Os.Kind.Win => T
+    case Os.Kind.LinuxArm => F
+    case Os.Kind.Unsupported => F
+  }
+
   @pure def nameExePathMap(sireumHome: Os.Path): HashMap[String, String] = {
     val platform: String = Os.kind match {
       case Os.Kind.Mac => "mac"
