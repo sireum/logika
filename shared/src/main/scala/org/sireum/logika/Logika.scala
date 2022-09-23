@@ -3165,8 +3165,11 @@ import Util._
         }
         var first: Z = -1
         val outputs = ops.MSZOps(inputs.toMS).mParMapCores(computeBranchSmt2 _, config.branchParCores)
-        for (i <- 0 until outputs.size if first < 0) {
+        for (i <- 0 until outputs.size) {
+          smt2.combineWith(outputs(i)._3)
           reporter.reports(outputs(i)._4)
+        }
+        for (i <- 0 until outputs.size if first < 0) {
           if (outputs(i)._1.nonEmpty) {
             first = i
           }
@@ -3177,10 +3180,8 @@ import Util._
         leafClaims = leafClaims :+ outputs(first)._1.get
         var nextFreshGap = outputs(first)._2 - s0.nextFresh
         for (i <- first + 1 until outputs.size) {
-          reporter.reports(outputs(i)._4)
           outputs(i)._1 match {
             case Some((cond, claimss)) =>
-              smt2.combineWith(outputs(i)._3)
               val gap = outputs(i)._2 - s0.nextFresh
               if (gap > 0) {
                 val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap)
