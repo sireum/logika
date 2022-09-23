@@ -367,11 +367,11 @@ object State {
 
     @datatype class Eq(val v1: Value.Sym, val v2: Value) extends Claim {
       @pure override def toRawST: ST = {
-        return st"${v1.toRawST} ≜ ${v2.toRawST}"
+        return st"${v1.toRawST} =~= ${v2.toRawST}"
       }
 
       override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
-        claimSTs.add(st"${v1.toST(numMap, defs)} === ${v2.toST(numMap, defs)}")
+        claimSTs.add(st"${v1.toST(numMap, defs)} =~= ${v2.toST(numMap, defs)}")
       }
 
       @pure def types: ISZ[AST.Typed] = {
@@ -711,7 +711,7 @@ object State {
 
         override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
           if (defs.get(sym.num).get.size > 1) {
-            claimSTs.add(st"${sym.toRawST} === ${value.toST(numMap, defs)}")
+            claimSTs.add(st"${sym.toRawST} =~= ${value.toST(numMap, defs)}")
           }
         }
       }
