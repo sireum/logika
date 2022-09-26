@@ -33,9 +33,23 @@ object LogikaTest {
 
   val sireumHome: Os.Path = Os.path(Os.env("SIREUM_HOME").get).canon
 
-  val rlimit: Z = 1000000
+  val rlimit: Z = {
+    var r: Z = 1000000
+    Os.env("SIREUM_LOGIKA_RLIMIT") match {
+      case Some(n) => r = Z(n).getOrElse(r)
+      case _ =>
+    }
+    r
+  }
 
-  val timeoutInMs: Z = 2000
+  val timeoutInMs: Z = {
+    var r: Z = 2000
+    Os.env("SIREUM_LOGIKA_TIMEOUT") match {
+      case Some(n) => r = Z(n).getOrElse(r)
+      case _ =>
+    }
+    r
+  }
 
   val config: Config =
     Config(

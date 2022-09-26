@@ -41,16 +41,10 @@ import LogikaRcTest._
 
 class LogikaRcTest extends SireumRcSpec {
 
-  lazy val hasAltErgo: B = Os.env("SIREUM_HOME") match {
-    case Some(sireumHome) =>
-      val m = Smt2Invoke.nameExePathMap(Os.path(sireumHome))
-      val r = m.contains("alt-ergo") || m.contains("alt-ergo-open")
-      r
-    case _ => F
-  }
-
   def shouldIgnore(name: Predef.String): Boolean = name match {
-    case "collection.sc" | "opsem-alt.sc" if !Os.isWin && isInGithubAction => true
+    case "collection.sc" => !Os.isWin && isInGithubAction
+    case "opsem-alt.sc" => (!Os.isWin && isInGithubAction) || (Os.isLinux && Os.env("SIREUM_DISTRO_JENKINS") === Some("true"))
+    case "opsem.sc" => Os.isMac && isInGithubAction
     case _ => false
   }
 
