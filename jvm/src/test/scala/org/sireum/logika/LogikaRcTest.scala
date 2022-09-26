@@ -42,8 +42,7 @@ import LogikaRcTest._
 class LogikaRcTest extends SireumRcSpec {
 
   def shouldIgnore(name: Predef.String): Boolean = name match {
-    case "collection.sc" => !Os.isWin && isInGithubAction
-    case "opsem-alt.sc" => (!Os.isWin && isInGithubAction) || (Os.isLinux && Os.env("SIREUM_DISTRO_JENKINS") === Some("true"))
+    case "collection.sc" | "opsem-alt.sc" => !Os.isWin && isInGithubAction
     case "opsem.sc" => Os.isMac && isInGithubAction
     case _ => false
   }
