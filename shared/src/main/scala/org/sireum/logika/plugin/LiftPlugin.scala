@@ -71,7 +71,7 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
 
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-    val AST.ProofAst.Step.Justification.Apply(AST.Exp.Invoke(_, _, ISZ(invoke: AST.Exp.Invoke)), _) = just
+    val AST.ProofAst.Step.Justification.Apply(AST.Exp.Invoke(_, _, _, ISZ(invoke: AST.Exp.Invoke)), _) = just
     val res = invoke.ident.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     val args = invoke.args
     val posOpt = invoke.ident.attr.posOpt
