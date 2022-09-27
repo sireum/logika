@@ -108,14 +108,13 @@ object Task {
       if (!p._1.status) {
         return reporter.messages
       }
-      val normClaim: AST.Exp = AST.Util.normalizeExp(
+      val normClaim: AST.Exp = th.normalizeExp(
         if (theorem.isFun) theorem.claim.asInstanceOf[AST.Exp.Quant].fun.exp.asInstanceOf[AST.Stmt.Expr].exp
         else theorem.claim)
       val spcEntries = p._2.entries
       for (i <- spcEntries.size - 1 to 0 by -1 if spcEntries(i)._2.isInstanceOf[StepProofContext.Regular]) {
-        val StepProofContext.Regular(stepNo, claim, _) = spcEntries(i)._2
-        val spcPos = stepNo.posOpt.get
-        if (normClaim == AST.Util.normalizeExp(claim)) {
+        val StepProofContext.Regular(_, claim, _) = spcEntries(i)._2
+        if (normClaim == th.normalizeExp(claim)) {
           reporter.inform(normClaim.posOpt.get, Logika.Reporter.Info.Kind.Verified,
             st"""Accepted by using ${Plugin.stepNoDesc(F, spcEntries(i)._1)}, i.e.:
                 |

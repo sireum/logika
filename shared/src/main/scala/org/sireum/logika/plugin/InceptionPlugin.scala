@@ -29,7 +29,6 @@ import org.sireum._
 import org.sireum.message.Position
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.Info
-import org.sireum.lang.symbol.Resolver.QName
 import org.sireum.lang.tipe.TypeChecker
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
@@ -77,14 +76,14 @@ import org.sireum.logika.Logika.Reporter
         var provenClaims = HashMap.empty[AST.Exp, (AST.ProofAst.StepId, AST.Exp)]
         for (spc <- spcMap.values) {
           spc match {
-            case spc: StepProofContext.Regular => provenClaims = provenClaims + AST.Util.normalizeExp(spc.exp) ~> ((spc.stepNo, spc.exp))
+            case spc: StepProofContext.Regular => provenClaims = provenClaims + logika.th.normalizeExp(spc.exp) ~> ((spc.stepNo, spc.exp))
             case _ =>
           }
         }
         var ok = T
         for (require <- requires) {
           val req = ips.transformExp(require).getOrElseEager(require)
-          val stepNoExpOpt = provenClaims.get(AST.Util.normalizeExp(req))
+          val stepNoExpOpt = provenClaims.get(logika.th.normalizeExp(req))
           val pos = require.posOpt.get
           if (ips.reporter.messages.isEmpty && stepNoExpOpt.isEmpty) {
             reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying $id's assumption at [${pos.beginLine}, ${pos.beginColumn}]")
@@ -107,7 +106,7 @@ import org.sireum.logika.Logika.Reporter
         var ok = T
         for (w <- just.witnesses) {
           spcMap.get(w) match {
-            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + AST.Util.normalizeExp(spc.exp) ~> ((spc.stepNo, spc.exp))
+            case Some(spc: StepProofContext.Regular) => witnesses = witnesses + logika.th.normalizeExp(spc.exp) ~> ((spc.stepNo, spc.exp))
             case Some(_) =>
               reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step $w as an argument for inception")
               ok = F
@@ -126,7 +125,7 @@ import org.sireum.logika.Logika.Reporter
         }
         for (i <- 0 until rs.size) {
           val pos = requires(i).posOpt.get
-          val require = AST.Util.normalizeExp(rs(i))
+          val require = logika.th.normalizeExp(rs(i))
           witnesses.get(require) match {
             case Some((stepNo, exp)) =>
               evidence = evidence :+
@@ -149,11 +148,11 @@ import org.sireum.logika.Logika.Reporter
       }
       @pure def esMapEntry(ensure: AST.Exp): (AST.Exp, (Position, AST.Exp, AST.Exp)) = {
         val tensure = ips.transformExp(ensure).getOrElseEager(ensure)
-        val dbensure = AST.Util.normalizeExp(tensure)
+        val dbensure = logika.th.normalizeExp(tensure)
         return (dbensure, (ensure.posOpt.get, ensure, tensure))
       }
       val esMap = HashMap ++ (for (e <- ensures) yield esMapEntry(e))
-      val ePosExpTExpOpt = esMap.get(step.claimNorm)
+      val ePosExpTExpOpt = esMap.get(logika.th.normalizeExp(step.claim))
       if (ePosExpTExpOpt.isEmpty) {
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from $id's $conc${if (ensures.size > 1) "s" else ""}".render)
         return emptyResult

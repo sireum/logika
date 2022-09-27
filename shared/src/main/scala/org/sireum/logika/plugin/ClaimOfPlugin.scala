@@ -92,9 +92,9 @@ import org.sireum.logika.Logika.Reporter
       case _ => halt("Infeasible")
     }
     val sm = lang.tipe.TypeChecker.buildTypeSubstMap(name, arg.posOpt, typeParams, targs, reporter).get
-    val stepClaim = AST.Util.normalizeExp(step.claim)
+    val stepClaim = logika.th.normalizeExp(step.claim)
     for (claim <- claims) {
-      val normClaim = AST.Util.normalizeExp(claim)
+      val normClaim = logika.th.normalizeExp(claim)
       val substNormClaim = AST.Util.substExpSkipResolvedInfo(normClaim, sm)
       if (stepClaim == substNormClaim) {
         val claimPos = claim.posOpt.get

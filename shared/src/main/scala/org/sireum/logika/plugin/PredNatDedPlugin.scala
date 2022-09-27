@@ -80,7 +80,7 @@ object PredNatDedPlugin {
       case string"AllI" =>
         val quant: AST.Exp.QuantType = step.claim match {
           case stepClaim@AST.Exp.QuantType(_, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)) if stepClaim.isForall =>
-            AST.Util.normalizeQuantType(stepClaim).asInstanceOf[AST.Exp.QuantType]
+            logika.th.normalizeQuantType(stepClaim).asInstanceOf[AST.Exp.QuantType]
           case _ =>
             reporter.error(step.claim.posOpt, Logika.kind, "Expecting a simple universal quantified type claim")
             return emptyResult
@@ -125,7 +125,7 @@ object PredNatDedPlugin {
             exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
-        if (!subProof.contains(AST.Util.normalizeExp(substClaim))) {
+        if (!subProof.contains(logika.th.normalizeExp(substClaim))) {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not infer the stated claim using ${just.invokeIdent.id.value}")
           return emptyResult
         }
@@ -176,11 +176,11 @@ object PredNatDedPlugin {
             exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
-        if (AST.Util.normalizeExp(substClaim) != assumption) {
+        if (logika.th.normalizeExp(substClaim) != assumption) {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not match the assumption in let sub-proof $subProofNo")
           return emptyResult
         }
-        val stepClaim = step.claimNorm
+        val stepClaim = logika.th.normalizeExp(step.claim)
         if (!subProof.contains(stepClaim) && stepClaim != assumption) {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not find the stated claim in let sub-proof $subProofNo")
           return emptyResult

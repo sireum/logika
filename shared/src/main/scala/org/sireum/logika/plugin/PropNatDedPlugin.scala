@@ -106,12 +106,12 @@ import org.sireum.logika.Logika.Reporter
       }
       val ISZ(subProofNo) = args
       val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo) match {
-        case Some(sp: StepProofContext.SubProof) if sp.assumption == AST.Util.normalizeExp(claim.left) => HashSet ++ sp.claims + sp.assumption
+        case Some(sp: StepProofContext.SubProof) if sp.assumption == logika.th.normalizeExp(claim.left) => HashSet ++ sp.claims + sp.assumption
         case _ =>
           reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the antecedent of step ${step.id}'s claim")
           return F
       }
-      if (!subProof.contains(AST.Util.normalizeExp(claim.right))) {
+      if (!subProof.contains(logika.th.normalizeExp(claim.right))) {
         reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find the consequent of step ${step.id}'s claim in sub-proof $subProofNo")
         return F
       }
@@ -128,22 +128,22 @@ import org.sireum.logika.Logika.Reporter
             return emptyResult
         }
         val leftSubProof: HashSet[AST.Exp] = spcMap.get(leftSubProofNo) match {
-          case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == AST.Util.normalizeExp(orClaim.left) => HashSet ++ sp.claims
+          case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == logika.th.normalizeExp(orClaim.left) => HashSet ++ sp.claims
           case _ =>
             reporter.error(leftSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the left-operand of $orClaimNo's claim")
             return emptyResult
         }
         val rightSubProof: HashSet[AST.Exp] = spcMap.get(rightSubProofNo) match {
-          case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == AST.Util.normalizeExp(orClaim.right) => HashSet ++ sp.claims
+          case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == logika.th.normalizeExp(orClaim.right) => HashSet ++ sp.claims
           case _ =>
             reporter.error(rightSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the right-operand of $orClaimNo's claim")
             return emptyResult
         }
-        val stepClaim = step.claimNorm
+        val stepClaim = logika.th.normalizeExp(step.claim)
         val ok = leftSubProof.contains(stepClaim) && rightSubProof.contains(stepClaim)
         if (!ok) {
           stepClaim match {
-            case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) && leftSubProof.contains(AST.Util.normalizeExp(stepClaim.left)) && rightSubProof.contains(AST.Util.normalizeExp(stepClaim.right)) =>
+            case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) && leftSubProof.contains(logika.th.normalizeExp(stepClaim.left)) && rightSubProof.contains(logika.th.normalizeExp(stepClaim.right)) =>
             case _ =>
               reporter.error(step.id.posOpt, Logika.kind, s"Could not infer the stated claim from both sub-proofs $leftSubProofNo and $rightSubProofNo using ${just.invokeIdent.id.value}")
               return emptyResult
@@ -166,7 +166,7 @@ import org.sireum.logika.Logika.Reporter
         }
         val ISZ(subProofNo) = args
         val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo) match {
-          case Some(sp: StepProofContext.SubProof) if sp.assumption == AST.Util.normalizeExp(claim.exp) => sp.claims
+          case Some(sp: StepProofContext.SubProof) if sp.assumption == logika.th.normalizeExp(claim.exp) => sp.claims
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the operand of step ${step.id}'s claim")
             return emptyResult

@@ -96,10 +96,10 @@ import org.sireum.logika.Logika.Reporter
     val args = argsOpt.get
 
     val provenClaims = HashMap ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
-      (AST.Util.normalizeExp(spc.asInstanceOf[StepProofContext.Regular].exp), spc.asInstanceOf[StepProofContext.Regular]))
+      (logika.th.normalizeExp(spc.asInstanceOf[StepProofContext.Regular].exp), spc.asInstanceOf[StepProofContext.Regular]))
 
     if (args.isEmpty) {
-      val claimNorm = step.claimNorm
+      val claimNorm = logika.th.normalizeExp(step.claim)
       val spcOpt = provenClaims.get(claimNorm)
       spcOpt match {
         case Some(spc) =>
@@ -114,7 +114,7 @@ import org.sireum.logika.Logika.Reporter
           if (id === "Premise") {
             val pathConditions = org.sireum.logika.Util.claimsToExps(pos, logika.context.methodName, state.claims,
               logika.th, logika.config.atLinesFresh)
-            val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield AST.Util.normalizeExp(e))
+            val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield logika.th.normalizeExp(e))
             if (normPathConditions.contains(claimNorm)) {
               val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
               val (status, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)

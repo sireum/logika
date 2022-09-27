@@ -31,7 +31,6 @@ import org.sireum.lang.tipe.TypeChecker
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Reporter
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
-import org.sireum.message.Position
 
 
 @datatype class LiftPlugin extends JustificationPlugin {
@@ -103,7 +102,7 @@ import org.sireum.message.Position
     var provenClaims = HashMap.empty[AST.Exp, (AST.ProofAst.StepId, AST.Exp)]
     for (spc <- spcMap.values) {
       spc match {
-        case spc: StepProofContext.Regular => provenClaims = provenClaims + AST.Util.normalizeExp(spc.exp) ~> ((spc.stepNo, spc.exp))
+        case spc: StepProofContext.Regular => provenClaims = provenClaims + logika.th.normalizeExp(spc.exp) ~> ((spc.stepNo, spc.exp))
         case _ =>
       }
     }
@@ -135,7 +134,7 @@ import org.sireum.message.Position
       return emptyResult
     }
 
-    if (AST.Util.normalizeExp(step.claim) != AST.Util.normalizeExp(iclaim)) {
+    if (logika.th.normalizeExp(step.claim) != logika.th.normalizeExp(iclaim)) {
       reporter.error(posOpt, Logika.kind, s"Could not lift ${mi.methodRes.id} to produce the stated claim")
       return emptyResult
     }
