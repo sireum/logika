@@ -1425,6 +1425,8 @@ object Util {
         case _: State.Claim.Prop => return F
         case _: State.Claim.If => return F
         case _: State.Claim.Eq => return F
+        case _: State.Claim.Let.CurrentId => return F
+        case _: State.Claim.Let.CurrentName => return F
         case _ => return T
       }
     }
@@ -2315,6 +2317,13 @@ object Util {
       return r
     }
 
+    def equate(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): Option[AST.Exp] = {
+      val (op, resOpt): (String, Option[AST.ResolvedInfo]) =
+        if (th.isGroundType(t)) (AST.Exp.BinaryOp.Eq3, eqResOpt)
+        else (AST.Exp.BinaryOp.Equiv, equivResOpt)
+      return if (e1 === e2) None() else Some(AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, resOpt, Some(t))))
+    }
+
     def toExp(claim: State.Claim): Option[AST.Exp] = {
       claim match {
         case claim: State.Claim.And =>
@@ -2370,6 +2379,16 @@ object Util {
             case (Some(cond), Some(left), Some(right)) => return Some(constructIf(cond, left, right, posOpt, AST.Typed.bOpt))
             case (_, _, _) => return None()
           }
+        case claim: State.Claim.Let.CurrentId =>
+          (letToExp(claim), valueToExp(claim.sym)) match {
+            case (Some(e1), Some(e2)) => return equate(claim.sym.tipe, e1, e2)
+            case _ => return None()
+          }
+        case claim: State.Claim.Let.CurrentName =>
+          (letToExp(claim), valueToExp(claim.sym)) match {
+            case (Some(e1), Some(e2)) => return equate(claim.sym.tipe, e1, e2)
+            case _ => return None()
+          }
         case claim: State.Claim.Eq =>
           collector.letMap.get(claim.v1.num) match {
             case Some(lets) if lets.size > 1 &&
@@ -2378,11 +2397,7 @@ object Util {
                 case Some(eqs) if eqs.size === 1 =>
                   val v1 = eqs.elements(0).v1
                   (valueToExp(v1), valueToExp(claim.v2)) match {
-                    case (Some(e1), Some(e2)) =>
-                      val (op, resOpt): (String, Option[AST.ResolvedInfo]) =
-                        if (th.isGroundType(claim.v1.tipe)) (AST.Exp.BinaryOp.Eq3, eqResOpt)
-                        else (AST.Exp.BinaryOp.Equiv, equivResOpt)
-                      return Some(AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, resOpt, Some(v1.tipe))))
+                    case (Some(e1), Some(e2)) => return equate(v1.tipe, e1, e2)
                     case (_, _) => return None()
                   }
                 case _ =>
