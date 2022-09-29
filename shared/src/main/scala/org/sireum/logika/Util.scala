@@ -1427,6 +1427,8 @@ object Util {
         case _: State.Claim.Eq => return F
         case _: State.Claim.Let.CurrentId => return F
         case _: State.Claim.Let.CurrentName => return F
+        case _: State.Claim.Let.Id => return F
+        case _: State.Claim.Let.Name => return F
         case _ => return T
       }
     }
@@ -2385,6 +2387,16 @@ object Util {
             case _ => return None()
           }
         case claim: State.Claim.Let.CurrentName =>
+          (letToExp(claim), valueToExp(claim.sym)) match {
+            case (Some(e1), Some(e2)) => return equate(claim.sym.tipe, e1, e2)
+            case _ => return None()
+          }
+        case claim: State.Claim.Let.Id =>
+          (letToExp(claim), valueToExp(claim.sym)) match {
+            case (Some(e1), Some(e2)) => return equate(claim.sym.tipe, e1, e2)
+            case _ => return None()
+          }
+        case claim: State.Claim.Let.Name =>
           (letToExp(claim), valueToExp(claim.sym)) match {
             case (Some(e1), Some(e2)) => return equate(claim.sym.tipe, e1, e2)
             case _ => return None()
