@@ -1416,6 +1416,20 @@ object Util {
     return s4
   }
 
+  @pure def bigAnd(claims: ISZ[State.Claim]): State.Claim = {
+    if (claims.size === 1) {
+      return claims(0)
+    }
+    var cs = ISZ[State.Claim]()
+    for (claim <- claims) {
+      claim match {
+        case claim: State.Claim.And => cs = cs ++ claim.claims
+        case _ => cs = cs :+ claim
+      }
+    }
+    return State.Claim.And(cs)
+  }
+
   @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ISZ[AST.Exp] = {
     def ignore(claim: State.Claim): B = {
       claim match {
@@ -1454,7 +1468,7 @@ object Util {
       return r
     }
 
-    @pure def bigAnd(exps: ISZ[AST.Exp]): AST.Exp = {
+    @pure def bigAndExp(exps: ISZ[AST.Exp]): AST.Exp = {
       var set = HashSSet.empty[AST.Exp]
       for (exp <- exps) {
         if (exp === trueLit) {
@@ -1469,7 +1483,7 @@ object Util {
         AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
     }
 
-    @pure def bigOr(exps: ISZ[AST.Exp]): AST.Exp = {
+    @pure def bigOrExp(exps: ISZ[AST.Exp]): AST.Exp = {
       var set = HashSSet.empty[AST.Exp]
       for (exp <- exps) {
         if (exp === trueLit) {
@@ -1484,7 +1498,7 @@ object Util {
         AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
     }
 
-    @pure def bigImply(exps: ISZ[AST.Exp]): AST.Exp = {
+    @pure def bigImplyExp(exps: ISZ[AST.Exp]): AST.Exp = {
       var es = ISZ[AST.Exp]()
       for (i <- 0 until exps.size - 1) {
         val exp = exps(i)
@@ -1727,7 +1741,7 @@ object Util {
               case _ =>
             }
           }
-          return Some(bigAnd(es))
+          return Some(bigAndExp(es))
         case let: State.Claim.Let.Or =>
           var es = ISZ[AST.Exp]()
           for (v <- let.args) {
@@ -1736,7 +1750,7 @@ object Util {
               case _ => return None()
             }
           }
-          return Some(bigOr(es))
+          return Some(bigOrExp(es))
         case let: State.Claim.Let.Imply =>
           var es = ISZ[AST.Exp]()
           for (i <- 0 until let.args.size - 1) {
@@ -1753,7 +1767,7 @@ object Util {
               es = es :+ e
             case _ => return None()
           }
-          return Some(bigImply(es))
+          return Some(bigImplyExp(es))
         case let: State.Claim.Let.Ite =>
           (valueToExp(let.cond), valueToExp(let.left), valueToExp(let.right)) match {
             case (Some(cond), Some(left), Some(right)) =>
@@ -2219,7 +2233,7 @@ object Util {
                 val (op, eqResOpt) = eqOpResOpt(tOpt.get)
                 exps = exps :+ AST.Exp.Binary(l, op, r, AST.ResolvedAttr(symPosOpt, eqResOpt, tOpt))
               }
-              return Some(bigAnd(exps))
+              return Some(bigAndExp(exps))
             case (_, _) => return None()
           }
         case _ => return None()
@@ -2336,7 +2350,7 @@ object Util {
               case _ =>
             }
           }
-          return Some(bigAnd(es))
+          return Some(bigAndExp(es))
         case claim: State.Claim.Or =>
           var es = ISZ[AST.Exp]()
           for (c <- defsToEqs(claim.claims)) {
@@ -2345,7 +2359,7 @@ object Util {
               case _ => return None()
             }
           }
-          return Some(bigOr(es))
+          return Some(bigOrExp(es))
         case claim: State.Claim.Imply =>
           var es = ISZ[AST.Exp]()
           val cs = defsToEqs(claim.claims)
@@ -2363,7 +2377,7 @@ object Util {
               es = es :+ e
             case _ => return None()
           }
-          return Some(bigImply(es))
+          return Some(bigImplyExp(es))
         case claim: State.Claim.Prop =>
           valueToExp(claim.value) match {
             case Some(e) =>

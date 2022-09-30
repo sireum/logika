@@ -32,6 +32,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.Reporter
 import Util._
+import org.sireum.logika.Smt2.stTrue
 
 object Smt2 {
   @msig trait Cache {
@@ -2052,19 +2053,14 @@ object Smt2 {
   def implyST(cs: ISZ[State.Claim], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
               declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     var sts = ISZ[ST]()
-    for (i <- 0 until cs.size) {
+    for (i <- 0 until cs.size - 1) {
       c2ST(cs(i), v2st, lets, declIds) match {
         case Some(st) => sts = sts :+ st
         case _ =>
       }
     }
-    if (sts.isEmpty) {
-      return implySTH(ISZ(), None())
-    } else if (sts.size === 1) {
-      return implySTH(ISZ(), Some(sts(0)))
-    } else {
-      return implySTH(ops.ISZOps(sts).dropRight(1), Some(sts(sts.size - 1)))
-    }
+    val lastOpt = c2ST(cs(cs.size - 1), v2st, lets, declIds)
+    return if (lastOpt.isEmpty) stTrue else implySTH(sts, lastOpt)
   }
 
   def c2DeclST(c: State.Claim): ISZ[(String, ST)] = {
