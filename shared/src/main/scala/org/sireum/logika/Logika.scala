@@ -630,7 +630,7 @@ import Util._
     if (!info.ast.isVal) {
       return None()
     }
-    AST.Util.constantInitOpt(info.ast.initOpt) match {
+    AST.Util.constantInitOpt(info.ast) match {
       case Some(exp) =>
         val r = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, exp, reporter)
         assert(r.size === 1)
