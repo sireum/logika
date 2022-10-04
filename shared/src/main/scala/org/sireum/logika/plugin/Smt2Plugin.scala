@@ -58,7 +58,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
                       state: State,
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
-    @strictpure def err(): Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
+    @strictpure def err(): Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val (options, timeout, resourceLimit, argsOpt): (String, Z, Z, Option[ISZ[AST.ProofAst.StepId]]) = just.args match {
       case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ) => (s.value, t.value, r.value, None())
@@ -85,7 +85,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
     val id = just.invokeIdent.id.value
 
     if (argsOpt.isEmpty && id === "Smt2_*") {
-      return Plugin.Result(F, state.nextFresh, state.claims)
+      return Plugin.Result(F, state.nextFresh, ISZ())
     }
 
     val posOpt = just.invokeIdent.posOpt
@@ -112,7 +112,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
         }
       }
       if (!ok) {
-        return Plugin.Result(F, s0.nextFresh, s0.claims)
+        return Plugin.Result(F, s0.nextFresh, ISZ())
       }
       val q = logika.evalRegularStepClaim(lsmt2, cache, s0, step.claim, step.id.posOpt, reporter)
       ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)

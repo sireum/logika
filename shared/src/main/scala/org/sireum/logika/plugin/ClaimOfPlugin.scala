@@ -56,7 +56,7 @@ import org.sireum.logika.Logika.Reporter
                       state: State,
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
-    @strictpure def err(): Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
+    @strictpure def err(): Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val arg: AST.Exp = just.args(0) match {
       case a: AST.Exp.Eta => a.ref.asExp

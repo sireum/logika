@@ -90,7 +90,7 @@ import org.sireum.logika.Logika.Reporter
     }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
+    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
     if (argsOpt.isEmpty) {
       return emptyResult

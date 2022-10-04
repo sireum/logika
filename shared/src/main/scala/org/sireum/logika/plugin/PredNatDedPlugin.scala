@@ -75,7 +75,7 @@ object PredNatDedPlugin {
                       reporter: Reporter): Plugin.Result = {
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, state.claims)
+    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     res.id match {
       case string"AllI" =>
         val quant: AST.Exp.QuantType = step.claim match {

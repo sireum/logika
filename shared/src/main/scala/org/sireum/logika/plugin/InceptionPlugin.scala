@@ -206,7 +206,7 @@ import org.sireum.logika.Logika.Reporter
     def handleFactTheorem(name: ISZ[String], posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
       if (args.isEmpty) {
         reporter.error(posOpt, Logika.kind, "Please use ClaimOf justification for empty arguments")
-        return Plugin.Result(F, state.nextFresh, state.claims)
+        return Plugin.Result(F, state.nextFresh, ISZ())
       }
       logika.th.nameMap.get(name) match {
         case Some(info: Info.Fact) =>
