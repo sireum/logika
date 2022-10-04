@@ -89,7 +89,7 @@ import org.sireum.logika.Logika.Reporter
     }
 
     if (argsOpt.isEmpty) {
-      return Plugin.Result(F, state.nextFresh, state.claims)
+      return Plugin.Result(F, state.nextFresh, ISZ())
     }
 
     val pos = posOpt.get
@@ -116,21 +116,19 @@ import org.sireum.logika.Logika.Reporter
               logika.th, logika.config.atLinesFresh)
             val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield logika.th.normalizeExp(e))
             if (normPathConditions.contains(claimNorm)) {
-              val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-              val (status, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
               reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
                 st"""Accepted because the stated claim is in the path conditions:
                     |{
                     |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
                     |}""".render)
-              return Plugin.Result(status, nextFresh, claims)
+              return Plugin.Result(T, state.nextFresh, ISZ())
             } else {
               reporter.error(posOpt, Logika.kind,
                 st"""The stated claim has not been proven before nor is a premise in:
                     |{
                     |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
                     |}""".render)
-              return Plugin.Result(F, state.nextFresh, state.claims)
+              return Plugin.Result(F, state.nextFresh, ISZ())
             }
           }
       }
@@ -158,7 +156,7 @@ import org.sireum.logika.Logika.Reporter
         }
       }
       if (!ok) {
-        return Plugin.Result(F, s0.nextFresh, s0.claims)
+        return Plugin.Result(F, s0.nextFresh, ISZ())
       }
       val q = logika.evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
       ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
