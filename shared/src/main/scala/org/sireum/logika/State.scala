@@ -367,11 +367,11 @@ object State {
 
     @datatype class Eq(val v1: Value.Sym, val v2: Value) extends Claim {
       @pure override def toRawST: ST = {
-        return st"${v1.toRawST} =~= ${v2.toRawST}"
+        return st"${v1.toRawST} === ${v2.toRawST}"
       }
 
       override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
-        claimSTs.add(st"${v1.toST(numMap, defs)} =~= ${v2.toST(numMap, defs)}")
+        claimSTs.add(st"${v1.toST(numMap, defs)} === ${v2.toST(numMap, defs)}")
       }
 
       @pure def types: ISZ[AST.Typed] = {
@@ -711,7 +711,7 @@ object State {
 
         override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
           if (defs.get(sym.num).get.size > 1) {
-            claimSTs.add(st"${sym.toRawST} =~= ${value.toST(numMap, defs)}")
+            claimSTs.add(st"${sym.toRawST} === ${value.toST(numMap, defs)}")
           }
         }
       }
@@ -791,12 +791,7 @@ object State {
 
       @datatype class Binary(val sym: Value.Sym, val left: Value, val op: String, val right: Value, val tipe: AST.Typed) extends Let {
         @pure override def toRawST: ST = {
-          val opString: String = op match {
-            case AST.Exp.BinaryOp.Eq => AST.Exp.BinaryOp.Eq3
-            case AST.Exp.BinaryOp.Ne => AST.Exp.BinaryOp.Ne3
-            case _ => op
-          }
-          return st"${sym.toRawST} ≜ ${left.toRawST} $opString ${right.toRawST}"
+          return st"${sym.toRawST} ≜ ${left.toRawST} $op ${right.toRawST}"
         }
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
@@ -828,12 +823,7 @@ object State {
           }
           val leftST: ST = if (leftParen) st"(${left.toST(numMap, defs)})" else st"${left.toST(numMap, defs)}"
           val rightST: ST = if (rightParen) st"(${right.toST(numMap, defs)})" else st"${right.toST(numMap, defs)}"
-          val opString: String = op match {
-            case AST.Exp.BinaryOp.Eq => AST.Exp.BinaryOp.Eq3
-            case AST.Exp.BinaryOp.Ne => AST.Exp.BinaryOp.Ne3
-            case _ => op
-          }
-          return Some(st"$leftST $opString $rightST")
+          return Some(st"$leftST $op $rightST")
         }
       }
 

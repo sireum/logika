@@ -1906,12 +1906,11 @@ object Smt2 {
               |)"""
       case c: State.Claim.Let.Binary =>
         val op: String = c.op match {
-          case AST.Exp.BinaryOp.Eq3 => AST.Exp.BinaryOp.Eq
-          case AST.Exp.BinaryOp.Ne3 => AST.Exp.BinaryOp.Ne
           case AST.Exp.BinaryOp.CondImply => AST.Exp.BinaryOp.Imply
           case AST.Exp.BinaryOp.CondAnd => AST.Exp.BinaryOp.And
           case AST.Exp.BinaryOp.CondOr => AST.Exp.BinaryOp.Or
           case AST.Exp.BinaryOp.Equiv => return st"(= ${v2st(c.left)} ${v2st(c.right)})"
+          case AST.Exp.BinaryOp.Inequiv => return st"(not (= ${v2st(c.left)} ${v2st(c.right)}))"
           case _ => c.op
         }
         return if (Smt2.isSimpsOp(c)) v2ST(c.sym) else st"(${typeOpId(c.tipe, op)} ${v2st(c.left)} ${v2st(c.right)})"

@@ -1704,14 +1704,12 @@ object Util {
             case AST.Exp.BinaryOp.Or => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)
             case AST.Exp.BinaryOp.Xor => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryXor)
             case AST.Exp.BinaryOp.Imply => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
-            case AST.Exp.BinaryOp.Eq => (AST.Exp.BinaryOp.Eq3, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
-            case AST.Exp.BinaryOp.Eq3 => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
+            case AST.Exp.BinaryOp.Eq => (AST.Exp.BinaryOp.Eq, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
             case AST.Exp.BinaryOp.Equiv =>
-              if (th.isGroundType(let.tipe)) (AST.Exp.BinaryOp.Eq3, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
+              if (th.isGroundType(let.tipe)) (AST.Exp.BinaryOp.Equiv, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
               else (AST.Exp.BinaryOp.Equiv, AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)
             case AST.Exp.BinaryOp.FpEq => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryFpEq)
-            case AST.Exp.BinaryOp.Ne => (AST.Exp.BinaryOp.Ne3, AST.ResolvedInfo.BuiltIn.Kind.BinaryNe)
-            case AST.Exp.BinaryOp.Ne3 => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryNe)
+            case AST.Exp.BinaryOp.Ne => (AST.Exp.BinaryOp.Ne, AST.ResolvedInfo.BuiltIn.Kind.BinaryNe)
             case AST.Exp.BinaryOp.FpNe => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryFpNe)
             case AST.Exp.BinaryOp.Lt => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryLt)
             case AST.Exp.BinaryOp.Le => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryLe)
@@ -2165,14 +2163,6 @@ object Util {
 
     }
 
-    def eqOpResOpt(t: AST.Typed): (String, Option[AST.ResolvedInfo]) = {
-      if (th.isGroundType(t)) {
-        return (AST.Exp.BinaryOp.Eq3, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)))
-      } else {
-        return (AST.Exp.BinaryOp.Equiv, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)))
-      }
-    }
-
     def fieldStoreToExp(left: AST.Exp, let: State.Claim.Let.FieldStore): Option[AST.Exp] = {
       val sym = let.sym
       val symPosOpt = Option.some(sym.pos)
@@ -2207,14 +2197,14 @@ object Util {
           (valueToExp(let.adt), valueToExp(let.value)) match {
             case (Some(o1), Some(e)) =>
               val attr = AST.Attr(symPosOpt)
-              val (idEqOp, idEqResOpt) = eqOpResOpt(let.value.tipe)
               var exps = ISZ[AST.Exp](
-                AST.Exp.Binary(left, AST.Exp.BinaryOp.Eq3, o1, AST.ResolvedAttr(symPosOpt,
+                AST.Exp.Binary(left, AST.Exp.BinaryOp.Equiv, o1, AST.ResolvedAttr(symPosOpt,
                   Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)), Some(sym.tipe))),
                 AST.Exp.Binary(
                   AST.Exp.Select(Some(left), AST.Id(let.id, attr), ISZ(), AST.ResolvedAttr(symPosOpt, idResOpt,
-                    Some(let.value.tipe))), idEqOp, e,
-                  AST.ResolvedAttr(symPosOpt, idEqResOpt, Some(let.value.tipe)))
+                    Some(let.value.tipe))), AST.Exp.BinaryOp.Equiv, e,
+                  AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)),
+                    Some(let.value.tipe)))
               )
               for (x <- vars) {
                 val id = AST.Id(x.ast.id.value, attr)
@@ -2222,8 +2212,8 @@ object Util {
                 val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
                 val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
                 val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
-                val (op, eqResOpt) = eqOpResOpt(tOpt.get)
-                exps = exps :+ AST.Exp.Binary(l, op, r, AST.ResolvedAttr(symPosOpt, eqResOpt, tOpt))
+                exps = exps :+ AST.Exp.Binary(l, AST.Exp.BinaryOp.Equiv, r,
+                  AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)), tOpt))
               }
               for (x <- specVars) {
                 val id = AST.Id(x.ast.id.value, attr)
@@ -2231,8 +2221,8 @@ object Util {
                 val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
                 val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
                 val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
-                val (op, eqResOpt) = eqOpResOpt(tOpt.get)
-                exps = exps :+ AST.Exp.Binary(l, op, r, AST.ResolvedAttr(symPosOpt, eqResOpt, tOpt))
+                exps = exps :+ AST.Exp.Binary(l, AST.Exp.BinaryOp.Equiv, r,
+                  AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)), tOpt))
               }
               return Some(bigAndExp(exps))
             case (_, _) => return None()
@@ -2335,10 +2325,8 @@ object Util {
     }
 
     def equate(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): Option[AST.Exp] = {
-      val (op, resOpt): (String, Option[AST.ResolvedInfo]) =
-        if (th.isGroundType(t)) (AST.Exp.BinaryOp.Eq3, eqResOpt)
-        else (AST.Exp.BinaryOp.Equiv, equivResOpt)
-      return if (e1 == e2) None() else Some(AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, resOpt, Some(t))))
+      return if (e1 == e2) None()
+      else Some(AST.Exp.Binary(e1, AST.Exp.BinaryOp.Equiv, e2, AST.ResolvedAttr(posOpt, eqResOpt, Some(t))))
     }
 
     def toExp(claim: State.Claim): Option[AST.Exp] = {
@@ -2445,11 +2433,7 @@ object Util {
           }
           (valueToExp(claim.v1), valueToExp(claim.v2)) match {
             case (Some(e1), Some(e2)) =>
-              val (op, resOpt): (String, Option[AST.ResolvedInfo]) =
-                if (th.isGroundType(claim.v1.tipe)) (AST.Exp.BinaryOp.Eq3, eqResOpt)
-                else (AST.Exp.BinaryOp.Equiv, equivResOpt)
-              return Some(AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, resOpt, Some(claim.v1.tipe)
-              )))
+              return Some(AST.Exp.Binary(e1, AST.Exp.BinaryOp.Equiv, e2, AST.ResolvedAttr(posOpt, eqResOpt, Some(claim.v1.tipe))))
             case _ => return None()
           }
         case claim: State.Claim.Let => return letToExp(claim)
