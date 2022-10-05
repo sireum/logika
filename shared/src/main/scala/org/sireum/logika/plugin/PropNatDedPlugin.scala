@@ -84,7 +84,7 @@ import org.sireum.logika.Logika.Reporter
         case _ => return F
       }
       res match {
-        case res: AST.ResolvedInfo.Var => return res.id === "F" && res.owner == AST.Typed.sireumName
+        case res: AST.ResolvedInfo.Var => return res.id == "F" && res.owner == AST.Typed.sireumName
         case _ =>return F
       }
     }

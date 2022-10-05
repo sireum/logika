@@ -7,15 +7,15 @@ import org.sireum.justification.natded.prop.{negE, ImplyI}
 @spec def eq[T](t1: T, t2: T): B = $
 
 @spec def eqFact[T](t1: T, t2: T) = Fact(
-  eq(t1, t2) === (t1 === t2)
+  eq(t1, t2) == (t1 == t2)
 )
 
 @spec def eqSymmetric[A](t1: A, t2: A) = Theorem(
-  eq(t1, t2) === eq(t2, t1),
+  eq(t1, t2) == eq(t2, t1),
   Proof(
     //@formatter:off
-    ∀ { (t1: A, t2: A) => eq(t1, t2) === (t1 == t2) } by ClaimOf(eqFact[A] _),
-    eq(t1, t2) === eq(t2, t1)                         by Auto
+    1 #> ∀ { (t1: A, t2: A) => eq(t1, t2) == (t1 == t2) } by ClaimOf(eqFact[A] _),
+    2 #> (eq(t1, t2) == eq(t2, t1))                       by Auto
     //@formatter:on
   )
 )

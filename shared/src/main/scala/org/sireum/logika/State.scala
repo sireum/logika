@@ -1051,6 +1051,6 @@ object State {
   }
 
   @strictpure def shorten(ids: ISZ[String]): ISZ[String] =
-    if (ids.size > 2 && ids(0) === "org" && ids(1) === "sireum") ops.ISZOps(ids).slice(2, ids.size) else ids
+    if (ids.size > 2 && ids(0) == "org" && ids(1) == "sireum") ops.ISZOps(ids).slice(2, ids.size) else ids
 
 }

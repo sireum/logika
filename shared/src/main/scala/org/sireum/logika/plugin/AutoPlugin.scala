@@ -68,7 +68,7 @@ import org.sireum.logika.Logika.Reporter
         (id, just.id.asExp.posOpt, Some(ISZ()))
       case just: AST.ProofAst.Step.Justification.Apply =>
         val invokeId = just.invokeIdent.id.value
-        val ao: Option[ISZ[AST.ProofAst.StepId]] = if (just.args.size === 1) {
+        val ao: Option[ISZ[AST.ProofAst.StepId]] = if (just.args.size == 1) {
           just.args(0) match {
             case arg: AST.Exp.Invoke if arg.typedOpt == iszzTypedOpt =>
               arg.attr.resOpt.get match {
@@ -111,7 +111,7 @@ import org.sireum.logika.Logika.Reporter
                 |""".render)
           return Plugin.Result(T, state.nextFresh, spc.claims)
         case _ =>
-          if (id === "Premise") {
+          if (id == "Premise") {
             val pathConditions = org.sireum.logika.Util.claimsToExps(pos, logika.context.methodName, state.claims,
               logika.th, logika.config.atLinesFresh)
             val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield logika.th.normalizeExp(e))

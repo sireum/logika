@@ -279,7 +279,8 @@ object Util {
         case exp: AST.Exp.Ident =>
           exp.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Var => return introInputIdent(o, res, exp.id, exp.typedOpt)
-            case res: AST.ResolvedInfo.LocalVar if res.context === context => return introInputIdent(o, res, exp.id, exp.typedOpt)
+            case res: AST.ResolvedInfo.LocalVar if res.context == context =>
+              return introInputIdent(o, res, exp.id, exp.typedOpt)
             case _ =>
           }
         case exp: AST.Exp.Select =>
@@ -496,7 +497,7 @@ object Util {
             map.size - 1
         }
       }
-      if ((n === num) && rOpt.isEmpty && o.id === res.id && o.context === res.context) {
+      if ((n == num) && rOpt.isEmpty && o.id == res.id && o.context == res.context) {
         rOpt = Some(o)
       }
       return MStateTransformer.PreResultStateClaimLetId
@@ -527,7 +528,7 @@ object Util {
             map.size - 1
         }
       }
-      if ((n === num) && rOpt.isEmpty && o.ids === (res.owner :+ res.id)) {
+      if ((n == num) && rOpt.isEmpty && o.ids == (res.owner :+ res.id)) {
         rOpt = Some(o)
       }
       return MStateTransformer.PreResultStateClaimLetName
@@ -761,7 +762,7 @@ object Util {
         for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
           val (mname, id, t) = v
           val posOpt = id.attr.posOpt
-          if (id.value =!= "this") {
+          if (id.value != "this") {
             val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
             state = assumeValueInv(l, smt2, cache, T, s0, sym, posOpt.get, reporter)
             localInMap = localInMap + id.value ~> sym
@@ -782,7 +783,7 @@ object Util {
         val spBody = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
         logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, spBody, reporter)
       } else {
-        logika.evalStmts(!(body.allReturns && config.branchPar =!= Config.BranchPar.Disabled), Split.Default, smt2,
+        logika.evalStmts(!(body.allReturns && config.branchPar != Config.BranchPar.Disabled), Split.Default, smt2,
           cache, None(), T, state, stmts, reporter)
       }
       checkMethodPost(logika, smt2, cache, reporter, ss, methodPosOpt, invs, ensures, mconfig.logPc, mconfig.logRawPc,
@@ -798,10 +799,10 @@ object Util {
         case contract: AST.MethodContract.Cases =>
           if (caseIndex >= 0) {
             val c = contract.cases(caseIndex)
-            checkCase(if (c.label.value === "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
+            checkCase(if (c.label.value == "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
           } else {
             for (c <- contract.cases) {
-              checkCase(if (c.label.value === "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
+              checkCase(if (c.label.value == "") None() else Some(c.label), contract.reads, c.requires, contract.modifies, c.ensures)
             }
           }
       }
@@ -973,7 +974,7 @@ object Util {
         val s2 = assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
         smt2.addStrictPureMethodDecl(pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size), reporter)
         s0 = s0(nextFresh = s2.nextFresh, status = s2.status)
-        for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes) if pair._1.value =!= "this") {
+        for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes) if pair._1.value != string"this") {
           val (pid, pt) = pair
           val (s0_1, pv) = idIntro(pos, s0, context, pid.value, pt, pid.attr.posOpt)
           val s0_2 = assumeValueInv(logika, smt2, cache, T, s0_1, pv, pos, reporter)
@@ -1417,7 +1418,7 @@ object Util {
   }
 
   @pure def bigAnd(claims: ISZ[State.Claim]): State.Claim = {
-    if (claims.size === 1) {
+    if (claims.size == 1) {
       return claims(0)
     }
     var cs = ISZ[State.Claim]()
@@ -1471,9 +1472,9 @@ object Util {
     @pure def bigAndExp(exps: ISZ[AST.Exp]): AST.Exp = {
       var set = HashSSet.empty[AST.Exp]
       for (exp <- exps) {
-        if (exp === trueLit) {
+        if (exp == trueLit) {
           // skip
-        } else if (exp === falseLit) {
+        } else if (exp == falseLit) {
           return falseLit
         } else {
           set = set + exp
@@ -1486,9 +1487,9 @@ object Util {
     @pure def bigOrExp(exps: ISZ[AST.Exp]): AST.Exp = {
       var set = HashSSet.empty[AST.Exp]
       for (exp <- exps) {
-        if (exp === trueLit) {
+        if (exp == trueLit) {
           return trueLit
-        } else if (exp === falseLit) {
+        } else if (exp == falseLit) {
           // skip
         } else {
           set = set + exp
@@ -1502,7 +1503,7 @@ object Util {
       var es = ISZ[AST.Exp]()
       for (i <- 0 until exps.size - 1) {
         val exp = exps(i)
-        if (exp === falseLit) {
+        if (exp == falseLit) {
           return trueLit
         } else {
           es = es :+ exp
@@ -1515,7 +1516,7 @@ object Util {
       val res = AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
       var i = es.size - 2
       while (i >= 0) {
-        if (r =!= trueLit) {
+        if (r != trueLit) {
           r = AST.Exp.Binary(es(i), op, r, AST.ResolvedAttr(None(), Some(res), AST.Typed.bOpt))
         }
         i = i - 1
@@ -1553,16 +1554,16 @@ object Util {
     }
 
     def constructIf(cond: AST.Exp, left: AST.Exp, right: AST.Exp, pOpt: Option[Position], tOpt: Option[AST.Typed]): AST.Exp = {
-      if (right === trueLit) {
-        if (left === trueLit) {
+      if (right == trueLit) {
+        if (left == trueLit) {
           return trueLit
         }
         return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondImply, left, AST.ResolvedAttr(pOpt,
           Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)), AST.Typed.bOpt))
-      } else if (right === falseLit) {
+      } else if (right == falseLit) {
         return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondAnd, left, AST.ResolvedAttr(pOpt,
           Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)), AST.Typed.bOpt))
-      } else if (left === trueLit) {
+      } else if (left == trueLit) {
         return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondOr, right, AST.ResolvedAttr(pOpt,
           Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr)), AST.Typed.bOpt))
       }
@@ -1619,7 +1620,7 @@ object Util {
             ISZ()
           }
           val attr = AST.Attr(symPosOpt)
-          if (let.context === context || let.context.isEmpty) {
+          if (let.context == context || let.context.isEmpty) {
             return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
               Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
               Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr))
@@ -1655,7 +1656,7 @@ object Util {
         case let: State.Claim.Let.Binary =>
           @pure def isS(t: AST.Typed): B = {
             t match {
-              case t: AST.Typed.Name => return (t.ids == AST.Typed.isName || t.ids === AST.Typed.msName)
+              case t: AST.Typed.Name => return (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName)
               case _ => return F
             }
           }
@@ -1664,13 +1665,13 @@ object Util {
               case (Some(l), Some(r)) =>
                 var left = l
                 var right = r
-                val sType: AST.Typed.Name = if (op === AST.Exp.BinaryOp.Prepend) {
+                val sType: AST.Typed.Name = if (op == AST.Exp.BinaryOp.Prepend) {
                   left match {
                     case l: AST.Exp.Tuple if l.args.size >= 2 => left = AST.Exp.Tuple(ISZ(left), l.attr)
                     case _ =>
                   }
                   let.right.tipe.asInstanceOf[AST.Typed.Name]
-                } else if (op === AST.Exp.BinaryOp.Append) {
+                } else if (op == AST.Exp.BinaryOp.Append) {
                   right match {
                     case r: AST.Exp.Tuple if r.args.size >= 2 => right = AST.Exp.Tuple(ISZ(right), r.attr)
                     case _ =>
@@ -1795,7 +1796,7 @@ object Util {
           }
           val nameExp = th.nameToExp(let.tipe.ids, symPos)
           return Some(AST.Exp.Invoke(
-            if (ownerName.isEmpty || ownerName === AST.Typed.sireumName) None()
+            if (ownerName.isEmpty || ownerName == AST.Typed.sireumName) None()
             else Some(th.nameToExp(ownerName, symPos).asExp),
             AST.Exp.Ident(AST.Id(let.tipe.ids(let.tipe.ids.size - 1), AST.Attr(symPosOpt)), AST.ResolvedAttr(
               symPosOpt,
@@ -1820,9 +1821,9 @@ object Util {
           }
           val t = sym.tipe.asInstanceOf[AST.Typed.Name]
           val (name, targs): (ISZ[String], ISZ[AST.Type]) =
-            if (t.args(0) === AST.Typed.z) {
-              if (t.ids === AST.Typed.msName) {
-                if (t.args(1) === AST.Typed.z) (AST.Typed.zsName, ISZ())
+            if (t.args(0) == AST.Typed.z) {
+              if (t.ids == AST.Typed.msName) {
+                if (t.args(1) == AST.Typed.z) (AST.Typed.zsName, ISZ())
                 else (AST.Typed.mszName, ISZ(typedToType(t.args(1))))
               } else {
                 (AST.Typed.iszName, ISZ(typedToType(t.args(1))))
@@ -1842,7 +1843,7 @@ object Util {
             }
             resOpt.get match {
               case res: AST.ResolvedInfo.Method =>
-                return res.id === "isInBound" && (res.owner === AST.Typed.isName || res.owner === AST.Typed.msName)
+                return res.id == "isInBound" && (res.owner == AST.Typed.isName || res.owner == AST.Typed.msName)
               case _ =>
             }
             return F
@@ -1855,7 +1856,7 @@ object Util {
               case arg: AST.Exp.Ident =>
                 arg.attr.resOpt match {
                   case Some(res: AST.ResolvedInfo.LocalVar) =>
-                    return res.id === idOpt.get.value && res.context === fcontext
+                    return res.id == idOpt.get.value && res.context == fcontext
                   case _ =>
                 }
               case _ =>
@@ -1867,16 +1868,16 @@ object Util {
               return (F, F)
             }
             val id = idOpt.get.value
-            if (range.attr.resOpt =!= andResOpt) {
+            if (range.attr.resOpt != andResOpt) {
               return (F, F)
             }
             (range.left, range.right) match {
-              case (left: AST.Exp.Binary, right: AST.Exp.Binary) if left.attr.resOpt === leResOpt =>
+              case (left: AST.Exp.Binary, right: AST.Exp.Binary) if left.attr.resOpt == leResOpt =>
                 (left.right, right.left) match {
                   case (lr: AST.Exp.Ident, rl: AST.Exp.Ident) =>
                     (lr.resOpt, rl.resOpt) match {
                       case (Some(lrRes: AST.ResolvedInfo.LocalVar), Some(rlRes: AST.ResolvedInfo.LocalVar)) =>
-                        if (lrRes.id === id && rlRes.id === id && lrRes.context === fcontext && rlRes.context === fcontext) {
+                        if (lrRes.id == id && rlRes.id == id && lrRes.context == fcontext && rlRes.context == fcontext) {
                           // skip
                         } else {
                           return (F, F)
@@ -1885,9 +1886,9 @@ object Util {
                     }
                   case _ =>
                 }
-                if (right.attr.resOpt === leResOpt) {
+                if (right.attr.resOpt == leResOpt) {
                   return (T, T)
-                } else if (right.attr.resOpt === ltResOpt) {
+                } else if (right.attr.resOpt == ltResOpt) {
                   return (T, F)
                 }
               case _ =>
@@ -1896,7 +1897,7 @@ object Util {
           }
           @pure def paramIdx(idOpt1: Option[AST.Id], idOpt2: Option[AST.Id]): B = {
             (idOpt1, idOpt2) match {
-              case (Some(id1), Some(id2)) => return id1.value === s"${id2.value}${Logika.idxSuffix}"
+              case (Some(id1), Some(id2)) => return id1.value == s"${id2.value}${Logika.idxSuffix}"
               case _ =>
             }
             return F
@@ -1905,7 +1906,7 @@ object Util {
             e match {
               case e: AST.Exp.Ident =>
                 e.resOpt match {
-                  case Some(res: AST.ResolvedInfo.LocalVar) => return res.id === id.value && res.context === fcontext
+                  case Some(res: AST.ResolvedInfo.LocalVar) => return res.id == id.value && res.context == fcontext
                   case _ =>
                 }
               case _ =>
@@ -1928,25 +1929,25 @@ object Util {
             params = params :+ AST.Exp.Fun.Param(Some(AST.Id(x.id, attr)), Some(t), Some(x.tipe))
           }
           exp match {
-            case exp: AST.Exp.Binary if (let.isAll && (exp.attr.resOpt === implyResOpt ||
-              exp.attr.resOpt === condImplyResOpt)) || (!let.isAll && (exp.attr.resOpt === andResOpt ||
-              exp.attr.resOpt === condAndResOpt)) =>
+            case exp: AST.Exp.Binary if (let.isAll && (exp.attr.resOpt == implyResOpt ||
+              exp.attr.resOpt == condImplyResOpt)) || (!let.isAll && (exp.attr.resOpt == andResOpt ||
+              exp.attr.resOpt == condAndResOpt)) =>
               exp.left match {
                 case left: AST.Exp.Invoke if left.receiverOpt.nonEmpty && isInBoundResOpt(left.ident.attr.resOpt) =>
                   val seq = left.receiverOpt.get
                   val t = seq.typedOpt.get.asInstanceOf[AST.Typed.Name]
-                  if (params.size === 2 && paramIdx(params(0).idOpt, params(1).idOpt) &&
+                  if (params.size == 2 && paramIdx(params(0).idOpt, params(1).idOpt) &&
                     isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
                     exp.right match {
-                      case right: AST.Exp.Binary if (let.isAll && right.attr.resOpt === implyResOpt) ||
-                        (!let.isAll && right.attr.resOpt === andResOpt) =>
+                      case right: AST.Exp.Binary if (let.isAll && right.attr.resOpt == implyResOpt) ||
+                        (!let.isAll && right.attr.resOpt == andResOpt) =>
                         right.left match {
                           case rl: AST.Exp.Binary if isIdent(fcontext, params(1).idOpt.get, rl.right) &&
-                            rl.attr.resOpt === eqResOpt || rl.attr.resOpt === equivResOpt =>
+                            rl.attr.resOpt == eqResOpt || rl.attr.resOpt == equivResOpt =>
                             rl.left match {
-                              case rll: AST.Exp.Invoke if rll.args.size === 1 &&
+                              case rll: AST.Exp.Invoke if rll.args.size == 1 &&
                                 isIdent(fcontext, params(0).idOpt.get, rll.args(0)) =>
-                                if (left.receiverOpt === Some[AST.Exp](rll.ident)) {
+                                if (left.receiverOpt == Some[AST.Exp](rll.ident)) {
                                   val fun = AST.Exp.Fun(fcontext, ISZ(params(1)(tipeOpt = None())),
                                     AST.Stmt.Expr(right.right, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
                                     AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, ISZ(argTypes(1)), AST.Typed.b))))
@@ -1961,7 +1962,7 @@ object Util {
                         }
                       case _ =>
                     }
-                  } else if (params.size === 1 && isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
+                  } else if (params.size == 1 && isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
                     val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = {
                       val info = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Sig].methods.get("indices").get
                       (info.resOpt, info.typedOpt)
@@ -1975,7 +1976,7 @@ object Util {
                         params(0).idOpt.get.value)),
                       AST.Typed.bOpt)))
                   }
-                case left: AST.Exp.Binary if params.size === 1 =>
+                case left: AST.Exp.Binary if params.size == 1 =>
                   val (ok, isExact) = isQuantRange(fcontext, params(0).idOpt, left)
                   if (ok) {
                     val lo = left.left.asInstanceOf[AST.Exp.Binary].left
@@ -2021,7 +2022,7 @@ object Util {
                               info.owner, let.id)), Some(sym.tipe))))
                         case _ =>
                       }
-                      assert(let.id === "size" && (t.ids === AST.Typed.isName || t.ids === AST.Typed.msName))
+                      assert(let.id == "size" && (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName))
                       val info = ti.methods.get(let.id).get
                       val tOpt: Option[AST.Typed.Fun] = info.typedOpt match {
                         case Some(_: AST.Typed.Method) => Some(AST.Typed.Fun(T, T, ISZ(), sym.tipe))
@@ -2150,7 +2151,7 @@ object Util {
               case _ => return None()
             }
           }
-          assert(let.isLocal && let.context === context)
+          assert(let.isLocal && let.context == context)
           val ident = AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt,
             Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, let.id)),
             Some(let.tipe)))
@@ -2248,7 +2249,7 @@ object Util {
         case value: State.Value.Sym =>
           collector.letMap.get(value.num) match {
             case Some(lets) =>
-              if (lets.size === 1) {
+              if (lets.size == 1) {
                 return letToExp(lets.elements(0))
               } else {
                 for (let <- lets.elements) {
@@ -2337,7 +2338,7 @@ object Util {
       val (op, resOpt): (String, Option[AST.ResolvedInfo]) =
         if (th.isGroundType(t)) (AST.Exp.BinaryOp.Eq3, eqResOpt)
         else (AST.Exp.BinaryOp.Equiv, equivResOpt)
-      return if (e1 === e2) None() else Some(AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, resOpt, Some(t))))
+      return if (e1 == e2) None() else Some(AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, resOpt, Some(t))))
     }
 
     def toExp(claim: State.Claim): Option[AST.Exp] = {
@@ -2420,7 +2421,7 @@ object Util {
             case Some(lets) if lets.size > 1 &&
               ops.ISZOps(lets.elements).forall((let: State.Claim.Let) => let.isInstanceOf[State.Claim.Let.Def]) =>
               collector.eqMap.get(claim.v1.num) match {
-                case Some(eqs) if eqs.size === 1 =>
+                case Some(eqs) if eqs.size == 1 =>
                   val v1 = eqs.elements(0).v1
                   (valueToExp(v1), valueToExp(claim.v2)) match {
                     case (Some(e1), Some(e2)) => return equate(v1.tipe, e1, e2)
@@ -2462,7 +2463,7 @@ object Util {
     for (claim <- claims if !ignore(claim)) {
       toExp(claim) match {
         case Some(exp) =>
-          if (exp =!= trueLit) {
+          if (exp != trueLit) {
             r = r + exp
           }
         case _ =>

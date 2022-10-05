@@ -590,7 +590,7 @@ import Util._
   def evalStringInterpolate(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State,
                             lit: AST.Exp.StringInterpolate, reporter: Reporter): ISZ[(State, State.Value)] = {
     var r = ISZ[(State, State.Value)]()
-    val isST = lit.prefix === "st"
+    val isST = lit.prefix == "st"
     for (p <- evalExps(split, smt2, cache, rtCheck, state, lit.args.size, (n: Z) => lit.args(n), reporter)) {
       val s0 = p._1
       val pos = lit.posOpt.get
@@ -633,7 +633,7 @@ import Util._
     AST.Util.constantInitOpt(info.ast) match {
       case Some(exp) =>
         val r = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, exp, reporter)
-        assert(r.size === 1)
+        assert(r.size == 1)
         return Some(r(0))
       case _ =>
         return None()
@@ -1175,7 +1175,7 @@ import Util._
           return evalInstanceOfAs(res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf, exp.receiverOpt,
             exp.targs(0).typedOpt.get, exp.posOpt.get)
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext  =>
-          if (res.owner.size == 3 && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id === "random") {
+          if (res.owner.size == 3 && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id == "random") {
             return random(res.tpeOpt.get.ret)
           } else {
             val mType = res.tpeOpt.get
@@ -1333,7 +1333,7 @@ import Util._
       var r = ISZ[(State, State.Value)]()
       val srcv: ISZ[(State, State.Value)] = exp.receiverOpt match {
         case Some(rcv) =>
-          if (exp.ident.id.value === "apply") {
+          if (exp.ident.id.value == "apply") {
             evalExp(split, smt2, cache, rtCheck, state, rcv , reporter)
           } else {
             evalSelect(AST.Exp.Select(exp.receiverOpt, exp.ident.id, exp.targs, exp.ident.attr))
@@ -1356,7 +1356,7 @@ import Util._
       var r = ISZ[(State, State.Value)]()
       val srcv: ISZ[(State, State.Value)] = exp.receiverOpt match {
         case Some(rcv) =>
-          if (exp.ident.id.value === "apply") {
+          if (exp.ident.id.value == "apply") {
             evalExp(split, smt2, cache, rtCheck, state, rcv , reporter)
           } else {
             evalSelect(AST.Exp.Select(exp.receiverOpt, exp.ident.id, exp.targs, exp.ident.attr))
@@ -1423,7 +1423,7 @@ import Util._
         case _: AST.Exp.This => return local(AST.ResolvedInfo.LocalVar(context.methodName,
           AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), exp.num.value)
         case e: AST.Exp.LitString =>
-          val ids = ops.StringOps(e.value).split((c: C) => c === '.').map((s: String) => ops.StringOps(s).trim)
+          val ids = ops.StringOps(e.value).split((c: C) => c == '.').map((s: String) => ops.StringOps(s).trim)
           val lcontext = ops.ISZOps(ids).dropRight(1)
           return local(AST.ResolvedInfo.LocalVar(lcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
             ids(ids.size - 1)), exp.num.value)
@@ -2030,7 +2030,7 @@ import Util._
 
           val rep = reporter.empty
           val (label, cs1): (String, State) = labelOpt match {
-            case Some(lbl) if lbl.value =!= "" =>
+            case Some(lbl) if lbl.value.size == 0 =>
               (s"(${lbl.value}) p", cs0.addClaim(State.Claim.Label(lbl.value, lbl.posOpt.get)))
             case _ => ("P", cs0)
           }
@@ -2472,7 +2472,7 @@ import Util._
           paramMap = paramMap + id.value ~> AST.Exp.Sym(arg.num, AST.TypedAttr(id.attr.posOpt, p._2.typedOpt))
         }
         val pos = cond.posOpt.get
-        val antecedent: State.Value.Sym = if (condIdTypes.size === 1) {
+        val antecedent: State.Value.Sym = if (condIdTypes.size == 1) {
           condIdTypes(0).asInstanceOf[State.Value.Sym]
         } else {
           val (s3, b) = s1.freshSym(AST.Typed.b, pos)
@@ -2811,11 +2811,11 @@ import Util._
                 rhs: State.Value.Sym, reporter: Reporter): ISZ[State] = {
     @pure def isSeqSelect(exp: AST.Exp.Invoke): B = {
       exp.attr.resOpt.get match {
-        case res: AST.ResolvedInfo.Method if res.mode === AST.MethodMode.Select => return T
-        case res: AST.ResolvedInfo.BuiltIn if res.kind === AST.ResolvedInfo.BuiltIn.Kind.Apply =>
+        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Select => return T
+        case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Apply =>
           exp.receiverOpt match {
             case Some(receiver) => receiver.typedOpt.get match {
-              case t: AST.Typed.Name if t.ids === AST.Typed.isName || t.ids === AST.Typed.msName => return T
+              case t: AST.Typed.Name if t.ids == AST.Typed.isName || t.ids == AST.Typed.msName => return T
               case _ =>
             }
             case _ =>
@@ -2829,7 +2829,7 @@ import Util._
         lhs.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar =>
             context.methodOpt match {
-              case Some(mctx) if mctx.paramIds.contains(res.id) && !mctx.modLocalIds.contains(res.id) && res.context === mctx.name =>
+              case Some(mctx) if mctx.paramIds.contains(res.id) && !mctx.modLocalIds.contains(res.id) && res.context == mctx.name =>
                 reporter.error(lhs.posOpt, kind, s"Missing Modifies clause for ${res.id}")
               case _ =>
             }
@@ -3202,7 +3202,7 @@ import Util._
   def mergeBranches(shouldSplit: B, s0: State, leafClaims: LeafClaims): ISZ[State] = {
     if (leafClaims.isEmpty) {
       return ISZ(s0(status = F))
-    } else if (leafClaims.size === 1) {
+    } else if (leafClaims.size == 1) {
       val (cond, claimss) = leafClaims(0)
       val s1 = s0.addClaim(cond)
       return for (claims <- claimss) yield s1.addClaims(claims)
@@ -3751,7 +3751,7 @@ import Util._
                 s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
               var nextFresh: Z = s4.nextFresh
               if (thenSat) {
-                for (s5 <- evalStmts(!(whileStmt.body.allReturns && config.branchPar =!= Config.BranchPar.Disabled),
+                for (s5 <- evalStmts(!(whileStmt.body.allReturns && config.branchPar != Config.BranchPar.Disabled),
                   split, smt2, cache, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)) {
                   if (s5.status) {
                     for (s6 <- checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop",
@@ -4243,7 +4243,7 @@ import Util._
       currents = ISZ()
       for (current <- cs) {
         if (current.status) {
-          currents = currents ++ evalStmt(if (i === size - 1 && splitLast) Split.Enabled else split, smt2, cache,
+          currents = currents ++ evalStmt(if (i == size - 1 && splitLast) Split.Enabled else split, smt2, cache,
             rtCheck, current, stmts(i), reporter)
         } else {
           done = done :+ current

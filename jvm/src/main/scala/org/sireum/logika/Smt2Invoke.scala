@@ -94,7 +94,7 @@ object Smt2Invoke {
       val pr = proc.run()
       val pout: String = st"${pr.err}${pr.out}".render
       val isTimeout: B = timeoutCodes.contains(pr.exitCode) ||
-        (config.name === "cvc5" && ops.StringOps(pout).contains("cvc5 interrupted by timeout."))
+        (config.name == "cvc5" && ops.StringOps(pout).contains("cvc5 interrupted by timeout."))
       val isUnknown: B = if (pr.exitCode == 1) {
         config.name match {
           case string"cvc5" =>
@@ -126,7 +126,7 @@ object Smt2Invoke {
           var i: Z = 0
           while (i < out.size) {
             val lineOps = ops.StringOps(out(i))
-            if (!(lineOps.startsWith(";") || lineOps.trim.size === 0)) {
+            if (!(lineOps.startsWith(";") || lineOps.trim.size == 0)) {
               l = out(i)
               i = out.size
             }
@@ -151,7 +151,7 @@ object Smt2Invoke {
                 |; Solver: ${config.exe}
                 |; Arguments: ${(config.opts, " ")}
                 |; Output:
-                |${(for (line <- ops.StringOps(pout).split((c: C) => c === '\n')) yield st"; $line", "\n")}""".render, pout, duration, F))
+                |${(for (line <- ops.StringOps(pout).split((c: C) => c == '\n')) yield st"; $line", "\n")}""".render, pout, duration, F))
         }
       }
       rOpt

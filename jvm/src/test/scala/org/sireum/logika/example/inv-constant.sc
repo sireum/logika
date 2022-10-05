@@ -18,10 +18,10 @@ import O._
 }
 
 def foo(): Unit = {
-  assert(Z_CONST === 1)
+  assert(Z_CONST == 1)
   assert(B_CONST)
   assert(O.B_CONST)
   val foo = Foo()
-  assert(foo.x === 2)
-  assert(Bar().y === 3)
+  assert(foo.x == 2)
+  assert(Bar().y == 3)
 }

@@ -80,7 +80,7 @@ object Task {
         val (s2, sym) = logika.value2Sym(s1, v, pos)
         val s3 = s2.addClaim(State.Claim.Prop(T, sym))
         if (smt2.satResult(cache, T, config.logVc, config.logVcDirOpt, s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos,
-          s3.claims, reporter)._2.kind === Smt2Query.Result.Kind.Unsat) {
+          s3.claims, reporter)._2.kind == Smt2Query.Result.Kind.Unsat) {
           reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
           s0 = s3(status = F)
         } else {

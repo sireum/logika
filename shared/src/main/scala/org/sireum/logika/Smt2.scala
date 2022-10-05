@@ -209,9 +209,9 @@ object Smt2 {
                    timeoutInMs: Z,
                    rlimit: Z): Either[ISZ[Smt2Config], String] = {
     var r = ISZ[Smt2Config]()
-    for (option <- ops.StringOps(options).split((c: C) => c === ';')) {
+    for (option <- ops.StringOps(options).split((c: C) => c == ';')) {
       val opts: ISZ[String] =
-        for (e <- ops.StringOps(ops.StringOps(option).trim).split((c: C) => c === ',')) yield ops.StringOps(e).trim
+        for (e <- ops.StringOps(ops.StringOps(option).trim).split((c: C) => c == ',')) yield ops.StringOps(e).trim
       opts match {
         case ISZ(name, _*) =>
           solverArgs(name, timeoutInMs, rlimit) match {
@@ -750,7 +750,7 @@ object Smt2 {
       val etThid = typeHierarchyId(et)
       val etEqId: ST = typeOpId(et, "==")
       val (etAdt, etS, etTuple): (B, B, B) = et match {
-        case et: AST.Typed.Name => (isAdt(et), et.ids === AST.Typed.isName || et.ids === AST.Typed.msName, F)
+        case et: AST.Typed.Name => (isAdt(et), et.ids == AST.Typed.isName || et.ids == AST.Typed.msName, F)
         case _: AST.Typed.Tuple => (F, F, T)
         case _ => (F, F, F)
       }
@@ -1008,7 +1008,7 @@ object Smt2 {
           addTypeDecl(t, st"(declare-fun ${q.fieldLookupId} ($tId) ${q.fieldTypeId})")
           q.fieldType match {
             case ft: AST.Typed.Name =>
-              if (ft.ids === AST.Typed.isName || ft.ids === AST.Typed.msName) {
+              if (ft.ids == AST.Typed.isName || ft.ids == AST.Typed.msName) {
                 addTypeDecl(t,
                   st"""(assert (forall ((o $tId))
                       |  (=> (= (type-of o) $thId)
@@ -1099,7 +1099,7 @@ object Smt2 {
       val thId = typeHierarchyId(t)
       addTypeHierarchyId(t, thId)
       val tid = typeId(t)
-      val isString = t.ids === AST.Typed.stringName
+      val isString = t.ids == AST.Typed.stringName
       if (!isString) {
         addSort(t, st"(define-sort $tid () ADT)")
       }
@@ -1295,7 +1295,7 @@ object Smt2 {
         val tArg = t.args(i - 1)
         val eSTOpt: Option[ST] = tArg match {
           case tArg: AST.Typed.Name =>
-            if (tArg.ids === AST.Typed.isName || tArg.ids === AST.Typed.msName) {
+            if (tArg.ids == AST.Typed.isName || tArg.ids == AST.Typed.msName) {
               Some(st"(= (${sTypeOfName(tArg)} e$i) ${typeHierarchyId(tArg)})")
             } else if (isAdt(tArg)) {
               Some(st"(sub-type (type-of e$i) ${typeHierarchyId(tArg)})")
@@ -1661,7 +1661,7 @@ object Smt2 {
           }
       }
     }
-    return if (ids(0) === Smt2.topPrefix) ids2ST(ids) else rec(ISZ(ids(ids.size - 1)))
+    return if (ids(0) == Smt2.topPrefix) ids2ST(ids) else rec(ISZ(ids(ids.size - 1)))
   }
 
   @pure def currentNameId(c: State.Claim.Let.CurrentName): ST = {
@@ -2140,7 +2140,7 @@ object Smt2 {
   @memoize def typeIdRaw(t: AST.Typed): ST = {
     Util.normType(t) match {
       case t: AST.Typed.Name =>
-        val ids: ISZ[String] = if (t.ids.size === 1) Smt2.topPrefix +: t.ids else t.ids
+        val ids: ISZ[String] = if (t.ids.size == 1) Smt2.topPrefix +: t.ids else t.ids
         if (t.args.isEmpty) {
           return st"${(shorten(ids), ".")}"
         } else {
@@ -2157,7 +2157,7 @@ object Smt2 {
   @memoize def typeId(t: AST.Typed): ST = {
     Util.normType(t) match {
       case t: AST.Typed.Fun =>
-        if (t.args.size === 1) {
+        if (t.args.size == 1) {
           return st"(Array ${typeId(t.args(0))} ${typeId(t.ret)})"
         } else {
           return st"(Array ${typeId(AST.Typed.Tuple(t.args))} ${typeId(t.ret)})"
@@ -2173,7 +2173,7 @@ object Smt2 {
   @pure def id(t: AST.Typed, prefix: String): ST = {
     t match {
       case t: AST.Typed.Name =>
-        val ids: ISZ[String] = if (t.ids.size === 1) Smt2.topPrefix +: t.ids else t.ids
+        val ids: ISZ[String] = if (t.ids.size == 1) Smt2.topPrefix +: t.ids else t.ids
         if (ids.size == 3 && t.args.isEmpty && ids(0) == "org" && ids(1) == "sireum") {
           return st"${ids(2)}"
         } else {

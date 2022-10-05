@@ -84,7 +84,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 
     val id = just.invokeIdent.id.value
 
-    if (argsOpt.isEmpty && id === "Smt2_*") {
+    if (argsOpt.isEmpty && id == "Smt2_*") {
       return Plugin.Result(F, state.nextFresh, ISZ())
     }
 

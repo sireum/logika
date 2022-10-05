@@ -5,7 +5,7 @@ import org.sireum.justification.ClaimOf
 @spec def f(num: Z): Z = $
 
 @spec def fFact = Fact(
-  f(0) === 1,
+  f(0) == 1,
   ∀{ num: Z => (num > 0) ->: (f(num) == num * f(num - 1)) }
 )
 
@@ -19,7 +19,7 @@ import org.sireum.justification.ClaimOf
 
   Deduce(
     //@formatter:off
-    1 #> (f(0) === 1)                                                 by ClaimOf(fFact _)
+    1 #> (f(0) == 1)                                                 by ClaimOf(fFact _)
     //@formatter:on
   )
 
@@ -45,7 +45,7 @@ import org.sireum.justification.ClaimOf
 def foo(): Unit = {
   Deduce(
     //@formatter:off
-    1 #> (f(0) === 1)                                                 by ClaimOf(fFact _),
+    1 #> (f(0) == 1)                                                 by ClaimOf(fFact _),
     2 #> ∀{ num: Z => (num > 0) ->: (f(num) == num * f(num - 1)) }    by ClaimOf(fFact _)
     //@formatter:on
   )
