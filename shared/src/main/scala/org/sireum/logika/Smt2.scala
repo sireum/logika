@@ -616,7 +616,7 @@ object Smt2 {
 
   @memoize def adtId(tipe: AST.Typed): ST = {
     tipe match {
-      case tipe: AST.Typed.Name if isAdt(tipe) => return st"ADT"
+      case tipe: AST.Typed.Name if typeHierarchy.isAdt(tipe) => return st"ADT"
       case _ => typeId(tipe)
     }
   }
@@ -626,7 +626,7 @@ object Smt2 {
   }
 
   @memoize def adtTypeOpId(t: AST.Typed, op: String): ST = {
-    return if (isAdtType(t)) st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
+    return if (typeHierarchy.isAdtType(t)) st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
   }
 
   def satResult(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
@@ -750,7 +750,7 @@ object Smt2 {
       val etThid = typeHierarchyId(et)
       val etEqId: ST = typeOpId(et, "==")
       val (etAdt, etS, etTuple): (B, B, B) = et match {
-        case et: AST.Typed.Name => (isAdt(et), et.ids == AST.Typed.isName || et.ids == AST.Typed.msName, F)
+        case et: AST.Typed.Name => (typeHierarchy.isAdt(et), et.ids == AST.Typed.isName || et.ids == AST.Typed.msName, F)
         case _: AST.Typed.Tuple => (F, F, T)
         case _ => (F, F, F)
       }
@@ -1013,7 +1013,7 @@ object Smt2 {
                   st"""(assert (forall ((o $tId))
                       |  (=> (= (type-of o) $thId)
                       |      (= (${sTypeOfName(ft)} (${q.fieldLookupId} o)) ${typeHierarchyId(ft)}))))""")
-              } else if (isAdt(ft)) {
+              } else if (typeHierarchy.isAdt(ft)) {
                 addTypeDecl(t,
                   st"""(assert (forall ((o $tId))
                       |  (=> (= (type-of o) $thId)
@@ -1054,7 +1054,7 @@ object Smt2 {
           st"""(declare-fun $newId (${(for (q <- fieldInfos if q.isParam) yield q.fieldTypeId, " ")}) $tId)
               |(assert (forall (${(for (q <- fieldInfos if q.isParam) yield st"(${q.fieldId} ${q.fieldTypeId})", " ")} (x!0 $tId))
               |  (=>
-              |    ${(for (q <- fieldInfos if q.isParam && isAdtType(q.fieldType)) yield st"(sub-type (type-of ${q.fieldId}) ${typeHierarchyId(q.fieldType)})", "\n")}
+              |    ${(for (q <- fieldInfos if q.isParam && typeHierarchy.isAdtType(q.fieldType)) yield st"(sub-type (type-of ${q.fieldId}) ${typeHierarchyId(q.fieldType)})", "\n")}
               |    (= x!0 ${if (hasParam) st"($newId ${(for (q <- fieldInfos if q.isParam) yield q.fieldId, " ")})" else newId})
               |    (and
               |      (= (type-of x!0) $thId)
@@ -1297,7 +1297,7 @@ object Smt2 {
           case tArg: AST.Typed.Name =>
             if (tArg.ids == AST.Typed.isName || tArg.ids == AST.Typed.msName) {
               Some(st"(= (${sTypeOfName(tArg)} e$i) ${typeHierarchyId(tArg)})")
-            } else if (isAdt(tArg)) {
+            } else if (typeHierarchy.isAdt(tArg)) {
               Some(st"(sub-type (type-of e$i) ${typeHierarchyId(tArg)})")
             } else {
               None()
@@ -1501,24 +1501,6 @@ object Smt2 {
       case _ =>
     }
     return res
-  }
-
-  @memoize def isAdt(t: AST.Typed.Name): B = {
-    if (typeHierarchy.isGroundType(t)) {
-      return F
-    }
-    t.ids match {
-      case AST.Typed.isName => return F
-      case AST.Typed.msName => return F
-      case _ => return T
-    }
-  }
-
-  @pure def isAdtType(t: AST.Typed): B = {
-    t match {
-      case t: AST.Typed.Name => return isAdt(t)
-      case _ => return F
-    }
   }
 
   def query(funDecls: ISZ[ST], decls: ISZ[ST], claims: ISZ[ST]): ST = {
@@ -1850,7 +1832,7 @@ object Smt2 {
         tipe match {
           case tipe: AST.Typed.Name if tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName =>
             typeConstraints = typeConstraints :+ st"(= (${sTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
-          case tipe if isAdtType(tipe) =>
+          case tipe if typeHierarchy.isAdtType(tipe) =>
             typeConstraints = typeConstraints :+ st"(sub-type (type-of $x) ${typeHierarchyId(tipe)})"
           case tipe: AST.Typed.Tuple =>
             typeConstraints = typeConstraints :+ st"(= (${tupleTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
@@ -2074,9 +2056,9 @@ object Smt2 {
           st"""(declare-const $n ${typeId(tipe)})
               |(assert (= (${tupleTypeOfName(tipe)} $n) ${typeHierarchyId(tipe)}))"""
         case _ =>
-          if (isAdtType(tipe)) {
+          if (typeHierarchy.isAdtType(tipe)) {
             st"""(declare-const $n ${typeId(tipe)})
-                |(assert (sub-type (type-of $n) ${typeHierarchyId(tipe)}))"""
+                |(assert (${if (typeHierarchy.isAdtLeafType(tipe)) "=" else "sub-type"} (type-of $n) ${typeHierarchyId(tipe)}))"""
           } else {
             st"(declare-const $n ${typeId(tipe)})"
           }
@@ -2090,7 +2072,7 @@ object Smt2 {
     }
     c match {
       case _: State.Claim.Label => return ISZ()
-      case c: State.Claim.Eq => return ISZ()
+      case _: State.Claim.Eq => return ISZ()
       case c: State.Claim.Prop =>
         val vST = v2ST(c.value)
         return ISZ[(String, ST)](vST.render ~> st"(declare-const $vST B)")
