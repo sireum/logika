@@ -2319,7 +2319,8 @@ object Util {
     }
 
     def equate(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): AST.Exp = {
-      return AST.Exp.Binary(e1, AST.Exp.BinaryOp.EquivUni, e2, AST.ResolvedAttr(posOpt, equivResOpt, Some(t)))
+      return if (th.isGroundType(t)) AST.Exp.Binary(e1, AST.Exp.BinaryOp.Eq, e2, AST.ResolvedAttr(posOpt, eqResOpt, Some(t)))
+      else AST.Exp.Binary(e1, AST.Exp.BinaryOp.EquivUni, e2, AST.ResolvedAttr(posOpt, equivResOpt, Some(t)))
     }
 
     def equateOpt(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): Option[AST.Exp] = {

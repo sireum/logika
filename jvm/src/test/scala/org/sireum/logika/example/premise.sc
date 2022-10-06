@@ -11,7 +11,7 @@ object Foo {
 def addY(n: Z): Unit = {
   Contract(
     Modifies(y),
-    Ensures(y === In(y) + n)
+    Ensures(y == In(y) + n)
   )
   y = y + n
 }
@@ -20,7 +20,7 @@ def addY(n: Z): Unit = {
 def addFooY(n: Z): Unit = {
   Contract(
     Modifies(Foo.y),
-    Ensures(Foo.y === In(Foo.y) + n)
+    Ensures(Foo.y == In(Foo.y) + n)
   )
   Foo.y = Foo.y + n
 }
@@ -35,7 +35,7 @@ def testId(): Unit = {
 
   Deduce(
     //@formatter:off
-    x === 4              by Premise
+    x == 4              by Premise
     //@formatter:on
   )
 
@@ -43,8 +43,8 @@ def testId(): Unit = {
 
   Deduce(
     //@formatter:off
-    At(x, 0) === 4       by Premise,
-    x === 5              by Premise,
+    At(x, 0) == 4       by Premise,
+    x == 5              by Premise,
     //@formatter:on
   )
 
@@ -52,7 +52,7 @@ def testId(): Unit = {
 
   Deduce(
     //@formatter:off
-    y === At(y, 0) + 1   by Premise
+    y == At(y, 0) + 1   by Premise
     //@formatter:on
   )
 }
@@ -67,7 +67,7 @@ def testName(): Unit = {
 
   Deduce(
     //@formatter:off
-    Foo.y === At(Foo.y, 0) + 1          by Premise
+    Foo.y == At(Foo.y, 0) + 1          by Premise
     //@formatter:on
   )
 
@@ -75,8 +75,8 @@ def testName(): Unit = {
 
   Deduce(
     //@formatter:off
-    At(Foo.y, 1) === At(Foo.y, 0) + 1   by Premise,
-    Foo.y === At(Foo.y, 1) + 2          by Premise
+    At(Foo.y, 1) == At(Foo.y, 0) + 1   by Premise,
+    Foo.y == At(Foo.y, 1) + 2          by Premise
     //@formatter:on
   )
 }
@@ -90,8 +90,8 @@ def testIdString(): Unit = {
 
   Deduce(
     //@formatter:off
-    At[Z]("addY.n", 0) === 0                     by Premise,
-    y === At(y, 0) + At[Z]("addY.n", 0)          by Premise
+    At[Z]("addY.n", 0) == 0                     by Premise,
+    y == At(y, 0) + At[Z]("addY.n", 0)          by Premise
     //@formatter:on
   )
 
@@ -99,10 +99,10 @@ def testIdString(): Unit = {
 
   Deduce(
     //@formatter:off
-    At[Z]("addY.n", 0) === 0                     by Premise,
-    At[Z]("addY.n", 1) === 1                     by Premise,
-    At(y, 1) === At(y, 0) + At[Z]("addY.n", 0)   by Premise,
-    y === At(y, 1) + At[Z]("addY.n", 1)          by Premise
+    At[Z]("addY.n", 0) == 0                     by Premise,
+    At[Z]("addY.n", 1) == 1                     by Premise,
+    At(y, 1) == At(y, 0) + At[Z]("addY.n", 0)   by Premise,
+    y == At(y, 1) + At[Z]("addY.n", 1)          by Premise
     //@formatter:on
   )
 }
@@ -117,8 +117,8 @@ def testNameString(): Unit = {
 
   Deduce(
     //@formatter:off
-    At[Z]("addFooY.n", 0) === 0                             by Premise,
-    Foo.y === At(Foo.y, 0) + At[Z]("addFooY.n", 0)          by Premise
+    At[Z]("addFooY.n", 0) == 0                             by Premise,
+    Foo.y == At(Foo.y, 0) + At[Z]("addFooY.n", 0)          by Premise
     //@formatter:on
   )
 
@@ -126,10 +126,10 @@ def testNameString(): Unit = {
 
   Deduce(
     //@formatter:off
-    At[Z]("addFooY.n", 0) === 0                             by Premise,
-    At[Z]("addFooY.n", 1) === 1                             by Premise,
-    At(Foo.y, 1) === At(Foo.y, 0) + At[Z]("addFooY.n", 0)   by Premise,
-    Foo.y === At(Foo.y, 1) + At[Z]("addFooY.n", 1)          by Premise
+    At[Z]("addFooY.n", 0) == 0                             by Premise,
+    At[Z]("addFooY.n", 1) == 1                             by Premise,
+    At(Foo.y, 1) == At(Foo.y, 0) + At[Z]("addFooY.n", 0)   by Premise,
+    Foo.y == At(Foo.y, 1) + At[Z]("addFooY.n", 1)          by Premise
     //@formatter:on
   )
 }
@@ -179,16 +179,16 @@ def testQuant2(foos: ISZ[Foo], i: Z): Unit = {
 }
 
 def testAdtLit[T](o: Option[T], v: T): Unit = {
-  Contract(Requires(o === Some(v)))
-  Deduce(o === Some(v) by Premise)
+  Contract(Requires(o == Some(v)))
+  Deduce(o == Some(v) by Premise)
 }
 
 def testSeqLit[T](o: ISZ[T], v: T): Unit = {
-  Contract(Requires(o === ISZ(v)))
-  Deduce(o === ISZ(v) by Premise)
+  Contract(Requires(o == ISZ(v)))
+  Deduce(o == ISZ(v) by Premise)
 }
 
 def testFieldLookup(o: Some[Z]): Unit = {
-  Contract(Requires(o.value === 3))
-  Deduce(o.value === 3 by Premise)
+  Contract(Requires(o.value == 3))
+  Deduce(o.value == 3 by Premise)
 }
