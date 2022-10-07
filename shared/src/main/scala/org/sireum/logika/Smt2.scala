@@ -32,7 +32,6 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.Reporter
 import Util._
-import org.sireum.logika.Smt2.stTrue
 
 object Smt2 {
   @msig trait Cache {
@@ -966,16 +965,6 @@ object Smt2 {
       val parents = poset.parentsOf(t).elements
       if (ti.ast.isRoot) {
         addAdtDecl(t, st"""(declare-fun $eqId ($tId $tId) B)""")
-        if (typeHierarchy.isSubstitutable(t)) {
-          addAdtDecl(t,
-            st"""(assert (forall ((x $tId) (y $tId))
-                |  (=>
-                |    (sub-type (type-of x) $thId)
-                |    (sub-type (type-of y) $thId)
-                |    ($eqId x y)
-                |    (= x y))))"""
-          )
-        }
         addAdtDecl(t, st"(define-fun $neId ((o1 $tId) (o2 $tId)) B (not ($eqId o1 o2)))")
         var leaves: ISZ[ST] = ISZ()
         for (child <- poset.childrenOf(t).elements) {
@@ -1067,14 +1056,14 @@ object Smt2 {
               |    (= (type-of x!0) (type-of x!1) $thId)
               |    ${(for (q <- fieldInfos if q.isParam) yield st"(${typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
-        if (typeHierarchy.isSubstitutable(t)) {
+        if (typeHierarchy.isSubstitutable(t) && !ops.ISZOps(fieldInfos).exists((fi: Smt2.AdtFieldInfo) => fi.isSpec)) {
           addTypeDecl(t,
-            st"""(assert (forall ((x!0 $tId) (x!1 $tId))
+            st"""(assert (forall ((x $tId) (y $tId))
                 |  (=>
-                |    (= (type-of x!0) $thId)
-                |    (= (type-of x!0) $thId)
-                |    ($eqId x!0 x!1)
-                |    (= x!0 x!1))))""")
+                |    (= (type-of x) $thId)
+                |    (= (type-of y) $thId)
+                |    ($eqId x y)
+                |    (= x y))))""")
         }
         addTypeDecl(t, st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
       }
@@ -2043,7 +2032,7 @@ object Smt2 {
       }
     }
     val lastOpt = c2ST(cs(cs.size - 1), v2st, lets, declIds)
-    return if (lastOpt.isEmpty) stTrue else implySTH(sts, lastOpt)
+    return if (lastOpt.isEmpty) Smt2.stTrue else implySTH(sts, lastOpt)
   }
 
   def c2DeclST(c: State.Claim): ISZ[(String, ST)] = {
