@@ -41,6 +41,8 @@ jobs:
             bin/linux/.alt-ergo-open.ver
             bin/linux/cvc
             bin/linux/.cvc.ver
+            bin/linux/cvc5
+            bin/linux/.cvc5.ver
             bin/linux/z3
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-smt2
       - name: Test
@@ -86,6 +88,8 @@ jobs:
             bin/mac/.alt-ergo-open.ver
             bin/mac/cvc
             bin/mac/.cvc.ver
+            bin/mac/cvc5
+            bin/mac/.cvc5.ver
             bin/mac/z3
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-smt2
       - name: Test
@@ -129,6 +133,8 @@ jobs:
           path: |
             bin\win\cvc.exe
             bin\win\.cvc.ver
+            bin\win\cvc5.exe
+            bin\win\.cvc5.ver
             bin\win\z3
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-smt2
       - name: Test
