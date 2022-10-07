@@ -1066,7 +1066,7 @@ object Smt2 {
               |    (= (type-of x!0) (type-of x!1) $thId)
               |    ${(for (q <- fieldInfos if q.isParam) yield st"(${typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))"""
         )
-        if (typeHierarchy.isSubstitutable(t) && ti.specVars.isEmpty) {
+        if (typeHierarchy.isSubstitutableWithoutSpecVars(t)) {
           addTypeDecl(t,
             st"""(assert (forall ((x $tId) (y $tId))
                 |  (=>
