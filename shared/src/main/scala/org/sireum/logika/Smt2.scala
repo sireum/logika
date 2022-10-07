@@ -840,7 +840,7 @@ object Smt2 {
             |    (=> (not (= 0 ($sizeId x))) ($itEqId ($lastIndexId x) ($lastIndexId y)))
             |    (forall ((i $itId)) (=> ($isInBoundId x i) ($etEqId (select x i) (select y i))))))""")
       addTypeDecl(t, st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
-      if (typeHierarchy.isSubstitutable(et)) {
+      if (typeHierarchy.isSubstitutableWithoutSpecVars(et)) {
         addTypeDecl(t,
           st"""(assert (forall ((x $tId) (y $tId))
               |  (=>
@@ -967,18 +967,13 @@ object Smt2 {
         addAdtDecl(t, st"""(declare-fun $eqId ($tId $tId) B)""")
         addAdtDecl(t, st"(define-fun $neId ((o1 $tId) (o2 $tId)) B (not ($eqId o1 o2)))")
         var leaves: ISZ[ST] = ISZ()
-        var noSpecVarOnAllLeaves = T
         for (child <- poset.childrenOf(t).elements) {
           typeHierarchy.typeMap.get(child.ids) match {
-            case Some(info: TypeInfo.Adt) if !info.ast.isRoot =>
-              if (info.specVars.nonEmpty) {
-                noSpecVarOnAllLeaves = F
-              }
-              leaves = leaves :+ typeHierarchyId(child)
+            case Some(info: TypeInfo.Adt) if !info.ast.isRoot => leaves = leaves :+ typeHierarchyId(child)
             case _ =>
           }
         }
-        if (typeHierarchy.isSubstitutable(t) && noSpecVarOnAllLeaves) {
+        if (typeHierarchy.isSubstitutableWithoutSpecVars(t)) {
           addAdtDecl(t,
             st"""(assert (forall ((x $tId) (y $tId))
                 |  (=>
