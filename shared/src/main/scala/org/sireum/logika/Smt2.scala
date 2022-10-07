@@ -1333,6 +1333,15 @@ object Smt2 {
             |  )
             |)
             |(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
+      if (ops.ISZOps(t.args).forall((et: AST.Typed) => typeHierarchy.isSubstitutableWithoutSpecVars(et))) {
+        addTypeDecl(t,
+          st"""(assert (forall ((x $tId) (y $tId))
+              |  (=>
+              |    (= ($typeOfName x) $thId)
+              |    (= ($typeOfName y) $thId)
+              |    ($eqId x y)
+              |    (= x y))))""")
+      }
     }
 
     val t = Util.normType(tipe)
