@@ -759,7 +759,7 @@ object Smt2 {
       addSort(t, st"""(declare-const $thId Type)""")
       addSort(t, st"""(declare-fun $typeofName ($tId) Type)""")
       @strictpure def etThidSubtypeOpt(x: String): Option[ST] =
-        if (etAdt) Some(st"(sub-type (type-of $x) $etThid)")
+        if (etAdt) Some(st"(${if (typeHierarchy.isAdtLeafType(et)) "=" else "sub-type"} (type-of $x) $etThid)")
         else if (etS) Some(st"(= (${sTypeOfName(et)} $x) $etThid)")
         else if (etTuple) Some(st"(= (${tupleTypeOfName(et)} $x) $etThid)")
         else None()
@@ -1016,7 +1016,7 @@ object Smt2 {
                 addTypeDecl(t,
                   st"""(assert (forall ((o $tId))
                       |  (=> (= (type-of o) $thId)
-                      |      (sub-type (type-of (${q.fieldLookupId} o)) ${typeHierarchyId(ft)}))))""")
+                      |      (${if (typeHierarchy.isAdtLeafType(ft)) "=" else "sub-type"} (type-of (${q.fieldLookupId} o)) ${typeHierarchyId(ft)}))))""")
               }
             case ft: AST.Typed.Tuple =>
               addTypeDecl(t,
@@ -1297,7 +1297,7 @@ object Smt2 {
             if (tArg.ids == AST.Typed.isName || tArg.ids == AST.Typed.msName) {
               Some(st"(= (${sTypeOfName(tArg)} e$i) ${typeHierarchyId(tArg)})")
             } else if (typeHierarchy.isAdt(tArg)) {
-              Some(st"(sub-type (type-of e$i) ${typeHierarchyId(tArg)})")
+              Some(st"(${if (typeHierarchy.isAdtLeafType(tArg)) "=" else "sub-type"} (type-of e$i) ${typeHierarchyId(tArg)})")
             } else {
               None()
             }
