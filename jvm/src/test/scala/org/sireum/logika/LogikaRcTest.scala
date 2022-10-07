@@ -33,7 +33,7 @@ object LogikaRcTest {
 
   val failPrefix: Predef.String = "zfail$"
   val failDemoSuffix: Predef.String = "-demo-fail.sc"
-  val simplifiedPrefix: Predef.String = " (simplified)"
+  val simplifiedSuffix: Predef.String = " (simplified)"
 
 }
 
@@ -42,27 +42,31 @@ import LogikaRcTest._
 class LogikaRcTest extends SireumRcSpec {
 
   def shouldIgnore(name: Predef.String): Boolean = name match {
-    case "collection.sc" => !Os.isWin && isInGithubAction
+    case "collection.sc" | "opsem.sc" | "opsem-alt.sc" => !Os.isMac && isInGithubAction
     case _ => false
   }
 
   def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = {
     val m = $internal.RC.text(Vector("example")) { (p, f) => p.last.endsWith(".sc") && !p.last.startsWith("wip-") }
-    for ((k, v) <- m if !shouldIgnore(k.last); pair <- Seq((k, v), (k.dropRight(1) :+ s"${k.last}$simplifiedPrefix", v))) yield pair
+    for ((k, v) <- m if !shouldIgnore(k.last); pair <- Seq((k, v), (k.dropRight(1) :+ s"${k.last}$simplifiedSuffix", v))) yield pair
   }
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
+    def filterSmt2Config(c: Config, p: Smt2Config => B): Config =
+      c(smt2Configs = for (sc <- c.smt2Configs if p(sc)) yield sc)
     Smt2Invoke.haltOnError = T
-    val isSimplified = path.last.endsWith(simplifiedPrefix)
-    val p = if (isSimplified) path.dropRight(1) :+ path.last.replace(simplifiedPrefix, "") else path
+    val isSimplified = path.last.endsWith(simplifiedSuffix)
+    val p = if (isSimplified) path.dropRight(1) :+ path.last.replace(simplifiedSuffix, "") else path
     val reporter = Logika.Reporter.create
     var c = config(simplifiedQuery = isSimplified)
     p(p.size - 1) match {
-      case "collection.sc" | "strictpure.sc" => c = c(timeoutInMs = if (isInGithubAction) 8000 else 5000)
+      case "collection.sc" =>
+        c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))(timeoutInMs = if (isInGithubAction) 8000 else 5000)
       case "opsem.sc" =>
-        c = c(smt2Configs = for (c <- c.smt2Configs if !c.name.value.startsWith("alt-ergo")) yield c)
+        c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))
       case "opsem-alt.sc" =>
-        c = c(smt2Configs = for (c <- c.smt2Configs if c.name.value == "cvc5") yield c)
+        c = filterSmt2Config(c, _.name.value == "cvc5")
+      case "strictpure.sc" => c = c(timeoutInMs = if (isInGithubAction) 8000 else 5000)
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))
