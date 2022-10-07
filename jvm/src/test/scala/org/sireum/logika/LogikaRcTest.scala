@@ -60,7 +60,7 @@ class LogikaRcTest extends SireumRcSpec {
     var c = config(simplifiedQuery = isSimplified)
     p(p.size - 1) match {
       case "collection.sc" | "strictpure.sc" => c = c(timeoutInMs = if (isInGithubAction) 8000 else 5000)
-      case "opsem.sc" | "opsem-alt.sc" => c = c(timeoutInMs = if (isInGithubAction) 8000 else 5000)
+      case "opsem.sc" | "opsem-alt.sc" => c = c(timeoutInMs = if (isInGithubAction) 10000 else 5000)
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))
