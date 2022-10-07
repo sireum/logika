@@ -967,11 +967,26 @@ object Smt2 {
         addAdtDecl(t, st"""(declare-fun $eqId ($tId $tId) B)""")
         addAdtDecl(t, st"(define-fun $neId ((o1 $tId) (o2 $tId)) B (not ($eqId o1 o2)))")
         var leaves: ISZ[ST] = ISZ()
+        var noSpecVarOnAllLeaves = T
         for (child <- poset.childrenOf(t).elements) {
           typeHierarchy.typeMap.get(child.ids) match {
-            case Some(info: TypeInfo.Adt) if !info.ast.isRoot => leaves = leaves :+ typeHierarchyId(child)
+            case Some(info: TypeInfo.Adt) if !info.ast.isRoot =>
+              if (info.specVars.nonEmpty) {
+                noSpecVarOnAllLeaves = F
+              }
+              leaves = leaves :+ typeHierarchyId(child)
             case _ =>
           }
+        }
+        if (typeHierarchy.isSubstitutable(t) && noSpecVarOnAllLeaves) {
+          addAdtDecl(t,
+            st"""(assert (forall ((x $tId) (y $tId))
+                |  (=>
+                |    (sub-type (type-of x) $thId)
+                |    (sub-type (type-of y) $thId)
+                |    ($eqId x y)
+                |    (= x y))))"""
+          )
         }
         if (leaves.nonEmpty) {
           addAdtDecl(t,
