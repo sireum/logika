@@ -42,8 +42,7 @@ import LogikaRcTest._
 class LogikaRcTest extends SireumRcSpec {
 
   def shouldIgnore(name: Predef.String): Boolean = name match {
-    case "collection.sc" | "opsem-alt.sc" => !Os.isWin && isInGithubAction
-    case "opsem.sc" => Os.isMac && isInGithubAction
+    case "collection.sc" => !Os.isWin && isInGithubAction
     case _ => false
   }
 
@@ -60,6 +59,10 @@ class LogikaRcTest extends SireumRcSpec {
     var c = config(simplifiedQuery = isSimplified)
     p(p.size - 1) match {
       case "collection.sc" | "strictpure.sc" => c = c(timeoutInMs = if (isInGithubAction) 8000 else 5000)
+      case "opsem.sc" =>
+        c = c(smt2Configs = for (c <- c.smt2Configs if !c.name.value.startsWith("alt-ergo")) yield c)
+      case "opsem-alt.sc" =>
+        c = c(smt2Configs = for (c <- c.smt2Configs if c.name.value == "cvc5") yield c)
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))
