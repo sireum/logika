@@ -61,13 +61,8 @@ class LogikaRcTest extends SireumRcSpec {
     val reporter = Logika.Reporter.create
     var c = config(simplifiedQuery = isSimplified)
     p(p.size - 1) match {
-      case "collection.sc" =>
-        c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))(timeoutInMs = if (isInGithubAction) 8000 else 5000)
-      case "opsem.sc" =>
-        c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))
-      case "opsem-alt.sc" =>
-        c = filterSmt2Config(c, _.name.value == "cvc5")
-      case "strictpure.sc" => c = c(timeoutInMs = if (isInGithubAction) 8000 else 5000)
+      case "collection.sc" | "opsem-alt.sc" => c = filterSmt2Config(c, _.name.value == "cvc5")
+      case "opsem.sc" => c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))
