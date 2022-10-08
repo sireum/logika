@@ -42,7 +42,7 @@ import LogikaRcTest._
 class LogikaRcTest extends SireumRcSpec {
 
   def shouldIgnore(name: Predef.String): Boolean = name match {
-    case "collection.sc" | "opsem.sc" | "opsem-alt.sc" => !Os.isMac && isInGithubAction
+    case "collection.sc" | "opsem.sc" | "opsem-alt.sc" => Os.isMac && isInGithubAction
     case _ => false
   }
 
