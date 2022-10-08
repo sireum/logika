@@ -41,15 +41,24 @@ import LogikaRcTest._
 
 class LogikaRcTest extends SireumRcSpec {
 
-  def shouldIgnore(name: Predef.String): Boolean = name match {
-    case "collection.sc" => !Os.isWin && isInGithubAction
+  def shouldIgnore(name: Predef.String, isSimplified: Boolean): Boolean = name match {
+    case "collection.sc" => Os.isMac && !isSimplified && isInGithubAction
     case "opsem.sc" | "opsem-alt.sc" => Os.isMac && isInGithubAction
     case _ => false
   }
 
   def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = {
     val m = $internal.RC.text(Vector("example")) { (p, f) => p.last.endsWith(".sc") && !p.last.startsWith("wip-") }
-    for ((k, v) <- m if !shouldIgnore(k.last); pair <- Seq((k, v), (k.dropRight(1) :+ s"${k.last}$simplifiedSuffix", v))) yield pair
+    for ((k, v) <- m; pair <- {
+      var r = Vector[(Vector[Predef.String], Predef.String)]()
+      if (!shouldIgnore(k.last, F)) {
+        r = r :+ (k, v)
+      }
+      if (!shouldIgnore(k.last, T)) {
+        r = r :+ (k.dropRight(1) :+ s"${k.last}$simplifiedSuffix", v)
+      }
+      r
+    }) yield pair
   }
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
@@ -61,7 +70,7 @@ class LogikaRcTest extends SireumRcSpec {
     val reporter = Logika.Reporter.create
     var c = config(simplifiedQuery = isSimplified)
     p(p.size - 1) match {
-      case "collection.sc" if isInGithubAction => c = filterSmt2Config(c, _.name.value == "cvc5")(timeoutInMs = c.timeoutInMs * 5)
+      case "collection.sc" if isInGithubAction => c = filterSmt2Config(c, _.name.value == "cvc5")(timeoutInMs = c.timeoutInMs * 3)
       case "opsem.sc" => c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))
       case "opsem-alt.sc"  => c = filterSmt2Config(c, _.name.value == "cvc5")
       case _ =>
