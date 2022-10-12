@@ -3751,8 +3751,7 @@ import Util._
                 s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
               var nextFresh: Z = s4.nextFresh
               if (thenSat) {
-                for (s5 <- evalStmts(!(whileStmt.body.allReturns && config.branchPar != Config.BranchPar.Disabled),
-                  split, smt2, cache, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)) {
+                for (s5 <- evalStmts(split, smt2, cache, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)) {
                   if (s5.status) {
                     for (s6 <- checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop",
                       s5, whileStmt.invariants, reporter)) {
@@ -3808,7 +3807,7 @@ import Util._
                 val thenClaims = s3.claims :+ prop
                 val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
                   s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
-                for (s4 <- evalStmts(F, sp, smt2, cache, None(), rtCheck, s3(claims = thenClaims), whileStmt.body.stmts, reporter)) {
+                for (s4 <- evalStmts(sp, smt2, cache, None(), rtCheck, s3(claims = thenClaims), whileStmt.body.stmts, reporter)) {
                   val s6s: ISZ[State] = if (s4.status) {
                     val bound = loopBound(loopId)
                     if (bound <= 0 || numLoops + 1 < loopBound(loopId)) {
@@ -4232,7 +4231,7 @@ import Util._
         ops.ISZOps(sF.claims).drop(size + 1)), nextFresh)
   }
 
-  def evalStmts(splitLast: B, split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym],
+  def evalStmts(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym],
                 rtCheck: B, state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): ISZ[State] = {
     var currents = ISZ(state)
     var done = ISZ[State]()
@@ -4243,8 +4242,7 @@ import Util._
       currents = ISZ()
       for (current <- cs) {
         if (current.status) {
-          currents = currents ++ evalStmt(if (i == size - 1 && splitLast) Split.Enabled else split, smt2, cache,
-            rtCheck, current, stmts(i), reporter)
+          currents = currents ++ evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
         } else {
           done = done :+ current
         }
@@ -4264,7 +4262,7 @@ import Util._
                body: AST.Body, posOpt: Option[Position], reporter: Reporter): ISZ[State] = {
     val s0 = state
     var r = ISZ[State]()
-    for (s1 <- evalStmts(F, split, smt2, cache, rOpt, rtCheck, s0, body.stmts, reporter)) {
+    for (s1 <- evalStmts(split, smt2, cache, rOpt, rtCheck, s0, body.stmts, reporter)) {
       if (s1.status) {
         r = r :+ rewriteLocalVars(s1, body.undecls, posOpt, reporter)
       } else {

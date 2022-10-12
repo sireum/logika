@@ -783,8 +783,7 @@ object Util {
         val spBody = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
         logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, spBody, reporter)
       } else {
-        logika.evalStmts(!(body.allReturns && config.branchPar != Config.BranchPar.Disabled), Split.Default, smt2,
-          cache, None(), T, state, stmts, reporter)
+        logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
       }
       checkMethodPost(logika, smt2, cache, reporter, ss, methodPosOpt, invs, ensures, mconfig.logPc, mconfig.logRawPc,
         if (stmts.nonEmpty) stmts(stmts.size - 1).posOpt else None())
