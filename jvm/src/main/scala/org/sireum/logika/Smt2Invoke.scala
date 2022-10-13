@@ -132,7 +132,7 @@ object Smt2Invoke {
             }
             i = i + 1
           }
-          ops.StringOps(l).trim
+          ops.StringOps(ops.StringOps(l).split((c: C) => c == ' ')(0)).trim
         }
         firstLine match {
           case string"sat" => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, queryString,
