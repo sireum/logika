@@ -597,6 +597,7 @@ object Util {
   val ltResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLt))
   val eqResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq))
   val equivResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv))
+  val notResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot))
 
   def collectLetClaims(enabled: B, claims: ISZ[State.Claim]): (HashMap[Z, ISZ[State.Claim.Let]], HashSSet[State.Value.Sym]) = {
     if (enabled) {
@@ -2439,12 +2440,48 @@ object Util {
     }
 
     var r = HashSSet.empty[AST.Exp]
+    var ipMap = HashSMap.empty[AST.Exp, (ISZ[AST.Exp], HashSet[AST.Exp])]
+    var inpMap = HashSMap.empty[AST.Exp, (ISZ[AST.Exp], HashSet[AST.Exp])]
 
     for (claim <- claims if !ignore(claim)) {
       toExp(claim) match {
         case Some(exp) =>
-          if (exp != trueLit) {
-            r = r + exp
+          exp match {
+            case exp: AST.Exp.Binary =>
+              if (exp.attr.resOpt == implyResOpt) {
+                exp.left match {
+                  case left: AST.Exp.Unary if left.attr.resOpt == notResOpt =>
+                    inpMap = {
+                      val (es, s) = inpMap.get(left.exp).getOrElseEager((ISZ(), HashSet.empty))
+                      inpMap + left.exp ~> ((es :+ exp, s + th.normalizeExp(exp.right)))
+                    }
+                    val (es, s) = ipMap.get(left.exp).getOrElseEager((ISZ(), HashSet.empty))
+                    if (s.contains(th.normalizeExp(exp.right))) {
+                      r = r -- es
+                      r = r + exp.right
+                    } else {
+                      r = r + exp
+                    }
+                  case left =>
+                    ipMap = {
+                      val (es, s) = ipMap.get(left).getOrElseEager((ISZ(), HashSet.empty))
+                      ipMap + left ~> ((es :+ exp, s + th.normalizeExp(exp.right)))
+                    }
+                    val (es, s) = inpMap.get(left).getOrElseEager((ISZ(), HashSet.empty))
+                    if (s.contains(th.normalizeExp(exp.right))) {
+                      r = r -- es
+                      r = r + exp.right
+                    } else {
+                      r = r + exp
+                    }
+                }
+              } else {
+                r = r + exp
+              }
+            case _ =>
+              if (exp != trueLit) {
+                r = r + exp
+              }
           }
         case _ =>
       }
