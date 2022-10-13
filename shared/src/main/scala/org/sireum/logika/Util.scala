@@ -2355,12 +2355,11 @@ object Util {
               case _ =>
             }
           }
+          if (es.isEmpty) {
+            return None()
+          }
           toExp(cs(cs.size - 1)) match {
-            case Some(e) =>
-              if (es.isEmpty) {
-                return Some(e)
-              }
-              es = es :+ e
+            case Some(e) => es = es :+ e
             case _ => return None()
           }
           return Some(bigImplyExp(es))
