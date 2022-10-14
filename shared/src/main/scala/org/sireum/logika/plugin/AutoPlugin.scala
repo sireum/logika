@@ -111,25 +111,23 @@ import org.sireum.logika.Logika.Reporter
                 |""".render)
           return Plugin.Result(T, state.nextFresh, spc.claims)
         case _ =>
-          if (id == "Premise") {
-            val pathConditions = org.sireum.logika.Util.claimsToExps(pos, logika.context.methodName, state.claims,
-              logika.th, logika.config.atLinesFresh)
-            val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield logika.th.normalizeExp(e))
-            if (normPathConditions.contains(claimNorm)) {
-              reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
-                st"""Accepted because the stated claim is in the path conditions:
-                    |{
-                    |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
-                    |}""".render)
-              return Plugin.Result(T, state.nextFresh, ISZ())
-            } else {
-              reporter.error(posOpt, Logika.kind,
-                st"""The stated claim has not been proven before nor is a premise in:
-                    |{
-                    |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
-                    |}""".render)
-              return Plugin.Result(F, state.nextFresh, ISZ())
-            }
+          val pathConditions = org.sireum.logika.Util.claimsToExps(pos, logika.context.methodName, state.claims,
+            logika.th, logika.config.atLinesFresh)
+          val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield logika.th.normalizeExp(e))
+          if (normPathConditions.contains(claimNorm)) {
+            reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+              st"""Accepted because the stated claim is in the path conditions:
+                  |{
+                  |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
+                  |}""".render)
+            return Plugin.Result(T, state.nextFresh, ISZ())
+          } else if (id == "Premise") {
+            reporter.error(posOpt, Logika.kind,
+              st"""The stated claim has not been proven before nor is a premise in:
+                  |{
+                  |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
+                  |}""".render)
+            return Plugin.Result(F, state.nextFresh, ISZ())
           }
       }
     }
