@@ -235,6 +235,14 @@ def clone(repo: String): Unit = {
   } else {
     Os.proc(ISZ("git", "pull")).at(home / repo).console.runCheck()
   }
+  val currBranch = ops.StringOps(proc"git rev-parse --abbrev-ref HEAD".at(home).runCheck().out).trim
+  val branchExistsInRepo = ops.StringOps(proc"git ls-remote --heads origin ${currBranch}".at(home / repo).run().out).trim.size > 0
+  if(branchExistsInRepo) {
+    proc"git remote set-branches origin $currBranch".at(home / repo).runCheck()
+    proc"git fetch".at(home / repo).runCheck()
+    proc"git checkout $currBranch".at(home / repo).runCheck()
+  }
+
   println()
 }
 
