@@ -1681,13 +1681,7 @@ object Util {
                   let.left.tipe.asInstanceOf[AST.Typed.Name]
                 }
                 val info = th.typeMap.get(sType.ids).get.asInstanceOf[TypeInfo.Sig].methods.get(op).get
-                return Some(AST.Exp.Invoke(
-                  Some(left),
-                  AST.Exp.Ident(AST.Id(op, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt, info.resOpt, info.typedOpt)),
-                  ISZ(),
-                  ISZ(right),
-                  AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))
-                ))
+                return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))))
               case (_, _) => return None()
             }
           }
@@ -2439,54 +2433,60 @@ object Util {
       }
     }
 
+    def simplify(cs: ISZ[AST.Exp]): ISZ[AST.Exp] = {
+      var r = HashSSet.empty[AST.Exp]
+      var ipMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
+      var inpMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
+
+      for (exp <- cs) {
+        exp match {
+          case exp: AST.Exp.Binary if exp.attr.resOpt == implyResOpt =>
+            exp.left match {
+              case left: AST.Exp.Unary if left.attr.resOpt == notResOpt =>
+                inpMap = {
+                  val key = th.normalizeExp(left.exp)
+                  val m = inpMap.get(key).getOrElse(HashMap.empty)
+                  val key2 = th.normalizeExp(exp.right)
+                  inpMap + key ~> (m + key2 ~> (m.get(key2).getOrElse(ISZ()) :+ exp))
+                }
+                ipMap.get(th.normalizeExp(left.exp)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
+                  case Some(es) =>
+                    r = r -- es
+                    r = r + exp.right
+                  case _ =>
+                    r = r + exp
+                }
+              case left =>
+                ipMap = {
+                  val key = th.normalizeExp(left)
+                  val m = ipMap.get(key).getOrElse(HashMap.empty)
+                  val key2 = th.normalizeExp(exp.right)
+                  ipMap + key ~> (m + key2 ~> (m.get(key2).getOrElse(ISZ()) :+ exp))
+                }
+                inpMap.get(th.normalizeExp(left)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
+                  case Some(es) =>
+                    r = r -- es
+                    r = r + exp.right
+                  case _ =>
+                    r = r + exp
+                }
+            }
+          case _ => r = r + exp
+        }
+      }
+      return r.elements
+    }
+
     var r = HashSSet.empty[AST.Exp]
-    var ipMap = HashSMap.empty[AST.Exp, (ISZ[AST.Exp], HashSet[AST.Exp])]
-    var inpMap = HashSMap.empty[AST.Exp, (ISZ[AST.Exp], HashSet[AST.Exp])]
 
     for (claim <- claims if !ignore(claim)) {
       toExp(claim) match {
-        case Some(exp) =>
-          exp match {
-            case exp: AST.Exp.Binary =>
-              if (exp.attr.resOpt == implyResOpt) {
-                exp.left match {
-                  case left: AST.Exp.Unary if left.attr.resOpt == notResOpt =>
-                    inpMap = {
-                      val (es, s) = inpMap.get(left.exp).getOrElseEager((ISZ(), HashSet.empty))
-                      inpMap + left.exp ~> ((es :+ exp, s + th.normalizeExp(exp.right)))
-                    }
-                    val (es, s) = ipMap.get(left.exp).getOrElseEager((ISZ(), HashSet.empty))
-                    if (s.contains(th.normalizeExp(exp.right))) {
-                      r = r -- es
-                      r = r + exp.right
-                    } else {
-                      r = r + exp
-                    }
-                  case left =>
-                    ipMap = {
-                      val (es, s) = ipMap.get(left).getOrElseEager((ISZ(), HashSet.empty))
-                      ipMap + left ~> ((es :+ exp, s + th.normalizeExp(exp.right)))
-                    }
-                    val (es, s) = inpMap.get(left).getOrElseEager((ISZ(), HashSet.empty))
-                    if (s.contains(th.normalizeExp(exp.right))) {
-                      r = r -- es
-                      r = r + exp.right
-                    } else {
-                      r = r + exp
-                    }
-                }
-              } else {
-                r = r + exp
-              }
-            case _ =>
-              if (exp != trueLit) {
-                r = r + exp
-              }
-          }
+        case Some(exp) if exp != trueLit => r = r + exp
         case _ =>
       }
     }
-    return r.elements
+
+    return simplify(r.elements)
   }
 
 }
