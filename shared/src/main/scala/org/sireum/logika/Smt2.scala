@@ -1841,7 +1841,7 @@ object Smt2 {
           case tipe: AST.Typed.Name if tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName =>
             typeConstraints = typeConstraints :+ st"(= (${sTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
           case tipe if typeHierarchy.isAdtType(tipe) =>
-            typeConstraints = typeConstraints :+ st"(sub-type (type-of $x) ${typeHierarchyId(tipe)})"
+            typeConstraints = typeConstraints :+ st"(${if (typeHierarchy.isAdtLeafType(tipe)) "=" else "sub-type"} (type-of $x) ${typeHierarchyId(tipe)})"
           case tipe: AST.Typed.Tuple =>
             typeConstraints = typeConstraints :+ st"(= (${tupleTypeOfName(tipe)} $x) ${typeHierarchyId(tipe)})"
           case _ =>
