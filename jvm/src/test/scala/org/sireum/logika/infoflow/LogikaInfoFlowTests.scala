@@ -22,10 +22,12 @@ class LogikaInfoFlowTests extends SireumRcSpec {
   val root = Os.path(".") / "logika" / "jvm" / "src" / "test" / "scala" / "org" / "sireum" / "logika" / "infoflow"
 
   def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = {
-    { // force marcro expansion
+    { // force marcro expansion when in IVE
       val root = Os.path(".") / "logika" / "jvm" / "src" / "test" / "scala" / "org" / "sireum" / "logika" / "infoflow"
       val p = root / "LogikaInfoFlowTests.scala"
-      p.writeOver(s"${p.read} ")
+      if(p.exists) {
+        p.writeOver(s"${p.read} ")
+      }
     }
     val m = $internal.RC.text(Vector("example")) { (p, f) => p.last.endsWith(".sc") }
     implicit val ordering: Ordering[Vector[Predef.String]] = m.ordering
@@ -33,15 +35,9 @@ class LogikaInfoFlowTests extends SireumRcSpec {
          pair <- Seq((k, v), (k.dropRight(1) :+ s"${k.last}$simplifiedPrefix", v))) yield pair
   }
 
-  val dontSplitPfq:B = F
-  val splitAll:B = F
-  val splitContract: B = F
-  val splitIf: B = F
-  val spiltMatch: B = F
-
   val logPc: B = F
   val logRawPc: B = F
-  val logVc: B = T
+  val logVc: B = F
   var logVcDirOpt: Option[String] = None()
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
@@ -60,8 +56,7 @@ class LogikaInfoFlowTests extends SireumRcSpec {
       }
     }
 
-    c = c(dontSplitPfq = dontSplitPfq, splitAll = splitAll, splitContract = splitContract, splitIf = splitIf,
-      logPc = logPc, logRawPc = logRawPc, logVc = logVc, logVcDirOpt = logVcDirOpt)
+    c = c(logPc = logPc, logRawPc = logRawPc, logVc = logVc, logVcDirOpt = logVcDirOpt)
 
     Logika.checkScript(Some(f.string), content, c,
       th => Smt2Impl.create(c.smt2Configs, th, c.timeoutInMs, c.fpRoundingMode, c.charBitWidth,
@@ -75,4 +70,4 @@ class LogikaInfoFlowTests extends SireumRcSpec {
       !reporter.hasIssue
     }
   }
-}                                  
+}
