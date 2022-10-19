@@ -47,8 +47,9 @@ class LogikaRcTest extends SireumRcSpec {
     case _ => false
   }
 
-  def textResources: scala.collection.Map[scala.Vector[Predef.String], Predef.String] = {
+  def textResources: scala.collection.SortedMap[scala.Vector[Predef.String], Predef.String] = {
     val m = $internal.RC.text(Vector("example")) { (p, f) => p.last.endsWith(".sc") && !p.last.startsWith("wip-") }
+    implicit val ordering: Ordering[Vector[Predef.String]] = m.ordering
     for ((k, v) <- m; pair <- {
       var r = Vector[(Vector[Predef.String], Predef.String)]()
       if (!shouldIgnore(k.last, F)) {
