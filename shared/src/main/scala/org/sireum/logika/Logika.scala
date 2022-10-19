@@ -1511,7 +1511,6 @@ import Util._
       }
       val qcs: ISZ[State.Claim] = if (s0.claims.size != s1.claims.size) {
         val p = s1.claims(s0.claims.size)
-        val c = bigAnd(quantClaims)
         if (quant.isForall) ISZ(State.Claim.Imply(ISZ(p, bigAnd(quantClaims)))) else p +: quantClaims
       } else {
         quantClaims
