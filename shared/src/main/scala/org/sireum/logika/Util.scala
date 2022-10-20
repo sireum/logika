@@ -644,7 +644,7 @@ object Util {
                    ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
                    implicitContext: Option[(String, Position)], compMethods: HashSet[ISZ[String]]): Logika = {
     val mctx = Context.Method(owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
-      HashMap.empty, HashMap.empty, HashMap.empty, posOpt)
+      HashMap.empty, HashMap.empty, HashMap.empty, posOpt, extension.PStorage.empty)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext,
       compMethods = compMethods)
     return Logika(th, config, ctx, plugins)
@@ -693,6 +693,60 @@ object Util {
     return r
   }
 
+  def updateInVarMaps(l: Logika, smt2: Smt2, cache: Smt2.Cache, state: State, reporter: Reporter): (Logika, State) = {
+    var s0 = state
+    val mctx = l.context.methodOpt.get
+    var objectVarInMap = mctx.objectVarInMap
+    var objectNames = HashSMap.empty[ISZ[String], Position]
+    for (p <- (mctx.readObjectVarMap(TypeChecker.emptySubstMap) ++
+      mctx.modObjectVarMap(TypeChecker.emptySubstMap).entries).entries) {
+      val (ids, (t, posOpt)) = p
+      val pos = posOpt.get
+      val owner: ISZ[String] = l.th.nameMap.get(ids).get match {
+        case info: Info.Var => info.owner
+        case info: Info.SpecVar => info.owner
+        case info => halt(s"Unexpected: $info")
+      }
+      objectNames = objectNames + owner ~> pos
+      val (s1, sym) = nameIntro(posOpt.get, s0, ids, t, posOpt)
+      s0 = assumeValueInv(l, smt2, cache, T, s1, sym, pos, reporter)
+      objectVarInMap = objectVarInMap + ids ~> sym
+    }
+    for (p <- objectNames.entries) {
+      val (objectName, pos) = p
+      s0 = assumeObjectInv(l, smt2, cache, objectName, s0, pos, reporter)
+    }
+    var fieldVarInMap = mctx.fieldVarInMap
+    mctx.receiverTypeOpt match {
+      case Some(receiverType) =>
+        val (s1, thiz) = idIntro(mctx.posOpt.get, s0, mctx.name, "this", receiverType, mctx.posOpt)
+        s0 = s1
+        for (p <- mctx.fieldVarMap(TypeChecker.emptySubstMap).entries) {
+          val (id, (t, posOpt)) = p
+          val (s2, sym) = s0.freshSym(t, posOpt.get)
+          s0 = s2.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
+          fieldVarInMap = fieldVarInMap + id ~> sym
+        }
+      case _ =>
+    }
+    var localInMap = mctx.localInMap
+    for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
+      val (mname, id, t) = v
+      val posOpt = id.attr.posOpt
+      if (id.value != "this") {
+        val (s1, sym) = idIntro(posOpt.get, s0, mname, id.value, t, posOpt)
+        s0 = assumeValueInv(l, smt2, cache, T, s1, sym, posOpt.get, reporter)
+        localInMap = localInMap + id.value ~> sym
+      } else {
+        val (s1, sym) = idIntro(posOpt.get, s0, mname, id.value, t, None())
+        s0 = s1
+        localInMap = localInMap + id.value ~> sym
+      }
+    }
+    return (l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
+      localInMap = localInMap)))), s0)
+  }
+
   def checkMethod(th: TypeHierarchy,
                   plugins: ISZ[plugin.Plugin],
                   method: AST.Stmt.Method,
@@ -712,7 +766,6 @@ object Util {
       val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
       val methodPosOpt = method.sig.id.attr.posOpt
       val logika: Logika = {
-        val mname = res.owner :+ method.sig.id.value
         val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
           None()
         } else {
@@ -722,64 +775,15 @@ object Util {
             case _ => halt("Infeasible")
           }
         }
-        val l = logikaMethod(th, mconfig, res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes,
+        val p = updateInVarMaps(logikaMethod(th, mconfig, res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes,
           method.sig.returnType.typedOpt.get, methodPosOpt, reads, requires, modifies, ensures,
-          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None(), HashSet.empty)
-        val mctx = l.context.methodOpt.get
-        var objectVarInMap = mctx.objectVarInMap
-        var objectNames = HashSMap.empty[ISZ[String], Position]
-        for (p <- (mctx.readObjectVarMap(TypeChecker.emptySubstMap) ++
-          mctx.modObjectVarMap(TypeChecker.emptySubstMap).entries).entries) {
-          val (ids, (t, posOpt)) = p
-          val pos = posOpt.get
-          val owner: ISZ[String] = th.nameMap.get(ids).get match {
-            case info: Info.Var => info.owner
-            case info: Info.SpecVar => info.owner
-            case info => halt(s"Unexpected: $info")
-          }
-          objectNames = objectNames + owner ~> pos
-          val (s0, sym) = nameIntro(posOpt.get, state, ids, t, posOpt)
-          state = assumeValueInv(l, smt2, cache, T, s0, sym, pos, reporter)
-          objectVarInMap = objectVarInMap + ids ~> sym
-        }
-        for (p <- objectNames.entries) {
-          val (objectName, pos) = p
-          state = assumeObjectInv(l, smt2, cache, objectName, state, pos, reporter)
-        }
-        var fieldVarInMap = mctx.fieldVarInMap
-        mctx.receiverTypeOpt match {
-          case Some(receiverType) =>
-            val (s0, thiz) = idIntro(method.sig.id.attr.posOpt.get, state, mname, "this", receiverType, method.sig.id.attr.posOpt)
-            state = s0
-            for (p <- mctx.fieldVarMap(TypeChecker.emptySubstMap).entries) {
-              val (id, (t, posOpt)) = p
-              val (s1, sym) = state.freshSym(t, posOpt.get)
-              state = s1.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
-              fieldVarInMap = fieldVarInMap + id ~> sym
-            }
-          case _ =>
-        }
-        var localInMap = mctx.localInMap
-        for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
-          val (mname, id, t) = v
-          val posOpt = id.attr.posOpt
-          if (id.value != "this") {
-            val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, posOpt)
-            state = assumeValueInv(l, smt2, cache, T, s0, sym, posOpt.get, reporter)
-            localInMap = localInMap + id.value ~> sym
-          } else {
-            val (s0, sym) = idIntro(posOpt.get, state, mname, id.value, t, None())
-            state = s0
-            localInMap = localInMap + id.value ~> sym
-          }
-        }
-        l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
-          localInMap = localInMap))))
+          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None(), HashSet.empty), smt2, cache, state, reporter)
+        state = p._2
+        p._1
       }
       val invs = logika.retrieveInvs(res.owner, res.isInObject)
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
-      val body = method.bodyOpt.get
-      val stmts = body.stmts
+      val stmts = method.bodyOpt.get.stmts
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
         val spBody = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
         logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, spBody, reporter)
@@ -1143,7 +1147,8 @@ object Util {
       objectVarInMap = HashMap.empty,
       fieldVarInMap = HashMap.empty,
       localInMap = HashMap.empty,
-      posOpt = None()
+      posOpt = None(),
+      storage = logika.context.methodOpt.map((mctx: Context.Method) => mctx.storage).getOrElse(extension.PStorage.empty)
     ))))
     val invs = l.retrieveInvs(name, T)
     if (invs.isEmpty) {

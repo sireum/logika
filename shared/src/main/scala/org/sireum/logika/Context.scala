@@ -43,7 +43,8 @@ object Context {
                          val objectVarInMap: HashMap[ISZ[String], State.Value.Sym],
                          val fieldVarInMap: HashMap[String, State.Value.Sym],
                          val localInMap: HashMap[String, State.Value.Sym],
-                         val posOpt: Option[Position]) {
+                         val posOpt: Option[Position],
+                         val storage: extension.PStorage) {
 
     @strictpure def isInObject: B = receiverTypeOpt.isEmpty
 
@@ -135,14 +136,15 @@ object Context {
     @strictpure def isOK: B = state.status
   }
 
-  @strictpure def empty: Context = Context(ISZ(), None(), ISZ(), None(), HashSet.empty)
+  @strictpure def empty: Context = Context(ISZ(), None(), ISZ(), None(), HashSet.empty, extension.PStorage.empty)
 }
 
 @datatype class Context(val typeParams: ISZ[AST.TypeParam],
                         val methodOpt: Option[Context.Method],
                         val caseLabels: ISZ[AST.Exp.LitString],
                         val implicitCheckTitlePosOpt: Option[(String, Position)],
-                        val compMethods: HashSet[ISZ[String]]) {
+                        val compMethods: HashSet[ISZ[String]],
+                        val storage: extension.PStorage) {
 
   @pure def owner: ISZ[String] = {
     methodOpt match {

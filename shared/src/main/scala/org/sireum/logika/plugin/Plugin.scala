@@ -26,6 +26,7 @@
 package org.sireum.logika.plugin
 
 import org.sireum._
+import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
@@ -76,7 +77,7 @@ object Plugin {
 
 @sig trait StmtPlugin extends Plugin {
 
-  @pure def canHandle(logika: Logika, exp: AST.Stmt): B
+  @pure def canHandle(logika: Logika, stmt: AST.Stmt): B
 
   def handle(logika: Logika,
              smt2: Smt2,
@@ -84,4 +85,19 @@ object Plugin {
              state: State,
              stmt: AST.Stmt,
              reporter: Reporter): ISZ[State]
+}
+
+@sig trait MethodPlugin extends Plugin {
+
+  @pure def canHandle(th: TypeHierarchy, stmt: AST.Stmt.Method): B
+
+  def handle(th: TypeHierarchy,
+             plugins: ISZ[Plugin],
+             stmt: AST.Stmt.Method,
+             caseIndex: Z,
+             config: logika.Config,
+             smt2: Smt2,
+             cache: Smt2.Cache,
+             reporter: Reporter): Unit
+
 }

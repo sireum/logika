@@ -502,6 +502,7 @@ import Util._
         case p: plugin.JustificationPlugin => jps = jps :+ p
         case p: plugin.ExpPlugin => eps = eps :+ p
         case p: plugin.StmtPlugin => sps = sps :+ p
+        case _: plugin.MethodPlugin =>
         case _ => halt(s"Unexpected plugin: $p")
       }
     }

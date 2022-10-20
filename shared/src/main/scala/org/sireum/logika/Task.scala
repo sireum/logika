@@ -170,6 +170,14 @@ object Task {
       for (tv <- tvs) {
         csmt2.addTypeVarIndex(tv)
       }
+      for (p <- plugins) {
+        p match {
+          case p: plugin.MethodPlugin if p.canHandle(th, method) =>
+            p.handle(th, plugins, method, caseIndex, config, csmt2, cache, reporter)
+            return reporter.messages
+          case _ =>
+        }
+      }
       Util.checkMethod(th, plugins, method, caseIndex, config, csmt2, cache, reporter)
       return reporter.messages
     }
