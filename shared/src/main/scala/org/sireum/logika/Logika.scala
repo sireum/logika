@@ -28,7 +28,7 @@ package org.sireum.logika
 
 import org.sireum._
 import org.sireum.lang.symbol.{Info, TypeInfo}
-import org.sireum.lang.symbol.Resolver.QName
+import org.sireum.lang.symbol.Resolver.{NameMap, QName, TypeMap}
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Message, Position}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
@@ -422,7 +422,7 @@ object Logika {
     }
     val fileSet: HashSSet[String] = HashSSet ++ files
     @pure def filterNameMap(map: lang.symbol.Resolver.NameMap): lang.symbol.Resolver.NameMap = {
-      var r = HashMap.empty[QName, Info]
+      var r: NameMap = HashSMap.empty
       for (info <- map.values) {
         info match {
           case info: Info.Object if shouldCheck(fileSet, line, info.posOpt) => r = r + info.name ~> info
@@ -432,7 +432,7 @@ object Logika {
       return r
     }
     @pure def filterTypeMap(map: lang.symbol.Resolver.TypeMap): lang.symbol.Resolver.TypeMap = {
-      var r = HashMap.empty[QName, TypeInfo]
+      var r: TypeMap = HashSMap.empty
       for (info <- map.values) {
         info match {
           case info: TypeInfo.Adt if shouldCheck(fileSet, line, info.posOpt) => r = r + info.name ~> info
