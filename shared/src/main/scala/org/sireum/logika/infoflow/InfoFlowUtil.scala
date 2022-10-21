@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.logika
+package org.sireum.logika.infoflow
 
 import org.sireum._
 import org.sireum.lang.ast.MethodContract.InfoFlow
@@ -7,6 +7,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.State.Claim.Let
 import org.sireum.logika.State.{Claim, Value}
+import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StateTransformer, Util}
 import org.sireum.message.Position
 
 object InfoFlowUtil {

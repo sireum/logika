@@ -129,7 +129,7 @@ object Logika {
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
   val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), Smt2Plugin(), ClaimOfPlugin(), LiftPlugin(), PropNatDedPlugin(),
-    PredNatDedPlugin(), InceptionPlugin())
+    PredNatDedPlugin(), InceptionPlugin(), org.sireum.logika.infoflow.InfoFlowMethodPlugin())
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
     (F, AST.Typed.isName, "firstIndex"), (F, AST.Typed.msName, "firstIndex"),
@@ -1883,7 +1883,7 @@ import Util._
 
         val lComp: Logika = {
           val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
-            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(), ISZ(),
+            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
             plugins, Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get)),
             this.context.compMethods + (res.owner :+ res.id)
           )

@@ -43,7 +43,6 @@ object Context {
                          val requires: ISZ[AST.Exp],
                          val modifies: ISZ[AST.Exp.Ref],
                          val ensures: ISZ[AST.Exp],
-                         val infoFlows: ISZ[AST.MethodContract.InfoFlow],
                          val objectVarInMap: HashMap[ISZ[String], State.Value.Sym],
                          val fieldVarInMap: HashMap[String, State.Value.Sym],
                          val localInMap: HashMap[String, State.Value.Sym],
