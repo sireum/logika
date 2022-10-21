@@ -98,6 +98,21 @@ object Plugin {
              config: logika.Config,
              smt2: Smt2,
              cache: Smt2.Cache,
-             reporter: Reporter): Unit
+             reporter: Reporter): B
+
+}
+
+
+@sig trait StmtsPlugin extends Plugin {
+
+  @pure def canHandle(th: TypeHierarchy, stmts: ISZ[AST.Stmt.Method]): B
+
+  def handle(th: TypeHierarchy,
+             plugins: ISZ[Plugin],
+             stmts: ISZ[AST.Stmt],
+             config: logika.Config,
+             smt2: Smt2,
+             cache: Smt2.Cache,
+             reporter: Reporter): (B, ISZ[State])
 
 }

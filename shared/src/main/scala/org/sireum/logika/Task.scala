@@ -141,6 +141,22 @@ object Task {
       for (tv <- itvc.s.elements) {
         csmt2.addTypeVarIndex(tv)
       }
+      for (p <- plugins) {
+        p match {
+          case p: plugin.StmtsPlugin =>
+            val (done, ss) = p.handle(th, plugins, stmts, config, smt2, cache, reporter)
+            for (state <- ss if state.status) {
+              if (stmts.nonEmpty) {
+                val lastPos = stmts(stmts.size - 1).posOpt.get
+                logika.logPc(config.logPc, config.logRawPc, state(status = F), reporter, Some(lastPos))
+              }
+            }
+            if (done) {
+              return reporter.messages
+            }
+          case _ =>
+        }
+      }
       for (state <- logika.evalStmts(Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.status) {
         if (stmts.nonEmpty) {
           val lastPos = stmts(stmts.size - 1).posOpt.get
@@ -173,8 +189,9 @@ object Task {
       for (p <- plugins) {
         p match {
           case p: plugin.MethodPlugin if p.canHandle(th, method) =>
-            p.handle(th, plugins, method, caseIndex, config, csmt2, cache, reporter)
-            return reporter.messages
+            if (p.handle(th, plugins, method, caseIndex, config, csmt2, cache, reporter)) {
+              return reporter.messages
+            }
           case _ =>
         }
       }

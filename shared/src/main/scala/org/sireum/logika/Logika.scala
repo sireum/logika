@@ -503,6 +503,7 @@ import Util._
         case p: plugin.ExpPlugin => eps = eps :+ p
         case p: plugin.StmtPlugin => sps = sps :+ p
         case _: plugin.MethodPlugin =>
+        case _: plugin.StmtsPlugin =>
         case _ => halt(s"Unexpected plugin: $p")
       }
     }
