@@ -8,35 +8,36 @@ import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.Util.{checkMethodPost, checkMethodPre, logikaMethod, updateInVarMaps}
-import org.sireum.logika.plugin.{MethodPlugin, Plugin}
+import org.sireum.logika.infoflow.InfoFlowUtil.{INFO_FLOWS_KEY, IN_AGREE_KEY, InAgreementsType, InfoFlowsType, getInAgreements}
+import org.sireum.logika.plugin.{MethodPlugin, Plugin, StmtPlugin}
 import org.sireum.logika.{Config, Logika, Smt2, State}
 
 @datatype class InfoFlowMethodPlugin extends MethodPlugin {
 
-  override def name: String = {
+  def name: String = {
     return "Info Flow Method Plugin"
   }
 
-  override def canHandle(th: TypeHierarchy, method: AST.Stmt.Method): B = {
+  @pure def canHandle(th: TypeHierarchy, method: AST.Stmt.Method): B = {
     method.contract match {
       case c: AST.MethodContract.Simple => return c.infoFlows.nonEmpty
       case _ => return F
     }
   }
 
-  override def handle(th: TypeHierarchy,
-                      plugins: ISZ[Plugin],
-                      method: AST.Stmt.Method,
-                      caseIndex: Z,
-                      config: Config,
-                      smt2: Smt2,
-                      cache: Smt2.Cache,
-                      reporter: Reporter): B = {
+  def handle(th: TypeHierarchy,
+             plugins: ISZ[Plugin],
+             method: AST.Stmt.Method,
+             caseIndex: Z,
+             config: Config,
+             smt2: Smt2,
+             cache: Smt2.Cache,
+             reporter: Reporter): B = {
 
     val mconfig: Config = if (caseIndex >= 0) config(checkInfeasiblePatternMatch = F) else config
 
     def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp],
-                  modifies: ISZ[AST.Exp.Ref], ensures: ISZ[AST.Exp], infoFlows: ISZ[InfoFlow]): Unit = {
+                  modifies: ISZ[AST.Exp.Ref], ensures: ISZ[AST.Exp], infoFlowsNode: ISZ[InfoFlow]): Unit = {
       var state = State.create
       labelOpt match {
         case Some(label) if label.value != "" => state = state.addClaim(State.Claim.Label(label.value, label.posOpt.get))
@@ -44,7 +45,7 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
       }
       val res = method.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
       val methodPosOpt = method.sig.id.attr.posOpt
-      val logika: Logika = {
+      var logika: Logika = {
         val receiverTypeOpt: Option[AST.Typed] = if (res.isInObject) {
           None()
         } else {
@@ -63,19 +64,23 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
       val invs = logika.retrieveInvs(res.owner, res.isInObject)
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
 
-      val stateSyms = InfoFlowUtil.processInfoFlowInAgrees(logika, smt2, cache, reporter, state, methodPosOpt, infoFlows)
+      val infoFlows: InfoFlowsType = HashSMap.empty[String, InfoFlow] ++ infoFlowsNode.map((m : InfoFlow) => ((m.label.value, m)))
+      val stateSyms = InfoFlowUtil.processInfoFlowInAgrees(logika, smt2, cache, reporter, state, infoFlows)
       state = stateSyms._1
+
+      logika = logika(context = logika.context(storage =
+        logika.context.storage + ((IN_AGREE_KEY, stateSyms._2)) + ((INFO_FLOWS_KEY, infoFlows))))
 
       val stmts = method.bodyOpt.get.stmts
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
-        val spBody = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
-        logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, spBody, reporter)
+        halt("Infeasible since contracts cannot be attached to strict pure methods")
       } else {
         logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
       }
 
-      val ss2: ISZ[State] = InfoFlowUtil.checkInfoFlowOutAgrees(logika, smt2, cache, reporter, ss, methodPosOpt, infoFlows, stateSyms._2,
-        if (stmts.nonEmpty) stmts(stmts.size - 1).posOpt else None())
+      val partitionsToCheck:ISZ[AST.Exp.LitString] = infoFlows.values.map((m: InfoFlow) => m.label)
+      val ss2: ISZ[State] = InfoFlowUtil.checkInfoFlowAgreements(infoFlows, stateSyms._2, partitionsToCheck,
+        logika, smt2, cache, reporter, ss)
 
       val ssPost: ISZ[State] = checkMethodPost(logika, smt2, cache, reporter, ss2, methodPosOpt, invs, ensures, mconfig.logPc, mconfig.logRawPc,
         if (stmts.nonEmpty) stmts(stmts.size - 1).posOpt else None())
@@ -85,9 +90,64 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
       case contract: AST.MethodContract.Simple =>
         checkCase(None(), contract.reads, contract.requires, contract.modifies, contract.ensures, contract.infoFlows)
       case contract: AST.MethodContract.Cases =>
-        halt("Infeasible. Need to refactor Cases to include InfoFlows")
+        halt("Infeasible until Cases include InfoFlows")
     }
 
     return T
+  }
+}
+
+@datatype class InfoFlowStmtPlugin extends StmtPlugin {
+
+  def name: String = {
+    return "Info Flow Statement Plugin"
+  }
+
+  def hasInlineAgreementPartitions(stmt: AST.Stmt): B = {
+    return getInlineAgreementPartitions(stmt).nonEmpty
+  }
+
+  def getInlineAgreementPartitions(stmt: AST.Stmt): Option[ISZ[AST.Exp.LitString]] = {
+    var ret = ISZ[AST.Exp.LitString]()
+    stmt match {
+      case AST.Stmt.DeduceSequent(just, sequents) if sequents.size == 1 =>
+        sequents(0).conclusion match {
+          case e: AST.Exp.InlineAgree =>
+            return Some(e.partitions.map((m: AST.Exp.LitString) => m))
+          case _ =>
+        }
+      case _ =>
+    }
+    return None()
+  }
+
+  @pure def canHandle(logika: Logika, stmt: AST.Stmt): B = {
+    return InfoFlowUtil.getInfoFlows(logika.context.storage).nonEmpty &&
+      InfoFlowUtil.getInAgreements(logika.context.storage).nonEmpty &&
+      hasInlineAgreementPartitions(stmt)
+  }
+
+  def handle(logika: Logika,
+             smt2: Smt2,
+             cache: Smt2.Cache,
+             state: State,
+             stmt: AST.Stmt,
+             reporter: Reporter): ISZ[State] = {
+    val infoFlows = InfoFlowUtil.getInfoFlows(logika.context.storage).get
+    val inAgrees = InfoFlowUtil.getInAgreements(logika.context.storage).get
+    val inlinePartitions = getInlineAgreementPartitions(stmt).get
+
+    var states: ISZ[State] = ISZ()
+    for(p <- inlinePartitions if !infoFlows.contains(p.value)){
+      reporter.error(p.posOpt, "Inflow", s"'$p' is not a valid partition")
+      states = states :+ state(status = F)
+    }
+
+    if(!reporter.hasError) {
+      states = InfoFlowUtil.checkInfoFlowAgreements(infoFlows, inAgrees, inlinePartitions,
+        logika, smt2, cache, reporter, ISZ(state))
+    }
+
+    return states
   }
 }

@@ -2,6 +2,7 @@
 package org.sireum.logika.infoflow
 
 import org.sireum._
+import org.sireum.extension.PStorage
 import org.sireum.lang.ast.MethodContract.InfoFlow
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
@@ -13,6 +14,20 @@ import org.sireum.message.Position
 object InfoFlowUtil {
 
   val secondTraceSuffix: String = "~"
+
+  val IN_AGREE_KEY: String = "IN_AGREE_KEY"
+  type InAgreementsType = HashSMap[String, ISZ[State.Value.Sym]]
+
+  val INFO_FLOWS_KEY: String = "INFO_FLOWS_KEY"
+  type InfoFlowsType = HashSMap[String, InfoFlow]
+
+  def getInAgreements(storage: PStorage): Option[InAgreementsType] = {
+    return storage.get(IN_AGREE_KEY)
+  }
+
+  def getInfoFlows(storage: PStorage): Option[InfoFlowsType] = {
+    return storage.get(INFO_FLOWS_KEY)
+  }
 
   @datatype class SymValueRewriter(val fresh: Z) extends StateTransformer.PrePost[Z] {
     override def preStateValueSym(maxSym: Z,
@@ -34,10 +49,10 @@ object InfoFlowUtil {
 
 
   def processInfoFlowInAgrees(logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, state: State,
-                              methodPosOpt: Option[Position], infoFlows: ISZ[InfoFlow]): (State, ISZ[ISZ[State.Value.Sym]]) = {
+                              infoFlows: InfoFlowsType): (State, InAgreementsType) = {
     var s = state
-    var syms: ISZ[ISZ[State.Value.Sym]] = ISZ()
-    for (infoFlow <- infoFlows if s.status) {
+    var syms: InAgreementsType = HashSMap.empty
+    for (infoFlow <- infoFlows.values if s.status) {
       var ssyms: ISZ[State.Value.Sym] = ISZ()
       for (inExp <- infoFlow.inAgrees) {
         inExp match {
@@ -62,23 +77,27 @@ object InfoFlowUtil {
         }
       }
       if (ssyms.nonEmpty) {
-        syms = syms :+ ssyms
+        syms = syms + (infoFlow.label.value ~> ssyms)
       }
     }
     return (s, syms)
   }
 
-  def checkInfoFlowOutAgrees(logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, states: ISZ[State],
-                             methodPosOpt: Option[Position], infoFlows: ISZ[InfoFlow], inAgreeSyms: ISZ[ISZ[Value.Sym]], value: Option[Position]): ISZ[State] = {
+  def checkInfoFlowAgreements(infoFlows: InfoFlowsType,
+                              inAgreeSyms: InAgreementsType,
+                              partitionsToCheck: ISZ[AST.Exp.LitString],
+                              logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, states: ISZ[State]): ISZ[State] = {
 
     if (inAgreeSyms.nonEmpty) {
       assert(infoFlows.size == inAgreeSyms.size, s"${infoFlows.size} vs ${inAgreeSyms.size}")
 
       var r: ISZ[State] = ISZ()
-      for (flowIndex <- 0 until infoFlows.size) {
-        val inSyms: ISZ[State.Value.Sym] = inAgreeSyms(flowIndex)
-        val outAgrees = infoFlows(flowIndex).outAgrees
-        val label = infoFlows(flowIndex).label
+      for (partition <- partitionsToCheck) {
+        val infoFlow = infoFlows.get(partition.value).get
+        val inSyms: ISZ[State.Value.Sym] = inAgreeSyms.get(infoFlow.label.value).get
+        val outAgrees = infoFlow.outAgrees
+        val label = infoFlow.label
+        val pos = partition.posOpt.get
 
         for (state <- states) {
           if (!state.status) {
@@ -128,8 +147,6 @@ object InfoFlowUtil {
               s = s.addClaim(State.Claim.Eq(inSym, secInSym))
             }
 
-            val pos = methodPosOpt.get
-
             // add out agreements claims
             var bstack: Stack[State.Value.Sym] = Stack.empty
             for (outSym <- outSyms) {
@@ -163,9 +180,9 @@ object InfoFlowUtil {
             validity.kind match {
               case Smt2Query.Result.Kind.Unsat => r = r :+ s(status = T)
               case Smt2Query.Result.Kind.Sat => logika.error(Some(pos), s"Flow case $label violation", reporter)
-              case Smt2Query.Result.Kind.Unknown => logika.error(methodPosOpt, s"Could not verify flow case $label", reporter)
-              case Smt2Query.Result.Kind.Timeout => logika.error(methodPosOpt, s"Timed out while checking flow case $label", reporter)
-              case Smt2Query.Result.Kind.Error => logika.error(methodPosOpt, s"Error encountered when checking flow case $label", reporter)
+              case Smt2Query.Result.Kind.Unknown => logika.error(Some(pos), s"Could not verify flow case $label", reporter)
+              case Smt2Query.Result.Kind.Timeout => logika.error(Some(pos), s"Timed out while checking flow case $label", reporter)
+              case Smt2Query.Result.Kind.Error => logika.error(Some(pos), s"Error encountered when checking flow case $label", reporter)
             }
 
             r = r :+ s(status = F)
