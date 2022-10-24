@@ -8,7 +8,7 @@ import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.Util.{checkMethodPost, checkMethodPre, logikaMethod, updateInVarMaps}
-import org.sireum.logika.infoflow.InfoFlowUtil.{INFO_FLOWS_KEY, IN_AGREE_KEY, InAgreementsType, InfoFlowsType, getInAgreements}
+import org.sireum.logika.infoflow.InfoFlowContext.InfoFlowsType
 import org.sireum.logika.plugin.{MethodPlugin, Plugin, StmtPlugin}
 import org.sireum.logika.{Config, Logika, Smt2, State}
 
@@ -64,12 +64,13 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
       val invs = logika.retrieveInvs(res.owner, res.isInObject)
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
 
-      val infoFlows: InfoFlowsType = HashSMap.empty[String, InfoFlow] ++ infoFlowsNode.map((m : InfoFlow) => ((m.label.value, m)))
+      val infoFlows: InfoFlowsType = HashSMap.empty[String, InfoFlow] ++ infoFlowsNode.map((m: InfoFlow) => ((m.label.value, m)))
       val stateSyms = InfoFlowUtil.processInfoFlowInAgrees(logika, smt2, cache, reporter, state, infoFlows)
       state = stateSyms._1
 
       logika = logika(context = logika.context(storage =
-        logika.context.storage + ((IN_AGREE_KEY, stateSyms._2)) + ((INFO_FLOWS_KEY, infoFlows))))
+        InfoFlowContext.putInfoFlows(infoFlows,
+          InfoFlowContext.putInAgreements(stateSyms._2, logika.context.storage))))
 
       val stmts = method.bodyOpt.get.stmts
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
@@ -78,7 +79,7 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
         logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
       }
 
-      val partitionsToCheck:ISZ[AST.Exp.LitString] = infoFlows.values.map((m: InfoFlow) => m.label)
+      val partitionsToCheck: ISZ[AST.Exp.LitString] = infoFlows.values.map((m: InfoFlow) => m.label)
       val ss2: ISZ[State] = InfoFlowUtil.checkInfoFlowAgreements(infoFlows, stateSyms._2, partitionsToCheck,
         logika, smt2, cache, reporter, ss)
 
@@ -122,8 +123,8 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
   }
 
   @pure def canHandle(logika: Logika, stmt: AST.Stmt): B = {
-    return InfoFlowUtil.getInfoFlows(logika.context.storage).nonEmpty &&
-      InfoFlowUtil.getInAgreements(logika.context.storage).nonEmpty &&
+    return InfoFlowContext.getInfoFlows(logika.context.storage).nonEmpty &&
+      InfoFlowContext.getInAgreements(logika.context.storage).nonEmpty &&
       hasInlineAgreementPartitions(stmt)
   }
 
@@ -133,17 +134,17 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
              state: State,
              stmt: AST.Stmt,
              reporter: Reporter): ISZ[State] = {
-    val infoFlows = InfoFlowUtil.getInfoFlows(logika.context.storage).get
-    val inAgrees = InfoFlowUtil.getInAgreements(logika.context.storage).get
+    val infoFlows = InfoFlowContext.getInfoFlows(logika.context.storage).get
+    val inAgrees = InfoFlowContext.getInAgreements(logika.context.storage).get
     val inlinePartitions = getInlineAgreementPartitions(stmt).get
 
     var states: ISZ[State] = ISZ()
-    for(p <- inlinePartitions if !infoFlows.contains(p.value)){
+    for (p <- inlinePartitions if !infoFlows.contains(p.value)) {
       reporter.error(p.posOpt, "Inflow", s"'$p' is not a valid partition")
       states = states :+ state(status = F)
     }
 
-    if(!reporter.hasError) {
+    if (!reporter.hasError) {
       states = InfoFlowUtil.checkInfoFlowAgreements(infoFlows, inAgrees, inlinePartitions,
         logika, smt2, cache, reporter, ISZ(state))
     }

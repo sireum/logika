@@ -2,18 +2,15 @@
 package org.sireum.logika.infoflow
 
 import org.sireum._
-import org.sireum.extension.PStorage
 import org.sireum.lang.ast.MethodContract.InfoFlow
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
+import org.sireum.logika.State.Claim
 import org.sireum.logika.State.Claim.Let
-import org.sireum.logika.State.{Claim, Value}
-import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StateTransformer, Util}
-import org.sireum.message.Position
+import org.sireum.logika.infoflow.InfoFlowContext.{InAgreementsType, InfoFlowsType}
+import org.sireum.logika.{Context, Logika, Smt2, Smt2Query, State, StateTransformer, Util}
 
-object InfoFlowUtil {
-
-  val secondTraceSuffix: String = "~"
+object InfoFlowContext {
 
   val IN_AGREE_KEY: String = "IN_AGREE_KEY"
   type InAgreementsType = HashSMap[String, ISZ[State.Value.Sym]]
@@ -21,13 +18,41 @@ object InfoFlowUtil {
   val INFO_FLOWS_KEY: String = "INFO_FLOWS_KEY"
   type InfoFlowsType = HashSMap[String, InfoFlow]
 
-  def getInAgreements(storage: PStorage): Option[InAgreementsType] = {
-    return storage.get(IN_AGREE_KEY)
+  type LogikaStore = HashMap[String, Context.Value]
+
+  @datatype class InAgreementValue(val inAgreements: InAgreementsType) extends Context.Value
+
+  @datatype class InfoFlowsValue(val infoFlows: InfoFlowsType) extends Context.Value
+
+  def putInAgreements(inAgreements: InAgreementsType, context: HashMap[String, Context.Value]): LogikaStore = {
+    return context + IN_AGREE_KEY ~> InAgreementValue(inAgreements)
   }
 
-  def getInfoFlows(storage: PStorage): Option[InfoFlowsType] = {
-    return storage.get(INFO_FLOWS_KEY)
+  def getInAgreements(storage: LogikaStore): Option[InAgreementsType] = {
+    val ret: Option[InAgreementsType] = storage.get(IN_AGREE_KEY) match {
+      case Some(InAgreementValue(v)) => return Some(v)
+      case _ => return None()
+    }
+    return ret
   }
+
+  def putInfoFlows(infoFlows: InfoFlowsType, context: LogikaStore): LogikaStore = {
+    return context + INFO_FLOWS_KEY ~> InfoFlowsValue(infoFlows)
+  }
+
+  def getInfoFlows(storage: LogikaStore): Option[InfoFlowsType] = {
+    val ret: Option[InfoFlowsType] = storage.get(INFO_FLOWS_KEY) match {
+      case Some(InfoFlowsValue(v)) => Some(v)
+      case _ => None()
+    }
+    return ret
+  }
+}
+
+object InfoFlowUtil {
+
+
+  val secondTraceSuffix: String = "~"
 
   @datatype class SymValueRewriter(val fresh: Z) extends StateTransformer.PrePost[Z] {
     override def preStateValueSym(maxSym: Z,
