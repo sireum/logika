@@ -644,7 +644,7 @@ object Util {
                    ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
                    implicitContext: Option[(String, Position)], compMethods: HashSet[ISZ[String]]): Logika = {
     val mctx = Context.Method(owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
-      HashMap.empty, HashMap.empty, HashMap.empty, posOpt, extension.PStorage.empty)
+      HashMap.empty, HashMap.empty, HashMap.empty, posOpt, HashMap.empty)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext,
       compMethods = compMethods)
     return Logika(th, config, ctx, plugins)
@@ -1148,7 +1148,7 @@ object Util {
       fieldVarInMap = HashMap.empty,
       localInMap = HashMap.empty,
       posOpt = None(),
-      storage = logika.context.methodOpt.map((mctx: Context.Method) => mctx.storage).getOrElse(extension.PStorage.empty)
+      storage = logika.context.methodOpt.map((mctx: Context.Method) => mctx.storage).getOrElse(HashMap.empty)
     ))))
     val invs = l.retrieveInvs(name, T)
     if (invs.isEmpty) {
