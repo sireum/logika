@@ -8,7 +8,7 @@ import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.Util.{checkMethodPost, checkMethodPre, logikaMethod, updateInVarMaps}
-import org.sireum.logika.infoflow.InfoFlowContext.InfoFlowsType
+import org.sireum.logika.infoflow.InfoFlowContext.{InfoFlowsType, Partition}
 import org.sireum.logika.plugin.{MethodPlugin, Plugin, StmtPlugin}
 import org.sireum.logika.{Config, Logika, Smt2, State}
 
@@ -79,7 +79,7 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
         logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
       }
 
-      val partitionsToCheck: ISZ[AST.Exp.LitString] = infoFlows.values.map((m: InfoFlow) => m.label)
+      val partitionsToCheck: ISZ[Partition] = infoFlows.values.map((m: InfoFlow) => ((m.label.value, m.label.posOpt)))
       val ss2: ISZ[State] = InfoFlowUtil.checkInfoFlowAgreements(infoFlows, stateSyms._2, partitionsToCheck,
         logika, smt2, cache, reporter, ss)
 
@@ -108,13 +108,13 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
     return getInlineAgreementPartitions(stmt).nonEmpty
   }
 
-  def getInlineAgreementPartitions(stmt: AST.Stmt): Option[ISZ[AST.Exp.LitString]] = {
-    var ret = ISZ[AST.Exp.LitString]()
+  def getInlineAgreementPartitions(stmt: AST.Stmt): Option[ISZ[InfoFlowContext.Partition]] = {
+    var ret = ISZ[InfoFlowContext.Partition]()
     stmt match {
       case AST.Stmt.DeduceSequent(just, sequents) if sequents.size == 1 =>
         sequents(0).conclusion match {
           case e: AST.Exp.InlineAgree =>
-            return Some(e.partitions.map((m: AST.Exp.LitString) => m))
+            return Some(e.partitions.map((m: AST.Exp.LitString) => ((m.value, m.posOpt))))
           case _ =>
         }
       case _ =>
@@ -136,11 +136,16 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
              reporter: Reporter): ISZ[State] = {
     val infoFlows = InfoFlowContext.getInfoFlows(logika.context.storage).get
     val inAgrees = InfoFlowContext.getInAgreements(logika.context.storage).get
-    val inlinePartitions = getInlineAgreementPartitions(stmt).get
+    var inlinePartitions = getInlineAgreementPartitions(stmt).get
+
+    if (inlinePartitions.isEmpty) {
+      val deducePos = stmt.posOpt
+      inlinePartitions = infoFlows.values.map((m: InfoFlow) => ((m.label.value, deducePos)))
+    }
 
     var states: ISZ[State] = ISZ()
-    for (p <- inlinePartitions if !infoFlows.contains(p.value)) {
-      reporter.error(p.posOpt, "Inflow", s"'$p' is not a valid partition")
+    for (p <- inlinePartitions if !infoFlows.contains(p._1)) {
+      reporter.error(p._2, "Inflow", s"'$p' is not a valid partition")
       states = states :+ state(status = F)
     }
 

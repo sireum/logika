@@ -7,8 +7,9 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.State.Claim
 import org.sireum.logika.State.Claim.Let
-import org.sireum.logika.infoflow.InfoFlowContext.{InAgreementsType, InfoFlowsType}
+import org.sireum.logika.infoflow.InfoFlowContext.{InAgreementsType, InfoFlowsType, Partition}
 import org.sireum.logika.{Context, Logika, Smt2, Smt2Query, State, StateTransformer, Util}
+import org.sireum.message.Position
 
 object InfoFlowContext {
 
@@ -19,6 +20,8 @@ object InfoFlowContext {
   type InfoFlowsType = HashSMap[String, InfoFlow]
 
   type LogikaStore = HashMap[String, Context.Value]
+
+  type Partition = (String, Option[Position])
 
   @datatype class InAgreementValue(val inAgreements: InAgreementsType) extends Context.Value
 
@@ -110,7 +113,7 @@ object InfoFlowUtil {
 
   def checkInfoFlowAgreements(infoFlows: InfoFlowsType,
                               inAgreeSyms: InAgreementsType,
-                              partitionsToCheck: ISZ[AST.Exp.LitString],
+                              partitionsToCheck: ISZ[Partition],
                               logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, states: ISZ[State]): ISZ[State] = {
 
     if (inAgreeSyms.nonEmpty) {
@@ -118,11 +121,11 @@ object InfoFlowUtil {
 
       var r: ISZ[State] = ISZ()
       for (partition <- partitionsToCheck) {
-        val infoFlow = infoFlows.get(partition.value).get
+        val infoFlow = infoFlows.get(partition._1).get
         val inSyms: ISZ[State.Value.Sym] = inAgreeSyms.get(infoFlow.label.value).get
         val outAgrees = infoFlow.outAgrees
         val label = infoFlow.label
-        val pos = partition.posOpt.get
+        val pos = partition._2.get // TODO: possible this is empty
 
         for (state <- states) {
           if (!state.status) {
