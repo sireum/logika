@@ -8,6 +8,7 @@ import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.State.Claim
 import org.sireum.logika.State.Claim.Let
 import org.sireum.logika.infoflow.InfoFlowContext.{InAgreementsType, InfoFlowsType, Partition}
+import org.sireum.logika.plugin.Plugin
 import org.sireum.logika.{Context, Logika, Smt2, Smt2Query, State, StateTransformer, Util}
 import org.sireum.message.Position
 
@@ -54,6 +55,7 @@ object InfoFlowContext {
 
 object InfoFlowUtil {
 
+  val infoFlowPlugins: ISZ[Plugin] = ISZ(InfoFlowMethodPlugin(), InfoFlowInlineAgreeStmtPlugin(), InfoFlowLoopStmtPlugin())
 
   val secondTraceSuffix: String = "~"
 
@@ -76,8 +78,8 @@ object InfoFlowUtil {
   }
 
 
-  def processInfoFlowInAgrees(logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, state: State,
-                              infoFlows: InfoFlowsType): (State, InAgreementsType) = {
+  def processInfoFlowInAgrees(infoFlows: InfoFlowsType,
+                              logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, state: State): (State, InAgreementsType) = {
     var s = state
     var syms: InAgreementsType = HashSMap.empty
     for (infoFlow <- infoFlows.values if s.status) {
@@ -114,10 +116,11 @@ object InfoFlowUtil {
   def checkInfoFlowAgreements(infoFlows: InfoFlowsType,
                               inAgreeSyms: InAgreementsType,
                               partitionsToCheck: ISZ[Partition],
+                              title: String,
                               logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, states: ISZ[State]): ISZ[State] = {
 
     if (inAgreeSyms.nonEmpty) {
-      assert(infoFlows.size == inAgreeSyms.size, s"${infoFlows.size} vs ${inAgreeSyms.size}")
+      //assert(infoFlows.size == inAgreeSyms.size, s"${infoFlows.size} vs ${inAgreeSyms.size}")
 
       var r: ISZ[State] = ISZ()
       for (partition <- partitionsToCheck) {
@@ -202,15 +205,15 @@ object InfoFlowUtil {
             val conclusion = State.Claim.Prop(T, sym)
 
             val validity = smt2.valid(cache = cache, reportQuery = T, log = logika.config.logVc, logDirOpt = logika.config.logVcDirOpt,
-              title = s"Flow case $label at [${pos.beginLine}, ${pos.endLine}]", pos = pos,
+              title = s"${title}Flow case $label at [${pos.beginLine}, ${pos.endLine}]", pos = pos,
               premises = s.claims, conclusion = conclusion, reporter = reporter)
 
             validity.kind match {
               case Smt2Query.Result.Kind.Unsat => r = r :+ s(status = T)
-              case Smt2Query.Result.Kind.Sat => logika.error(Some(pos), s"Flow case $label violation", reporter)
-              case Smt2Query.Result.Kind.Unknown => logika.error(Some(pos), s"Could not verify flow case $label", reporter)
-              case Smt2Query.Result.Kind.Timeout => logika.error(Some(pos), s"Timed out while checking flow case $label", reporter)
-              case Smt2Query.Result.Kind.Error => logika.error(Some(pos), s"Error encountered when checking flow case $label", reporter)
+              case Smt2Query.Result.Kind.Sat => logika.error(Some(pos), s"${title}Flow case $label violation", reporter)
+              case Smt2Query.Result.Kind.Unknown => logika.error(Some(pos), s"${title}Could not verify flow case $label", reporter)
+              case Smt2Query.Result.Kind.Timeout => logika.error(Some(pos), s"${title}Timed out while checking flow case $label", reporter)
+              case Smt2Query.Result.Kind.Error => logika.error(Some(pos), s"${title}Error encountered when checking $label case $label", reporter)
             }
 
             r = r :+ s(status = F)

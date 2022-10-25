@@ -2,7 +2,9 @@
 package org.sireum.logika.infoflow
 
 import org.sireum._
+import org.sireum.lang.ast.Exp.InfoFlowInvariant
 import org.sireum.lang.ast.MethodContract.InfoFlow
+import org.sireum.lang.ast.{Exp, Stmt}
 import org.sireum.lang.symbol.TypeInfo
 import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
@@ -10,11 +12,11 @@ import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.Util.{checkMethodPost, checkMethodPre, logikaMethod, updateInVarMaps}
 import org.sireum.logika.infoflow.InfoFlowContext.{InfoFlowsType, Partition}
 import org.sireum.logika.plugin.{MethodPlugin, Plugin, StmtPlugin}
-import org.sireum.logika.{Config, Logika, Smt2, State}
+import org.sireum.logika.{Config, Logika, Smt2, State, Util}
 
 @datatype class InfoFlowMethodPlugin extends MethodPlugin {
 
-  def name: String = {
+  @pure def name: String = {
     return "Info Flow Method Plugin"
   }
 
@@ -65,7 +67,7 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
 
       val infoFlows: InfoFlowsType = HashSMap.empty[String, InfoFlow] ++ infoFlowsNode.map((m: InfoFlow) => ((m.label.value, m)))
-      val stateSyms = InfoFlowUtil.processInfoFlowInAgrees(logika, smt2, cache, reporter, state, infoFlows)
+      val stateSyms = InfoFlowUtil.processInfoFlowInAgrees(infoFlows, logika, smt2, cache, reporter, state)
       state = stateSyms._1
 
       logika = logika(context = logika.context(storage =
@@ -81,6 +83,7 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
 
       val partitionsToCheck: ISZ[Partition] = infoFlows.values.map((m: InfoFlow) => ((m.label.value, m.label.posOpt)))
       val ss2: ISZ[State] = InfoFlowUtil.checkInfoFlowAgreements(infoFlows, stateSyms._2, partitionsToCheck,
+        "Post Flow: ",
         logika, smt2, cache, reporter, ss)
 
       val ssPost: ISZ[State] = checkMethodPost(logika, smt2, cache, reporter, ss2, methodPosOpt, invs, ensures, mconfig.logPc, mconfig.logRawPc,
@@ -98,10 +101,10 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
   }
 }
 
-@datatype class InfoFlowStmtPlugin extends StmtPlugin {
+@datatype class InfoFlowInlineAgreeStmtPlugin extends StmtPlugin {
 
-  def name: String = {
-    return "Info Flow Statement Plugin"
+  @pure def name: String = {
+    return "Info Flow Inline Agreement Statement Plugin"
   }
 
   def hasInlineAgreementPartitions(stmt: AST.Stmt): B = {
@@ -151,9 +154,160 @@ import org.sireum.logika.{Config, Logika, Smt2, State}
 
     if (!reporter.hasError) {
       states = InfoFlowUtil.checkInfoFlowAgreements(infoFlows, inAgrees, inlinePartitions,
+        "Inline Flow: ",
         logika, smt2, cache, reporter, ISZ(state))
     }
 
     return states
+  }
+}
+
+@datatype class InfoFlowLoopStmtPlugin extends StmtPlugin {
+  @pure def name: String = {
+    return "Info Flow Loop Stmt Plugin"
+  }
+
+  @pure def hasFlowLoopInvariants(invariants: ISZ[AST.Exp]): B = {
+    return getFlowLoopInvariant(invariants).nonEmpty
+  }
+
+  @pure def canHandle(logika: Logika, stmt: Stmt): B = {
+    stmt match {
+      case whileStmt: AST.Stmt.While =>
+        return hasFlowLoopInvariants(whileStmt.invariants) &&
+          InfoFlowContext.getInfoFlows(logika.context.storage).nonEmpty &&
+          InfoFlowContext.getInAgreements(logika.context.storage).nonEmpty
+      case _ => return F
+    }
+  }
+
+  def getFlowLoopInvariant(invariants: ISZ[Exp]): Option[InfoFlowInvariant] = {
+    // TODO: restrict to one flow loop invariant
+    for (e <- invariants) {
+      e match {
+        case i: InfoFlowInvariant => return Some(i)
+        case _ =>
+      }
+    }
+    return None()
+  }
+
+  @pure def handle(logika: Logika, smt2: Smt2, cache: Smt2.Cache, s0: State, stmt: Stmt, reporter: Reporter): ISZ[State] = {
+    stmt match {
+      case whileStmt: AST.Stmt.While =>
+        val split = Split.Default // TODO: argument to evalStmt that's lost when calling plugin
+        val rtCheck: B = F // TODO: argument to evalStmt that's lost when calling plugin
+
+        var r = ISZ[State]()
+
+        val methodInfoFlows: InfoFlowsType = InfoFlowContext.getInfoFlows(logika.context.storage).get
+        val methodInAgreements = InfoFlowContext.getInAgreements(logika.context.storage).get
+
+        val flowInvariant: InfoFlowInvariant = getFlowLoopInvariant(whileStmt.invariants).get
+        val invariantFlows: InfoFlowsType = HashSMap.empty[String, InfoFlow] ++ flowInvariant.flowInvariants.map((m: InfoFlow) => ((m.label.value, m)))
+
+        val loopPartitionsToCheck: ISZ[Partition] = invariantFlows.values.map((m: InfoFlow) => ((m.label.value, m.label.posOpt)))
+
+        val nonFlowInvariants = whileStmt.invariants.filter((e: Exp) => !e.isInstanceOf[InfoFlowInvariant])
+
+        val postInvStates = logika.checkExps(split, smt2, cache, F, "Loop invariant", " at the beginning of while-loop", s0,
+          nonFlowInvariants, reporter)
+
+        for (s0w <- InfoFlowUtil.checkInfoFlowAgreements(
+          invariantFlows, methodInAgreements, loopPartitionsToCheck,
+          "Flow Loop Invariant at the beginning of while-loop: ",
+          logika, smt2, cache, reporter, postInvStates)) {
+
+          if (s0w.status) {
+
+            val flowInAgrees = InfoFlowUtil.processInfoFlowInAgrees(invariantFlows,
+              logika, smt2, cache, reporter, s0w)
+            // TODO: stick flow in agree syms in store in case an inline check occurs inside loop body
+
+            val s1 = flowInAgrees._1
+            val s0R: State = {
+              val modObjectVars = whileStmt.contract.modifiedObjectVars
+              var srw = Util.rewriteObjectVars(logika, smt2, cache, rtCheck, s0(nextFresh = s1.nextFresh),
+                whileStmt.contract.modifiedObjectVars, whileStmt.posOpt.get, reporter)
+              for (p <- modObjectVars.entries) {
+                val (res, (tipe, pos)) = p
+                val (srw1, sym) = srw.freshSym(tipe, pos)
+                val srw2 = Util.assumeValueInv(logika, smt2, cache, rtCheck, srw1, sym, pos, reporter)
+                srw = srw2.addClaim(State.Claim.Let.CurrentName(sym, res.owner :+ res.id, Some(pos)))
+              }
+              val (receiverModified, modLocalVars) = whileStmt.contract.modifiedLocalVars(logika.context.receiverLocalTypeOpt)
+              val receiverOpt: Option[State.Value.Sym] = if (receiverModified) {
+                val (srw3, sym) = Util.idIntro(whileStmt.posOpt.get, srw, logika.context.methodName, "this",
+                  logika.context.receiverLocalTypeOpt.get._2, None())
+                srw = srw3
+                Some(sym)
+              } else {
+                None()
+              }
+              srw = Util.rewriteLocalVars(srw, modLocalVars.keys, whileStmt.posOpt, reporter)
+              for (p <- modLocalVars.entries) {
+                val (res, (tipe, pos)) = p
+                val (srw4, sym) = Util.idIntro(pos, srw, res.context, res.id, tipe, Some(pos))
+                srw = Util.assumeValueInv(logika, smt2, cache, rtCheck, srw4, sym, pos, reporter)
+              }
+              if (receiverModified) {
+                val srw6 = Util.evalAssignReceiver(whileStmt.contract.modifies, logika, logika, smt2, cache, rtCheck, srw,
+                  Some(AST.Exp.This(AST.TypedAttr(whileStmt.posOpt, Some(receiverOpt.get.tipe)))), receiverOpt,
+                  HashMap.empty, reporter)
+                val (srw7, sym) = Util.idIntro(whileStmt.posOpt.get, srw6, logika.context.methodName, "this",
+                  logika.context.receiverLocalTypeOpt.get._2, None())
+                srw = Util.assumeValueInv(logika, smt2, cache, rtCheck, srw7, sym, sym.pos, reporter)
+              }
+              srw
+            }
+            val s2 = State(T, s0R.claims ++ (for (i <- s0.claims.size until s1.claims.size) yield s1.claims(i)), s0R.nextFresh)
+            for (p <- logika.evalExp(split, smt2, cache, rtCheck, s2, whileStmt.cond, reporter)) {
+              val (s3, v) = p
+              if (s3.status) {
+                val pos = whileStmt.cond.posOpt.get
+                val (s4, cond) = logika.value2Sym(s3, v, pos)
+                val prop = State.Claim.Prop(T, cond)
+                val thenClaims = s4.claims :+ prop
+                val thenSat = smt2.sat(cache, T, logika.config.logVc, logika.config.logVcDirOpt,
+                  s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
+                var nextFresh: Z = s4.nextFresh
+                if (thenSat) {
+                  for (s5 <- logika.evalStmts(split, smt2, cache, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)) {
+                    if (s5.status) {
+                      val postLoopStates = logika.checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop",
+                        s5, nonFlowInvariants, reporter)
+
+                      for(s6 <- InfoFlowUtil.checkInfoFlowAgreements(
+                        invariantFlows, flowInAgrees._2, loopPartitionsToCheck,
+                        "Flow Loop Invariant at end of while-lopp",
+                        logika, smt2, cache, reporter, postLoopStates)) {
+                        if (nextFresh < s6.nextFresh) {
+                          nextFresh = s6.nextFresh
+                        }
+                      }
+                    } else {
+                      if (nextFresh < s5.nextFresh) {
+                        nextFresh = s5.nextFresh
+                      }
+                    }
+                  }
+                }
+                val negProp = State.Claim.Prop(F, cond)
+                val elseClaims = s4.claims :+ negProp
+                val elseSat = smt2.sat(cache, T, logika.config.logVc, logika.config.logVcDirOpt,
+                  s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
+                r = r :+ State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
+              } else {
+                r = r :+ s3
+              }
+            }
+          } else {
+            r = r :+ s0w
+          }
+        }
+        return r
+
+      case _ => halt("Infeasible")
+    }
   }
 }
