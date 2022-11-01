@@ -542,6 +542,37 @@ object Util {
     }
   }
 
+  @record class RandomFinder(val t: AST.Typed,
+                             val num: Z,
+                             var numMap: HashMap[AST.Typed, HashMap[Z, Z]],
+                             var rOpt: Option[State.Claim.Let.Random]) extends MStateTransformer {
+    override def preStateClaimLetRandom(o: State.Claim.Let.Random): MStateTransformer.PreResult[State.Claim.Let] = {
+      val key = o.sym.tipe
+      val n: Z = {
+        var map = numMap.get(key).getOrElse(HashMap.empty)
+        val key2 = o.sym.num
+        map.get(key2) match {
+          case Some(m) => m
+          case _ =>
+            map = map + key2 ~> map.size
+            numMap = numMap + key ~> map
+            map.size - 1
+        }
+      }
+      if (n == num && rOpt.isEmpty && t == o.sym.tipe) {
+        rOpt = Some(o)
+      }
+      return MStateTransformer.PreResultStateClaimLetId
+    }
+
+    override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
+      if (rOpt.isEmpty) {
+        return super.preStateClaim(o)
+      }
+      return MStateTransformer.PreResult(F, MNone())
+    }
+  }
+
   @record class LetEqNumMapCollector(var letMap: HashMap[Z, HashSet[State.Claim.Let]],
                                      var eqMap: HashMap[Z, HashSet[State.Claim.Eq]],
                                      var lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
@@ -593,7 +624,7 @@ object Util {
                              val eqMap: HashMap[Z, HashSet[State.Claim.Eq]],
                              val lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
                              val vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]],
-                             var symNumMap: HashMap[Z, Z]) {
+                             var symNumMap: HashMap[(String, AST.Typed), HashMap[Z, Z]]) {
 
     val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
     val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
@@ -1516,11 +1547,14 @@ object Util {
 
     def symAt(id: String, sym: State.Value.Sym): AST.Exp.At = {
       val attr = AST.Attr(Some(sym.pos))
-      val n: Z = symNumMap.get(sym.num) match {
+      val key = (id, sym.tipe)
+      val map = symNumMap.get(key).getOrElse(HashMap.empty)
+      val key2 = sym.num
+      val n: Z = map.get(key2) match {
         case Some(m) => m
         case _ =>
-          val m = symNumMap.size
-          symNumMap = symNumMap + sym.num ~> m
+          val m = map.size
+          symNumMap = symNumMap + key ~> (map + key2 ~> m)
           m
       }
       val linesFresh: ISZ[AST.Exp.LitZ] =

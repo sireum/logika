@@ -1397,6 +1397,18 @@ import Util._
     }
 
     def evalAt(exp: AST.Exp.At): (State, State.Value) = {
+      def rand(num: Z): (State, State.Value) = {
+        val t = exp.tipeOpt.get.typedOpt.get
+        val finder = Util.RandomFinder(t, num, HashMap.empty, None())
+        finder.transformState(state)
+        finder.rOpt match {
+          case Some(r) =>
+            return (state, r.sym)
+          case _ =>
+            reporter.error(exp.posOpt, kind, st"Could not find .random of $t with the occurrence number $num".render)
+            return (state(status = F), State.errorValue)
+        }
+      }
       def local(res: AST.ResolvedInfo.LocalVar, num: Z): (State, State.Value) = {
         val finder = Util.LocalVarIdFinder(res, num, HashMap.empty, None())
         finder.transformState(state)
@@ -1429,6 +1441,9 @@ import Util._
         case _: AST.Exp.This => return local(AST.ResolvedInfo.LocalVar(context.methodName,
           AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), exp.num.value)
         case e: AST.Exp.LitString =>
+          if (e.value == ".random") {
+            return rand(exp.num.value)
+          }
           val ids = ops.StringOps(e.value).split((c: C) => c == '.').map((s: String) => ops.StringOps(s).trim)
           val lcontext = ops.ISZOps(ids).dropRight(1)
           return local(AST.ResolvedInfo.LocalVar(lcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
