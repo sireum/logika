@@ -137,4 +137,7 @@ object Plugin {
                        lets: HashMap[Z, ISZ[State.Claim.Let]],
                        declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): Option[ST]
 
+  @pure def canHandleSymRewrite(data: State.Claim.Data): B
+
+  @pure def handleSymRewrite(rw: logika.Util.SymAddRewriter, data: State.Claim.Data): MOption[State.Claim.Data]
 }

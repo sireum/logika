@@ -3188,7 +3188,7 @@ import Util._
             case Some((cond, claimss)) =>
               val gap = outputs(i)._2 - s0.nextFresh
               if (gap > 0) {
-                val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap)
+                val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap, jescPlugins._4)
                 val newCond = rw.transformStateClaim(cond).getOrElseEager(cond)
                 var newClaimss = ISZ[ISZ[State.Claim]]()
                 for (claims <- claimss) {

@@ -32,6 +32,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{Reporter, Split}
+import org.sireum.logika.State.Claim
 
 object Util {
 
@@ -474,9 +475,19 @@ object Util {
     }
   }
 
-  @record class SymAddRewriter(val min: Z, val add: Z) extends MStateTransformer {
+  @record class SymAddRewriter(val min: Z, val add: Z, val plugins: ISZ[plugin.ClaimPlugin]) extends MStateTransformer {
+
     override def postStateValueSym(o: State.Value.Sym): MOption[State.Value] = {
       return if (o.num < min) MNone() else MSome(o(num = o.num + add))
+    }
+
+    override def transformStateClaimData(o: Claim.Data): MOption[Claim.Data] = {
+      if (plugins.nonEmpty) {
+        for (p <- plugins if p.canHandleSymRewrite(o)) {
+          return p.handleSymRewrite(this, o)
+        }
+      }
+      return MNone()
     }
   }
 
