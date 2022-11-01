@@ -117,7 +117,7 @@ object InfoFlowContext {
 
 object InfoFlowUtil {
 
-  val infoFlowPlugins: ISZ[Plugin] = ISZ(InfoFlowMethodPlugin(), InfoFlowInlineAgreeStmtPlugin(), InfoFlowLoopStmtPlugin())
+  val infoFlowPlugins: ISZ[Plugin] = ISZ(InfoFlowMethodPlugin(), InfoFlowInlineAgreeStmtPlugin(), InfoFlowLoopStmtPlugin(), InfoFlowClaimPlugin())
 
   val secondTraceSuffix: String = "~"
 

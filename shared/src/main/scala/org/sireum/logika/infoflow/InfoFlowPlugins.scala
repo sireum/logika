@@ -9,9 +9,11 @@ import org.sireum.lang.symbol.TypeInfo
 import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
+import org.sireum.logika.State.Claim
+import org.sireum.logika.State.Claim.Let
 import org.sireum.logika.Util.{checkMethodPost, checkMethodPre, logikaMethod, updateInVarMaps}
 import org.sireum.logika.infoflow.InfoFlowContext.{InfoFlowAgreeSym, InfoFlowsType, Partition}
-import org.sireum.logika.plugin.{MethodPlugin, Plugin, StmtPlugin}
+import org.sireum.logika.plugin.{ClaimPlugin, MethodPlugin, Plugin, StmtPlugin}
 import org.sireum.logika.{Config, Logika, Smt2, State, Util}
 import org.sireum.message.Position
 
@@ -364,6 +366,50 @@ object InfoFlowLoopStmtPlugin {
         }
         return r
 
+      case _ => halt("Infeasible")
+    }
+  }
+}
+
+@datatype class InfoFlowClaimPlugin extends ClaimPlugin {
+  @pure def name: String = {
+    return "InfoFlow Claim Plugin"
+  }
+
+  @pure def canHandleExp(claim: State.Claim): B = {
+    return F
+  }
+
+  @pure def handleExp(cs2es: Util.ClaimsToExps, claim: State.Claim): Option[Exp] = {
+    halt("Infeasible")
+  }
+
+  @pure def canHandleDeclSmt2(claim: State.Claim): B = {
+    return F
+  }
+
+  @pure def canHandleSmt2(rhs: B, claim: State.Claim): B = {
+    return F
+  }
+
+  @pure def handleDeclSmt2(smt2: Smt2, claim: State.Claim): ISZ[(String, ST)] = {
+    halt("Infeasible")
+  }
+
+  @pure def handleSmt2(smt2: Smt2, claim: State.Claim, v2st: State.Value => ST, lets: HashMap[Z, ISZ[Claim.Let]], declIds: HashSMap[(_root_.org.sireum.ISZ[String], String, StepId), Let.Id]): Option[ST] = {
+    halt("infeasible")
+  }
+
+  @pure def canHandleSymRewrite(data: Claim.Data): B = {
+    data match {
+      case i: InfoFlowContext.InfoFlowAgreeSym => return T
+      case _ => return F
+    }
+  }
+
+  override def handleSymRewrite(rw: Util.SymAddRewriter, data: Claim.Data): MOption[Claim.Data] = {
+    data match {
+      case i: InfoFlowContext.InfoFlowAgreeSym => return MSome(i(sym = rw.transformStateValueSym(i.sym).get))
       case _ => halt("Infeasible")
     }
   }
