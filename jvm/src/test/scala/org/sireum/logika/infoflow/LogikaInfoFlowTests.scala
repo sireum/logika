@@ -59,7 +59,7 @@ class LogikaInfoFlowTests extends SireumRcSpec {
     c = c(logPc = logPc, logRawPc = logRawPc, logVc = logVc, logVcDirOpt = logVcDirOpt)
 
     Logika.checkScript(Some(f.string), content, c,
-      th => Smt2Impl.create(c.smt2Configs, th, c.timeoutInMs, c.fpRoundingMode, c.charBitWidth,
+      th => Smt2Impl.create(c.smt2Configs, ISZ(), th, c.timeoutInMs, c.fpRoundingMode, c.charBitWidth,
         c.intBitWidth, c.useReal, c.simplifiedQuery, c.smt2Seq, reporter),
       Smt2.NoCache(), reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     reporter.printMessages()
@@ -70,4 +70,4 @@ class LogikaInfoFlowTests extends SireumRcSpec {
       !reporter.hasIssue
     }
   }
-}                                                                                   
+}

@@ -319,13 +319,6 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Let.InfoFlowAgreeSym =>
-          val r: PreResult[Context, State.Claim] = preStateClaimLetInfoFlowAgreeSym(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type State.Claim")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
-          }
-          return r
         case o: State.Claim.Let.Id =>
           val r: PreResult[Context, State.Claim] = preStateClaimLetId(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: State.Claim)) => PreResult(preCtx, continu, Some[State.Claim](r))
@@ -480,7 +473,6 @@ object StateTransformer {
         case o: State.Claim.Let.Random => return preStateClaimLetRandom(ctx, o)
         case o: State.Claim.Let.Name => return preStateClaimLetName(ctx, o)
         case o: State.Claim.Let.CurrentId => return preStateClaimLetCurrentId(ctx, o)
-        case o: State.Claim.Let.InfoFlowAgreeSym => return preStateClaimLetInfoFlowAgreeSym(ctx, o)
         case o: State.Claim.Let.Id => return preStateClaimLetId(ctx, o)
         case o: State.Claim.Let.Def => return preStateClaimLetDef(ctx, o)
         case o: State.Claim.Let.TypeTest => return preStateClaimLetTypeTest(ctx, o)
@@ -533,10 +525,6 @@ object StateTransformer {
     }
 
     @pure def preStateClaimLetCurrentId(ctx: Context, o: State.Claim.Let.CurrentId): PreResult[Context, State.Claim.Let] = {
-      return PreResult(ctx, T, None())
-    }
-
-    @pure def preStateClaimLetInfoFlowAgreeSym(ctx: Context, o: State.Claim.Let.InfoFlowAgreeSym): PreResult[Context, State.Claim.Let] = {
       return PreResult(ctx, T, None())
     }
 
@@ -896,13 +884,6 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
           }
           return r
-        case o: State.Claim.Let.InfoFlowAgreeSym =>
-          val r: TPostResult[Context, State.Claim] = postStateClaimLetInfoFlowAgreeSym(ctx, o) match {
-           case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type State.Claim")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
-          }
-          return r
         case o: State.Claim.Let.Id =>
           val r: TPostResult[Context, State.Claim] = postStateClaimLetId(ctx, o) match {
            case TPostResult(postCtx, Some(result: State.Claim)) => TPostResult(postCtx, Some[State.Claim](result))
@@ -1057,7 +1038,6 @@ object StateTransformer {
         case o: State.Claim.Let.Random => return postStateClaimLetRandom(ctx, o)
         case o: State.Claim.Let.Name => return postStateClaimLetName(ctx, o)
         case o: State.Claim.Let.CurrentId => return postStateClaimLetCurrentId(ctx, o)
-        case o: State.Claim.Let.InfoFlowAgreeSym => return postStateClaimLetInfoFlowAgreeSym(ctx, o)
         case o: State.Claim.Let.Id => return postStateClaimLetId(ctx, o)
         case o: State.Claim.Let.Def => return postStateClaimLetDef(ctx, o)
         case o: State.Claim.Let.TypeTest => return postStateClaimLetTypeTest(ctx, o)
@@ -1110,10 +1090,6 @@ object StateTransformer {
     }
 
     @pure def postStateClaimLetCurrentId(ctx: Context, o: State.Claim.Let.CurrentId): TPostResult[Context, State.Claim.Let] = {
-      return TPostResult(ctx, None())
-    }
-
-    @pure def postStateClaimLetInfoFlowAgreeSym(ctx: Context, o: State.Claim.Let.InfoFlowAgreeSym): TPostResult[Context, State.Claim.Let] = {
       return TPostResult(ctx, None())
     }
 
@@ -1580,12 +1556,6 @@ import StateTransformer._
             TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
           else
             TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.InfoFlowAgreeSym =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
         case o2: State.Claim.Let.Id =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           if (hasChanged || r0.resultOpt.nonEmpty)
@@ -1785,12 +1755,6 @@ import StateTransformer._
           else
             TPostResult(r0.ctx, None())
         case o2: State.Claim.Let.CurrentId =>
-          val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))
-          else
-            TPostResult(r0.ctx, None())
-        case o2: State.Claim.Let.InfoFlowAgreeSym =>
           val r0: TPostResult[Context, State.Value.Sym] = transformStateValueSym(preR.ctx, o2.sym)
           if (hasChanged || r0.resultOpt.nonEmpty)
             TPostResult(r0.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym))))

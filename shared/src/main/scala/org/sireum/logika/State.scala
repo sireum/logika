@@ -677,24 +677,7 @@ object State {
             claimSTs.add(st"${toST(numMap, defs)} == ${sym.toST(numMap, defs)}")
           }
         }
-      }
-
-      @datatype class InfoFlowAgreeSym(val sym: Value.Sym, val channel: String) extends Let {
-
-        @pure override def toRawST: ST = {
-          return st"INFO FLOW toRawST ${sym}"
-        }
-
-        override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
-          return Some(numMap.toST(st"TODO INFO FLOW toST", sym.num))
-        }
-
-        override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
-          if (defs.get(sym.num).get != ISZ[Claim.Let](this)) {
-            claimSTs.add(st"${toST(numMap, defs)} == ${sym.toST(numMap, defs)}")
-          }
-        }
-      }
+     }
 
       @datatype class Id(val sym: Value.Sym, val context: ISZ[String], val id: String, val num: Z, val poss: ISZ[Position]) extends Let {
 

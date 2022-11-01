@@ -10,7 +10,7 @@ import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.Util.{checkMethodPost, checkMethodPre, logikaMethod, updateInVarMaps}
-import org.sireum.logika.infoflow.InfoFlowContext.{InfoFlowsType, Partition}
+import org.sireum.logika.infoflow.InfoFlowContext.{InfoFlowAgreeSym, InfoFlowsType, Partition}
 import org.sireum.logika.plugin.{MethodPlugin, Plugin, StmtPlugin}
 import org.sireum.logika.{Config, Logika, Smt2, State, Util}
 import org.sireum.message.Position
@@ -202,10 +202,11 @@ object InfoFlowLoopStmtPlugin {
 
   def recordLoopInvariantOutAgrees(state: State, invariantFlows: InfoFlowsType, pos: Option[Position], reporter: Reporter): State = {
     var s = state
-    for(infoFlow <- invariantFlows.values) {
+    for (infoFlow <- invariantFlows.values) {
       val channel = infoFlow.label.value
       var syms: ISZ[State.Value.Sym] = ISZ()
-      for(outExp <- infoFlow.outAgrees) {
+      var agreeClaims: ISZ[State.Claim] = ISZ()
+      for (outExp <- infoFlow.outAgrees) {
         outExp match {
           case ref: AST.Exp.Ref =>
             val res = ref.resOpt.get
@@ -213,13 +214,13 @@ object InfoFlowLoopStmtPlugin {
               case lv: AST.ResolvedInfo.LocalVar =>
                 val (s1, r) = Util.idIntro(ref.posOpt.get, s, lv.context, s"${lv.id}", ref.typedOpt.get, None())
                 syms = syms :+ r
+                agreeClaims = agreeClaims :+ State.Claim.Custom(InfoFlowAgreeSym(r, lv.id, channel))
                 s = s1
               case x => halt(s"Need to handle $x")
             }
           case x => halt(s"Need to handle : $x")
         }
       }
-      val agreeClaims: ISZ[State.Claim] = for (sym <- syms) yield State.Claim.Let.InfoFlowAgreeSym(sym, channel)
       s = s(claims = s.claims ++ agreeClaims)
     }
     return s

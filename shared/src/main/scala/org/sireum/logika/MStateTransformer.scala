@@ -205,10 +205,6 @@ object MStateTransformer {
 
   val PostResultStateClaimLetCurrentId: MOption[State.Claim.Let] = MNone()
 
-  val PreResultStateClaimLetInfoFlowAgreeSym: PreResult[State.Claim.Let] = PreResult(T, MNone())
-
-  val PostResultStateClaimLetInfoFlowAgreeSym: MOption[State.Claim.Let] = MNone()
-
   val PreResultStateClaimLetId: PreResult[State.Claim.Let] = PreResult(T, MNone())
 
   val PostResultStateClaimLetId: MOption[State.Claim.Let] = MNone()
@@ -567,13 +563,6 @@ import MStateTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
-      case o: State.Claim.Let.InfoFlowAgreeSym =>
-        val r: PreResult[State.Claim] = preStateClaimLetInfoFlowAgreeSym(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
-         case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
-        }
-        return r
       case o: State.Claim.Let.Id =>
         val r: PreResult[State.Claim] = preStateClaimLetId(o) match {
          case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
@@ -728,7 +717,6 @@ import MStateTransformer._
       case o: State.Claim.Let.Random => return preStateClaimLetRandom(o)
       case o: State.Claim.Let.Name => return preStateClaimLetName(o)
       case o: State.Claim.Let.CurrentId => return preStateClaimLetCurrentId(o)
-      case o: State.Claim.Let.InfoFlowAgreeSym => return preStateClaimLetInfoFlowAgreeSym(o)
       case o: State.Claim.Let.Id => return preStateClaimLetId(o)
       case o: State.Claim.Let.Def => return preStateClaimLetDef(o)
       case o: State.Claim.Let.TypeTest => return preStateClaimLetTypeTest(o)
@@ -782,10 +770,6 @@ import MStateTransformer._
 
   def preStateClaimLetCurrentId(o: State.Claim.Let.CurrentId): PreResult[State.Claim.Let] = {
     return PreResultStateClaimLetCurrentId
-  }
-
-  def preStateClaimLetInfoFlowAgreeSym(o: State.Claim.Let.InfoFlowAgreeSym): PreResult[State.Claim.Let] = {
-    return PreResultStateClaimLetInfoFlowAgreeSym
   }
 
   def preStateClaimLetId(o: State.Claim.Let.Id): PreResult[State.Claim.Let] = {
@@ -1144,13 +1128,6 @@ import MStateTransformer._
          case _ => MNone[State.Claim]()
         }
         return r
-      case o: State.Claim.Let.InfoFlowAgreeSym =>
-        val r: MOption[State.Claim] = postStateClaimLetInfoFlowAgreeSym(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
-         case _ => MNone[State.Claim]()
-        }
-        return r
       case o: State.Claim.Let.Id =>
         val r: MOption[State.Claim] = postStateClaimLetId(o) match {
          case MSome(result: State.Claim) => MSome[State.Claim](result)
@@ -1305,7 +1282,6 @@ import MStateTransformer._
       case o: State.Claim.Let.Random => return postStateClaimLetRandom(o)
       case o: State.Claim.Let.Name => return postStateClaimLetName(o)
       case o: State.Claim.Let.CurrentId => return postStateClaimLetCurrentId(o)
-      case o: State.Claim.Let.InfoFlowAgreeSym => return postStateClaimLetInfoFlowAgreeSym(o)
       case o: State.Claim.Let.Id => return postStateClaimLetId(o)
       case o: State.Claim.Let.Def => return postStateClaimLetDef(o)
       case o: State.Claim.Let.TypeTest => return postStateClaimLetTypeTest(o)
@@ -1359,10 +1335,6 @@ import MStateTransformer._
 
   def postStateClaimLetCurrentId(o: State.Claim.Let.CurrentId): MOption[State.Claim.Let] = {
     return PostResultStateClaimLetCurrentId
-  }
-
-  def postStateClaimLetInfoFlowAgreeSym(o: State.Claim.Let.InfoFlowAgreeSym): MOption[State.Claim.Let] = {
-    return PostResultStateClaimLetInfoFlowAgreeSym
   }
 
   def postStateClaimLetId(o: State.Claim.Let.Id): MOption[State.Claim.Let] = {
@@ -1802,12 +1774,6 @@ import MStateTransformer._
             MSome(o2(sym = r0.getOrElse(o2.sym)))
           else
             MNone()
-        case o2: State.Claim.Let.InfoFlowAgreeSym =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym)))
-          else
-            MNone()
         case o2: State.Claim.Let.Id =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           if (hasChanged || r0.nonEmpty)
@@ -2007,12 +1973,6 @@ import MStateTransformer._
           else
             MNone()
         case o2: State.Claim.Let.CurrentId =>
-          val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(sym = r0.getOrElse(o2.sym)))
-          else
-            MNone()
-        case o2: State.Claim.Let.InfoFlowAgreeSym =>
           val r0: MOption[State.Value.Sym] = transformStateValueSym(o2.sym)
           if (hasChanged || r0.nonEmpty)
             MSome(o2(sym = r0.getOrElse(o2.sym)))

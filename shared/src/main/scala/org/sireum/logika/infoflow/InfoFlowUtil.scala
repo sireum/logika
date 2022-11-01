@@ -3,10 +3,11 @@ package org.sireum.logika.infoflow
 
 import org.sireum._
 import org.sireum.lang.ast.MethodContract.InfoFlow
+import org.sireum.lang.ast.Typed
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.State.Claim
-import org.sireum.logika.State.Claim.Let
+import org.sireum.logika.State.Claim.{Data, Let}
 import org.sireum.logika.infoflow.InfoFlowContext.{InAgreementsType, InfoFlowsType, Partition}
 import org.sireum.logika.plugin.Plugin
 import org.sireum.logika.{Context, Logika, Smt2, Smt2Query, State, StateTransformer, Util}
@@ -26,19 +27,37 @@ object InfoFlowContext {
 
   type Partition = (String, Option[Position])
 
+  @datatype class InfoFlowAgreeSym(val sym: State.Value.Sym,
+                                   val id: String,
+                                   val channel: String) extends Data {
+    @pure def toRawST: ST = {
+      halt("stub")
+    }
+
+    def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[State.Claim.Let]]): Unit = { }
+
+    @pure def types: ISZ[Typed] = {
+      return ISZ()
+    }
+  }
+
   @datatype class InAgreementValue(val inAgreements: InAgreementsType) extends Context.Value
 
   @datatype class InfoFlowsValue(val infoFlows: InfoFlowsType) extends Context.Value
 
-  type SClaimAgree = ISZ[State.Claim.Let.InfoFlowAgreeSym]
+  type SClaimAgree = ISZ[InfoFlowAgreeSym]
 
   @datatype class CollectAgreementSyms() extends StateTransformer.PrePost[SClaimAgree] {
 
     override
-    def preStateClaimLetInfoFlowAgreeSym(ctx: SClaimAgree,
-                                         o: State.Claim.Let.InfoFlowAgreeSym): StateTransformer.PreResult[SClaimAgree, State.Claim.Let] = {
-
-      return StateTransformer.PreResult(ctx :+ o, T, None())
+    def preStateClaimCustom(ctx: SClaimAgree,
+                            o: State.Claim.Custom): StateTransformer.PreResult[SClaimAgree, State.Claim] = {
+      o match {
+        case State.Claim.Custom(i: InfoFlowAgreeSym) =>
+          return StateTransformer.PreResult(ctx :+ i, T, None())
+        case _ =>
+          return StateTransformer.PreResult(ctx, T, None())
+      }
     }
   }
 

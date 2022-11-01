@@ -1866,8 +1866,6 @@ object Smt2 {
               lets: HashMap[Z, ISZ[State.Claim.Let]],
               declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
     c match {
-      case c: State.Claim.Let.InfoFlowAgreeSym =>
-        halt("Infeasible")
       case c: State.Claim.Let.SeqStore =>
         return st"(${typeOpId(c.seq.tipe, "up")} ${v2st(c.seq)} ${v2st(c.index)} ${v2st(c.element)})"
       case c: State.Claim.Let.FieldStore =>
@@ -1958,7 +1956,6 @@ object Smt2 {
         return None()
       case c: State.Claim.Let =>
         c match {
-          case c: State.Claim.Let.InfoFlowAgreeSym => return None()
           case c: State.Claim.Let.Binary if Smt2.isSimpsOp(c) =>
             return Some(st"(${typeOpId(c.tipe, c.op)} ${v2st(c.left)} ${v2st(c.right)} ${v2st(c.sym)})")
           case c: State.Claim.Let.CurrentId if c.declId =>
