@@ -65,7 +65,8 @@ object Logika {
   }
 
   @msig trait Reporter extends message.Reporter {
-    def state(posOpt: Option[Position], context: ISZ[String], th: TypeHierarchy, s: State, atLinesFresh: B): Unit
+    def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
+              th: TypeHierarchy, s: State, atLinesFresh: B): Unit
 
     def query(pos: Position, title: String, time: Z, r: Smt2Query.Result): Unit
 
@@ -81,7 +82,8 @@ object Logika {
   @record class ReporterImpl(var _messages: ISZ[Message]) extends Reporter {
     var _ignore: B = F
 
-    override def state(posOpt: Option[Position], context: ISZ[String], th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
+    override def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
+                       th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
     }
 
     override def query(pos: Position, title: String, time: Z, r: Smt2Query.Result): Unit = {
@@ -493,21 +495,23 @@ import Util._
                        val context: Context,
                        val plugins: ISZ[Plugin]) {
 
-  val jesPlugins: (ISZ[plugin.JustificationPlugin], ISZ[plugin.ExpPlugin], ISZ[plugin.StmtPlugin]) = {
+  val jescPlugins: (ISZ[plugin.JustificationPlugin], ISZ[plugin.ExpPlugin], ISZ[plugin.StmtPlugin], ISZ[plugin.ClaimPlugin]) = {
     var jps = ISZ[plugin.JustificationPlugin]()
     var eps = ISZ[plugin.ExpPlugin]()
     var sps = ISZ[plugin.StmtPlugin]()
+    var cps = ISZ[plugin.ClaimPlugin]()
     for (p <- plugins) {
       p match {
         case p: plugin.JustificationPlugin => jps = jps :+ p
         case p: plugin.ExpPlugin => eps = eps :+ p
         case p: plugin.StmtPlugin => sps = sps :+ p
+        case p: plugin.ClaimPlugin => cps = cps :+ p
         case _: plugin.MethodPlugin =>
         case _: plugin.StmtsPlugin =>
         case _ => halt(s"Unexpected plugin: $p")
       }
     }
-    (jps, eps, sps)
+    (jps, eps, sps, cps)
   }
 
   def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
@@ -724,8 +728,8 @@ import Util._
     if (!state.status) {
       return ISZ((state, State.errorValue))
     }
-    val ePlugins = jesPlugins._2
-    if (jesPlugins._2.nonEmpty) {
+    val ePlugins = jescPlugins._2
+    if (jescPlugins._2.nonEmpty) {
       for (p <- ePlugins if p.canHandle(this, e)) {
         return p.handle(this, smt2, cache, state, e, reporter)
       }
@@ -3454,7 +3458,7 @@ import Util._
     var (s0, m) = stateMap
     step match {
       case step: AST.ProofAst.Step.Regular =>
-        for (plugin <- jesPlugins._1 if plugin.canHandle(this, step.just)) {
+        for (plugin <- jescPlugins._1 if plugin.canHandle(this, step.just)) {
           val Plugin.Result(r, nextFresh, claims) =
             plugin.handle(this, smt2, cache, m, s0, step, reporter)
           return (s0(status = r, nextFresh = nextFresh).addClaims(claims),
@@ -3594,7 +3598,7 @@ import Util._
     if (!state.status) {
       return ISZ(state)
     }
-    val sPlugins = jesPlugins._3
+    val sPlugins = jescPlugins._3
     if (sPlugins.nonEmpty) {
       for (p <- sPlugins if p.canHandle(this, stmt)) {
         return p.handle(this, smt2, cache, state, stmt, reporter)
@@ -4117,13 +4121,13 @@ import Util._
   }
 
   def logPc(enabled: B, raw: B, state: State, reporter: Reporter, posOpt: Option[Position]): Unit = {
-    reporter.state(posOpt, context.methodName, th, state, config.atLinesFresh)
+    reporter.state(jescPlugins._4, posOpt, context.methodName, th, state, config.atLinesFresh)
     if (enabled || raw) {
       val sts: ISZ[ST] =
         if (raw) {
           State.Claim.claimsRawSTs(state.claims)
         } else {
-          val es = Util.claimsToExps(posOpt.get, context.methodName, state.claims, th, config.atLinesFresh)
+          val es = Util.claimsToExps(jescPlugins._4, posOpt.get, context.methodName, state.claims, th, config.atLinesFresh)
           for (e <- es) yield e.prettyST
         }
       if (sts.isEmpty) {

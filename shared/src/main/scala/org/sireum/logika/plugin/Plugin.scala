@@ -43,6 +43,9 @@ object Plugin {
         else if (stepId.no < 0) st"the method's premise #${-stepId.no}" else st"proof step $stepId"
       case _ => if (cap) st"Proof step $stepId" else st"proof step $stepId"
     }
+
+  @strictpure def claimPlugins(plugins: ISZ[Plugin]): ISZ[ClaimPlugin] =
+    for (p <- plugins if p.isInstanceOf[ClaimPlugin]) yield p.asInstanceOf[ClaimPlugin]
 }
 
 @sig trait Plugin {
@@ -114,5 +117,24 @@ object Plugin {
              smt2: Smt2,
              cache: Smt2.Cache,
              reporter: Reporter): (B, ISZ[State])
+
+}
+
+@sig trait ClaimPlugin extends Plugin {
+
+  @pure def canHandleExp(claim: State.Claim): B
+
+  @pure def handleExp(cs2es: logika.Util.ClaimsToExps, claim: State.Claim): Option[AST.Exp]
+
+  @pure def canHandleDeclSmt2(claim: State.Claim): B
+
+  @pure def canHandleSmt2(rhs: B, claim: State.Claim): B
+
+  @pure def handleDeclSmt2(smt2: Smt2, claim: State.Claim): ISZ[(String, ST)]
+
+  @pure def handleSmt2(smt2: Smt2,
+                       claim: State.Claim, v2st: State.Value => ST,
+                       lets: HashMap[Z, ISZ[State.Claim.Let]],
+                       declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): Option[ST]
 
 }

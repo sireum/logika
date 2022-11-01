@@ -402,6 +402,8 @@ object Smt2 {
 
   def updateFrom(that: Smt2): Unit
 
+  def plugins: ISZ[plugin.ClaimPlugin]
+
   @strictpure def proofFunId(pf: State.ProofFun): ST = {
     val targs: ST = pf.receiverTypeOpt match {
       case Some(receiverType: AST.Typed.Name) =>
@@ -1428,6 +1430,7 @@ object Smt2 {
           case _: State.Claim.Label =>
           case _: State.Claim.Prop =>
           case _: State.Claim.Eq =>
+          case _: State.Claim.Custom =>
         }
       }
     }
@@ -1731,6 +1734,7 @@ object Smt2 {
         case _: State.Claim.Label => return acc
         case _: State.Claim.Prop => return acc
         case _: State.Claim.Eq => return acc
+        case _: State.Claim.Custom => return acc
       }
     }
     val lids = collectLids(claims) -- declIds.keys
@@ -1752,6 +1756,7 @@ object Smt2 {
           case claim: State.Claim.Label => rest = rest :+ claim
           case claim: State.Claim.Prop => rest = rest :+ claim
           case claim: State.Claim.Eq => rest = rest :+ claim
+          case claim: State.Claim.Custom => rest = rest :+ claim
         }
       }
       var body: ST =
@@ -1936,12 +1941,16 @@ object Smt2 {
           if (c.args.size == 1) v2st(c.args(0))
           else st"(${typeOpId(AST.Typed.Tuple(for (arg <- c.args) yield arg.tipe), c.id)} ${(for (arg <- c.args) yield v2st(arg), " ")})"
         return st"(select ${if (c.isLocal) currentLocalIdString(c.context, c.id) else currentNameIdString(c.context :+ c.id)} $args)"
-      case _: State.Claim.Let.Random =>
-        halt("Infeasible")
+      case c: State.Claim.Let.Random => halt(s"Infeasible: $c")
     }
   }
 
   def c2ST(c: State.Claim, v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]], declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): Option[ST] = {
+    if (plugins.nonEmpty) {
+      for (p <- plugins if p.canHandleSmt2(T, c)) {
+        return p.handleSmt2(this, c, v2st, lets, declIds)
+      }
+    }
     c match {
       case _: State.Claim.Let.Random =>
         return None()
@@ -1973,6 +1982,7 @@ object Smt2 {
       case c: State.Claim.And => return Some(andST(c.claims, v2st, lets, declIds))
       case c: State.Claim.Or => return Some(orST(c.claims, v2st, lets, declIds))
       case c: State.Claim.Imply => return Some(implyST(c.claims, v2st, lets, declIds))
+      case _: State.Claim.Custom => return None()
     }
   }
 
@@ -2078,6 +2088,11 @@ object Smt2 {
       val symST = v2ST(cDef.sym)
       return ISZ[(String, ST)](symST.render ~> st"(declare-const $symST ${typeId(cDef.sym.tipe)})")
     }
+    if (plugins.nonEmpty) {
+      for (p <- plugins if p.canHandleDeclSmt2(c)) {
+        return p.handleDeclSmt2(this, c)
+      }
+    }
     c match {
       case _: State.Claim.Label => return ISZ()
       case _: State.Claim.Eq => return ISZ()
@@ -2125,6 +2140,7 @@ object Smt2 {
         r = r :+ ns ~> declareConst(n, c.sym.tipe)
         return r
       case c: State.Claim.Let => return def2DeclST(c)
+      case _: State.Claim.Custom => return ISZ()
     }
   }
 

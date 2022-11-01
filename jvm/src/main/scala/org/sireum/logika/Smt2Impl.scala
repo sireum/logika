@@ -32,10 +32,10 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
 
-  def create(configs: ISZ[Smt2Config], typeHierarchy: TypeHierarchy, timeoutInMs: Z,
+  def create(configs: ISZ[Smt2Config], plugins: ISZ[plugin.ClaimPlugin], typeHierarchy: TypeHierarchy, timeoutInMs: Z,
              fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B, smt2Seq: B,
              reporter: Logika.Reporter): Smt2 = {
-    val r = Smt2Impl(typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, smt2Seq,
+    val r = Smt2Impl(plugins, typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, smt2Seq,
       fpRoundingMode, configs, HashSet.empty[AST.Typed] + AST.Typed.b, Poset.empty, HashSMap.empty, HashSMap.empty,
       HashSMap.empty, HashSMap.empty, HashSMap.empty, HashSMap.empty, HashMap.empty, HashSMap.empty, HashMap.empty,
       HashSSet.empty)
@@ -45,7 +45,8 @@ object Smt2Impl {
 
 }
 
-@record class Smt2Impl(val typeHierarchy: TypeHierarchy,
+@record class Smt2Impl(val plugins: ISZ[plugin.ClaimPlugin],
+                       val typeHierarchy: TypeHierarchy,
                        val timeoutInMs: Z,
                        val charBitWidth: Z,
                        val intBitWidth: Z,

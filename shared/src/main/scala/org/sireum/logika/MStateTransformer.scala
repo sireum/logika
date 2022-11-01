@@ -273,6 +273,10 @@ object MStateTransformer {
 
   val PostResultStateClaimLetImply: MOption[State.Claim.Let] = MNone()
 
+  val PreResultStateClaimCustom: PreResult[State.Claim] = PreResult(T, MNone())
+
+  val PostResultStateClaimCustom: MOption[State.Claim] = MNone()
+
   val PreResultStateProofFun: PreResult[State.ProofFun] = PreResult(T, MNone())
 
   val PostResultStateProofFun: MOption[State.ProofFun] = MNone()
@@ -671,6 +675,7 @@ import MStateTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
+      case o: State.Claim.Custom => return preStateClaimCustom(o)
     }
   }
 
@@ -833,6 +838,14 @@ import MStateTransformer._
 
   def preStateClaimLetImply(o: State.Claim.Let.Imply): PreResult[State.Claim.Let] = {
     return PreResultStateClaimLetImply
+  }
+
+  def preStateClaimCustom(o: State.Claim.Custom): PreResult[State.Claim] = {
+    return PreResultStateClaimCustom
+  }
+
+  def preStateClaimData(o: State.Claim.Data): PreResult[State.Claim.Data] = {
+    return PreResult(T, MNone())
   }
 
   def preStateProofFun(o: State.ProofFun): PreResult[State.ProofFun] = {
@@ -1227,6 +1240,7 @@ import MStateTransformer._
          case _ => MNone[State.Claim]()
         }
         return r
+      case o: State.Claim.Custom => return postStateClaimCustom(o)
     }
   }
 
@@ -1389,6 +1403,14 @@ import MStateTransformer._
 
   def postStateClaimLetImply(o: State.Claim.Let.Imply): MOption[State.Claim.Let] = {
     return PostResultStateClaimLetImply
+  }
+
+  def postStateClaimCustom(o: State.Claim.Custom): MOption[State.Claim] = {
+    return PostResultStateClaimCustom
+  }
+
+  def postStateClaimData(o: State.Claim.Data): MOption[State.Claim.Data] = {
+    return MNone()
   }
 
   def postStateProofFun(o: State.ProofFun): MOption[State.ProofFun] = {
@@ -1870,6 +1892,12 @@ import MStateTransformer._
             MSome(o2(sym = r0.getOrElse(o2.sym), args = r1.getOrElse(o2.args)))
           else
             MNone()
+        case o2: State.Claim.Custom =>
+          val r0: MOption[State.Claim.Data] = transformStateClaimData(o2.data)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(data = r0.getOrElse(o2.data)))
+          else
+            MNone()
       }
       rOpt
     } else if (preR.resultOpt.nonEmpty) {
@@ -2132,6 +2160,30 @@ import MStateTransformer._
     val hasChanged: B = r.nonEmpty
     val o2: State.Claim.Let.Quant.Var = r.getOrElse(o)
     val postR: MOption[State.Claim.Let.Quant.Var] = postStateClaimLetQuantVar(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformStateClaimData(o: State.Claim.Data): MOption[State.Claim.Data] = {
+    val preR: PreResult[State.Claim.Data] = preStateClaimData(o)
+    val r: MOption[State.Claim.Data] = if (preR.continu) {
+      val o2: State.Claim.Data = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: MOption[State.Claim.Data] = MNone()
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: State.Claim.Data = r.getOrElse(o)
+    val postR: MOption[State.Claim.Data] = postStateClaimData(o2)
     if (postR.nonEmpty) {
       return postR
     } else if (hasChanged) {

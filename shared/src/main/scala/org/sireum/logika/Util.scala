@@ -584,6 +584,1084 @@ object Util {
     }
   }
 
+  @record class ClaimsToExps(val plugins: ISZ[plugin.ClaimPlugin],
+                             val pos: Position,
+                             val context: ISZ[String],
+                             val th: TypeHierarchy,
+                             val includeFreshLines: B,
+                             val letMap: HashMap[Z, HashSet[State.Claim.Let]],
+                             val eqMap: HashMap[Z, HashSet[State.Claim.Eq]],
+                             val lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
+                             val vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]],
+                             var symNumMap: HashMap[Z, Z]) {
+
+    val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
+    val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
+    val posOpt: Option[Position] = Some(pos)
+
+    @pure def ignore(claim: State.Claim): B = {
+      claim match {
+        case _: State.Claim.And => return F
+        case _: State.Claim.Or => return F
+        case _: State.Claim.Imply => return F
+        case _: State.Claim.Prop => return F
+        case _: State.Claim.If => return F
+        case _: State.Claim.Eq => return F
+        case _: State.Claim.Let.CurrentId => return F
+        case _: State.Claim.Let.CurrentName => return F
+        case _: State.Claim.Let.Id => return F
+        case _: State.Claim.Let.Name => return F
+        case _: State.Claim.Custom => return F
+        case _ => return T
+      }
+    }
+
+    @pure def esToBinaryExp(es: ISZ[AST.Exp], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
+      if (es.isEmpty) {
+        return dflt
+      }
+      var r = es(0)
+      for (i <- 1 until es.size) {
+        r = AST.Exp.Binary(r, op, es(i), AST.ResolvedAttr(None(), Some(res), tOpt))
+      }
+      return r
+    }
+
+    @pure def bigAndExp(exps: ISZ[AST.Exp]): AST.Exp = {
+      var set = HashSSet.empty[AST.Exp]
+      for (exp <- exps) {
+        if (exp == trueLit) {
+          // skip
+        } else if (exp == falseLit) {
+          return falseLit
+        } else {
+          set = set + exp
+        }
+      }
+      return esToBinaryExp(set.elements, trueLit, AST.Exp.BinaryOp.And,
+        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
+    }
+
+    @pure def bigOrExp(exps: ISZ[AST.Exp]): AST.Exp = {
+      var set = HashSSet.empty[AST.Exp]
+      for (exp <- exps) {
+        if (exp == trueLit) {
+          return trueLit
+        } else if (exp == falseLit) {
+          // skip
+        } else {
+          set = set + exp
+        }
+      }
+      return esToBinaryExp(set.elements, falseLit, AST.Exp.BinaryOp.Or,
+        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
+    }
+
+    @pure def bigImplyExp(exps: ISZ[AST.Exp]): AST.Exp = {
+      var es = ISZ[AST.Exp]()
+      for (i <- 0 until exps.size - 1) {
+        val exp = exps(i)
+        if (exp == falseLit) {
+          return trueLit
+        } else {
+          es = es :+ exp
+        }
+      }
+      es = es :+ exps(exps.size - 1)
+      assert(es.size >= 2)
+      var r = es(es.size - 1)
+      val op = AST.Exp.BinaryOp.Imply
+      val res = AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
+      var i = es.size - 2
+      while (i >= 0) {
+        if (r != trueLit) {
+          r = AST.Exp.Binary(es(i), op, r, AST.ResolvedAttr(None(), Some(res), AST.Typed.bOpt))
+        }
+        i = i - 1
+      }
+      return r
+    }
+
+    @pure def typedToType(t: AST.Typed): AST.Type = {
+      val attr = AST.Attr(Some(pos))
+      val typedAttr = AST.TypedAttr(attr.posOpt, Some(t))
+
+      @pure def toName(ids: ISZ[String]): AST.Name = {
+        ids match {
+          case ISZ("org", "sireum", _*) if ids.size > 2 =>
+            return AST.Name(for (i <- 2 until ids.size) yield AST.Id(ids(i), attr), attr)
+          case _ => return AST.Name(for (id <- ids) yield AST.Id(id, attr), attr)
+        }
+      }
+
+      t match {
+        case t: AST.Typed.Name => return AST.Type.Named(toName(t.ids),
+          for (arg <- t.args) yield typedToType(arg), typedAttr)
+        case t: AST.Typed.TypeVar => return AST.Type.Named(toName(ISZ(t.id)), ISZ(), typedAttr)
+        case t: AST.Typed.Tuple => return AST.Type.Tuple(for (arg <- t.args) yield typedToType(arg), typedAttr)
+        case t: AST.Typed.Enum => return AST.Type.Named(toName(t.name), ISZ(), typedAttr)
+        case t: AST.Typed.Fun => return AST.Type.Fun(t.isPure, t.isByName, for (arg <- t.args) yield typedToType(arg),
+          typedToType(t.ret), typedAttr)
+        case t: AST.Typed.Method => halt(s"Infeasible: $t")
+        case t: AST.Typed.Object => halt(s"Infeasible: $t")
+        case t: AST.Typed.Methods => halt(s"Infeasible: $t")
+        case t: AST.Typed.Package => halt(s"Infeasible: $t")
+        case t: AST.Typed.Fact => halt(s"Infeasible: $t")
+        case t: AST.Typed.Theorem => halt(s"Infeasible: $t")
+        case t: AST.Typed.Inv => halt(s"Infeasible: $t")
+      }
+    }
+
+    @pure def constructIf(cond: AST.Exp, left: AST.Exp, right: AST.Exp, pOpt: Option[Position], tOpt: Option[AST.Typed]): AST.Exp = {
+      if (right == trueLit) {
+        if (left == trueLit) {
+          return trueLit
+        }
+        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondImply, left, AST.ResolvedAttr(pOpt,
+          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)), AST.Typed.bOpt))
+      } else if (right == falseLit) {
+        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondAnd, left, AST.ResolvedAttr(pOpt,
+          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)), AST.Typed.bOpt))
+      } else if (left == trueLit) {
+        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondOr, right, AST.ResolvedAttr(pOpt,
+          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr)), AST.Typed.bOpt))
+      }
+      return AST.Exp.If(cond, left, right, AST.TypedAttr(pOpt, tOpt))
+    }
+
+    @pure def rcvOptIdent(v: State.Value, symPosOpt: Option[Position]): Option[(Option[AST.Exp], AST.Exp.Ident)] = {
+      valueToExp(v) match {
+        case Some(o) =>
+          o match {
+            case o: AST.Exp.Ident => return Some((None(), o))
+            case o: AST.Exp.Select => return Some((o.receiverOpt, AST.Exp.Ident(o.id, o.attr)))
+            case o => return Some((Some(o), AST.Exp.Ident(AST.Id("apply", AST.Attr(symPosOpt)), AST.ResolvedAttr(
+              symPosOpt, TypeChecker.applyResOpt, o.typedOpt))))
+          }
+        case _ => return None()
+      }
+    }
+
+    @pure def defsToEqs(cs: ISZ[State.Claim]): ISZ[State.Claim] = {
+      var r = ISZ[State.Claim]()
+      for (c <- cs) {
+        c match {
+          case c: State.Claim.Let.Def => r = r :+ State.Claim.Eq(c.sym, c.value)
+          case _ =>
+            if (!ignore(c)) {
+              r = r :+ c
+            }
+        }
+      }
+      return r
+    }
+
+    @pure def equate(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): AST.Exp = {
+      return if (th.isGroundType(t)) AST.Exp.Binary(e1, AST.Exp.BinaryOp.Eq, e2, AST.ResolvedAttr(posOpt, eqResOpt, Some(t)))
+      else AST.Exp.Binary(e1, AST.Exp.BinaryOp.EquivUni, e2, AST.ResolvedAttr(posOpt, equivResOpt, Some(t)))
+    }
+
+    @pure def equateOpt(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): Option[AST.Exp] = {
+      return if (e1 == e2) None() else Some(equate(t, e1, e2))
+    }
+
+    @pure def simplify(cs: ISZ[AST.Exp]): ISZ[AST.Exp] = {
+      var r = HashSSet.empty[AST.Exp]
+      var ipMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
+      var inpMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
+
+      for (exp <- cs) {
+        exp match {
+          case exp: AST.Exp.Binary if exp.attr.resOpt == implyResOpt =>
+            exp.left match {
+              case left: AST.Exp.Unary if left.attr.resOpt == notResOpt =>
+                inpMap = {
+                  val key = th.normalizeExp(left.exp)
+                  val m = inpMap.get(key).getOrElse(HashMap.empty)
+                  val key2 = th.normalizeExp(exp.right)
+                  inpMap + key ~> (m + key2 ~> (m.get(key2).getOrElse(ISZ()) :+ exp))
+                }
+                ipMap.get(th.normalizeExp(left.exp)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
+                  case Some(es) =>
+                    r = r -- es
+                    r = r + exp.right
+                  case _ =>
+                    r = r + exp
+                }
+              case left =>
+                ipMap = {
+                  val key = th.normalizeExp(left)
+                  val m = ipMap.get(key).getOrElse(HashMap.empty)
+                  val key2 = th.normalizeExp(exp.right)
+                  ipMap + key ~> (m + key2 ~> (m.get(key2).getOrElse(ISZ()) :+ exp))
+                }
+                inpMap.get(th.normalizeExp(left)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
+                  case Some(es) =>
+                    r = r -- es
+                    r = r + exp.right
+                  case _ =>
+                    r = r + exp
+                }
+            }
+          case _ => r = r + exp
+        }
+      }
+      return r.elements
+    }
+
+    def letToExp(let: State.Claim.Let): Option[AST.Exp] = {
+      val sym = let.sym
+      val symPos = sym.pos
+      val symPosOpt = Option.some(symPos)
+
+      let match {
+        case let: State.Claim.Let.CurrentId =>
+          return Some(AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
+            symPosOpt,
+            Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+            Some(sym.tipe))))
+        case let: State.Claim.Let.CurrentName =>
+          return Some(th.nameToExp(let.ids, symPos).asExp)
+        case let: State.Claim.Let.Id =>
+          val n = lNumMap.get((let.context, let.id)).get.get((let.num, let.poss)).get
+          val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
+            (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
+          } else {
+            ISZ()
+          }
+          val attr = AST.Attr(symPosOpt)
+          if (let.context == context || let.context.isEmpty) {
+            return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
+              Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+              Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr))
+          } else {
+            return Some(AST.Exp.At(Some(typedToType(sym.tipe)),
+              AST.Exp.LitString(st"${(let.context :+ let.id, ".")}".render, AST.Attr(symPosOpt)),
+              AST.Exp.LitZ(n, attr), linesFresh, attr))
+          }
+        case let: State.Claim.Let.Name =>
+          val n = vNumMap.get(let.ids).get.get((let.num, let.poss)).get
+          val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
+            (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
+          } else {
+            ISZ()
+          }
+          val attr = AST.Attr(symPosOpt)
+          return Some(AST.Exp.At(None(), th.nameToExp(let.ids, symPos).asExp, AST.Exp.LitZ(n, attr), linesFresh, attr))
+        case let: State.Claim.Let.Unary =>
+          val (op, kind): (AST.Exp.UnaryOp.Type, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
+            case string"+" => (AST.Exp.UnaryOp.Plus, AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus)
+            case string"-" => (AST.Exp.UnaryOp.Minus, AST.ResolvedInfo.BuiltIn.Kind.UnaryMinus)
+            case string"~" => (AST.Exp.UnaryOp.Complement, AST.ResolvedInfo.BuiltIn.Kind.UnaryComplement)
+            case string"!" => (AST.Exp.UnaryOp.Not, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)
+            case _ => halt(s"Infeasible: ${let.op}")
+          }
+          valueToExp(let.value) match {
+            case Some(e) =>
+              return Some(AST.Exp.Unary(op, e, AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(kind)),
+                Some(sym.tipe))))
+            case _ =>
+              return None()
+          }
+        case let: State.Claim.Let.Binary =>
+          @pure def isS(t: AST.Typed): B = {
+            t match {
+              case t: AST.Typed.Name => return (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName)
+              case _ => return F
+            }
+          }
+
+          @pure def sOp(op: String): Option[AST.Exp] = {
+            (valueToExp(let.left), valueToExp(let.right)) match {
+              case (Some(l), Some(r)) =>
+                var left = l
+                var right = r
+                val sType: AST.Typed.Name = if (op == AST.Exp.BinaryOp.Prepend) {
+                  left match {
+                    case l: AST.Exp.Tuple if l.args.size >= 2 => left = AST.Exp.Tuple(ISZ(left), l.attr)
+                    case _ =>
+                  }
+                  let.right.tipe.asInstanceOf[AST.Typed.Name]
+                } else if (op == AST.Exp.BinaryOp.Append) {
+                  right match {
+                    case r: AST.Exp.Tuple if r.args.size >= 2 => right = AST.Exp.Tuple(ISZ(right), r.attr)
+                    case _ =>
+                  }
+                  let.left.tipe.asInstanceOf[AST.Typed.Name]
+                } else {
+                  let.left.tipe.asInstanceOf[AST.Typed.Name]
+                }
+                val info = th.typeMap.get(sType.ids).get.asInstanceOf[TypeInfo.Sig].methods.get(op).get
+                return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))))
+              case (_, _) => return None()
+            }
+          }
+
+          val (op, kind): (String, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
+            case AST.Exp.BinaryOp.Add => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryAdd)
+            case AST.Exp.BinaryOp.Sub => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinarySub)
+            case AST.Exp.BinaryOp.Mul => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryMul)
+            case AST.Exp.BinaryOp.Div => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryDiv)
+            case AST.Exp.BinaryOp.Rem => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryRem)
+            case AST.Exp.BinaryOp.CondAnd => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)
+            case AST.Exp.BinaryOp.CondOr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr)
+            case AST.Exp.BinaryOp.CondImply => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)
+            case AST.Exp.BinaryOp.And => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd)
+            case AST.Exp.BinaryOp.Or => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)
+            case AST.Exp.BinaryOp.Xor => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryXor)
+            case AST.Exp.BinaryOp.Imply => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
+            case AST.Exp.BinaryOp.Eq => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
+            case AST.Exp.BinaryOp.Equiv => (AST.Exp.BinaryOp.EquivUni, AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)
+            case AST.Exp.BinaryOp.EquivUni => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)
+            case AST.Exp.BinaryOp.FpEq => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryFpEq)
+            case AST.Exp.BinaryOp.Ne => (AST.Exp.BinaryOp.Ne, AST.ResolvedInfo.BuiltIn.Kind.BinaryNe)
+            case AST.Exp.BinaryOp.Inequiv => (AST.Exp.BinaryOp.InequivUni, AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv)
+            case AST.Exp.BinaryOp.InequivUni => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv)
+            case AST.Exp.BinaryOp.FpNe => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryFpNe)
+            case AST.Exp.BinaryOp.Lt => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryLt)
+            case AST.Exp.BinaryOp.Le => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryLe)
+            case AST.Exp.BinaryOp.Gt => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryGt)
+            case AST.Exp.BinaryOp.Ge => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryGe)
+            case AST.Exp.BinaryOp.Shl => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryShl)
+            case AST.Exp.BinaryOp.Shr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryShr)
+            case AST.Exp.BinaryOp.Ushr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryUshr)
+            case AST.Exp.BinaryOp.Append if isS(let.left.tipe) => return sOp(let.op)
+            case AST.Exp.BinaryOp.AppendAll if isS(let.left.tipe) => return sOp(let.op)
+            case AST.Exp.BinaryOp.Prepend if isS(let.right.tipe) => return sOp(let.op)
+            case AST.Exp.BinaryOp.RemoveAll if isS(let.left.tipe) => return sOp(let.op)
+            case _ => halt(s"Infeasible: ${let.op}")
+          }
+          (valueToExp(let.left), valueToExp(let.right)) match {
+            case (Some(left), Some(right)) =>
+              return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt,
+                Some(AST.ResolvedInfo.BuiltIn(kind)), Some(sym.tipe))))
+            case (_, _) => return None()
+          }
+        case let: State.Claim.Let.Def =>
+          return valueToExp(let.value)
+        case let: State.Claim.Let.And =>
+          var es = ISZ[AST.Exp]()
+          for (v <- let.args) {
+            valueToExp(v) match {
+              case Some(e) => es = es :+ e
+              case _ =>
+            }
+          }
+          return Some(bigAndExp(es))
+        case let: State.Claim.Let.Or =>
+          var es = ISZ[AST.Exp]()
+          for (v <- let.args) {
+            valueToExp(v) match {
+              case Some(e) => es = es :+ e
+              case _ => return None()
+            }
+          }
+          return Some(bigOrExp(es))
+        case let: State.Claim.Let.Imply =>
+          var es = ISZ[AST.Exp]()
+          for (i <- 0 until let.args.size - 1) {
+            valueToExp(let.args(i)) match {
+              case Some(e) => es = es :+ e
+              case _ =>
+            }
+          }
+          valueToExp(let.args(let.args.size - 1)) match {
+            case Some(e) =>
+              if (es.isEmpty) {
+                return Some(e)
+              }
+              es = es :+ e
+            case _ => return None()
+          }
+          return Some(bigImplyExp(es))
+        case let: State.Claim.Let.Ite =>
+          (valueToExp(let.cond), valueToExp(let.left), valueToExp(let.right)) match {
+            case (Some(cond), Some(left), Some(right)) =>
+              return Some(constructIf(cond, left, right, symPosOpt, Some(sym.tipe)))
+            case (_, _, _) => return None()
+          }
+        case let: State.Claim.Let.TupleLit =>
+          var es = ISZ[AST.Exp]()
+          for (arg <- let.args) {
+            valueToExp(arg) match {
+              case Some(e) => es = es :+ e
+              case _ => return None()
+            }
+          }
+          return Some(AST.Exp.Tuple(es, AST.TypedAttr(symPosOpt, Some(sym.tipe))))
+        case let: State.Claim.Let.AdtLit =>
+          val info = th.typeMap.get(let.tipe.ids).get.asInstanceOf[TypeInfo.Adt]
+          val ownerName = ops.ISZOps(let.tipe.ids).dropRight(1)
+          var es = ISZ[AST.Exp]()
+          for (arg <- let.args) {
+            valueToExp(arg) match {
+              case Some(e) => es = es :+ e
+              case _ => return None()
+            }
+          }
+          val nameExp = th.nameToExp(let.tipe.ids, symPos)
+          return Some(AST.Exp.Invoke(
+            if (ownerName.isEmpty || ownerName == AST.Typed.sireumName) None()
+            else Some(th.nameToExp(ownerName, symPos).asExp),
+            AST.Exp.Ident(AST.Id(let.tipe.ids(let.tipe.ids.size - 1), AST.Attr(symPosOpt)), AST.ResolvedAttr(
+              symPosOpt,
+              nameExp.resOpt,
+              nameExp.typedOpt
+            )),
+            for (targ <- let.tipe.args) yield typedToType(targ),
+            es,
+            AST.ResolvedAttr(
+              symPosOpt,
+              info.constructorResOpt,
+              Some(sym.tipe)
+            )
+          ))
+        case let: State.Claim.Let.SeqLit =>
+          var es = ISZ[AST.Exp]()
+          for (arg <- let.args) {
+            valueToExp(arg.value) match {
+              case Some(e) => es = es :+ e
+              case _ => return None()
+            }
+          }
+          val t = sym.tipe.asInstanceOf[AST.Typed.Name]
+          val (name, targs): (ISZ[String], ISZ[AST.Type]) =
+            if (t.args(0) == AST.Typed.z) {
+              if (t.ids == AST.Typed.msName) {
+                if (t.args(1) == AST.Typed.z) (AST.Typed.zsName, ISZ())
+                else (AST.Typed.mszName, ISZ(typedToType(t.args(1))))
+              } else {
+                (AST.Typed.iszName, ISZ(typedToType(t.args(1))))
+              }
+            } else {
+              (t.ids, ISZ(typedToType(t.args(0)), typedToType(t.args(1))))
+            }
+          val nameExp = th.nameToExp(name, symPos)
+          val ident = AST.Exp.Ident(AST.Id(name(name.size - 1), AST.Attr(symPosOpt)),
+            AST.ResolvedAttr(symPosOpt, nameExp.resOpt, nameExp.typedOpt))
+          return Some(AST.Exp.Invoke(None(), ident, targs, es, AST.ResolvedAttr(symPosOpt,
+            TypeChecker.sConstructorTypedResOpt(name, let.args.size)._2, Some(t))))
+        case let: State.Claim.Let.Quant =>
+          @pure def isInBoundResOpt(resOpt: Option[AST.ResolvedInfo]): B = {
+            if (resOpt.isEmpty) {
+              return F
+            }
+            resOpt.get match {
+              case res: AST.ResolvedInfo.Method =>
+                return res.id == "isInBound" && (res.owner == AST.Typed.isName || res.owner == AST.Typed.msName)
+              case _ =>
+            }
+            return F
+          }
+
+          @pure def isQuantParamIndex(fcontext: ISZ[String], idOpt: Option[AST.Id], arg: AST.Exp): B = {
+            if (idOpt.isEmpty) {
+              return F
+            }
+            arg match {
+              case arg: AST.Exp.Ident =>
+                arg.attr.resOpt match {
+                  case Some(res: AST.ResolvedInfo.LocalVar) =>
+                    return res.id == idOpt.get.value && res.context == fcontext
+                  case _ =>
+                }
+              case _ =>
+            }
+            return F
+          }
+
+          @pure def isQuantRange(fcontext: ISZ[String], idOpt: Option[AST.Id], range: AST.Exp.Binary): (B, B) = {
+            if (idOpt.isEmpty) {
+              return (F, F)
+            }
+            val id = idOpt.get.value
+            if (range.attr.resOpt != andResOpt) {
+              return (F, F)
+            }
+            (range.left, range.right) match {
+              case (left: AST.Exp.Binary, right: AST.Exp.Binary) if left.attr.resOpt == leResOpt =>
+                (left.right, right.left) match {
+                  case (lr: AST.Exp.Ident, rl: AST.Exp.Ident) =>
+                    (lr.resOpt, rl.resOpt) match {
+                      case (Some(lrRes: AST.ResolvedInfo.LocalVar), Some(rlRes: AST.ResolvedInfo.LocalVar)) =>
+                        if (lrRes.id == id && rlRes.id == id && lrRes.context == fcontext && rlRes.context == fcontext) {
+                          // skip
+                        } else {
+                          return (F, F)
+                        }
+                      case _ => return (F, F)
+                    }
+                  case _ =>
+                }
+                if (right.attr.resOpt == leResOpt) {
+                  return (T, T)
+                } else if (right.attr.resOpt == ltResOpt) {
+                  return (T, F)
+                }
+              case _ =>
+            }
+            return (F, F)
+          }
+
+          @pure def paramIdx(idOpt1: Option[AST.Id], idOpt2: Option[AST.Id]): B = {
+            (idOpt1, idOpt2) match {
+              case (Some(id1), Some(id2)) => return id1.value == s"${id2.value}${Logika.idxSuffix}"
+              case _ =>
+            }
+            return F
+          }
+
+          @pure def isIdent(fcontext: ISZ[String], id: AST.Id, e: AST.Exp): B = {
+            e match {
+              case e: AST.Exp.Ident =>
+                e.resOpt match {
+                  case Some(res: AST.ResolvedInfo.LocalVar) => return res.id == id.value && res.context == fcontext
+                  case _ =>
+                }
+              case _ =>
+            }
+            return F
+          }
+
+          val exp: AST.Exp = toExp(State.Claim.And(let.claims)) match {
+            case Some(e) => e
+            case _ => return None()
+          }
+          var params = ISZ[AST.Exp.Fun.Param]()
+          var fcontext = ISZ[String]()
+          val attr = AST.Attr(symPosOpt)
+          var argTypes = ISZ[AST.Typed]()
+          for (x <- let.vars) {
+            fcontext = x.context
+            argTypes = argTypes :+ x.tipe
+            val t = typedToType(x.tipe)
+            params = params :+ AST.Exp.Fun.Param(Some(AST.Id(x.id, attr)), Some(t), Some(x.tipe))
+          }
+          exp match {
+            case exp: AST.Exp.Binary if (let.isAll && (exp.attr.resOpt == implyResOpt ||
+              exp.attr.resOpt == condImplyResOpt)) || (!let.isAll && (exp.attr.resOpt == andResOpt ||
+              exp.attr.resOpt == condAndResOpt)) =>
+              exp.left match {
+                case left: AST.Exp.Invoke if left.receiverOpt.nonEmpty && isInBoundResOpt(left.ident.attr.resOpt) =>
+                  val seq = left.receiverOpt.get
+                  val t = seq.typedOpt.get.asInstanceOf[AST.Typed.Name]
+                  if (params.size == 2 && paramIdx(params(0).idOpt, params(1).idOpt) &&
+                    isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
+                    exp.right match {
+                      case right: AST.Exp.Binary if (let.isAll && right.attr.resOpt == implyResOpt) ||
+                        (!let.isAll && right.attr.resOpt == andResOpt) =>
+                        right.left match {
+                          case rl: AST.Exp.Binary if isIdent(fcontext, params(1).idOpt.get, rl.right) &&
+                            rl.attr.resOpt == eqResOpt || rl.attr.resOpt == equivResOpt =>
+                            rl.left match {
+                              case rll: AST.Exp.Invoke if rll.args.size == 1 &&
+                                isIdent(fcontext, params(0).idOpt.get, rll.args(0)) =>
+                                if (left.receiverOpt == Some[AST.Exp](rll.ident)) {
+                                  val fun = AST.Exp.Fun(fcontext, ISZ(params(1)(tipeOpt = None())),
+                                    AST.Stmt.Expr(right.right, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
+                                    AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, ISZ(argTypes(1)), AST.Typed.b))))
+                                  return Some(AST.Exp.QuantEach(let.isAll, rll.ident, fun, AST.ResolvedAttr(symPosOpt,
+                                    Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current,
+                                      F, T, params(1).idOpt.get.value)),
+                                    AST.Typed.bOpt)))
+                                }
+                              case _ =>
+                            }
+                          case _ =>
+                        }
+                      case _ =>
+                    }
+                  } else if (params.size == 1 && isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
+                    val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = {
+                      val info = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Sig].methods.get("indices").get
+                      (info.resOpt, info.typedOpt)
+                    }
+                    val fun = AST.Exp.Fun(fcontext, ISZ(params(0)(tipeOpt = None())), AST.Stmt.Expr(exp.right,
+                      AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), AST.TypedAttr(symPosOpt,
+                      Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
+                    return Some(AST.Exp.QuantEach(let.isAll, AST.Exp.Select(left.receiverOpt, AST.Id("indices", attr),
+                      ISZ(), AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), fun, AST.ResolvedAttr(symPosOpt,
+                      Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
+                        params(0).idOpt.get.value)),
+                      AST.Typed.bOpt)))
+                  }
+                case left: AST.Exp.Binary if params.size == 1 =>
+                  val (ok, isExact) = isQuantRange(fcontext, params(0).idOpt, left)
+                  if (ok) {
+                    val lo = left.left.asInstanceOf[AST.Exp.Binary].left
+                    val hi = left.right.asInstanceOf[AST.Exp.Binary].right
+                    val fun = AST.Exp.Fun(fcontext, ISZ(params(0)(tipeOpt = None())), AST.Stmt.Expr(exp.right,
+                      AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), AST.TypedAttr(symPosOpt,
+                      Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
+                    return Some(AST.Exp.QuantRange(let.isAll, lo, hi, isExact, fun, AST.ResolvedAttr(symPosOpt,
+                      Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
+                        params(0).idOpt.get.value)),
+                      AST.Typed.bOpt)))
+                  }
+                case _ =>
+              }
+            case _ =>
+          }
+          val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(exp, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
+            AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
+          return Some(AST.Exp.QuantType(let.isAll, fun, attr))
+        case let: State.Claim.Let.FieldLookup =>
+          valueToExp(let.adt) match {
+            case Some(o) =>
+              let.adt.tipe match {
+                case t: AST.Typed.Name =>
+                  th.typeMap.get(t.ids).get match {
+                    case ti: TypeInfo.Adt =>
+                      ti.vars.get(let.id) match {
+                        case Some(info) =>
+                          return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                            AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, info.ast.isSpec,
+                              info.ast.isVal, info.owner, let.id)), Some(sym.tipe))))
+                        case _ =>
+                          val info = ti.specVars.get(let.id).get
+                          return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                            AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, T, info.ast.isVal,
+                              info.owner, let.id)), Some(sym.tipe))))
+                      }
+                    case ti: TypeInfo.Sig =>
+                      ti.specVars.get(let.id) match {
+                        case Some(info) =>
+                          return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                            AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, T, info.ast.isVal,
+                              info.owner, let.id)), Some(sym.tipe))))
+                        case _ =>
+                      }
+                      assert(let.id == "size" && (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName))
+                      val info = ti.methods.get(let.id).get
+                      val tOpt: Option[AST.Typed.Fun] = info.typedOpt match {
+                        case Some(_: AST.Typed.Method) => Some(AST.Typed.Fun(T, T, ISZ(), sym.tipe))
+                        case Some(t) => halt(s"Infeasible: $t")
+                        case _ => None()
+                      }
+                      return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                        AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Method(info.isInObject, AST.MethodMode.Method, ISZ(),
+                          info.owner, let.id, ISZ(), tOpt, ISZ(), ISZ())), Some(sym.tipe))))
+                    case ti => halt(s"Infeasible: $ti")
+                  }
+                case t: AST.Typed.Tuple =>
+                  return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                    AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Tuple(t.args.size,
+                      Z(ops.StringOps(let.id).substring(1, let.id.size)).get)), Some(sym.tipe))))
+                case t => halt(s"Infeasible: $t")
+              }
+            case _ => return None()
+          }
+        case let: State.Claim.Let.SeqStore =>
+          (rcvOptIdent(let.seq, symPosOpt), valueToExp(let.index), valueToExp(let.element)) match {
+            case (Some((rcvOpt, ident)), Some(index), Some(element)) =>
+              val (_, resOpt) = TypeChecker.sStoreTypedResOpt(let.seq.tipe.asInstanceOf[AST.Typed.Name], 1)
+              return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(AST.Exp.Binary(index,
+                AST.Exp.BinaryOp.MapsTo, element, AST.ResolvedAttr(symPosOpt,
+                  Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo)), Some(AST.Typed.Tuple(ISZ(
+                    let.index.tipe, let.element.tipe)))))),
+                AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe))))
+            case (_, _, _) => return None()
+          }
+        case let: State.Claim.Let.SeqLookup =>
+          (rcvOptIdent(let.seq, symPosOpt), valueToExp(let.index)) match {
+            case (Some((rcvOpt, ident)), Some(index)) =>
+              val (_, resOpt) = TypeChecker.sSelectTypedResOpt(let.seq.tipe.asInstanceOf[AST.Typed.Name], F)
+              return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(index), AST.ResolvedAttr(symPosOpt, resOpt,
+                Some(sym.tipe))))
+            case (_, _) =>
+              return None()
+          }
+        case let: State.Claim.Let.SeqInBound =>
+          (valueToExp(let.seq), valueToExp(let.index)) match {
+            case (Some(o), Some(index)) =>
+              val info = th.typeMap.get(let.seq.tipe.asInstanceOf[AST.Typed.Name].ids).get.asInstanceOf[TypeInfo.Sig].methods.get("isInBound").get
+              val ident = AST.Exp.Ident(AST.Id("isInBound", AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt, info.resOpt, info.typedOpt))
+              return Some(AST.Exp.Invoke(Some(o), ident, ISZ(), ISZ(index),
+                AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))))
+            case _ => return None()
+          }
+        case let: State.Claim.Let.TypeTest =>
+          valueToExp(let.value) match {
+            case Some(e) =>
+              return Some(AST.Exp.Select(Some(e), AST.Id("isInstanceOf", AST.Attr(symPosOpt)),
+                ISZ(typedToType(let.tipe)), AST.ResolvedAttr(symPosOpt, lang.tipe.TypeChecker.isInstanceOfResOpt,
+                  AST.Typed.bOpt)))
+            case _ => return None()
+          }
+        case let: State.Claim.Let.ProofFunApply =>
+          if (let.pf.receiverTypeOpt.nonEmpty) {
+            val rcv = let.args(0)
+            valueToExp(rcv) match {
+              case Some(o) =>
+                var es = ISZ[AST.Exp]()
+                for (i <- 1 until let.args.size) {
+                  valueToExp(let.args(i)) match {
+                    case Some(e) => es = es :+ e
+                    case _ => return None()
+                  }
+                }
+                val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) =
+                  th.typeMap.get(rcv.tipe.asInstanceOf[AST.Typed.Name].ids).get match {
+                    case info: TypeInfo.Sig =>
+                      info.methods.get(let.pf.id) match {
+                        case Some(minfo) => (minfo.resOpt, minfo.typedOpt)
+                        case _ =>
+                          info.specMethods.get(let.pf.id) match {
+                            case Some(minfo) => (minfo.resOpt, minfo.typedOpt)
+                            case _ => (None(), None())
+                          }
+                      }
+                    case info: TypeInfo.Adt =>
+                      info.methods.get(let.pf.id) match {
+                        case Some(minfo) => (minfo.resOpt, minfo.typedOpt)
+                        case _ =>
+                          info.specMethods.get(let.pf.id) match {
+                            case Some(minfo) => (minfo.resOpt, minfo.typedOpt)
+                            case _ => (None(), None())
+                          }
+                      }
+                    case _ => halt("Infeasible")
+                  }
+                if (resOpt.isEmpty) {
+                  return None()
+                }
+                return Some(AST.Exp.Invoke(Some(o), AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
+                  AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
+                  Some(sym.tipe))))
+              case _ => return None()
+            }
+          } else {
+            var es = ISZ[AST.Exp]()
+            for (arg <- let.args) {
+              valueToExp(arg) match {
+                case Some(e) => es = es :+ e
+                case _ => return None()
+              }
+            }
+            val name = let.pf.context :+ let.pf.id
+            val rcvOpt: Option[AST.Exp] = if (let.pf.context.nonEmpty) Some(th.nameToExp(let.pf.context, symPos).asExp) else None()
+            val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = th.nameMap.get(name) match {
+              case Some(info: Info.Method) => (info.resOpt, info.typedOpt)
+              case Some(info: Info.SpecMethod) => (info.resOpt, info.typedOpt)
+              case _ => (None(), None())
+            }
+            if (resOpt.isEmpty) {
+              return None()
+            }
+            return Some(AST.Exp.Invoke(rcvOpt, AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
+              AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
+              Some(sym.tipe))))
+          }
+        case let: State.Claim.Let.Apply =>
+          var es = ISZ[AST.Exp]()
+          for (arg <- let.args) {
+            valueToExp(arg) match {
+              case Some(e) => es = es :+ e
+              case _ => return None()
+            }
+          }
+          assert(let.isLocal && let.context == context)
+          val ident = AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt,
+            Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, let.id)),
+            Some(let.tipe)))
+          return Some(AST.Exp.Invoke(None(), ident, ISZ(), es, AST.ResolvedAttr(symPosOpt, ident.resOpt,
+            Some(sym.tipe))))
+        case let: State.Claim.Let.Random =>
+          return Some(symAt(".random", let.sym))
+        case let: State.Claim.Let.FieldStore =>
+          halt(s"Infeasible: $let")
+      }
+
+    }
+
+    def fieldStoreToExp(left: AST.Exp, let: State.Claim.Let.FieldStore): Option[AST.Exp] = {
+      val sym = let.sym
+      val symPosOpt = Option.some(sym.pos)
+      rcvOptIdent(let.adt, symPosOpt) match {
+        case Some((rcvOpt, ident)) =>
+          val t = let.adt.tipe.asInstanceOf[AST.Typed.Name]
+          val (vars, specVars, idResOpt, sm): (ISZ[Info.Var], ISZ[Info.SpecVar], Option[AST.ResolvedInfo], HashMap[String, AST.Typed]) =
+            th.typeMap.get(t.ids).get match {
+              case info: TypeInfo.Adt =>
+                val paramIds = HashSet.empty[String] ++ (for (p <- info.ast.params) yield p.id.value)
+                if (paramIds.contains(let.id)) {
+                  val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(th, symPosOpt, t, ISZ(let.id), Reporter.create)
+                  val paramNames = resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames
+                  val index = ops.ISZOps(paramNames).indexOf(let.id)
+                  valueToExp(let.value) match {
+                    case Some(e) =>
+                      return Some(equate(sym.tipe, left, AST.Exp.InvokeNamed(rcvOpt, ident,
+                        ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)), e, index)),
+                        AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))))
+                    case _ => return None()
+                  }
+                }
+                ((info.vars -- (paramIds.elements :+ let.id)).values, (info.specVars -- ISZ(let.id)).values,
+                  info.vars.get(let.id).map((x: Info.Var) => x.resOpt).getOrElse(info.specVars.get(let.id).get.resOpt),
+                  TypeChecker.buildTypeSubstMap(info.name, symPosOpt, info.ast.typeParams, t.args, Reporter.create).get)
+              case info: TypeInfo.Sig =>
+                (ISZ(), (info.specVars -- ISZ(let.id)).values, info.specVars.get(let.id).get.resOpt,
+                  TypeChecker.buildTypeSubstMap(info.name, symPosOpt, info.ast.typeParams, t.args, Reporter.create).get)
+              case info => halt(s"Infeasible: $info")
+            }
+          (valueToExp(let.adt), valueToExp(let.value)) match {
+            case (Some(o1), Some(e)) =>
+              val attr = AST.Attr(symPosOpt)
+              var exps = ISZ[AST.Exp](
+                equate(sym.tipe, left, o1),
+                equate(let.value.tipe, AST.Exp.Select(Some(left), AST.Id(let.id, attr), ISZ(),
+                  AST.ResolvedAttr(symPosOpt, idResOpt, Some(let.value.tipe))), e),
+              )
+              for (x <- vars) {
+                val id = AST.Id(x.ast.id.value, attr)
+                val tOpt = Option.some(x.typedOpt.get.subst(sm))
+                val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
+                val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
+                val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
+                exps = exps :+ equate(tOpt.get, l, r)
+              }
+              for (x <- specVars) {
+                val id = AST.Id(x.ast.id.value, attr)
+                val tOpt = Option.some(x.typedOpt.get.subst(sm))
+                val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
+                val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
+                val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
+                exps = exps :+ equate(tOpt.get, l, r)
+              }
+              return Some(bigAndExp(exps))
+            case (_, _) => return None()
+          }
+        case _ => return None()
+      }
+    }
+
+    def valueToExp(value: State.Value): Option[AST.Exp] = {
+      @strictpure def subZPrefix(t: AST.Typed.Name): String = ops.StringOps(t.ids(t.ids.size - 1)).firstToLower
+
+      val attr = AST.Attr(Some(value.pos))
+      value match {
+        case value: State.Value.Sym =>
+          letMap.get(value.num) match {
+            case Some(lets) =>
+              if (lets.size == 1) {
+                return letToExp(lets.elements(0))
+              } else {
+                for (let <- lets.elements) {
+                  let match {
+                    case _: State.Claim.Let.Id =>
+                      letToExp(let) match {
+                        case Some(e) => return Some(e)
+                        case _ =>
+                      }
+                    case _: State.Claim.Let.Name =>
+                      letToExp(let) match {
+                        case Some(e) => return Some(e)
+                        case _ =>
+                      }
+                    case _ =>
+                  }
+                }
+                return None()
+              }
+            case _ =>
+              return Some(symAt(".cx", value))
+          }
+        case value: State.Value.B => return Some(AST.Exp.LitB(value.value, attr))
+        case value: State.Value.Z => return Some(AST.Exp.LitZ(value.value, attr))
+        case value: State.Value.R => return Some(AST.Exp.LitR(value.value, attr))
+        case value: State.Value.C => return Some(AST.Exp.LitC(value.value, attr))
+        case value: State.Value.F32 => return Some(AST.Exp.LitF32(value.value, attr))
+        case value: State.Value.F64 => return Some(AST.Exp.LitF64(value.value, attr))
+        case value: State.Value.String => return Some(AST.Exp.LitString(value.value, attr))
+        case value: State.Value.Enum => return Some(th.nameToExp(value.owner :+ value.id, value.pos).asExp)
+        case value: State.Value.S8 =>
+          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.S8.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
+        case value: State.Value.S16 =>
+          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.S16.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
+        case value: State.Value.S32 =>
+          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.S32.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
+        case value: State.Value.S64 =>
+          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.S64.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
+        case value: State.Value.U8 =>
+          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.U8.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
+        case value: State.Value.U16 =>
+          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.U16.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
+        case value: State.Value.U32 =>
+          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.U32.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
+        case value: State.Value.U64 =>
+          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(conversions.U64.toZ(value.value).string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
+        case value: State.Value.Range =>
+          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
+            ISZ(AST.Exp.LitString(value.value.string, attr)), ISZ(),
+            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
+        case value: State.Value.Unit => halt(s"Infeasible: $value")
+      }
+    }
+
+    def symAt(id: String, sym: State.Value.Sym): AST.Exp.At = {
+      val attr = AST.Attr(Some(sym.pos))
+      val n: Z = symNumMap.get(sym.num) match {
+        case Some(m) => m
+        case _ =>
+          val m = symNumMap.size
+          symNumMap = symNumMap + sym.num ~> m
+          m
+      }
+      val linesFresh: ISZ[AST.Exp.LitZ] =
+        if (includeFreshLines) ISZ(AST.Exp.LitZ(sym.pos.beginLine, attr), AST.Exp.LitZ(sym.num, attr))
+        else ISZ()
+      return AST.Exp.At(Some(typedToType(sym.tipe)), AST.Exp.LitString(id, attr),
+        AST.Exp.LitZ(n, attr), linesFresh, attr)
+    }
+
+    def toExp(claim: State.Claim): Option[AST.Exp] = {
+      if (plugins.nonEmpty) {
+        for (p <- plugins if p.canHandleExp(claim)) {
+          return p.handleExp(this, claim)
+        }
+      }
+      claim match {
+        case claim: State.Claim.And =>
+          var es = ISZ[AST.Exp]()
+          for (c <- defsToEqs(claim.claims)) {
+            toExp(c) match {
+              case Some(e) => es = es :+ e
+              case _ =>
+            }
+          }
+          return Some(bigAndExp(es))
+        case claim: State.Claim.Or =>
+          var es = ISZ[AST.Exp]()
+          for (c <- defsToEqs(claim.claims)) {
+            toExp(c) match {
+              case Some(e) => es = es :+ e
+              case _ => return None()
+            }
+          }
+          return Some(bigOrExp(es))
+        case claim: State.Claim.Imply =>
+          var es = ISZ[AST.Exp]()
+          val cs = defsToEqs(claim.claims)
+          for (i <- 0 until cs.size - 1) {
+            toExp(cs(i)) match {
+              case Some(e) => es = es :+ e
+              case _ =>
+            }
+          }
+          if (es.isEmpty) {
+            return None()
+          }
+          toExp(cs(cs.size - 1)) match {
+            case Some(e) => es = es :+ e
+            case _ => return None()
+          }
+          return Some(bigImplyExp(es))
+        case claim: State.Claim.Prop =>
+          valueToExp(claim.value) match {
+            case Some(e) =>
+              return Some(
+                if (claim.isPos) e
+                else AST.Exp.Unary(AST.Exp.UnaryOp.Not, e, AST.ResolvedAttr(posOpt,
+                  Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)), AST.Typed.bOpt)))
+            case _ => return None()
+          }
+        case claim: State.Claim.If =>
+          val condOpt = valueToExp(claim.cond)
+          val leftOpt = toExp(State.Claim.And(claim.tClaims))
+          val rightOpt = toExp(State.Claim.And(claim.fClaims))
+          (condOpt, leftOpt, rightOpt) match {
+            case (Some(cond), Some(left), Some(right)) => return Some(constructIf(cond, left, right, posOpt, AST.Typed.bOpt))
+            case (_, _, _) => return None()
+          }
+        case claim: State.Claim.Let.CurrentId =>
+          (letToExp(claim), valueToExp(claim.sym)) match {
+            case (Some(e1), Some(e2)) => return equateOpt(claim.sym.tipe, e1, e2)
+            case _ => return None()
+          }
+        case claim: State.Claim.Let.CurrentName =>
+          (letToExp(claim), valueToExp(claim.sym)) match {
+            case (Some(e1), Some(e2)) => return equateOpt(claim.sym.tipe, e1, e2)
+            case _ => return None()
+          }
+        case claim: State.Claim.Let.Id =>
+          (letToExp(claim), valueToExp(claim.sym)) match {
+            case (Some(e1), Some(e2)) => return equateOpt(claim.sym.tipe, e1, e2)
+            case _ => return None()
+          }
+        case claim: State.Claim.Let.Name =>
+          (letToExp(claim), valueToExp(claim.sym)) match {
+            case (Some(e1), Some(e2)) => return equateOpt(claim.sym.tipe, e1, e2)
+            case _ => return None()
+          }
+        case claim: State.Claim.Eq =>
+          letMap.get(claim.v1.num) match {
+            case Some(lets) if lets.size > 1 &&
+              ops.ISZOps(lets.elements).forall((let: State.Claim.Let) => let.isInstanceOf[State.Claim.Let.Def]) =>
+              eqMap.get(claim.v1.num) match {
+                case Some(eqs) if eqs.size == 1 =>
+                  val v1 = eqs.elements(0).v1
+                  (valueToExp(v1), valueToExp(claim.v2)) match {
+                    case (Some(e1), Some(e2)) => return equateOpt(v1.tipe, e1, e2)
+                    case (_, _) => return None()
+                  }
+                case _ =>
+              }
+            case _ =>
+          }
+          claim.v2 match {
+            case right: State.Value.Sym =>
+              letMap.get(right.num).getOrElse(HashSet.empty[State.Claim.Let]).elements match {
+                case ISZ(let: State.Claim.Let.FieldStore) =>
+                  valueToExp(claim.v1) match {
+                    case Some(v1) => return fieldStoreToExp(v1, let)
+                    case _ => return None()
+                  }
+                case _ =>
+              }
+            case _ =>
+          }
+          (valueToExp(claim.v1), valueToExp(claim.v2)) match {
+            case (Some(e1), Some(e2)) =>
+              return equateOpt(claim.v1.tipe, e1, e2)
+            case _ => return None()
+          }
+        case claim: State.Claim.Let => return letToExp(claim)
+        case _: State.Claim.Label => return None()
+        case _: State.Claim.Custom => return None()
+        case claim => halt(s"Infeasible: $claim")
+      }
+    }
+
+    @pure def translate(claims: ISZ[State.Claim]): ISZ[AST.Exp] = {
+      var r = HashSSet.empty[AST.Exp]
+
+      for (claim <- claims if !ignore(claim)) {
+        toExp(claim) match {
+          case Some(exp) if exp != trueLit => r = r + exp
+          case _ =>
+        }
+      }
+
+      return simplify(r.elements)
+    }
+  }
+
   val builtInTypeNames: HashSet[ISZ[String]] = HashSet ++ ISZ(
     AST.Typed.bName, AST.Typed.zName, AST.Typed.cName, AST.Typed.stringName, AST.Typed.f32Name, AST.Typed.f64Name,
     AST.Typed.rName, AST.Typed.stName, AST.Typed.isName, AST.Typed.msName
@@ -1436,1062 +2514,14 @@ object Util {
     return State.Claim.And(cs)
   }
 
-  @pure def claimsToExps(pos: Position, context: ISZ[String], claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ISZ[AST.Exp] = {
-    def ignore(claim: State.Claim): B = {
-      claim match {
-        case _: State.Claim.And => return F
-        case _: State.Claim.Or => return F
-        case _: State.Claim.Imply => return F
-        case _: State.Claim.Prop => return F
-        case _: State.Claim.If => return F
-        case _: State.Claim.Eq => return F
-        case _: State.Claim.Let.CurrentId => return F
-        case _: State.Claim.Let.CurrentName => return F
-        case _: State.Claim.Let.Id => return F
-        case _: State.Claim.Let.Name => return F
-        case _ => return T
-      }
-    }
-
-    val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
-    val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
-
-    var symNumMap = HashMap.empty[Z, Z]
-    val posOpt: Option[Position] = Some(pos)
+  @pure def claimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
+                         claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ISZ[AST.Exp] = {
     val collector = LetEqNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty, HashMap.empty)
     for (claim <- claims) {
       collector.transformStateClaim(claim)
     }
-
-    @pure def esToBinaryExp(es: ISZ[AST.Exp], dflt: AST.Exp, op: String, tOpt: Option[AST.Typed], res: AST.ResolvedInfo): AST.Exp = {
-      if (es.isEmpty) {
-        return dflt
-      }
-      var r = es(0)
-      for (i <- 1 until es.size) {
-        r = AST.Exp.Binary(r, op, es(i), AST.ResolvedAttr(None(), Some(res), tOpt))
-      }
-      return r
-    }
-
-    @pure def bigAndExp(exps: ISZ[AST.Exp]): AST.Exp = {
-      var set = HashSSet.empty[AST.Exp]
-      for (exp <- exps) {
-        if (exp == trueLit) {
-          // skip
-        } else if (exp == falseLit) {
-          return falseLit
-        } else {
-          set = set + exp
-        }
-      }
-      return esToBinaryExp(set.elements, trueLit, AST.Exp.BinaryOp.And,
-        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
-    }
-
-    @pure def bigOrExp(exps: ISZ[AST.Exp]): AST.Exp = {
-      var set = HashSSet.empty[AST.Exp]
-      for (exp <- exps) {
-        if (exp == trueLit) {
-          return trueLit
-        } else if (exp == falseLit) {
-          // skip
-        } else {
-          set = set + exp
-        }
-      }
-      return esToBinaryExp(set.elements, falseLit, AST.Exp.BinaryOp.Or,
-        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
-    }
-
-    @pure def bigImplyExp(exps: ISZ[AST.Exp]): AST.Exp = {
-      var es = ISZ[AST.Exp]()
-      for (i <- 0 until exps.size - 1) {
-        val exp = exps(i)
-        if (exp == falseLit) {
-          return trueLit
-        } else {
-          es = es :+ exp
-        }
-      }
-      es = es :+ exps(exps.size - 1)
-      assert(es.size >= 2)
-      var r = es(es.size - 1)
-      val op = AST.Exp.BinaryOp.Imply
-      val res = AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
-      var i = es.size - 2
-      while (i >= 0) {
-        if (r != trueLit) {
-          r = AST.Exp.Binary(es(i), op, r, AST.ResolvedAttr(None(), Some(res), AST.Typed.bOpt))
-        }
-        i = i - 1
-      }
-      return r
-    }
-
-    def typedToType(t: AST.Typed): AST.Type = {
-      val attr = AST.Attr(Some(pos))
-      val typedAttr = AST.TypedAttr(attr.posOpt, Some(t))
-
-      @pure def toName(ids: ISZ[String]): AST.Name = {
-        ids match {
-          case ISZ("org", "sireum", _*) if ids.size > 2 =>
-            return AST.Name(for (i <- 2 until ids.size) yield AST.Id(ids(i), attr), attr)
-          case _ => return AST.Name(for (id <- ids) yield AST.Id(id, attr), attr)
-        }
-      }
-      t match {
-        case t: AST.Typed.Name => return AST.Type.Named(toName(t.ids),
-          for (arg <- t.args) yield typedToType(arg), typedAttr)
-        case t: AST.Typed.TypeVar => return AST.Type.Named(toName(ISZ(t.id)), ISZ(), typedAttr)
-        case t: AST.Typed.Tuple => return AST.Type.Tuple(for (arg <- t.args) yield typedToType(arg), typedAttr)
-        case t: AST.Typed.Enum => return AST.Type.Named(toName(t.name), ISZ(), typedAttr)
-        case t: AST.Typed.Fun => return AST.Type.Fun(t.isPure, t.isByName, for (arg <- t.args) yield typedToType(arg),
-          typedToType(t.ret), typedAttr)
-        case t: AST.Typed.Method => halt(s"Infeasible: $t")
-        case t: AST.Typed.Object => halt(s"Infeasible: $t")
-        case t: AST.Typed.Methods => halt(s"Infeasible: $t")
-        case t: AST.Typed.Package => halt(s"Infeasible: $t")
-        case t: AST.Typed.Fact =>  halt(s"Infeasible: $t")
-        case t: AST.Typed.Theorem => halt(s"Infeasible: $t")
-        case t: AST.Typed.Inv => halt(s"Infeasible: $t")
-      }
-    }
-
-    def constructIf(cond: AST.Exp, left: AST.Exp, right: AST.Exp, pOpt: Option[Position], tOpt: Option[AST.Typed]): AST.Exp = {
-      if (right == trueLit) {
-        if (left == trueLit) {
-          return trueLit
-        }
-        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondImply, left, AST.ResolvedAttr(pOpt,
-          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)), AST.Typed.bOpt))
-      } else if (right == falseLit) {
-        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondAnd, left, AST.ResolvedAttr(pOpt,
-          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)), AST.Typed.bOpt))
-      } else if (left == trueLit) {
-        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondOr, right, AST.ResolvedAttr(pOpt,
-          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr)), AST.Typed.bOpt))
-      }
-      return AST.Exp.If(cond, left, right, AST.TypedAttr(pOpt, tOpt))
-    }
-
-    def symAt(id: String, sym: State.Value.Sym): AST.Exp.At = {
-      val attr = AST.Attr(Some(sym.pos))
-      val n: Z = symNumMap.get(sym.num) match {
-        case Some(m) => m
-        case _ =>
-          val m = symNumMap.size
-          symNumMap = symNumMap + sym.num ~> m
-          m
-      }
-      val linesFresh: ISZ[AST.Exp.LitZ] =
-        if (includeFreshLines) ISZ(AST.Exp.LitZ(sym.pos.beginLine, attr), AST.Exp.LitZ(sym.num, attr))
-        else ISZ()
-      return AST.Exp.At(Some(typedToType(sym.tipe)), AST.Exp.LitString(id, attr),
-        AST.Exp.LitZ(n, attr), linesFresh, attr)
-    }
-
-    def rcvOptIdent(v: State.Value, symPosOpt: Option[Position]): Option[(Option[AST.Exp], AST.Exp.Ident)] = {
-      valueToExp(v) match {
-        case Some(o) =>
-          o match {
-            case o: AST.Exp.Ident => return Some((None(), o))
-            case o: AST.Exp.Select => return Some((o.receiverOpt, AST.Exp.Ident(o.id, o.attr)))
-            case o => return Some((Some(o), AST.Exp.Ident(AST.Id("apply", AST.Attr(symPosOpt)), AST.ResolvedAttr(
-              symPosOpt, TypeChecker.applyResOpt, o.typedOpt))))
-          }
-        case _ => return None()
-      }
-    }
-
-    def letToExp(let: State.Claim.Let): Option[AST.Exp] = {
-      val sym = let.sym
-      val symPos = sym.pos
-      val symPosOpt = Option.some(symPos)
-
-      let match {
-        case let: State.Claim.Let.CurrentId =>
-          return Some(AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
-            symPosOpt,
-            Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
-            Some(sym.tipe))))
-        case let: State.Claim.Let.CurrentName =>
-          return Some(th.nameToExp(let.ids, symPos).asExp)
-        case let: State.Claim.Let.Id =>
-          val n = collector.lNumMap.get((let.context, let.id)).get.get((let.num, let.poss)).get
-          val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
-            (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
-          } else {
-            ISZ()
-          }
-          val attr = AST.Attr(symPosOpt)
-          if (let.context == context || let.context.isEmpty) {
-            return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
-              Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
-              Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr))
-          } else {
-            return Some(AST.Exp.At(Some(typedToType(sym.tipe)),
-              AST.Exp.LitString(st"${(let.context :+ let.id, ".")}".render, AST.Attr(symPosOpt)),
-              AST.Exp.LitZ(n, attr), linesFresh, attr))
-          }
-        case let: State.Claim.Let.Name =>
-          val n = collector.vNumMap.get(let.ids).get.get((let.num, let.poss)).get
-          val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
-            (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
-          } else {
-            ISZ()
-          }
-          val attr = AST.Attr(symPosOpt)
-          return Some(AST.Exp.At(None(), th.nameToExp(let.ids, symPos).asExp, AST.Exp.LitZ(n, attr), linesFresh, attr))
-        case let: State.Claim.Let.Unary =>
-          val (op, kind): (AST.Exp.UnaryOp.Type, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
-            case string"+" => (AST.Exp.UnaryOp.Plus, AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus)
-            case string"-" => (AST.Exp.UnaryOp.Minus, AST.ResolvedInfo.BuiltIn.Kind.UnaryMinus)
-            case string"~" => (AST.Exp.UnaryOp.Complement, AST.ResolvedInfo.BuiltIn.Kind.UnaryComplement)
-            case string"!" => (AST.Exp.UnaryOp.Not, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)
-            case _ => halt(s"Infeasible: ${let.op}")
-          }
-          valueToExp(let.value) match {
-            case Some(e) =>
-              return Some(AST.Exp.Unary(op, e, AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(kind)),
-                Some(sym.tipe))))
-            case _ =>
-              return None()
-          }
-        case let: State.Claim.Let.Binary =>
-          @pure def isS(t: AST.Typed): B = {
-            t match {
-              case t: AST.Typed.Name => return (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName)
-              case _ => return F
-            }
-          }
-          @pure def sOp(op: String): Option[AST.Exp] = {
-            (valueToExp(let.left), valueToExp(let.right)) match {
-              case (Some(l), Some(r)) =>
-                var left = l
-                var right = r
-                val sType: AST.Typed.Name = if (op == AST.Exp.BinaryOp.Prepend) {
-                  left match {
-                    case l: AST.Exp.Tuple if l.args.size >= 2 => left = AST.Exp.Tuple(ISZ(left), l.attr)
-                    case _ =>
-                  }
-                  let.right.tipe.asInstanceOf[AST.Typed.Name]
-                } else if (op == AST.Exp.BinaryOp.Append) {
-                  right match {
-                    case r: AST.Exp.Tuple if r.args.size >= 2 => right = AST.Exp.Tuple(ISZ(right), r.attr)
-                    case _ =>
-                  }
-                  let.left.tipe.asInstanceOf[AST.Typed.Name]
-                } else {
-                  let.left.tipe.asInstanceOf[AST.Typed.Name]
-                }
-                val info = th.typeMap.get(sType.ids).get.asInstanceOf[TypeInfo.Sig].methods.get(op).get
-                return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))))
-              case (_, _) => return None()
-            }
-          }
-          val (op, kind): (String, AST.ResolvedInfo.BuiltIn.Kind.Type) = let.op match {
-            case AST.Exp.BinaryOp.Add => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryAdd)
-            case AST.Exp.BinaryOp.Sub => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinarySub)
-            case AST.Exp.BinaryOp.Mul => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryMul)
-            case AST.Exp.BinaryOp.Div => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryDiv)
-            case AST.Exp.BinaryOp.Rem => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryRem)
-            case AST.Exp.BinaryOp.CondAnd => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)
-            case AST.Exp.BinaryOp.CondOr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr)
-            case AST.Exp.BinaryOp.CondImply => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)
-            case AST.Exp.BinaryOp.And => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd)
-            case AST.Exp.BinaryOp.Or => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)
-            case AST.Exp.BinaryOp.Xor => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryXor)
-            case AST.Exp.BinaryOp.Imply => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
-            case AST.Exp.BinaryOp.Eq => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)
-            case AST.Exp.BinaryOp.Equiv => (AST.Exp.BinaryOp.EquivUni, AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)
-            case AST.Exp.BinaryOp.EquivUni => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv)
-            case AST.Exp.BinaryOp.FpEq => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryFpEq)
-            case AST.Exp.BinaryOp.Ne => (AST.Exp.BinaryOp.Ne, AST.ResolvedInfo.BuiltIn.Kind.BinaryNe)
-            case AST.Exp.BinaryOp.Inequiv => (AST.Exp.BinaryOp.InequivUni, AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv)
-            case AST.Exp.BinaryOp.InequivUni => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv)
-            case AST.Exp.BinaryOp.FpNe => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryFpNe)
-            case AST.Exp.BinaryOp.Lt => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryLt)
-            case AST.Exp.BinaryOp.Le => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryLe)
-            case AST.Exp.BinaryOp.Gt => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryGt)
-            case AST.Exp.BinaryOp.Ge => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryGe)
-            case AST.Exp.BinaryOp.Shl => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryShl)
-            case AST.Exp.BinaryOp.Shr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryShr)
-            case AST.Exp.BinaryOp.Ushr => (let.op, AST.ResolvedInfo.BuiltIn.Kind.BinaryUshr)
-            case AST.Exp.BinaryOp.Append if isS(let.left.tipe) => return sOp(let.op)
-            case AST.Exp.BinaryOp.AppendAll if isS(let.left.tipe) => return sOp(let.op)
-            case AST.Exp.BinaryOp.Prepend if isS(let.right.tipe) => return sOp(let.op)
-            case AST.Exp.BinaryOp.RemoveAll if isS(let.left.tipe)=> return sOp(let.op)
-            case _ => halt(s"Infeasible: ${let.op}")
-          }
-          (valueToExp(let.left), valueToExp(let.right)) match {
-            case (Some(left), Some(right)) =>
-              return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt,
-                Some(AST.ResolvedInfo.BuiltIn(kind)), Some(sym.tipe))))
-            case (_, _) => return None()
-          }
-        case let: State.Claim.Let.Def =>
-          return valueToExp(let.value)
-        case let: State.Claim.Let.And =>
-          var es = ISZ[AST.Exp]()
-          for (v <- let.args) {
-            valueToExp(v) match {
-              case Some(e) => es = es :+ e
-              case _ =>
-            }
-          }
-          return Some(bigAndExp(es))
-        case let: State.Claim.Let.Or =>
-          var es = ISZ[AST.Exp]()
-          for (v <- let.args) {
-            valueToExp(v) match {
-              case Some(e) => es = es :+ e
-              case _ => return None()
-            }
-          }
-          return Some(bigOrExp(es))
-        case let: State.Claim.Let.Imply =>
-          var es = ISZ[AST.Exp]()
-          for (i <- 0 until let.args.size - 1) {
-            valueToExp(let.args(i)) match {
-              case Some(e) => es = es :+ e
-              case _ =>
-            }
-          }
-          valueToExp(let.args(let.args.size - 1)) match {
-            case Some(e) =>
-              if (es.isEmpty) {
-                return Some(e)
-              }
-              es = es :+ e
-            case _ => return None()
-          }
-          return Some(bigImplyExp(es))
-        case let: State.Claim.Let.Ite =>
-          (valueToExp(let.cond), valueToExp(let.left), valueToExp(let.right)) match {
-            case (Some(cond), Some(left), Some(right)) =>
-              return Some(constructIf(cond, left, right, symPosOpt, Some(sym.tipe)))
-            case (_, _, _) => return None()
-          }
-        case let: State.Claim.Let.TupleLit =>
-          var es = ISZ[AST.Exp]()
-          for (arg <- let.args) {
-            valueToExp(arg) match {
-              case Some(e) => es = es :+ e
-              case _ => return None()
-            }
-          }
-          return Some(AST.Exp.Tuple(es, AST.TypedAttr(symPosOpt, Some(sym.tipe))))
-        case let: State.Claim.Let.AdtLit =>
-          val info = th.typeMap.get(let.tipe.ids).get.asInstanceOf[TypeInfo.Adt]
-          val ownerName = ops.ISZOps(let.tipe.ids).dropRight(1)
-          var es = ISZ[AST.Exp]()
-          for (arg <- let.args) {
-            valueToExp(arg) match {
-              case Some(e) => es = es :+ e
-              case _ => return None()
-            }
-          }
-          val nameExp = th.nameToExp(let.tipe.ids, symPos)
-          return Some(AST.Exp.Invoke(
-            if (ownerName.isEmpty || ownerName == AST.Typed.sireumName) None()
-            else Some(th.nameToExp(ownerName, symPos).asExp),
-            AST.Exp.Ident(AST.Id(let.tipe.ids(let.tipe.ids.size - 1), AST.Attr(symPosOpt)), AST.ResolvedAttr(
-              symPosOpt,
-              nameExp.resOpt,
-              nameExp.typedOpt
-            )),
-            for (targ <- let.tipe.args) yield typedToType(targ),
-            es,
-            AST.ResolvedAttr(
-              symPosOpt,
-              info.constructorResOpt,
-              Some(sym.tipe)
-            )
-          ))
-        case let: State.Claim.Let.SeqLit =>
-          var es = ISZ[AST.Exp]()
-          for (arg <- let.args) {
-            valueToExp(arg.value) match {
-              case Some(e) => es = es :+ e
-              case _ => return None()
-            }
-          }
-          val t = sym.tipe.asInstanceOf[AST.Typed.Name]
-          val (name, targs): (ISZ[String], ISZ[AST.Type]) =
-            if (t.args(0) == AST.Typed.z) {
-              if (t.ids == AST.Typed.msName) {
-                if (t.args(1) == AST.Typed.z) (AST.Typed.zsName, ISZ())
-                else (AST.Typed.mszName, ISZ(typedToType(t.args(1))))
-              } else {
-                (AST.Typed.iszName, ISZ(typedToType(t.args(1))))
-              }
-            } else {
-              (t.ids, ISZ(typedToType(t.args(0)), typedToType(t.args(1))))
-            }
-          val nameExp = th.nameToExp(name, symPos)
-          val ident = AST.Exp.Ident(AST.Id(name(name.size - 1), AST.Attr(symPosOpt)),
-            AST.ResolvedAttr(symPosOpt, nameExp.resOpt, nameExp.typedOpt))
-          return Some(AST.Exp.Invoke(None(), ident, targs, es, AST.ResolvedAttr(symPosOpt,
-            TypeChecker.sConstructorTypedResOpt(name, let.args.size)._2, Some(t))))
-        case let: State.Claim.Let.Quant =>
-          @pure def isInBoundResOpt(resOpt: Option[AST.ResolvedInfo]): B = {
-            if (resOpt.isEmpty) {
-              return F
-            }
-            resOpt.get match {
-              case res: AST.ResolvedInfo.Method =>
-                return res.id == "isInBound" && (res.owner == AST.Typed.isName || res.owner == AST.Typed.msName)
-              case _ =>
-            }
-            return F
-          }
-          @pure def isQuantParamIndex(fcontext: ISZ[String], idOpt: Option[AST.Id], arg: AST.Exp): B = {
-            if (idOpt.isEmpty) {
-              return F
-            }
-            arg match {
-              case arg: AST.Exp.Ident =>
-                arg.attr.resOpt match {
-                  case Some(res: AST.ResolvedInfo.LocalVar) =>
-                    return res.id == idOpt.get.value && res.context == fcontext
-                  case _ =>
-                }
-              case _ =>
-            }
-            return F
-          }
-          @pure def isQuantRange(fcontext: ISZ[String], idOpt: Option[AST.Id], range: AST.Exp.Binary): (B, B) = {
-            if (idOpt.isEmpty) {
-              return (F, F)
-            }
-            val id = idOpt.get.value
-            if (range.attr.resOpt != andResOpt) {
-              return (F, F)
-            }
-            (range.left, range.right) match {
-              case (left: AST.Exp.Binary, right: AST.Exp.Binary) if left.attr.resOpt == leResOpt =>
-                (left.right, right.left) match {
-                  case (lr: AST.Exp.Ident, rl: AST.Exp.Ident) =>
-                    (lr.resOpt, rl.resOpt) match {
-                      case (Some(lrRes: AST.ResolvedInfo.LocalVar), Some(rlRes: AST.ResolvedInfo.LocalVar)) =>
-                        if (lrRes.id == id && rlRes.id == id && lrRes.context == fcontext && rlRes.context == fcontext) {
-                          // skip
-                        } else {
-                          return (F, F)
-                        }
-                      case _ => return (F, F)
-                    }
-                  case _ =>
-                }
-                if (right.attr.resOpt == leResOpt) {
-                  return (T, T)
-                } else if (right.attr.resOpt == ltResOpt) {
-                  return (T, F)
-                }
-              case _ =>
-            }
-            return (F, F)
-          }
-          @pure def paramIdx(idOpt1: Option[AST.Id], idOpt2: Option[AST.Id]): B = {
-            (idOpt1, idOpt2) match {
-              case (Some(id1), Some(id2)) => return id1.value == s"${id2.value}${Logika.idxSuffix}"
-              case _ =>
-            }
-            return F
-          }
-          @pure def isIdent(fcontext: ISZ[String], id: AST.Id, e: AST.Exp): B = {
-            e match {
-              case e: AST.Exp.Ident =>
-                e.resOpt match {
-                  case Some(res: AST.ResolvedInfo.LocalVar) => return res.id == id.value && res.context == fcontext
-                  case _ =>
-                }
-              case _ =>
-            }
-            return F
-          }
-
-          val exp: AST.Exp = toExp(State.Claim.And(let.claims)) match {
-            case Some(e) => e
-            case _ => return None()
-          }
-          var params = ISZ[AST.Exp.Fun.Param]()
-          var fcontext = ISZ[String]()
-          val attr = AST.Attr(symPosOpt)
-          var argTypes = ISZ[AST.Typed]()
-          for (x <- let.vars) {
-            fcontext = x.context
-            argTypes = argTypes :+ x.tipe
-            val t = typedToType(x.tipe)
-            params = params :+ AST.Exp.Fun.Param(Some(AST.Id(x.id, attr)), Some(t), Some(x.tipe))
-          }
-          exp match {
-            case exp: AST.Exp.Binary if (let.isAll && (exp.attr.resOpt == implyResOpt ||
-              exp.attr.resOpt == condImplyResOpt)) || (!let.isAll && (exp.attr.resOpt == andResOpt ||
-              exp.attr.resOpt == condAndResOpt)) =>
-              exp.left match {
-                case left: AST.Exp.Invoke if left.receiverOpt.nonEmpty && isInBoundResOpt(left.ident.attr.resOpt) =>
-                  val seq = left.receiverOpt.get
-                  val t = seq.typedOpt.get.asInstanceOf[AST.Typed.Name]
-                  if (params.size == 2 && paramIdx(params(0).idOpt, params(1).idOpt) &&
-                    isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
-                    exp.right match {
-                      case right: AST.Exp.Binary if (let.isAll && right.attr.resOpt == implyResOpt) ||
-                        (!let.isAll && right.attr.resOpt == andResOpt) =>
-                        right.left match {
-                          case rl: AST.Exp.Binary if isIdent(fcontext, params(1).idOpt.get, rl.right) &&
-                            rl.attr.resOpt == eqResOpt || rl.attr.resOpt == equivResOpt =>
-                            rl.left match {
-                              case rll: AST.Exp.Invoke if rll.args.size == 1 &&
-                                isIdent(fcontext, params(0).idOpt.get, rll.args(0)) =>
-                                if (left.receiverOpt == Some[AST.Exp](rll.ident)) {
-                                  val fun = AST.Exp.Fun(fcontext, ISZ(params(1)(tipeOpt = None())),
-                                    AST.Stmt.Expr(right.right, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
-                                    AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, ISZ(argTypes(1)), AST.Typed.b))))
-                                  return Some(AST.Exp.QuantEach(let.isAll, rll.ident, fun, AST.ResolvedAttr(symPosOpt,
-                                    Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current,
-                                      F, T, params(1).idOpt.get.value)),
-                                    AST.Typed.bOpt)))
-                                }
-                              case _ =>
-                            }
-                          case _ =>
-                        }
-                      case _ =>
-                    }
-                  } else if (params.size == 1 && isQuantParamIndex(fcontext, params(0).idOpt, left.args(0))) {
-                    val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = {
-                      val info = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Sig].methods.get("indices").get
-                      (info.resOpt, info.typedOpt)
-                    }
-                    val fun = AST.Exp.Fun(fcontext, ISZ(params(0)(tipeOpt = None())), AST.Stmt.Expr(exp.right,
-                      AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), AST.TypedAttr(symPosOpt,
-                      Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
-                    return Some(AST.Exp.QuantEach(let.isAll, AST.Exp.Select(left.receiverOpt, AST.Id("indices", attr),
-                      ISZ(), AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), fun, AST.ResolvedAttr(symPosOpt,
-                      Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
-                        params(0).idOpt.get.value)),
-                      AST.Typed.bOpt)))
-                  }
-                case left: AST.Exp.Binary if params.size == 1 =>
-                  val (ok, isExact) = isQuantRange(fcontext, params(0).idOpt, left)
-                  if (ok) {
-                    val lo = left.left.asInstanceOf[AST.Exp.Binary].left
-                    val hi = left.right.asInstanceOf[AST.Exp.Binary].right
-                    val fun = AST.Exp.Fun(fcontext, ISZ(params(0)(tipeOpt = None())), AST.Stmt.Expr(exp.right,
-                      AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), AST.TypedAttr(symPosOpt,
-                      Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
-                    return Some(AST.Exp.QuantRange(let.isAll, lo, hi, isExact, fun, AST.ResolvedAttr(symPosOpt,
-                      Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
-                        params(0).idOpt.get.value)),
-                      AST.Typed.bOpt)))
-                  }
-                case _ =>
-              }
-            case _ =>
-          }
-          val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(exp, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
-            AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
-          return Some(AST.Exp.QuantType(let.isAll, fun, attr))
-        case let: State.Claim.Let.FieldLookup =>
-          valueToExp(let.adt) match {
-            case Some(o) =>
-              let.adt.tipe match {
-                case t: AST.Typed.Name =>
-                  th.typeMap.get(t.ids).get match {
-                    case ti: TypeInfo.Adt =>
-                      ti.vars.get(let.id) match {
-                        case Some(info) =>
-                          return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-                            AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, info.ast.isSpec,
-                              info.ast.isVal, info.owner, let.id)), Some(sym.tipe))))
-                        case _ =>
-                          val info = ti.specVars.get(let.id).get
-                          return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-                            AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, T, info.ast.isVal,
-                              info.owner, let.id)), Some(sym.tipe))))
-                      }
-                    case ti: TypeInfo.Sig =>
-                      ti.specVars.get(let.id) match {
-                        case Some(info) =>
-                          return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-                            AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, T, info.ast.isVal,
-                              info.owner, let.id)), Some(sym.tipe))))
-                        case _ =>
-                      }
-                      assert(let.id == "size" && (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName))
-                      val info = ti.methods.get(let.id).get
-                      val tOpt: Option[AST.Typed.Fun] = info.typedOpt match {
-                        case Some(_: AST.Typed.Method) => Some(AST.Typed.Fun(T, T, ISZ(), sym.tipe))
-                        case Some(t) => halt(s"Infeasible: $t")
-                        case _ => None()
-                      }
-                      return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-                        AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Method(info.isInObject, AST.MethodMode.Method, ISZ(),
-                          info.owner, let.id, ISZ(), tOpt, ISZ(), ISZ())), Some(sym.tipe))))
-                    case ti => halt(s"Infeasible: $ti")
-                  }
-                case t: AST.Typed.Tuple =>
-                  return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-                    AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Tuple(t.args.size,
-                      Z(ops.StringOps(let.id).substring(1, let.id.size)).get)), Some(sym.tipe))))
-                case t => halt(s"Infeasible: $t")
-              }
-            case _ => return None()
-          }
-        case let: State.Claim.Let.SeqStore =>
-          (rcvOptIdent(let.seq, symPosOpt), valueToExp(let.index), valueToExp(let.element)) match {
-            case (Some((rcvOpt, ident)), Some(index), Some(element)) =>
-              val (_, resOpt) = TypeChecker.sStoreTypedResOpt(let.seq.tipe.asInstanceOf[AST.Typed.Name], 1)
-              return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(AST.Exp.Binary(index,
-                AST.Exp.BinaryOp.MapsTo, element, AST.ResolvedAttr(symPosOpt,
-                  Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo)), Some(AST.Typed.Tuple(ISZ(
-                    let.index.tipe, let.element.tipe)))))),
-                AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe))))
-            case (_, _, _) => return None()
-          }
-        case let: State.Claim.Let.SeqLookup =>
-          (rcvOptIdent(let.seq, symPosOpt), valueToExp(let.index)) match {
-            case (Some((rcvOpt, ident)), Some(index)) =>
-              val (_, resOpt) = TypeChecker.sSelectTypedResOpt(let.seq.tipe.asInstanceOf[AST.Typed.Name], F)
-              return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(index), AST.ResolvedAttr(symPosOpt, resOpt,
-                Some(sym.tipe))))
-            case (_, _) =>
-              return None()
-          }
-        case let: State.Claim.Let.SeqInBound =>
-          (valueToExp(let.seq), valueToExp(let.index)) match {
-            case (Some(o), Some(index)) =>
-              val info = th.typeMap.get(let.seq.tipe.asInstanceOf[AST.Typed.Name].ids).get.asInstanceOf[TypeInfo.Sig].methods.get("isInBound").get
-              val ident = AST.Exp.Ident(AST.Id("isInBound", AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt, info.resOpt, info.typedOpt))
-              return Some(AST.Exp.Invoke(Some(o), ident, ISZ(), ISZ(index),
-                AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))))
-            case _ => return None()
-          }
-        case let: State.Claim.Let.TypeTest =>
-          valueToExp(let.value) match {
-            case Some(e) =>
-              return Some(AST.Exp.Select(Some(e), AST.Id("isInstanceOf", AST.Attr(symPosOpt)),
-                ISZ(typedToType(let.tipe)), AST.ResolvedAttr(symPosOpt, lang.tipe.TypeChecker.isInstanceOfResOpt,
-                  AST.Typed.bOpt)))
-            case _ => return None()
-          }
-        case let: State.Claim.Let.ProofFunApply =>
-          if (let.pf.receiverTypeOpt.nonEmpty) {
-            val rcv = let.args(0)
-            valueToExp(rcv) match {
-              case Some(o) =>
-                var es = ISZ[AST.Exp]()
-                for (i <- 1 until let.args.size) {
-                  valueToExp(let.args(i)) match {
-                    case Some(e) => es = es :+ e
-                    case _ => return None()
-                  }
-                }
-                val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) =
-                  th.typeMap.get(rcv.tipe.asInstanceOf[AST.Typed.Name].ids).get match {
-                    case info: TypeInfo.Sig =>
-                      info.methods.get(let.pf.id) match {
-                        case Some(minfo) => (minfo.resOpt, minfo.typedOpt)
-                        case _ =>
-                          info.specMethods.get(let.pf.id) match {
-                            case Some(minfo) => (minfo.resOpt, minfo.typedOpt)
-                            case _ => (None(), None())
-                          }
-                      }
-                    case info: TypeInfo.Adt =>
-                      info.methods.get(let.pf.id) match {
-                        case Some(minfo) => (minfo.resOpt, minfo.typedOpt)
-                        case _ =>
-                          info.specMethods.get(let.pf.id) match {
-                            case Some(minfo) => (minfo.resOpt, minfo.typedOpt)
-                            case _ => (None(), None())
-                          }
-                      }
-                    case _ => halt("Infeasible")
-                  }
-                if (resOpt.isEmpty) {
-                  return None()
-                }
-                return Some(AST.Exp.Invoke(Some(o), AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
-                  AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
-                  Some(sym.tipe))))
-              case _ => return None()
-            }
-          } else {
-            var es = ISZ[AST.Exp]()
-            for (arg <- let.args) {
-              valueToExp(arg) match {
-                case Some(e) => es = es :+ e
-                case _ => return None()
-              }
-            }
-            val name = let.pf.context :+ let.pf.id
-            val rcvOpt: Option[AST.Exp] = if (let.pf.context.nonEmpty) Some(th.nameToExp(let.pf.context, symPos).asExp) else None()
-            val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = th.nameMap.get(name) match {
-              case Some(info: Info.Method) => (info.resOpt, info.typedOpt)
-              case Some(info: Info.SpecMethod) => (info.resOpt, info.typedOpt)
-              case _ => (None(), None())
-            }
-            if (resOpt.isEmpty) {
-              return None()
-            }
-            return Some(AST.Exp.Invoke(rcvOpt, AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
-              AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
-              Some(sym.tipe))))
-          }
-        case let: State.Claim.Let.Apply =>
-          var es = ISZ[AST.Exp]()
-          for (arg <- let.args) {
-            valueToExp(arg) match {
-              case Some(e) => es = es :+ e
-              case _ => return None()
-            }
-          }
-          assert(let.isLocal && let.context == context)
-          val ident = AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt,
-            Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, let.id)),
-            Some(let.tipe)))
-          return Some(AST.Exp.Invoke(None(), ident, ISZ(), es, AST.ResolvedAttr(symPosOpt, ident.resOpt,
-            Some(sym.tipe))))
-        case let: State.Claim.Let.Random =>
-          return Some(symAt(".random", let.sym))
-        case let: State.Claim.Let.FieldStore =>
-          halt(s"Infeasible: $let")
-      }
-
-    }
-
-    def fieldStoreToExp(left: AST.Exp, let: State.Claim.Let.FieldStore): Option[AST.Exp] = {
-      val sym = let.sym
-      val symPosOpt = Option.some(sym.pos)
-      rcvOptIdent(let.adt, symPosOpt) match {
-        case Some((rcvOpt, ident)) =>
-          val t = let.adt.tipe.asInstanceOf[AST.Typed.Name]
-          val (vars, specVars, idResOpt, sm): (ISZ[Info.Var], ISZ[Info.SpecVar], Option[AST.ResolvedInfo], HashMap[String, AST.Typed]) =
-            th.typeMap.get(t.ids).get match {
-              case info: TypeInfo.Adt =>
-                val paramIds = HashSet.empty[String] ++ (for (p <- info.ast.params) yield p.id.value)
-                if (paramIds.contains(let.id)) {
-                  val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(th, symPosOpt, t, ISZ(let.id), Reporter.create)
-                  val paramNames = resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames
-                  val index = ops.ISZOps(paramNames).indexOf(let.id)
-                  valueToExp(let.value) match {
-                    case Some(e) =>
-                      return Some(equate(sym.tipe, left, AST.Exp.InvokeNamed(rcvOpt, ident,
-                        ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)), e, index)),
-                        AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))))
-                    case _ => return None()
-                  }
-                }
-                ((info.vars -- (paramIds.elements :+ let.id)).values, (info.specVars -- ISZ(let.id)).values,
-                  info.vars.get(let.id).map((x: Info.Var) => x.resOpt).getOrElse(info.specVars.get(let.id).get.resOpt),
-                  TypeChecker.buildTypeSubstMap(info.name, symPosOpt, info.ast.typeParams, t.args, Reporter.create).get)
-              case info: TypeInfo.Sig =>
-                (ISZ(), (info.specVars -- ISZ(let.id)).values, info.specVars.get(let.id).get.resOpt,
-                  TypeChecker.buildTypeSubstMap(info.name, symPosOpt, info.ast.typeParams, t.args, Reporter.create).get)
-              case info => halt(s"Infeasible: $info")
-            }
-          (valueToExp(let.adt), valueToExp(let.value)) match {
-            case (Some(o1), Some(e)) =>
-              val attr = AST.Attr(symPosOpt)
-              var exps = ISZ[AST.Exp](
-                equate(sym.tipe, left, o1),
-                equate(let.value.tipe, AST.Exp.Select(Some(left), AST.Id(let.id, attr), ISZ(),
-                  AST.ResolvedAttr(symPosOpt, idResOpt, Some(let.value.tipe))), e),
-              )
-              for (x <- vars) {
-                val id = AST.Id(x.ast.id.value, attr)
-                val tOpt = Option.some(x.typedOpt.get.subst(sm))
-                val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
-                val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
-                val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
-                exps = exps :+ equate(tOpt.get, l, r)
-              }
-              for (x <- specVars) {
-                val id = AST.Id(x.ast.id.value, attr)
-                val tOpt = Option.some(x.typedOpt.get.subst(sm))
-                val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
-                val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
-                val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
-                exps = exps :+ equate(tOpt.get, l, r)
-              }
-              return Some(bigAndExp(exps))
-            case (_, _) => return None()
-          }
-        case _ => return None()
-      }
-    }
-
-    def valueToExp(value: State.Value): Option[AST.Exp] = {
-      @strictpure def subZPrefix(t: AST.Typed.Name): String = ops.StringOps(t.ids(t.ids.size - 1)).firstToLower
-
-      val attr = AST.Attr(Some(value.pos))
-      value match {
-        case value: State.Value.Sym =>
-          collector.letMap.get(value.num) match {
-            case Some(lets) =>
-              if (lets.size == 1) {
-                return letToExp(lets.elements(0))
-              } else {
-                for (let <- lets.elements) {
-                  let match {
-                    case _: State.Claim.Let.Id =>
-                      letToExp(let) match {
-                        case Some(e) => return Some(e)
-                        case _ =>
-                      }
-                    case _: State.Claim.Let.Name =>
-                      letToExp(let) match {
-                        case Some(e) => return Some(e)
-                        case _ =>
-                      }
-                    case _ =>
-                  }
-                }
-                return None()
-              }
-            case _ =>
-              return Some(symAt(".cx", value))
-          }
-        case value: State.Value.B => return Some(AST.Exp.LitB(value.value, attr))
-        case value: State.Value.Z => return Some(AST.Exp.LitZ(value.value, attr))
-        case value: State.Value.R => return Some(AST.Exp.LitR(value.value, attr))
-        case value: State.Value.C => return Some(AST.Exp.LitC(value.value, attr))
-        case value: State.Value.F32 => return Some(AST.Exp.LitF32(value.value, attr))
-        case value: State.Value.F64 => return Some(AST.Exp.LitF64(value.value, attr))
-        case value: State.Value.String => return Some(AST.Exp.LitString(value.value, attr))
-        case value: State.Value.Enum => return Some(th.nameToExp(value.owner :+ value.id, value.pos).asExp)
-        case value: State.Value.S8 =>
-          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.S8.toZ(value.value).string, attr)), ISZ(),
-            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
-        case value: State.Value.S16 =>
-          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.S16.toZ(value.value).string, attr)), ISZ(),
-            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
-        case value: State.Value.S32 =>
-          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.S32.toZ(value.value).string, attr)), ISZ(),
-            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
-        case value: State.Value.S64 =>
-          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.S64.toZ(value.value).string, attr)), ISZ(),
-            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
-        case value: State.Value.U8 =>
-          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.U8.toZ(value.value).string, attr)), ISZ(),
-            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
-        case value: State.Value.U16 =>
-          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.U16.toZ(value.value).string, attr)), ISZ(),
-            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
-        case value: State.Value.U32 =>
-          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.U32.toZ(value.value).string, attr)), ISZ(),
-            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
-        case value: State.Value.U64 =>
-          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(conversions.U64.toZ(value.value).string, attr)), ISZ(),
-            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
-        case value: State.Value.Range =>
-          return Some(AST.Exp.StringInterpolate(subZPrefix(value.tipe),
-            ISZ(AST.Exp.LitString(value.value.string, attr)), ISZ(),
-            AST.TypedAttr(attr.posOpt, Some(value.tipe))))
-        case value: State.Value.Unit => halt(s"Infeasible: $value")
-      }
-    }
-
-    def defsToEqs(cs: ISZ[State.Claim]): ISZ[State.Claim] = {
-      var r = ISZ[State.Claim]()
-      for (c <- cs) {
-        c match {
-          case c: State.Claim.Let.Def => r = r :+ State.Claim.Eq(c.sym, c.value)
-          case _ =>
-            if (!ignore(c)) {
-              r = r :+ c
-            }
-        }
-      }
-      return r
-    }
-
-    def equate(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): AST.Exp = {
-      return if (th.isGroundType(t)) AST.Exp.Binary(e1, AST.Exp.BinaryOp.Eq, e2, AST.ResolvedAttr(posOpt, eqResOpt, Some(t)))
-      else AST.Exp.Binary(e1, AST.Exp.BinaryOp.EquivUni, e2, AST.ResolvedAttr(posOpt, equivResOpt, Some(t)))
-    }
-
-    def equateOpt(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): Option[AST.Exp] = {
-      return if (e1 == e2) None() else Some(equate(t, e1, e2))
-    }
-
-    def toExp(claim: State.Claim): Option[AST.Exp] = {
-      claim match {
-        case claim: State.Claim.And =>
-          var es = ISZ[AST.Exp]()
-          for (c <- defsToEqs(claim.claims)) {
-            toExp(c) match {
-              case Some(e) => es = es :+ e
-              case _ =>
-            }
-          }
-          return Some(bigAndExp(es))
-        case claim: State.Claim.Or =>
-          var es = ISZ[AST.Exp]()
-          for (c <- defsToEqs(claim.claims)) {
-            toExp(c) match {
-              case Some(e) => es = es :+ e
-              case _ => return None()
-            }
-          }
-          return Some(bigOrExp(es))
-        case claim: State.Claim.Imply =>
-          var es = ISZ[AST.Exp]()
-          val cs = defsToEqs(claim.claims)
-          for (i <- 0 until cs.size - 1) {
-            toExp(cs(i)) match {
-              case Some(e) => es = es :+ e
-              case _ =>
-            }
-          }
-          if (es.isEmpty) {
-            return None()
-          }
-          toExp(cs(cs.size - 1)) match {
-            case Some(e) => es = es :+ e
-            case _ => return None()
-          }
-          return Some(bigImplyExp(es))
-        case claim: State.Claim.Prop =>
-          valueToExp(claim.value) match {
-            case Some(e) =>
-              return Some(
-                if (claim.isPos) e
-                else AST.Exp.Unary(AST.Exp.UnaryOp.Not, e, AST.ResolvedAttr(posOpt,
-                  Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)), AST.Typed.bOpt)))
-            case _ => return None()
-          }
-        case claim: State.Claim.If =>
-          val condOpt = valueToExp(claim.cond)
-          val leftOpt = toExp(State.Claim.And(claim.tClaims))
-          val rightOpt = toExp(State.Claim.And(claim.fClaims))
-          (condOpt, leftOpt, rightOpt) match {
-            case (Some(cond), Some(left), Some(right)) => return Some(constructIf(cond, left, right, posOpt, AST.Typed.bOpt))
-            case (_, _, _) => return None()
-          }
-        case claim: State.Claim.Let.CurrentId =>
-          (letToExp(claim), valueToExp(claim.sym)) match {
-            case (Some(e1), Some(e2)) => return equateOpt(claim.sym.tipe, e1, e2)
-            case _ => return None()
-          }
-        case claim: State.Claim.Let.CurrentName =>
-          (letToExp(claim), valueToExp(claim.sym)) match {
-            case (Some(e1), Some(e2)) => return equateOpt(claim.sym.tipe, e1, e2)
-            case _ => return None()
-          }
-        case claim: State.Claim.Let.Id =>
-          (letToExp(claim), valueToExp(claim.sym)) match {
-            case (Some(e1), Some(e2)) => return equateOpt(claim.sym.tipe, e1, e2)
-            case _ => return None()
-          }
-        case claim: State.Claim.Let.Name =>
-          (letToExp(claim), valueToExp(claim.sym)) match {
-            case (Some(e1), Some(e2)) => return equateOpt(claim.sym.tipe, e1, e2)
-            case _ => return None()
-          }
-        case claim: State.Claim.Eq =>
-          collector.letMap.get(claim.v1.num) match {
-            case Some(lets) if lets.size > 1 &&
-              ops.ISZOps(lets.elements).forall((let: State.Claim.Let) => let.isInstanceOf[State.Claim.Let.Def]) =>
-              collector.eqMap.get(claim.v1.num) match {
-                case Some(eqs) if eqs.size == 1 =>
-                  val v1 = eqs.elements(0).v1
-                  (valueToExp(v1), valueToExp(claim.v2)) match {
-                    case (Some(e1), Some(e2)) => return equateOpt(v1.tipe, e1, e2)
-                    case (_, _) => return None()
-                  }
-                case _ =>
-              }
-            case _ =>
-          }
-          claim.v2 match {
-            case right: State.Value.Sym =>
-              collector.letMap.get(right.num).getOrElse(HashSet.empty[State.Claim.Let]).elements match {
-                case ISZ(let: State.Claim.Let.FieldStore) =>
-                  valueToExp(claim.v1) match {
-                    case Some(v1) => return fieldStoreToExp(v1, let)
-                    case _ => return None()
-                  }
-                case _ =>
-              }
-            case _ =>
-          }
-          (valueToExp(claim.v1), valueToExp(claim.v2)) match {
-            case (Some(e1), Some(e2)) =>
-              return equateOpt(claim.v1.tipe, e1, e2)
-            case _ => return None()
-          }
-        case claim: State.Claim.Let => return letToExp(claim)
-        case _: State.Claim.Label => return None()
-        case claim => halt(s"Infeasible: $claim")
-      }
-    }
-
-    def simplify(cs: ISZ[AST.Exp]): ISZ[AST.Exp] = {
-      var r = HashSSet.empty[AST.Exp]
-      var ipMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
-      var inpMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
-
-      for (exp <- cs) {
-        exp match {
-          case exp: AST.Exp.Binary if exp.attr.resOpt == implyResOpt =>
-            exp.left match {
-              case left: AST.Exp.Unary if left.attr.resOpt == notResOpt =>
-                inpMap = {
-                  val key = th.normalizeExp(left.exp)
-                  val m = inpMap.get(key).getOrElse(HashMap.empty)
-                  val key2 = th.normalizeExp(exp.right)
-                  inpMap + key ~> (m + key2 ~> (m.get(key2).getOrElse(ISZ()) :+ exp))
-                }
-                ipMap.get(th.normalizeExp(left.exp)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
-                  case Some(es) =>
-                    r = r -- es
-                    r = r + exp.right
-                  case _ =>
-                    r = r + exp
-                }
-              case left =>
-                ipMap = {
-                  val key = th.normalizeExp(left)
-                  val m = ipMap.get(key).getOrElse(HashMap.empty)
-                  val key2 = th.normalizeExp(exp.right)
-                  ipMap + key ~> (m + key2 ~> (m.get(key2).getOrElse(ISZ()) :+ exp))
-                }
-                inpMap.get(th.normalizeExp(left)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
-                  case Some(es) =>
-                    r = r -- es
-                    r = r + exp.right
-                  case _ =>
-                    r = r + exp
-                }
-            }
-          case _ => r = r + exp
-        }
-      }
-      return r.elements
-    }
-
-    var r = HashSSet.empty[AST.Exp]
-
-    for (claim <- claims if !ignore(claim)) {
-      toExp(claim) match {
-        case Some(exp) if exp != trueLit => r = r + exp
-        case _ =>
-      }
-    }
-
-    return simplify(r.elements)
+    val cs2es = ClaimsToExps(plugins, pos, context, th, includeFreshLines, collector.letMap, collector.eqMap,
+      collector.lNumMap, collector.vNumMap, HashMap.empty)
+    return cs2es.translate(claims)
   }
-
 }

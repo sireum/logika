@@ -1022,6 +1022,22 @@ object State {
       else st"${poss(0).beginLine}"
     }
 
+    @datatype class Custom(data: Data) extends Claim {
+      @strictpure override def toRawST: ST = data.toRawST
+
+      override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
+        data.toSTs(claimSTs, numMap, defs)
+      }
+
+      @strictpure override def types: ISZ[AST.Typed] = data.types
+    }
+
+    @sig trait Data {
+      @pure def toRawST: ST
+      def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit
+      @pure def types: ISZ[AST.Typed]
+    }
+
   }
 
   @datatype class ProofFun(val receiverTypeOpt: Option[AST.Typed],

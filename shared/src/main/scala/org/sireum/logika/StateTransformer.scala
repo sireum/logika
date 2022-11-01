@@ -431,6 +431,7 @@ object StateTransformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Custom => return preStateClaimCustom(ctx, o)
       }
     }
 
@@ -592,6 +593,14 @@ object StateTransformer {
     }
 
     @pure def preStateClaimLetImply(ctx: Context, o: State.Claim.Let.Imply): PreResult[Context, State.Claim.Let] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimCustom(ctx: Context, o: State.Claim.Custom): PreResult[Context, State.Claim] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimData(ctx: Context, o: State.Claim.Data): PreResult[Context, State.Claim.Data] = {
       return PreResult(ctx, T, None())
     }
 
@@ -987,6 +996,7 @@ object StateTransformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[State.Claim]())
           }
           return r
+        case o: State.Claim.Custom => return postStateClaimCustom(ctx, o)
       }
     }
 
@@ -1148,6 +1158,14 @@ object StateTransformer {
     }
 
     @pure def postStateClaimLetImply(ctx: Context, o: State.Claim.Let.Imply): TPostResult[Context, State.Claim.Let] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateClaimCustom(ctx: Context, o: State.Claim.Custom): TPostResult[Context, State.Claim] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateClaimData(ctx: Context, o: State.Claim.Data): TPostResult[Context, State.Claim.Data] = {
       return TPostResult(ctx, None())
     }
 
@@ -1656,6 +1674,12 @@ import StateTransformer._
             TPostResult(r1.ctx, Some(o2(sym = r0.resultOpt.getOrElse(o2.sym), args = r1.resultOpt.getOrElse(o2.args))))
           else
             TPostResult(r1.ctx, None())
+        case o2: State.Claim.Custom =>
+          val r0: TPostResult[Context, State.Claim.Data] = transformStateClaimData(preR.ctx, o2.data)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(data = r0.resultOpt.getOrElse(o2.data))))
+          else
+            TPostResult(r0.ctx, None())
       }
       rOpt
     } else if (preR.resultOpt.nonEmpty) {
@@ -1918,6 +1942,30 @@ import StateTransformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: State.Claim.Let.Quant.Var = r.resultOpt.getOrElse(o)
     val postR: TPostResult[Context, State.Claim.Let.Quant.Var] = pp.postStateClaimLetQuantVar(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformStateClaimData(ctx: Context, o: State.Claim.Data): TPostResult[Context, State.Claim.Data] = {
+    val preR: PreResult[Context, State.Claim.Data] = pp.preStateClaimData(ctx, o)
+    val r: TPostResult[Context, State.Claim.Data] = if (preR.continu) {
+      val o2: State.Claim.Data = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: TPostResult[Context, State.Claim.Data] = TPostResult(ctx, None())
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: State.Claim.Data = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, State.Claim.Data] = pp.postStateClaimData(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {
