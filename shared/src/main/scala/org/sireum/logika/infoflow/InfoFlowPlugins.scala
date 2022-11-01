@@ -396,8 +396,8 @@ object InfoFlowLoopStmtPlugin {
     halt("Infeasible")
   }
 
-  @pure def handleSmt2(smt2: Smt2, claim: State.Claim, v2st: State.Value => ST, lets: HashMap[Z, ISZ[Claim.Let]], declIds: HashSMap[(_root_.org.sireum.ISZ[String], String, StepId), Let.Id]): Option[ST] = {
-    halt("infeasible")
+  @pure def handleSmt2(smt2: Smt2, claim: State.Claim, v2st: State.Value => ST, lets: HashMap[Z, ISZ[Claim.Let]], declIds: HashSMap[(ISZ[String], String, Z), Let.Id]): Option[ST] = {
+    halt("Infeasible")
   }
 
   @pure def canHandleSymRewrite(data: Claim.Data): B = {
