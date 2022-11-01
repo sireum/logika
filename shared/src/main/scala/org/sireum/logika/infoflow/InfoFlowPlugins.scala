@@ -13,6 +13,11 @@ import org.sireum.logika.Util.{checkMethodPost, checkMethodPre, logikaMethod, up
 import org.sireum.logika.infoflow.InfoFlowContext.{InfoFlowsType, Partition}
 import org.sireum.logika.plugin.{MethodPlugin, Plugin, StmtPlugin}
 import org.sireum.logika.{Config, Logika, Smt2, State, Util}
+import org.sireum.message.Position
+
+object InfoFlowMethodPlugin {
+
+}
 
 @datatype class InfoFlowMethodPlugin extends MethodPlugin {
 
@@ -70,9 +75,8 @@ import org.sireum.logika.{Config, Logika, Smt2, State, Util}
       val stateSyms = InfoFlowUtil.processInfoFlowInAgrees(infoFlows, logika, smt2, cache, reporter, state)
       state = stateSyms._1
 
-      logika = logika(context = logika.context(storage =
-        InfoFlowContext.putInfoFlows(infoFlows,
-          InfoFlowContext.putInAgreements(stateSyms._2, logika.context.storage))))
+      logika = InfoFlowContext.putInfoFlowsL(infoFlows, logika)
+      logika = InfoFlowContext.putInAgreementsL(stateSyms._2, logika)
 
       val stmts = method.bodyOpt.get.stmts
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
@@ -81,8 +85,10 @@ import org.sireum.logika.{Config, Logika, Smt2, State, Util}
         logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
       }
 
-      val partitionsToCheck: ISZ[Partition] = infoFlows.values.map((m: InfoFlow) => ((m.label.value, m.label.posOpt)))
-      val ss2: ISZ[State] = InfoFlowUtil.checkInfoFlowAgreements(infoFlows, stateSyms._2, partitionsToCheck,
+      val augInAgrees = InfoFlowContext.getInAgreements(logika.context.storage).get
+
+      val channelsToCheck: ISZ[Partition] = infoFlows.values.map((m: InfoFlow) => ((m.label.value, m.label.posOpt)))
+      val ss2: ISZ[State] = InfoFlowUtil.checkInfoFlowAgreements(infoFlows, augInAgrees, channelsToCheck,
         "Post Flow: ",
         logika, smt2, cache, reporter, ss)
 
@@ -162,26 +168,12 @@ import org.sireum.logika.{Config, Logika, Smt2, State, Util}
   }
 }
 
-@datatype class InfoFlowLoopStmtPlugin extends StmtPlugin {
-  @pure def name: String = {
-    return "Info Flow Loop Stmt Plugin"
-  }
-
+object InfoFlowLoopStmtPlugin {
   @pure def hasFlowLoopInvariants(invariants: ISZ[AST.Exp]): B = {
     return getFlowLoopInvariant(invariants).nonEmpty
   }
 
-  @pure def canHandle(logika: Logika, stmt: Stmt): B = {
-    stmt match {
-      case whileStmt: AST.Stmt.While =>
-        return hasFlowLoopInvariants(whileStmt.invariants) &&
-          InfoFlowContext.getInfoFlows(logika.context.storage).nonEmpty &&
-          InfoFlowContext.getInAgreements(logika.context.storage).nonEmpty
-      case _ => return F
-    }
-  }
-
-  def getFlowLoopInvariant(invariants: ISZ[Exp]): Option[InfoFlowInvariant] = {
+  @pure def getFlowLoopInvariant(invariants: ISZ[Exp]): Option[InfoFlowInvariant] = {
     // TODO: restrict to one flow loop invariant
     for (e <- invariants) {
       e match {
@@ -191,10 +183,53 @@ import org.sireum.logika.{Config, Logika, Smt2, State, Util}
     }
     return None()
   }
+}
 
-  @pure def handle(logika: Logika, smt2: Smt2, cache: Smt2.Cache, s0: State, stmt: Stmt, reporter: Reporter): ISZ[State] = {
+@datatype class InfoFlowLoopStmtPlugin extends StmtPlugin {
+  @pure def name: String = {
+    return "Info Flow Loop Stmt Plugin"
+  }
+
+  @pure def canHandle(logika: Logika, stmt: Stmt): B = {
     stmt match {
       case whileStmt: AST.Stmt.While =>
+        return InfoFlowLoopStmtPlugin.hasFlowLoopInvariants(whileStmt.invariants) &&
+          InfoFlowContext.getInfoFlows(logika.context.storage).nonEmpty &&
+          InfoFlowContext.getInAgreements(logika.context.storage).nonEmpty
+      case _ => return F
+    }
+  }
+
+  def recordLoopInvariantOutAgrees(state: State, invariantFlows: InfoFlowsType, pos: Option[Position], reporter: Reporter): State = {
+    var s = state
+    for(infoFlow <- invariantFlows.values) {
+      val channel = infoFlow.label.value
+      var syms: ISZ[State.Value.Sym] = ISZ()
+      for(outExp <- infoFlow.outAgrees) {
+        outExp match {
+          case ref: AST.Exp.Ref =>
+            val res = ref.resOpt.get
+            res match {
+              case lv: AST.ResolvedInfo.LocalVar =>
+                val (s1, r) = Util.idIntro(ref.posOpt.get, s, lv.context, s"${lv.id}", ref.typedOpt.get, None())
+                syms = syms :+ r
+                s = s1
+              case x => halt(s"Need to handle $x")
+            }
+          case x => halt(s"Need to handle : $x")
+        }
+      }
+      val agreeClaims: ISZ[State.Claim] = for (sym <- syms) yield State.Claim.Let.InfoFlowAgreeSym(sym, channel)
+      s = s(claims = s.claims ++ agreeClaims)
+    }
+    return s
+  }
+
+  @pure def handle(logikax: Logika, smt2: Smt2, cache: Smt2.Cache, s0: State, stmt: Stmt, reporter: Reporter): ISZ[State] = {
+    stmt match {
+      case whileStmt: AST.Stmt.While =>
+        var logika = logikax
+
         val split = Split.Default // TODO: argument to evalStmt that's lost when calling plugin
         val rtCheck: B = F // TODO: argument to evalStmt that's lost when calling plugin
 
@@ -203,7 +238,7 @@ import org.sireum.logika.{Config, Logika, Smt2, State, Util}
         val methodInfoFlows: InfoFlowsType = InfoFlowContext.getInfoFlows(logika.context.storage).get
         val methodInAgreements = InfoFlowContext.getInAgreements(logika.context.storage).get
 
-        val flowInvariant: InfoFlowInvariant = getFlowLoopInvariant(whileStmt.invariants).get
+        val flowInvariant: InfoFlowInvariant = InfoFlowLoopStmtPlugin.getFlowLoopInvariant(whileStmt.invariants).get
         val invariantFlows: InfoFlowsType = HashSMap.empty[String, InfoFlow] ++ flowInvariant.flowInvariants.map((m: InfoFlow) => ((m.label.value, m)))
 
         val loopPartitionsToCheck: ISZ[Partition] = invariantFlows.values.map((m: InfoFlow) => ((m.label.value, m.label.posOpt)))
@@ -222,7 +257,8 @@ import org.sireum.logika.{Config, Logika, Smt2, State, Util}
 
             val flowInAgrees = InfoFlowUtil.processInfoFlowInAgrees(invariantFlows,
               logika, smt2, cache, reporter, s0w)
-            // TODO: stick flow in agree syms in store in case an inline check occurs inside loop body
+
+            logika = InfoFlowContext.putInAgreementsL(flowInAgrees._2, logika)
 
             val s1 = flowInAgrees._1
             val s0R: State = {
@@ -260,7 +296,9 @@ import org.sireum.logika.{Config, Logika, Smt2, State, Util}
               }
               srw
             }
+
             val s2 = State(T, s0R.claims ++ (for (i <- s0.claims.size until s1.claims.size) yield s1.claims(i)), s0R.nextFresh)
+
             for (p <- logika.evalExp(split, smt2, cache, rtCheck, s2, whileStmt.cond, reporter)) {
               val (s3, v) = p
               if (s3.status) {
@@ -271,15 +309,19 @@ import org.sireum.logika.{Config, Logika, Smt2, State, Util}
                 val thenSat = smt2.sat(cache, T, logika.config.logVc, logika.config.logVcDirOpt,
                   s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
                 var nextFresh: Z = s4.nextFresh
+
                 if (thenSat) {
+                  // can satisfy the true branch of the loop condition,
+                  // so now evaluate the loop loop body
                   for (s5 <- logika.evalStmts(split, smt2, cache, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)) {
                     if (s5.status) {
+
                       val postLoopStates = logika.checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop",
                         s5, nonFlowInvariants, reporter)
 
-                      for(s6 <- InfoFlowUtil.checkInfoFlowAgreements(
+                      for (s6 <- InfoFlowUtil.checkInfoFlowAgreements(
                         invariantFlows, flowInAgrees._2, loopPartitionsToCheck,
-                        "Flow Loop Invariant at end of while-lopp",
+                        "Flow Loop Invariant at end of while-loop ",
                         logika, smt2, cache, reporter, postLoopStates)) {
                         if (nextFresh < s6.nextFresh) {
                           nextFresh = s6.nextFresh
@@ -291,12 +333,26 @@ import org.sireum.logika.{Config, Logika, Smt2, State, Util}
                       }
                     }
                   }
+                  // done evaluating the body of the while loop
                 }
+
+                // now check to see if false/else branch of loop condition holds.  Note we're returning
+                // a state based of s4 claims which only includes claims from the loop invariant -- ie
+                // we're assuming the loop invariant holds when the loop exits
                 val negProp = State.Claim.Prop(F, cond)
-                val elseClaims = s4.claims :+ negProp
+                val _elseClaims = s4.claims :+ negProp
+
+                val elseClaims = _elseClaims
+
                 val elseSat = smt2.sat(cache, T, logika.config.logVc, logika.config.logVcDirOpt,
                   s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
-                r = r :+ State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
+
+                var state = State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
+
+                // now capture the current value of each channels' out agreements
+                state = recordLoopInvariantOutAgrees(state, invariantFlows, whileStmt.posOpt, reporter)
+
+                r = r :+ state
               } else {
                 r = r :+ s3
               }

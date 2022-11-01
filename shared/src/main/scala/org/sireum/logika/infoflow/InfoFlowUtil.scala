@@ -1,7 +1,6 @@
 // #Sireum
 package org.sireum.logika.infoflow
 
-import org.sireum._
 import org.sireum.lang.ast.MethodContract.InfoFlow
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.{Reporter, Split}
@@ -11,14 +10,17 @@ import org.sireum.logika.infoflow.InfoFlowContext.{InAgreementsType, InfoFlowsTy
 import org.sireum.logika.plugin.Plugin
 import org.sireum.logika.{Context, Logika, Smt2, Smt2Query, State, StateTransformer, Util}
 import org.sireum.message.Position
+import org.sireum.{Z, _}
 
 object InfoFlowContext {
 
+  type Channel = String
+
   val IN_AGREE_KEY: String = "IN_AGREE_KEY"
-  type InAgreementsType = HashSMap[String, ISZ[State.Value.Sym]]
+  type InAgreementsType = HashSMap[Channel, ISZ[State.Value.Sym]]
 
   val INFO_FLOWS_KEY: String = "INFO_FLOWS_KEY"
-  type InfoFlowsType = HashSMap[String, InfoFlow]
+  type InfoFlowsType = HashSMap[Channel, InfoFlow]
 
   type LogikaStore = HashMap[String, Context.Value]
 
@@ -28,16 +30,57 @@ object InfoFlowContext {
 
   @datatype class InfoFlowsValue(val infoFlows: InfoFlowsType) extends Context.Value
 
-  def putInAgreements(inAgreements: InAgreementsType, context: HashMap[String, Context.Value]): LogikaStore = {
-    return context + IN_AGREE_KEY ~> InAgreementValue(inAgreements)
+  type SClaimAgree = ISZ[State.Claim.Let.InfoFlowAgreeSym]
+
+  @datatype class CollectAgreementSyms() extends StateTransformer.PrePost[SClaimAgree] {
+
+    override
+    def preStateClaimLetInfoFlowAgreeSym(ctx: SClaimAgree,
+                                         o: State.Claim.Let.InfoFlowAgreeSym): StateTransformer.PreResult[SClaimAgree, State.Claim.Let] = {
+
+      return StateTransformer.PreResult(ctx :+ o, T, None())
+    }
   }
 
-  def getInAgreements(storage: LogikaStore): Option[InAgreementsType] = {
-    val ret: Option[InAgreementsType] = storage.get(IN_AGREE_KEY) match {
+  def getClaimAgreementSyms(state: State): InAgreementsType = {
+    var ret: InAgreementsType = HashSMap.empty
+    val agreementClaims = StateTransformer[SClaimAgree](CollectAgreementSyms()).transformState(ISZ(), state).ctx
+    for (claim <- agreementClaims) {
+      val syms: ISZ[State.Value.Sym] =
+        if (ret.contains(claim.channel)) ret.get(claim.channel).get
+        else ISZ()
+      ret = ret + claim.channel ~> (syms :+ claim.sym)
+    }
+    return ret
+  }
+
+  def putInAgreementsL(inAgreements: InAgreementsType, logika: Logika): Logika = {
+    return logika(context = logika.context(storage = putInAgreements(inAgreements, logika.context.storage)))
+  }
+
+  def putInAgreements(inAgreements: InAgreementsType, store: LogikaStore): LogikaStore = {
+    getInAgreements(store) match {
+      case Some(existingMap) =>
+        var mergedMap = existingMap
+        for (entry <- inAgreements.entries if mergedMap.contains(entry._1)) {
+          val mergedAgreements = mergedMap.get(entry._1).get ++ entry._2
+          mergedMap = mergedMap + entry._1 ~> mergedAgreements
+        }
+        return store + IN_AGREE_KEY ~> InAgreementValue(mergedMap)
+      case _ => return store + IN_AGREE_KEY ~> InAgreementValue(inAgreements)
+    }
+  }
+
+  def getInAgreements(store: LogikaStore): Option[InAgreementsType] = {
+    val ret: Option[InAgreementsType] = store.get(IN_AGREE_KEY) match {
       case Some(InAgreementValue(v)) => return Some(v)
       case _ => return None()
     }
     return ret
+  }
+
+  def putInfoFlowsL(infoFlows: InfoFlowsType, logika: Logika): Logika = {
+    return logika(context = logika.context(storage = putInfoFlows(infoFlows, logika.context.storage)))
   }
 
   def putInfoFlows(infoFlows: InfoFlowsType, context: LogikaStore): LogikaStore = {
@@ -77,7 +120,6 @@ object InfoFlowUtil {
     }
   }
 
-
   def processInfoFlowInAgrees(infoFlows: InfoFlowsType,
                               logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, state: State): (State, InAgreementsType) = {
     var s = state
@@ -115,7 +157,7 @@ object InfoFlowUtil {
 
   def checkInfoFlowAgreements(infoFlows: InfoFlowsType,
                               inAgreeSyms: InAgreementsType,
-                              partitionsToCheck: ISZ[Partition],
+                              channelsToCheck: ISZ[Partition],
                               title: String,
                               logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, states: ISZ[State]): ISZ[State] = {
 
@@ -123,12 +165,12 @@ object InfoFlowUtil {
       //assert(infoFlows.size == inAgreeSyms.size, s"${infoFlows.size} vs ${inAgreeSyms.size}")
 
       var r: ISZ[State] = ISZ()
-      for (partition <- partitionsToCheck) {
-        val infoFlow = infoFlows.get(partition._1).get
+      for (channel <- channelsToCheck) {
+        val infoFlow = infoFlows.get(channel._1).get
         val inSyms: ISZ[State.Value.Sym] = inAgreeSyms.get(infoFlow.label.value).get
         val outAgrees = infoFlow.outAgrees
         val label = infoFlow.label
-        val pos = partition._2.get // TODO: possible this is empty
+        val pos = channel._2.get // TODO: possible this is empty
 
         for (state <- states) {
           if (!state.status) {
@@ -137,6 +179,12 @@ object InfoFlowUtil {
             var s = state
 
             val origNextFresh = s.nextFresh
+
+            val inAgreementsFromClaims: ISZ[State.Value.Sym] =
+              InfoFlowContext.getClaimAgreementSyms(s).get(channel._1) match {
+                case Some(claimSyms) => claimSyms
+                case _ => ISZ()
+              }
 
             // introduce sym value for the outAgrees
             var outSyms: ISZ[State.Value.Sym] = ISZ()
@@ -173,7 +221,7 @@ object InfoFlowUtil {
             }
 
             // add in agreements claims
-            for (inSym <- inSyms) {
+            for (inSym <- inSyms ++ inAgreementsFromClaims) {
               val secInSym = inSym(num = inSym.num + origNextFresh)
               s = s.addClaim(State.Claim.Eq(inSym, secInSym))
             }
@@ -208,15 +256,16 @@ object InfoFlowUtil {
               title = s"${title}Flow case $label at [${pos.beginLine}, ${pos.endLine}]", pos = pos,
               premises = s.claims, conclusion = conclusion, reporter = reporter)
 
+            var ok = F
             validity.kind match {
-              case Smt2Query.Result.Kind.Unsat => r = r :+ s(status = T)
+              case Smt2Query.Result.Kind.Unsat => ok = T
               case Smt2Query.Result.Kind.Sat => logika.error(Some(pos), s"${title}Flow case $label violation", reporter)
               case Smt2Query.Result.Kind.Unknown => logika.error(Some(pos), s"${title}Could not verify flow case $label", reporter)
               case Smt2Query.Result.Kind.Timeout => logika.error(Some(pos), s"${title}Timed out while checking flow case $label", reporter)
               case Smt2Query.Result.Kind.Error => logika.error(Some(pos), s"${title}Error encountered when checking $label case $label", reporter)
             }
 
-            r = r :+ s(status = F)
+            r = r :+ state(status = ok)
           }
         }
       }

@@ -70,4 +70,4 @@ class LogikaInfoFlowTests extends SireumRcSpec {
       !reporter.hasIssue
     }
   }
-}                                             
+}                                                                                   
