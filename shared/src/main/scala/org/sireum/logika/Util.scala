@@ -32,7 +32,6 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{Reporter, Split}
-import org.sireum.logika.State.Claim
 
 object Util {
 
@@ -481,7 +480,7 @@ object Util {
       return if (o.num < min) MNone() else MSome(o(num = o.num + add))
     }
 
-    override def transformStateClaimData(o: Claim.Data): MOption[Claim.Data] = {
+    override def transformStateClaimData(o: State.Claim.Data): MOption[State.Claim.Data] = {
       if (plugins.nonEmpty) {
         for (p <- plugins if p.canHandleSymRewrite(o)) {
           return p.handleSymRewrite(this, o)
