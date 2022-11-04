@@ -50,6 +50,11 @@ object cli {
         description = "Sourcepath of Slang .scala files"),
     ),
     groups = ISZ(
+      OptGroup(name = "Additional Verifications", opts = ISZ(
+        Opt(name = "infoFlow", longKey = "info-flow", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Enable information flow verification"),
+      )),
       OptGroup(name = "Approximation", opts = ISZ(
         Opt(name = "charBitWidth", longKey = "c-bitwidth", shortKey = None(),
           tpe = Type.Num(sep = None(), default = 32, min = None(), max = None()),
