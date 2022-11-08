@@ -3222,65 +3222,55 @@ import Util._
   def mergeBranches(shouldSplit: B, s0: State, leafClaims: LeafClaims): ISZ[State] = {
     if (leafClaims.isEmpty) {
       return ISZ(s0(status = F))
-    } else if (leafClaims.size == 1) {
-      val (cond, claimss) = leafClaims(0)
-      var r = ISZ[State]()
-      for (claims <- claimss) {
-        val claimsOps = ops.ISZOps(claims)
-        r = r :+ s0(claims = (claimsOps.slice(0, s0.claims.size) :+ cond) ++ claimsOps.slice(s0.claims.size, claims.size))
-      }
-      return r
-    } else if (shouldSplit) {
+    } else if (shouldSplit || leafClaims.size == 1) {
       return for (p <- leafClaims; cs <- p._2) yield s0(claims = (ops.ISZOps(cs).slice(0, s0.claims.size) :+ p._1) ++
         ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size))
     }
-    @pure def computeDiffIndices(): (ISZ[State.Claim], HashSet[Z]) = {
-      var commonClaimPrefix = ISZ[State.Claim]()
-      var diffIndices = HashSet.empty[Z]
-      val css: ISZ[ISZ[State.Claim]] = for (p <- leafClaims; cs <- p._2) yield cs
-      for (i <- 0 until s0.claims.size) {
-        val c = css(0)(i)
-        var ok = T
-        var j = 1
-        while (ok && j < css.size) {
-          if (c != css(j)(i)) {
-            ok = F
-          }
-          j = j + 1
-        }
-        if (ok) {
-          commonClaimPrefix = commonClaimPrefix :+ c
-        } else {
-          commonClaimPrefix = commonClaimPrefix :+ trueClaim
-          diffIndices = diffIndices + i
-        }
+    var scss = ISZ[ISZ[(State.Claim, ISZ[State.Claim])]](for (cs <- leafClaims(0)._2) yield (leafClaims(0)._1, cs))
+    for (i <- 1 until leafClaims.size) {
+      var newScss = ISZ[ISZ[(State.Claim, ISZ[State.Claim])]]()
+      val (cond, claimss) = leafClaims(i)
+      for (scs <- scss; claims <- claimss) {
+         newScss = newScss :+ (scs :+ ((cond, claims)))
       }
-      return (commonClaimPrefix, diffIndices)
+      scss = newScss
     }
     var r = ISZ[State]()
-    val (commonClaimPrefix, diffIndices) = computeDiffIndices()
-    var andClaims = ISZ[State.Claim]()
-    for (p <- leafClaims) {
-      var orClaims = ISZ[State.Claim]()
-      for (cs <- p._2) {
-        var claims = ISZ[State.Claim]()
-        for (i <- 0 until s0.claims.size if diffIndices.contains(i)) {
-          claims = claims :+ cs(i)
+    for (scs <- scss) {
+      @pure def computeDiffIndices(): (ISZ[State.Claim], ISZ[Z]) = {
+        var commonClaimPrefix = ISZ[State.Claim]()
+        var diffIndices = ISZ[Z]()
+        for (i <- 0 until s0.claims.size) {
+          val c = scs(0)._2(i)
+          var ok = T
+          var j = 1
+          while (ok && j < scs.size) {
+            if (c != scs(j)._2(i)) {
+              ok = F
+            }
+            j = j + 1
+          }
+          if (ok) {
+            commonClaimPrefix = commonClaimPrefix :+ c
+          } else {
+            commonClaimPrefix = commonClaimPrefix :+ trueClaim
+            diffIndices = diffIndices :+ i
+          }
         }
-        claims = claims ++ ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size)
-        orClaims = orClaims :+ bigAnd(claims)
+        return (commonClaimPrefix, diffIndices)
       }
-      if (orClaims.size == 1) {
-        orClaims(0) match {
-          case oc: State.Claim.And =>
-            andClaims = andClaims ++ (for (c <- oc.claims) yield State.Claim.Imply(ISZ(p._1, c)).asInstanceOf[State.Claim])
-          case oc => andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, oc))
+      val (commonClaimPrefix, diffIndices) = computeDiffIndices()
+      var claims = ISZ[State.Claim]()
+      for (sc <- scs) {
+        for (i <- diffIndices) {
+          claims = claims :+ State.Claim.Imply(ISZ(sc._1, sc._2(i)))
         }
-      } else {
-        andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, State.Claim.Or(orClaims)))
+        for (i <- s0.claims.size + 1 until sc._2.size) {
+          claims = claims :+ State.Claim.Imply(ISZ(sc._1, sc._2(i)))
+        }
       }
+      r = r :+ s0(claims = commonClaimPrefix ++ claims)
     }
-    r = r :+ s0(claims = commonClaimPrefix ++ andClaims)
     return r
   }
 
