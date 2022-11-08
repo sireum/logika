@@ -3224,8 +3224,12 @@ import Util._
       return ISZ(s0(status = F))
     } else if (leafClaims.size == 1) {
       val (cond, claimss) = leafClaims(0)
-      val s1 = s0.addClaim(cond)
-      return for (claims <- claimss) yield s1.addClaims(claims)
+      var r = ISZ[State]()
+      for (claims <- claimss) {
+        val claimsOps = ops.ISZOps(claims)
+        r = r :+ s0(claims = (claimsOps.slice(0, s0.claims.size) :+ cond) ++ claimsOps.slice(s0.claims.size, claims.size))
+      }
+      return r
     } else if (shouldSplit) {
       return for (p <- leafClaims; cs <- p._2) yield s0(claims = (ops.ISZOps(cs).slice(0, s0.claims.size) :+ p._1) ++
         ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size))
@@ -3267,7 +3271,6 @@ import Util._
         orClaims = orClaims :+ bigAnd(claims)
       }
       if (orClaims.size == 1) {
-//        andClaims = andClaims :+ State.Claim.Imply(ISZ(p._1, orClaims(0)))
         orClaims(0) match {
           case oc: State.Claim.And =>
             andClaims = andClaims ++ (for (c <- oc.claims) yield State.Claim.Imply(ISZ(p._1, c)).asInstanceOf[State.Claim])
