@@ -1779,21 +1779,425 @@ import Util._
       else st"${(owner, ".")}#${res.id}"
     }
 
+    def compositional(posOpt: Option[Position], info: Context.InvokeMethodInfo,
+                      invs: ISZ[Info.Inv], s: State, typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed,
+                      invokeReceiverOpt: Option[AST.Exp], receiverOpt: Option[State.Value.Sym],
+                      paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)],
+                      oldVars: HashSMap[String, State.Value.Sym]): ISZ[(State, State.Value)] = {
+      val res = info.res
+      val ctx = res.owner :+ res.id
+      val pos = posOpt.get
+      val resST = methodResST(res)
+      val contract = info.contract
+      val isUnit = info.sig.returnType.typedOpt == AST.Typed.unitOpt
+      val receiverPosOpt: Option[Position] =
+        if (invokeReceiverOpt.nonEmpty) invokeReceiverOpt.get.posOpt
+        else info.sig.id.attr.posOpt
+      var r = ISZ[(State, State.Value)]()
+      if (context.compMethods.contains(res.owner :+ res.id)) {
+        reporter.error(posOpt, kind, st"Cannot use ${(res.owner :+ res.id, ".")}'s contracts cyclicly".render)
+        r = r :+ ((s(status = F), State.errorValue))
+        return r
+      }
+
+      var s1 = s
+      for (q <- paramArgs) {
+        val (l, _, arg, v) = q
+        val argPosOpt = arg.posOpt
+        val (s3, sym) = idIntro(arg.posOpt.get, s1, l.context, l.id, v.tipe, argPosOpt)
+        val (s4, vSym) = value2Sym(s3, v, argPosOpt.get)
+        s1 = s4.addClaim(State.Claim.Eq(sym, vSym))
+      }
+
+      val lComp: Logika = {
+        val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
+          info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
+          plugins, Some(
+            (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
+              info.sig.id.attr.posOpt.get)),
+          this.context.compMethods + (res.owner :+ res.id)
+        )
+        val mctx = l.context.methodOpt.get
+        var objectVarInMap = mctx.objectVarInMap
+        for (p <- mctx.modObjectVarMap(typeSubstMap).entries) {
+          val (ids, (t, _)) = p
+          val (s4, sym) = nameIntro(pos, s1, ids, t, None())
+          objectVarInMap = objectVarInMap + ids ~> sym
+          s1 = s4
+        }
+        var fieldVarInMap = mctx.fieldVarInMap
+        mctx.receiverTypeOpt match {
+          case Some(receiverType) =>
+            val fieldVarMap = mctx.fieldVarMap(typeSubstMap)
+            if (fieldVarMap.nonEmpty) {
+              val (s5, thiz) = idIntro(mctx.posOpt.get, s1, mctx.name, "this", receiverType, mctx.posOpt)
+              s1 = s5
+              for (p <- mctx.fieldVarMap(typeSubstMap).entries) {
+                val (id, (t, posOpt)) = p
+                val (s6, sym) = s1.freshSym(t, posOpt.get)
+                s1 = s6.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
+                fieldVarInMap = fieldVarInMap + id ~> sym
+              }
+            }
+          case _ =>
+        }
+        var localInMap = mctx.localInMap
+        for (p <- mctx.localMap(typeSubstMap).entries) {
+          val (id, (ctx, _, t)) = p
+          val (s7, sym): (State, State.Value.Sym) = idIntro(pos, s1, ctx, id, t, None())
+          localInMap = localInMap + id ~> sym
+          s1 = s7
+        }
+        l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
+          localInMap = localInMap))))
+      }
+
+      val (receiverModified, modLocals) = contract.modifiedLocalVars(lComp.context.receiverLocalTypeOpt)
+
+      def evalContractCase(logikaComp: Logika, callerReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
+                           labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
+                           ensures: ISZ[AST.Exp]): Context.ContractCaseResult = {
+
+        def modVarsResult(ms0: State, mposOpt: Option[Position]): (State, State.Value.Sym) = {
+          var ms1 = ms0
+          val modObjectVars = contract.modifiedObjectVars
+          val mpos = mposOpt.get
+          ms1 = rewriteObjectVars(this, smt2, cache, rtCheck, ms1, modObjectVars, mpos, reporter)
+          var oldIdMap = HashMap.empty[ISZ[String], State.Value.Sym]
+          for (pair <- modLocals.entries) {
+            val (info, (t, _)) = pair
+            val (ls0, sym) = idIntro(pos, ms1, info.context, info.id, t, None())
+            ms1 = ls0
+            oldIdMap = oldIdMap + (info.context :+ info.id) ~> sym
+          }
+          ms1 = rewriteLocalVars(ms1, modLocals.keys, mposOpt, reporter)
+          for (pair <- modLocals.entries) {
+            val (info, (t, pos)) = pair
+            val oldSym = oldIdMap.get(info.context :+ info.id).get
+            val (ls1, newSym) = idIntro(pos, ms1, info.context, info.id, t, Some(pos))
+            val ls2 = Util.assumeValueInv(this, smt2, cache, rtCheck, ls1, newSym, pos, reporter)
+            if (AST.Util.isSeq(t)) {
+              val (ls5, size1) = ls2.freshSym(AST.Typed.z, pos)
+              val (ls6, size2) = ls5.freshSym(AST.Typed.z, pos)
+              val (ls7, cond) = ls6.freshSym(AST.Typed.b, pos)
+              val ls8 = ls7.addClaims(ISZ[State.Claim](
+                State.Claim.Let.FieldLookup(size1, oldSym, "size"),
+                State.Claim.Let.FieldLookup(size2, newSym, "size"),
+                State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
+                State.Claim.Prop(T, cond)
+              ))
+              ms1 = ls8
+            } else {
+              ms1 = ls2
+            }
+          }
+          if (isUnit) {
+            return ms1.freshSym(AST.Typed.unit, mpos)
+          } else {
+            val (ms2, v) = resIntro(mpos, ms1, ctx, retType, mposOpt)
+            ms1 = ms2
+            return (ms1, v)
+          }
+        }
+
+        def modVarsRewrite(ms0: State, modPosOpt: Option[Position]): State = {
+          var ms1 = ms0
+          var newVars = oldVars
+          for (q <- paramArgs) {
+            val (p, t, arg, _) = q
+            if (modLocals.contains(p)) {
+              val (ms2, v) = idIntro(arg.posOpt.get, ms1, p.context, p.id, t, None())
+              ms1 = singleState(assignRec(Split.Disabled, smt2, cache, rtCheck, ms2, arg, v, reporter))
+              if (newVars.contains(p.id)) {
+                newVars = newVars + p.id ~> v
+              }
+            }
+          }
+          var rwLocals: ISZ[AST.ResolvedInfo.LocalVar] = for (q <- paramArgs) yield q._1
+          if (!isUnit) {
+            rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "Res")
+          }
+          if (receiverOpt.nonEmpty) {
+            rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this")
+          }
+          ms1 = rewriteLocalVars(ms1, rwLocals, modPosOpt, reporter)
+          if (newVars.nonEmpty) {
+            for (q <- paramArgs) {
+              val p = q._1
+              newVars.get(p.id) match {
+                case Some(v) => ms1 = ms1.addClaim(State.Claim.Let.CurrentId(T, v, ctx, p.id, posOpt))
+                case _ =>
+              }
+            }
+          }
+          callerReceiverOpt match {
+            case Some(receiver) =>
+              val (ms2, receiverSym) = idIntro(receiver.pos, ms1, context.methodOpt.get.name, "this", receiver.tipe, Some(receiver.pos))
+              ms1 = ms2.addClaim(State.Claim.Eq(receiverSym, receiver))
+            case _ =>
+          }
+          return ms1
+        }
+
+        def evalRequires(cs1: State, label: String, rep: Reporter): (State, ISZ[State.Value]) = {
+          var requireSyms = ISZ[State.Value]()
+          var i = 0
+          var csr0 = cs1
+          for (require <- requires if csr0.status) {
+            val title: String =
+              if (requires.size == 1) st"${label}re-condition of $resST".render
+              else st"${label}re-condition#$i of $resST".render
+
+            val (csr1, sym): (State, State.Value.Sym) =
+              if (assume) {
+                val p = logikaComp.evalAssume(smt2, cache, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
+                val size = p._1.claims.size
+                assert(p._1.claims(size - 1) == State.Claim.Prop(T, p._2))
+                (p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1)), p._2)
+              } else {
+                logikaComp.evalAssert(smt2, cache, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
+              }
+            requireSyms = requireSyms :+ sym
+            csr0 = csr1
+            i = i + 1
+          }
+          return (csr0, requireSyms)
+        }
+
+        def evalEnsures(cs1: State, label: String, rep: Reporter): State = {
+          val claims: ISZ[AST.Exp] = for (ensure <- ensures) yield AST.Util.substExp(ensure, typeSubstMap)
+          var i = 0
+          var cse3 = cs1
+          for (ensure <- claims if cse3.status) {
+            val title: String =
+              if (ensures.size == 1) st"${label}ost-condition of $resST".render
+              else st"${label}ost-condition#$i of $resST".render
+            cse3 = logikaComp.evalAssume(smt2, cache, F, title, cse3, ensure, posOpt, rep)._1
+            i = i + 1
+          }
+          return cse3
+        }
+
+        val rep = reporter.empty
+        val (label, cs1): (String, State) = labelOpt match {
+          case Some(lbl) if lbl.value.size == 0 =>
+            (s"(${lbl.value}) p", cs0.addClaim(State.Claim.Label(lbl.value, lbl.posOpt.get)))
+          case _ => ("P", cs0)
+        }
+        val (cs2, requireSyms) = evalRequires(cs1, label, rep)
+        if (!cs2.status) {
+          val (cs3, rsym) = cs2.freshSym(AST.Typed.b, pos)
+          return Context.ContractCaseResult(F, cs3.addClaim(State.Claim.Let.And(rsym, requireSyms)),
+            State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+        }
+        val (cs4, result) = modVarsResult(cs2, posOpt)
+        val cs5 = evalEnsures(cs4, label, rep)
+        if (!cs5.status) {
+          val (cs6, rsym) = cs5.freshSym(AST.Typed.b, pos)
+          return Context.ContractCaseResult(T, cs6.addClaim(State.Claim.Let.And(rsym, requireSyms)),
+            State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
+        }
+        val (cs10, rcvOpt): (State, Option[State.Value.Sym]) = if (receiverOpt.nonEmpty) {
+          receiverOpt match {
+            case Some(receiver) if invs.nonEmpty =>
+              val (cs7, rcv) = idIntro(pos, cs5, ctx, "this", receiver.tipe, None())
+              if (isUnit) {
+                (cs7, Some(rcv))
+              } else {
+                val (cs8, res) = resIntro(pos, cs7, ctx, retType, None())
+                val cs9 = assumeValueInv(logikaComp, smt2, cache, rtCheck, cs8, res, pos, reporter)
+                (cs9, Some(rcv))
+              }
+            case _ => (cs5, receiverOpt)
+          }
+        } else {
+          (cs5, None())
+        }
+        val cs11 = Util.checkInvs(logikaComp, posOpt, T, "Post-invariant", smt2, cache, rtCheck, cs10,
+          logikaComp.context.receiverTypeOpt, rcvOpt, invs, typeSubstMap, reporter)
+        val cs12 = evalAssignReceiver(
+          if (receiverModified) contract.modifies else ISZ(),
+          this, logikaComp, smt2, cache, rtCheck, cs11, invokeReceiverOpt, receiverOpt, typeSubstMap, reporter)
+        val cs13 = modVarsRewrite(cs12, posOpt)
+        val (cs14, rsym) = cs13.freshSym(AST.Typed.b, pos)
+        val cs15 = cs14.addClaim(State.Claim.Let.And(rsym, requireSyms))
+        return Context.ContractCaseResult(T, cs15, result, State.Claim.Prop(T, rsym), rep.messages)
+      }
+
+      val callerReceiverOpt: Option[State.Value.Sym] = context.methodOpt match {
+        case Some(m) => m.receiverTypeOpt match {
+          case Some(currentReceiverType) =>
+            val lcontext = context.methodOpt.get.name
+            val p = idIntro(posOpt.get, s1, lcontext, "this", currentReceiverType, None())
+            s1 = p._1
+            if (receiverModified && context.methodName == lcontext) {
+              s1 = rewriteLocal(s1, lcontext, "this", posOpt, reporter)
+            }
+            Some(p._2)
+          case _ => None()
+        }
+        case _ => None()
+      }
+      receiverOpt match {
+        case Some(receiver) =>
+          val (s2, receiverSym) = idIntro(receiver.pos, s1, res.owner :+ res.id, "this", receiver.tipe, receiverPosOpt)
+          s1 = s2.addClaim(State.Claim.Eq(receiverSym, receiver))
+        case _ =>
+      }
+      s1 = {
+        val pis = Util.checkInvs(lComp, posOpt, F, "Pre-invariant", smt2, cache, rtCheck, s1,
+          lComp.context.receiverTypeOpt, receiverOpt, invs, typeSubstMap, reporter)
+        s1(status = pis.status, nextFresh = pis.nextFresh)
+      }
+      contract match {
+        case contract: AST.MethodContract.Simple if s1.status =>
+          val ccr = evalContractCase(lComp, callerReceiverOpt, F, s1, None(), contract.requires, contract.ensures)
+          reporter.reports(ccr.messages)
+          r = r :+ ((ccr.state, ccr.retVal))
+        case contract: AST.MethodContract.Cases if s1.status =>
+          val root = s1
+          var isPreOK = F
+          var ccrs = ISZ[Context.ContractCaseResult]()
+          var okCcrs = ISZ[Context.ContractCaseResult]()
+          for (cas <- contract.cases) {
+            val ccr = evalContractCase(lComp, callerReceiverOpt, T, s1,
+              if (cas.label.value == "") None() else Some(cas.label), cas.requires, cas.ensures)
+            ccrs = ccrs :+ ccr
+            isPreOK = isPreOK || ccr.isPreOK
+            if (ccr.isOK) {
+              okCcrs = okCcrs :+ ccr
+            }
+            s1 = s1(nextFresh = ccr.state.nextFresh)
+          }
+          if (!isPreOK) {
+            for (ccr <- ccrs) {
+              reporter.reports(ccr.messages)
+            }
+          }
+          if (!isPreOK || okCcrs.isEmpty) {
+            r = r :+ ((s1(status = F), State.errorValue))
+          } else if (okCcrs.size == 1) {
+            val ccr = okCcrs(0)
+            s1 = s1(claims = ccr.state.claims :+ ccr.requiresClaim)
+            reporter.reports(ccr.messages)
+            r = r :+ ((s1, ccr.retVal))
+          } else {
+            val shouldSplit: B = split match {
+              case Split.Default => config.splitAll || config.splitContract
+              case Split.Enabled => T
+              case Split.Disabled => F
+            }
+            for (ccr <- okCcrs) {
+              reporter.reports(ccr.messages)
+            }
+            var nextFresh: Z =
+              ops.ISZOps(okCcrs).foldLeft((nf: Z, ccr: Context.ContractCaseResult) =>
+                if (nf < ccr.state.nextFresh) ccr.state.nextFresh else nf, -1)
+            assert(nextFresh >= 0)
+            if (!isUnit) {
+              nextFresh = nextFresh + 1
+            }
+            if (shouldSplit) {
+              for (ccr <- okCcrs) {
+                val cs = ccr.requiresClaim +:
+                  ops.ISZOps(ccr.state.claims).slice(root.claims.size, ccr.state.claims.size)
+                val claims = ops.ISZOps(ccr.state.claims).slice(0, root.claims.size) ++ cs
+                r = r :+ ((ccr.state(nextFresh = nextFresh, claims = claims), ccr.retVal))
+              }
+            } else {
+              var claims = ISZ[State.Claim]()
+              var map = HashMap.empty[State.Claim.Prop, ISZ[State.Claim]]
+              for (i <- 0 until root.claims.size) {
+                val rootClaim = root.claims(i)
+                if (ops.ISZOps(okCcrs).forall((ccr: Context.ContractCaseResult) => ccr.state.claims(i) == rootClaim)) {
+                  claims = claims :+ rootClaim
+                } else {
+                  for (ccr <- okCcrs) {
+                    val l = map.get(ccr.requiresClaim).getOrElse(ISZ())
+                    map = map + ccr.requiresClaim ~> (l :+ ccr.state.claims(i))
+                  }
+                }
+              }
+              val implies: ISZ[State.Claim] = for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
+                bigAnd(
+                  map.get(ccr.requiresClaim).getOrElse(ISZ()) ++
+                    (for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i)))
+              ))
+              claims = claims ++ implies
+              claims = claims :+ State.Claim.Or(for (ccr <- okCcrs) yield ccr.requiresClaim)
+              s1 = s1(claims = claims)
+              if (isUnit) {
+                r = r :+ ((s1(nextFresh = nextFresh), okCcrs(0).retVal))
+              } else {
+                val (s8, sym) = s1.freshSym(retType, pos)
+                s1 = s8
+                r = r :+ ((s1(nextFresh = nextFresh).addClaims(
+                  for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
+                    State.Claim.Let.Def(sym, ccr.retVal)))), sym))
+              }
+            }
+          }
+        case _ => r = r :+ ((s1, State.errorValue))
+      }
+      val oldR = r
+      r = ISZ()
+      var nextFresh: Z = -1
+      for (sv <- oldR) {
+        val s9 = sv._1
+        if (s9.nextFresh > nextFresh) {
+          nextFresh = s9.nextFresh
+        }
+        r = r :+ sv
+      }
+      r = for (sv <- r) yield (sv._1(nextFresh = nextFresh), sv._2)
+      return r
+    }
+
+    def strictPure(pos: Position, info: Context.InvokeMethodInfo, s1: State, typeSubstMap: HashMap[String, AST.Typed],
+                   retType: AST.Typed, receiverOpt: Option[State.Value.Sym],
+                   paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): ISZ[(State, State.Value)] = {
+      var r = ISZ[(State, State.Value)]()
+      val mres = info.res
+      val funType = mres.tpeOpt.get.subst(typeSubstMap)
+      val b = info.strictPureBodyOpt.get
+      val body: AST.AssignExp = if (typeSubstMap.isEmpty) {
+        b
+      } else {
+        AST.Transformer(AST.Util.TypePrePostSubstitutor(typeSubstMap)).transformAssignExp(F, b).resultOpt.getOrElse(b)
+      }
+      val receiverTypeOpt: Option[AST.Typed] = if (mres.isInObject) {
+        None()
+      } else {
+        th.typeMap.get(mres.owner).get match {
+          case ti: TypeInfo.Sig => Some(ti.tpe.subst(typeSubstMap))
+          case ti: TypeInfo.Adt => Some(ti.tpe.subst(typeSubstMap))
+          case _ => halt("Infeasible")
+        }
+      }
+      val (s2, pf) = strictPureMethod(th, config, plugins, smt2, cache, s1, receiverTypeOpt, funType, mres.owner,
+        mres.id, for (p <- info.sig.params) yield p.id, body, reporter, context.implicitCheckTitlePosOpt)
+      val (s3, re) = s2.freshSym(retType, pos)
+      var args: ISZ[State.Value] = for (q <- paramArgs) yield q._4
+      receiverOpt match {
+        case Some(receiver) => args = receiver +: args
+        case _ =>
+      }
+      r = r :+ ((s3.addClaim(State.Claim.Let.ProofFunApply(re, pf, args)), re))
+      return r
+    }
+
     def evalInvoke(s0: State,
                    invokeReceiverOpt: Option[AST.Exp],
                    ident: AST.Exp.Ident,
                    eargs: Either[ISZ[AST.Exp], ISZ[AST.NamedArg]],
                    attr: AST.ResolvedAttr): ISZ[(State, State.Value)] = {
       val res = attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-      val resST = methodResST(res)
       val posOpt = attr.posOpt
       val pos = posOpt.get
       val receiverPosOpt: Option[Position] =
         if (invokeReceiverOpt.nonEmpty) invokeReceiverOpt.get.posOpt
         else ident.posOpt
       val info = methodInfo(res.isInObject, res.owner, res.id)
-      val contract = info.contract
-      val isUnit = info.sig.returnType.typedOpt == AST.Typed.unitOpt
       val ctx = res.owner :+ res.id
 
       var r = ISZ[(State, State.Value)]()
@@ -1828,399 +2232,9 @@ import Util._
           ssmros
         }
 
-      def strictPure(s1: State, typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed,
-                     receiverOpt: Option[State.Value.Sym], paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): Unit = {
-        val mres = info.res
-        val funType = mres.tpeOpt.get.subst(typeSubstMap)
-        val b = info.strictPureBodyOpt.get
-        val body: AST.AssignExp = if (typeSubstMap.isEmpty) {
-          b
-        } else {
-          AST.Transformer(AST.Util.TypePrePostSubstitutor(typeSubstMap)).transformAssignExp(F, b).resultOpt.getOrElse(b)
-        }
-        val receiverTypeOpt: Option[AST.Typed] = if (mres.isInObject) {
-          None()
-        } else {
-          th.typeMap.get(mres.owner).get match {
-            case ti: TypeInfo.Sig => Some(ti.tpe.subst(typeSubstMap))
-            case ti: TypeInfo.Adt => Some(ti.tpe.subst(typeSubstMap))
-            case _ => halt("Infeasible")
-          }
-        }
-        val (s2, pf) = strictPureMethod(th, config, plugins, smt2, cache, s1, receiverTypeOpt, funType, mres.owner,
-          mres.id, for (p <- info.sig.params) yield p.id, body, reporter, context.implicitCheckTitlePosOpt)
-        val (s3, re) = s2.freshSym(retType, pos)
-        var args: ISZ[State.Value] = for (q <- paramArgs) yield q._4
-        receiverOpt match {
-          case Some(receiver) => args = receiver +: args
-          case _ =>
-        }
-        r = r :+ ((s3.addClaim(State.Claim.Let.ProofFunApply(re, pf, args)), re))
-      }
-
       val invs: ISZ[Info.Inv] =
         if (info.isHelper || info.strictPureBodyOpt.nonEmpty) ISZ()
         else retrieveInvs(res.owner, res.isInObject)
-
-      def compositional(s: State, typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed,
-                        receiverOpt: Option[State.Value.Sym],
-                        paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)],
-                        oldVars: HashSMap[String, State.Value.Sym]): Unit = {
-        if (context.compMethods.contains(res.owner :+ res.id)) {
-          reporter.error(posOpt, kind, st"Cannot use ${(res.owner :+ res.id, ".")}'s contracts cyclicly".render)
-          r = r :+ ((s(status = F), State.errorValue))
-          return
-        }
-
-        var s1 = s
-        for (q <- paramArgs) {
-          val (l, _, arg, v) = q
-          val argPosOpt = arg.posOpt
-          val (s3, sym) = idIntro(arg.posOpt.get, s1, l.context, l.id, v.tipe, argPosOpt)
-          val (s4, vSym) = value2Sym(s3, v, argPosOpt.get)
-          s1 = s4.addClaim(State.Claim.Eq(sym, vSym))
-        }
-
-        val lComp: Logika = {
-          val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
-            info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
-            plugins, Some((s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ", ident.posOpt.get)),
-            this.context.compMethods + (res.owner :+ res.id)
-          )
-          val mctx = l.context.methodOpt.get
-          var objectVarInMap = mctx.objectVarInMap
-          for (p <- mctx.modObjectVarMap(typeSubstMap).entries) {
-            val (ids, (t, _)) = p
-            val (s4, sym) = nameIntro(pos, s1, ids, t, None())
-            objectVarInMap = objectVarInMap + ids ~> sym
-            s1 = s4
-          }
-          var fieldVarInMap = mctx.fieldVarInMap
-          mctx.receiverTypeOpt match {
-            case Some(receiverType) =>
-              val fieldVarMap = mctx.fieldVarMap(typeSubstMap)
-              if (fieldVarMap.nonEmpty) {
-                val (s5, thiz) = idIntro(mctx.posOpt.get, s1, mctx.name, "this", receiverType, mctx.posOpt)
-                s1 = s5
-                for (p <- mctx.fieldVarMap(typeSubstMap).entries) {
-                  val (id, (t, posOpt)) = p
-                  val (s6, sym) = s1.freshSym(t, posOpt.get)
-                  s1 = s6.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
-                  fieldVarInMap = fieldVarInMap + id ~> sym
-                }
-              }
-            case _ =>
-          }
-          var localInMap = mctx.localInMap
-          for (p <- mctx.localMap(typeSubstMap).entries) {
-            val (id, (ctx, _, t)) = p
-            val (s7, sym): (State, State.Value.Sym) = idIntro(pos, s1, ctx, id, t, None())
-            localInMap = localInMap + id ~> sym
-            s1 = s7
-          }
-          l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
-            localInMap = localInMap))))
-        }
-
-        val (receiverModified, modLocals) = contract.modifiedLocalVars(lComp.context.receiverLocalTypeOpt)
-
-        def evalContractCase(logikaComp: Logika, callerReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
-                             labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
-                             ensures: ISZ[AST.Exp]): Context.ContractCaseResult = {
-
-          def modVarsResult(ms0: State, mposOpt: Option[Position]): (State, State.Value.Sym) = {
-            var ms1 = ms0
-            val modObjectVars = contract.modifiedObjectVars
-            val mpos = mposOpt.get
-            ms1 = rewriteObjectVars(this, smt2, cache, rtCheck, ms1, modObjectVars, mpos, reporter)
-            var oldIdMap = HashMap.empty[ISZ[String], State.Value.Sym]
-            for (pair <- modLocals.entries) {
-              val (info, (t, _)) = pair
-              val (ls0, sym) = idIntro(pos, ms1, info.context, info.id, t, None())
-              ms1 = ls0
-              oldIdMap = oldIdMap + (info.context :+ info.id) ~> sym
-            }
-            ms1 = rewriteLocalVars(ms1, modLocals.keys, mposOpt, reporter)
-            for (pair <- modLocals.entries) {
-              val (info, (t, pos)) = pair
-              val oldSym = oldIdMap.get(info.context :+ info.id).get
-              val (ls1, newSym) = idIntro(pos, ms1, info.context, info.id, t, Some(pos))
-              val ls2 = Util.assumeValueInv(this, smt2, cache, rtCheck, ls1, newSym, pos, reporter)
-              if (AST.Util.isSeq(t)) {
-                val (ls5, size1) = ls2.freshSym(AST.Typed.z, pos)
-                val (ls6, size2) = ls5.freshSym(AST.Typed.z, pos)
-                val (ls7, cond) = ls6.freshSym(AST.Typed.b, pos)
-                val ls8 = ls7.addClaims(ISZ[State.Claim](
-                  State.Claim.Let.FieldLookup(size1, oldSym, "size"),
-                  State.Claim.Let.FieldLookup(size2, newSym, "size"),
-                  State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
-                  State.Claim.Prop(T, cond)
-                ))
-                ms1 = ls8
-              } else {
-                ms1 = ls2
-              }
-            }
-            if (isUnit) {
-              return ms1.freshSym(AST.Typed.unit, mpos)
-            } else {
-              val (ms2, v) = resIntro(mpos, ms1, ctx, retType, mposOpt)
-              ms1 = ms2
-              return (ms1, v)
-            }
-          }
-
-          def modVarsRewrite(ms0: State, modPosOpt: Option[Position]): State = {
-            var ms1 = ms0
-            var newVars = oldVars
-            for (q <- paramArgs) {
-              val (p, t, arg, _) = q
-              if (modLocals.contains(p)) {
-                val (ms2, v) = idIntro(arg.posOpt.get, ms1, p.context, p.id, t, None())
-                ms1 = singleState(assignRec(Split.Disabled, smt2, cache, rtCheck, ms2, arg, v, reporter))
-                if (newVars.contains(p.id)) {
-                  newVars = newVars + p.id ~> v
-                }
-              }
-            }
-            var rwLocals: ISZ[AST.ResolvedInfo.LocalVar] = for (q <- paramArgs) yield q._1
-            if (!isUnit) {
-              rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "Res")
-            }
-            if (receiverOpt.nonEmpty) {
-              rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this")
-            }
-            ms1 = rewriteLocalVars(ms1, rwLocals, modPosOpt, reporter)
-            if (newVars.nonEmpty) {
-              for (q <- paramArgs) {
-                val p = q._1
-                newVars.get(p.id) match {
-                  case Some(v) => ms1 = ms1.addClaim(State.Claim.Let.CurrentId(T, v, ctx, p.id, posOpt))
-                  case _ =>
-                }
-              }
-            }
-            callerReceiverOpt match {
-              case Some(receiver) =>
-                val (ms2, receiverSym) = idIntro(receiver.pos, ms1, context.methodOpt.get.name, "this", receiver.tipe, Some(receiver.pos))
-                ms1 = ms2.addClaim(State.Claim.Eq(receiverSym, receiver))
-              case _ =>
-            }
-            return ms1
-          }
-
-          def evalRequires(cs1: State, label: String, rep: Reporter): (State, ISZ[State.Value]) = {
-            var requireSyms = ISZ[State.Value]()
-            var i = 0
-            var csr0 = cs1
-            for (require <- requires if csr0.status) {
-              val title: String =
-                if (requires.size == 1) st"${label}re-condition of $resST".render
-                else st"${label}re-condition#$i of $resST".render
-
-              val (csr1, sym): (State, State.Value.Sym) =
-                if (assume) {
-                  val p = logikaComp.evalAssume(smt2, cache, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
-                  val size = p._1.claims.size
-                  assert(p._1.claims(size - 1) == State.Claim.Prop(T, p._2))
-                  (p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1)), p._2)
-                } else {
-                  logikaComp.evalAssert(smt2, cache, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
-                }
-              requireSyms = requireSyms :+ sym
-              csr0 = csr1
-              i = i + 1
-            }
-            return (csr0, requireSyms)
-          }
-
-          def evalEnsures(cs1: State, label: String, rep: Reporter): State = {
-            val claims: ISZ[AST.Exp] = for (ensure <- ensures) yield AST.Util.substExp(ensure, typeSubstMap)
-            var i = 0
-            var cse3 = cs1
-            for (ensure <- claims if cse3.status) {
-              val title: String =
-                if (ensures.size == 1) st"${label}ost-condition of $resST".render
-                else st"${label}ost-condition#$i of $resST".render
-              cse3 = logikaComp.evalAssume(smt2, cache, F, title, cse3, ensure, posOpt, rep)._1
-              i = i + 1
-            }
-            return cse3
-          }
-
-          val rep = reporter.empty
-          val (label, cs1): (String, State) = labelOpt match {
-            case Some(lbl) if lbl.value.size == 0 =>
-              (s"(${lbl.value}) p", cs0.addClaim(State.Claim.Label(lbl.value, lbl.posOpt.get)))
-            case _ => ("P", cs0)
-          }
-          val (cs2, requireSyms) = evalRequires(cs1, label, rep)
-          if (!cs2.status) {
-            val (cs3, rsym) = cs2.freshSym(AST.Typed.b, pos)
-            return Context.ContractCaseResult(F, cs3.addClaim(State.Claim.Let.And(rsym, requireSyms)),
-              State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
-          }
-          val (cs4, result) = modVarsResult(cs2, posOpt)
-          val cs5 = evalEnsures(cs4, label, rep)
-          if (!cs5.status) {
-            val (cs6, rsym) = cs5.freshSym(AST.Typed.b, pos)
-            return Context.ContractCaseResult(T, cs6.addClaim(State.Claim.Let.And(rsym, requireSyms)),
-              State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
-          }
-          val (cs10, rcvOpt): (State, Option[State.Value.Sym]) = if (receiverOpt.nonEmpty) {
-            receiverOpt match {
-              case Some(receiver) if invs.nonEmpty =>
-                val (cs7, rcv) = idIntro(pos, cs5, ctx, "this", receiver.tipe, None())
-                if (isUnit) {
-                  (cs7, Some(rcv))
-                } else {
-                  val (cs8, res) = resIntro(pos, cs7, ctx, retType, None())
-                  val cs9 = assumeValueInv(logikaComp, smt2, cache, rtCheck, cs8, res, pos, reporter)
-                  (cs9, Some(rcv))
-                }
-              case _ => (cs5, receiverOpt)
-            }
-          } else {
-            (cs5, None())
-          }
-          val cs11 = Util.checkInvs(logikaComp, posOpt, T, "Post-invariant", smt2, cache, rtCheck, cs10,
-            logikaComp.context.receiverTypeOpt, rcvOpt, invs, typeSubstMap, reporter)
-          val cs12 = evalAssignReceiver(
-            if (receiverModified) contract.modifies else ISZ(),
-            this, logikaComp, smt2, cache, rtCheck, cs11, invokeReceiverOpt, receiverOpt, typeSubstMap, reporter)
-          val cs13 = modVarsRewrite(cs12, posOpt)
-          val (cs14, rsym) = cs13.freshSym(AST.Typed.b, pos)
-          val cs15 = cs14.addClaim(State.Claim.Let.And(rsym, requireSyms))
-          return Context.ContractCaseResult(T, cs15, result, State.Claim.Prop(T, rsym), rep.messages)
-        }
-
-        val callerReceiverOpt: Option[State.Value.Sym] = context.methodOpt match {
-          case Some(m) => m.receiverTypeOpt match {
-            case Some(currentReceiverType) =>
-              val lcontext = context.methodOpt.get.name
-              val p = idIntro(posOpt.get, s1, lcontext, "this", currentReceiverType, None())
-              s1 = p._1
-              if (receiverModified && context.methodName == lcontext) {
-                s1 = rewriteLocal(s1, lcontext, "this", posOpt, reporter)
-              }
-              Some(p._2)
-            case _ => None()
-          }
-          case _ => None()
-        }
-        receiverOpt match {
-          case Some(receiver) =>
-            val (s2, receiverSym) = idIntro(receiver.pos, s1, res.owner :+ res.id, "this", receiver.tipe, receiverPosOpt)
-            s1 = s2.addClaim(State.Claim.Eq(receiverSym, receiver))
-          case _ =>
-        }
-        s1 = {
-          val pis = Util.checkInvs(lComp, posOpt, F, "Pre-invariant", smt2, cache, rtCheck, s1,
-            lComp.context.receiverTypeOpt, receiverOpt, invs, typeSubstMap, reporter)
-          s1(status = pis.status, nextFresh = pis.nextFresh)
-        }
-        contract match {
-          case contract: AST.MethodContract.Simple if s1.status =>
-            val ccr = evalContractCase(lComp, callerReceiverOpt, F, s1, None(), contract.requires, contract.ensures)
-            reporter.reports(ccr.messages)
-            r = r :+ ((ccr.state, ccr.retVal))
-          case contract: AST.MethodContract.Cases if s1.status =>
-            val root = s1
-            var isPreOK = F
-            var ccrs = ISZ[Context.ContractCaseResult]()
-            var okCcrs = ISZ[Context.ContractCaseResult]()
-            for (cas <- contract.cases) {
-              val ccr = evalContractCase(lComp, callerReceiverOpt, T, s1,
-                if (cas.label.value == "") None() else Some(cas.label), cas.requires, cas.ensures)
-              ccrs = ccrs :+ ccr
-              isPreOK = isPreOK || ccr.isPreOK
-              if (ccr.isOK) {
-                okCcrs = okCcrs :+ ccr
-              }
-              s1 = s1(nextFresh = ccr.state.nextFresh)
-            }
-            if (!isPreOK) {
-              for (ccr <- ccrs) {
-                reporter.reports(ccr.messages)
-              }
-            }
-            if (!isPreOK || okCcrs.isEmpty) {
-              r = r :+ ((s1(status = F), State.errorValue))
-            } else if (okCcrs.size == 1) {
-              val ccr = okCcrs(0)
-              s1 = s1(claims = ccr.state.claims :+ ccr.requiresClaim)
-              reporter.reports(ccr.messages)
-              r = r :+ ((s1, ccr.retVal))
-            } else {
-              val shouldSplit: B = split match {
-                case Split.Default => config.splitAll || config.splitContract
-                case Split.Enabled => T
-                case Split.Disabled => F
-              }
-              for (ccr <- okCcrs) {
-                reporter.reports(ccr.messages)
-              }
-              var nextFresh: Z =
-                ops.ISZOps(okCcrs).foldLeft((nf: Z, ccr: Context.ContractCaseResult) =>
-                  if (nf < ccr.state.nextFresh) ccr.state.nextFresh else nf, -1)
-              assert(nextFresh >= 0)
-              if (!isUnit) {
-                nextFresh = nextFresh + 1
-              }
-              if (shouldSplit) {
-                for (ccr <- okCcrs) {
-                  val cs = ccr.requiresClaim +:
-                    ops.ISZOps(ccr.state.claims).slice(root.claims.size, ccr.state.claims.size)
-                  val claims = ops.ISZOps(ccr.state.claims).slice(0, root.claims.size) ++ cs
-                  r = r :+ ((ccr.state(nextFresh = nextFresh, claims = claims), ccr.retVal))
-                }
-              } else {
-                var claims = ISZ[State.Claim]()
-                var map = HashMap.empty[State.Claim.Prop, ISZ[State.Claim]]
-                for (i <- 0 until root.claims.size) {
-                  val rootClaim = root.claims(i)
-                  if (ops.ISZOps(okCcrs).forall((ccr: Context.ContractCaseResult) => ccr.state.claims(i) == rootClaim)) {
-                    claims = claims :+ rootClaim
-                  } else {
-                    for (ccr <- okCcrs) {
-                      val l = map.get(ccr.requiresClaim).getOrElse(ISZ())
-                      map = map + ccr.requiresClaim ~> (l :+ ccr.state.claims(i))
-                    }
-                  }
-                }
-                val implies: ISZ[State.Claim] = for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
-                  bigAnd(
-                    map.get(ccr.requiresClaim).getOrElse(ISZ()) ++
-                      (for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i)))
-                ))
-                claims = claims ++ implies
-                claims = claims :+ State.Claim.Or(for (ccr <- okCcrs) yield ccr.requiresClaim)
-                s1 = s1(claims = claims)
-                if (isUnit) {
-                  r = r :+ ((s1(nextFresh = nextFresh), okCcrs(0).retVal))
-                } else {
-                  val (s8, sym) = s1.freshSym(retType, pos)
-                  s1 = s8
-                  r = r :+ ((s1(nextFresh = nextFresh).addClaims(
-                    for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
-                      State.Claim.Let.Def(sym, ccr.retVal)))), sym))
-                }
-              }
-            }
-          case _ => r = r :+ ((s1, State.errorValue))
-        }
-        val oldR = r
-        r = ISZ()
-        var nextFresh: Z = -1
-        for (sv <- oldR) {
-          val s9 = sv._1
-          if (s9.nextFresh > nextFresh) {
-            nextFresh = s9.nextFresh
-          }
-          r = r :+ sv
-        }
-        r = for (sv <- r) yield (sv._1(nextFresh = nextFresh), sv._2)
-      }
 
       for (t <- stateSubstMapReceiverOpts) {
         var typeSubstMap = t._2
@@ -2272,7 +2286,7 @@ import Util._
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
 
                 if (info.strictPureBodyOpt.nonEmpty) {
-                  strictPure(s1, typeSubstMap, retType, receiverOpt, paramArgs)
+                  r = r ++ strictPure(pos, info, s1, typeSubstMap, retType, receiverOpt, paramArgs)
                 } else {
                   var s2 = s1
                   var oldVars = HashSMap.empty[String, State.Value.Sym]
@@ -2286,7 +2300,8 @@ import Util._
                     s2 = rewriteLocals(s2, ctx, oldVars.keys ++ (if (receiverOpt.isEmpty) ISZ[String]() else ISZ[String]("this")))._1
                   }
 
-                  compositional(s2, typeSubstMap, retType, receiverOpt, paramArgs, oldVars)
+                  r = r ++ compositional(posOpt, info, invs, s2, typeSubstMap, retType, invokeReceiverOpt,
+                    receiverOpt, paramArgs, oldVars)
 
                 }
               case _ =>
