@@ -28,7 +28,7 @@ package org.sireum.logika.plugin
 import org.sireum._
 import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
-import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
+import org.sireum.logika.{Context, Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
 object Plugin {
@@ -103,6 +103,12 @@ object Plugin {
              cache: Smt2.Cache,
              reporter: Reporter): B
 
+  @pure def canHandleCompositional(th: TypeHierarchy, info: Context.InvokeMethodInfo): B
+
+  def handleCompositional(logika: Logika, posOpt: Option[message.Position], info: Context.InvokeMethodInfo,
+                          state: State, typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed,
+                          invokeReceiverOpt: Option[AST.Exp], receiverOpt: Option[State.Value.Sym],
+                          paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): ISZ[(State, State.Value)]
 }
 
 

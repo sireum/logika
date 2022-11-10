@@ -495,23 +495,24 @@ import Util._
                        val context: Context,
                        val plugins: ISZ[Plugin]) {
 
-  val jescPlugins: (ISZ[plugin.JustificationPlugin], ISZ[plugin.ExpPlugin], ISZ[plugin.StmtPlugin], ISZ[plugin.ClaimPlugin]) = {
+  val jescmPlugins: (ISZ[plugin.JustificationPlugin], ISZ[plugin.ExpPlugin], ISZ[plugin.StmtPlugin], ISZ[plugin.ClaimPlugin], ISZ[plugin.MethodPlugin]) = {
     var jps = ISZ[plugin.JustificationPlugin]()
     var eps = ISZ[plugin.ExpPlugin]()
     var sps = ISZ[plugin.StmtPlugin]()
     var cps = ISZ[plugin.ClaimPlugin]()
+    var mps = ISZ[plugin.MethodPlugin]()
     for (p <- plugins) {
       p match {
         case p: plugin.JustificationPlugin => jps = jps :+ p
         case p: plugin.ExpPlugin => eps = eps :+ p
         case p: plugin.StmtPlugin => sps = sps :+ p
         case p: plugin.ClaimPlugin => cps = cps :+ p
-        case _: plugin.MethodPlugin =>
+        case p: plugin.MethodPlugin => mps = mps :+ p
         case _: plugin.StmtsPlugin =>
         case _ => halt(s"Unexpected plugin: $p")
       }
     }
-    (jps, eps, sps, cps)
+    (jps, eps, sps, cps, mps)
   }
 
   def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
@@ -728,8 +729,8 @@ import Util._
     if (!state.status) {
       return ISZ((state, State.errorValue))
     }
-    val ePlugins = jescPlugins._2
-    if (jescPlugins._2.nonEmpty) {
+    val ePlugins = jescmPlugins._2
+    if (jescmPlugins._2.nonEmpty) {
       for (p <- ePlugins if p.canHandle(this, e)) {
         return p.handle(this, smt2, cache, state, e, reporter)
       }
@@ -1779,11 +1780,9 @@ import Util._
       else st"${(owner, ".")}#${res.id}"
     }
 
-    def compositional(posOpt: Option[Position], info: Context.InvokeMethodInfo,
-                      invs: ISZ[Info.Inv], s: State, typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed,
-                      invokeReceiverOpt: Option[AST.Exp], receiverOpt: Option[State.Value.Sym],
-                      paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)],
-                      oldVars: HashSMap[String, State.Value.Sym]): ISZ[(State, State.Value)] = {
+    def compositional(posOpt: Option[Position], info: Context.InvokeMethodInfo, s: State,
+                      typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed, invokeReceiverOpt: Option[AST.Exp],
+                      receiverOpt: Option[State.Value.Sym], paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): ISZ[(State, State.Value)] = {
       val res = info.res
       val ctx = res.owner :+ res.id
       val pos = posOpt.get
@@ -1793,6 +1792,9 @@ import Util._
       val receiverPosOpt: Option[Position] =
         if (invokeReceiverOpt.nonEmpty) invokeReceiverOpt.get.posOpt
         else info.sig.id.attr.posOpt
+      val invs: ISZ[Info.Inv] =
+        if (info.isHelper || info.strictPureBodyOpt.nonEmpty) ISZ()
+        else retrieveInvs(res.owner, res.isInObject)
       var r = ISZ[(State, State.Value)]()
       if (context.compMethods.contains(res.owner :+ res.id)) {
         reporter.error(posOpt, kind, st"Cannot use ${(res.owner :+ res.id, ".")}'s contracts cyclicly".render)
@@ -1801,6 +1803,16 @@ import Util._
       }
 
       var s1 = s
+      var oldVars = HashSMap.empty[String, State.Value.Sym]
+      if (ctx == context.methodName) {
+        for (paramArg <- paramArgs) {
+          val id = paramArg._1.id
+          val (s2, sym) = idIntro(pos, s1, ctx, paramArg._1.id, paramArg._2, None())
+          oldVars = oldVars + id ~> sym
+          s1 = s2
+        }
+        s1 = rewriteLocals(s1, ctx, oldVars.keys ++ (if (receiverOpt.isEmpty) ISZ[String]() else ISZ[String]("this")))._1
+      }
       for (q <- paramArgs) {
         val (l, _, arg, v) = q
         val argPosOpt = arg.posOpt
@@ -2232,10 +2244,6 @@ import Util._
           ssmros
         }
 
-      val invs: ISZ[Info.Inv] =
-        if (info.isHelper || info.strictPureBodyOpt.nonEmpty) ISZ()
-        else retrieveInvs(res.owner, res.isInObject)
-
       for (t <- stateSubstMapReceiverOpts) {
         var typeSubstMap = t._2
         val receiverOpt = t._3
@@ -2288,21 +2296,18 @@ import Util._
                 if (info.strictPureBodyOpt.nonEmpty) {
                   r = r ++ strictPure(pos, info, s1, typeSubstMap, retType, receiverOpt, paramArgs)
                 } else {
-                  var s2 = s1
-                  var oldVars = HashSMap.empty[String, State.Value.Sym]
-                  if (ctx == context.methodName) {
-                    for (paramArg <- paramArgs) {
-                      val id = paramArg._1.id
-                      val (s3, sym) = idIntro(pos, s2, ctx, paramArg._1.id, paramArg._2, None())
-                      oldVars = oldVars + id ~> sym
-                      s2 = s3
+                  var default = T
+                  if (jescmPlugins._5.nonEmpty) {
+                    for (p <- jescmPlugins._5 if default && p.canHandleCompositional(th, info)) {
+                      default = F
+                      r = r ++ p.handleCompositional(this, posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt,
+                        receiverOpt, paramArgs)
                     }
-                    s2 = rewriteLocals(s2, ctx, oldVars.keys ++ (if (receiverOpt.isEmpty) ISZ[String]() else ISZ[String]("this")))._1
                   }
-
-                  r = r ++ compositional(posOpt, info, invs, s2, typeSubstMap, retType, invokeReceiverOpt,
-                    receiverOpt, paramArgs, oldVars)
-
+                  if (default) {
+                    r = r ++ compositional(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt,
+                      receiverOpt, paramArgs)
+                  }
                 }
               case _ =>
                 r = r :+ ((s1, State.errorValue))
@@ -3203,7 +3208,7 @@ import Util._
             case Some((cond, claimss)) =>
               val gap = outputs(i)._2 - s0.nextFresh
               if (gap > 0) {
-                val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap, jescPlugins._4)
+                val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap, jescmPlugins._4)
                 val newCond = rw.transformStateClaim(cond).getOrElseEager(cond)
                 var newClaimss = ISZ[ISZ[State.Claim]]()
                 for (claims <- claimss) {
@@ -3481,7 +3486,7 @@ import Util._
     var (s0, m) = stateMap
     step match {
       case step: AST.ProofAst.Step.Regular =>
-        for (plugin <- jescPlugins._1 if plugin.canHandle(this, step.just)) {
+        for (plugin <- jescmPlugins._1 if plugin.canHandle(this, step.just)) {
           val Plugin.Result(r, nextFresh, claims) =
             plugin.handle(this, smt2, cache, m, s0, step, reporter)
           return (s0(status = r, nextFresh = nextFresh).addClaims(claims),
@@ -3621,7 +3626,7 @@ import Util._
     if (!state.status) {
       return ISZ(state)
     }
-    val sPlugins = jescPlugins._3
+    val sPlugins = jescmPlugins._3
     if (sPlugins.nonEmpty) {
       for (p <- sPlugins if p.canHandle(this, stmt)) {
         return p.handle(this, smt2, cache, state, stmt, reporter)
@@ -4144,13 +4149,13 @@ import Util._
   }
 
   def logPc(enabled: B, raw: B, state: State, reporter: Reporter, posOpt: Option[Position]): Unit = {
-    reporter.state(jescPlugins._4, posOpt, context.methodName, th, state, config.atLinesFresh)
+    reporter.state(jescmPlugins._4, posOpt, context.methodName, th, state, config.atLinesFresh)
     if (enabled || raw) {
       val sts: ISZ[ST] =
         if (raw) {
           State.Claim.claimsRawSTs(state.claims)
         } else {
-          val es = Util.claimsToExps(jescPlugins._4, posOpt.get, context.methodName, state.claims, th, config.atLinesFresh)
+          val es = Util.claimsToExps(jescmPlugins._4, posOpt.get, context.methodName, state.claims, th, config.atLinesFresh)
           for (e <- es) yield e.prettyST
         }
       if (sts.isEmpty) {
