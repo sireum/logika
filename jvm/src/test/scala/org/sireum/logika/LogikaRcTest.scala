@@ -74,6 +74,7 @@ class LogikaRcTest extends SireumRcSpec {
       case "collection.sc" if isInGithubAction => c = filterSmt2Config(c, _.name.value == "cvc5")(timeoutInMs = c.timeoutInMs * 3)
       case "opsem.sc" => c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))(timeoutInMs = if (isInGithubAction) c.timeoutInMs * 2 else c.timeoutInMs)
       case "opsem-alt.sc"  => c = filterSmt2Config(c, _.name.value == "cvc5")
+      case "interprocedural.sc"  => c = c(interp = T)
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))

@@ -1780,6 +1780,114 @@ import Util._
       else st"${(owner, ".")}#${res.id}"
     }
 
+    def interprocedural(posOpt: Option[Position], info: Context.InvokeMethodInfo, s: State,
+                        typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed, invokeReceiverOpt: Option[AST.Exp],
+                        receiverOpt: Option[State.Value.Sym], paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): ISZ[(State, State.Value)] = {
+      val res = info.res
+      val ctx = res.owner :+ res.id
+      val pos = posOpt.get
+      val resST = methodResST(res)
+      val receiverPosOpt: Option[Position] =
+        if (invokeReceiverOpt.nonEmpty) invokeReceiverOpt.get.posOpt
+        else info.sig.id.attr.posOpt
+      val mpos = info.sig.id.attr.posOpt.get
+
+      val (s0, callerLocalMap): (State, HashSMap[String, State.Value.Sym]) = {
+        val (s1, m) = saveLocals(pos, s, context.methodName)
+        var s2 = s1
+        receiverOpt match {
+          case Some(receiver) =>
+            val (s3, sym) = idIntro(mpos, s2, ctx, "this", receiver.tipe, Some(mpos))
+            s2 = s3.addClaim(State.Claim.Eq(sym, receiver))
+          case _ =>
+        }
+        for (paramArg <- paramArgs) {
+          val (l, _, _, v) = paramArg
+          val (s3, sym) = idIntro(mpos, s2, l.context, l.id, v.tipe, Some(mpos))
+          s2 = s3.addClaim(State.Claim.Eq(sym, v))
+        }
+        (s2, m)
+      }
+
+      val stateMethods: ISZ[(State, Info.Method)] = if (info.res.isInObject) {
+        th.nameMap.get(ctx).get match {
+          case minfo: Info.Method => ISZ((s0, Info.substMethod(minfo, typeSubstMap)))
+          case _ => halt(s"TODO: ${resST.render}")
+        }
+      } else {
+        halt(s"TODO: ${resST.render}")
+      }
+
+      var r = ISZ[(State, State.Value)]()
+
+      def evalMethod(s1: State, minfo: Info.Method): Unit = {
+        val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
+          info.sig.returnType.typedOpt.get, receiverPosOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
+          plugins, Some(
+            (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
+              info.sig.id.attr.posOpt.get)),
+          this.context.compMethods + (res.owner :+ res.id)
+        )
+        val ss = l.evalStmts(split, smt2, cache, None(), rtCheck, s1, minfo.ast.bodyOpt.get.stmts, reporter)
+        if (reporter.hasError) {
+          r = r ++ (for (s2 <- ss) yield (s2(status = F), State.errorValue.asInstanceOf[State.Value]))
+          return
+        }
+        for (s2 <- ss) {
+          var s3 = s2(status = T)
+          var assigns = ISZ[(AST.Exp, State.Value.Sym)]()
+          var ids = ISZ[String]()
+          invokeReceiverOpt match {
+            case Some(receiver) =>
+              val t = receiver.typedOpt.get.subst(typeSubstMap)
+              if (th.isMutable(t)) {
+                val (s4, sym) = idIntro(pos, s3, ctx, "this", t, None())
+                assigns = assigns :+ ((receiver, sym))
+                s3 = s4
+              }
+              ids = ids :+ "this"
+            case _ =>
+          }
+          for (paramArg <- paramArgs) {
+            val (l, _, e, v) = paramArg
+            ids = ids :+ l.id
+            if (th.isMutable(v.tipe)) {
+              val (s4, sym) = idIntro(pos, s3, ctx, l.id, v.tipe, None())
+              assigns = assigns :+ ((e, sym))
+              s3 = s4
+            }
+          }
+          val retVal: State.Value = if (retType == AST.Typed.unit) {
+            State.Value.Unit(pos)
+          } else {
+            ids = ids :+ "Res"
+            val (s4, sym) = idIntro(pos, s3, ctx, "Res", retType, None())
+            s3 = s4
+            sym
+          }
+          s3 = rewriteLocals(s3, ctx, ids)._1
+          s3 = restoreLocals(pos, s3, context.methodName, callerLocalMap)
+          var s4s = ISZ(s3)
+          for (assign <- assigns) {
+            var s5s = ISZ[State]()
+            for (s4 <- s4s) {
+              s5s = s5s ++ assignRec(split, smt2, cache, rtCheck, s4, assign._1, assign._2, reporter)
+            }
+            s4s = s5s
+          }
+          for (s4 <- s4s) {
+            r = r :+ ((s4, retVal))
+          }
+        }
+      }
+
+      for (p <- stateMethods) {
+        evalMethod(p._1, p._2)
+      }
+
+      return r
+    }
+
     def compositional(posOpt: Option[Position], info: Context.InvokeMethodInfo, s: State,
                       typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed, invokeReceiverOpt: Option[AST.Exp],
                       receiverOpt: Option[State.Value.Sym], paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): ISZ[(State, State.Value)] = {
@@ -1807,7 +1915,7 @@ import Util._
       if (ctx == context.methodName) {
         for (paramArg <- paramArgs) {
           val id = paramArg._1.id
-          val (s2, sym) = idIntro(pos, s1, ctx, paramArg._1.id, paramArg._2, None())
+          val (s2, sym) = idIntro(pos, s1, ctx, paramArg._1.id, paramArg._4.tipe, None())
           oldVars = oldVars + id ~> sym
           s1 = s2
         }
@@ -2295,6 +2403,9 @@ import Util._
 
                 if (info.strictPureBodyOpt.nonEmpty) {
                   r = r ++ strictPure(pos, info, s1, typeSubstMap, retType, receiverOpt, paramArgs)
+                } else if (config.interp && info.contract.isEmpty) {
+                  r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt,
+                    receiverOpt, paramArgs)
                 } else {
                   var default = T
                   if (jescmPlugins._5.nonEmpty) {

@@ -1706,6 +1706,15 @@ object Util {
     }
   }
 
+  @record class LocalVarIdCollector(val ctx: ISZ[String], var idMap: HashSMap[String, AST.Typed]) extends MStateTransformer {
+    override def preStateClaimLetCurrentId(o: State.Claim.Let.CurrentId): MStateTransformer.PreResult[State.Claim.Let] = {
+      if (o.context == ctx) {
+        idMap = idMap + o.id ~> o.sym.tipe
+      }
+      return MStateTransformer.PreResultStateClaimLetCurrentId
+    }
+  }
+
   val builtInTypeNames: HashSet[ISZ[String]] = HashSet ++ ISZ(
     AST.Typed.bName, AST.Typed.zName, AST.Typed.cName, AST.Typed.stringName, AST.Typed.f32Name, AST.Typed.f64Name,
     AST.Typed.rName, AST.Typed.stName, AST.Typed.isName, AST.Typed.msName
@@ -2567,5 +2576,30 @@ object Util {
     val cs2es = ClaimsToExps(plugins, pos, context, th, includeFreshLines, collector.letMap, collector.eqMap,
       collector.lNumMap, collector.vNumMap, HashMap.empty)
     return cs2es.translate(claims)
+  }
+
+  @pure def saveLocals(pos: Position, s0: State, currentContext: ISZ[String]): (State, HashSMap[String, State.Value.Sym]) = {
+    val lvic = LocalVarIdCollector(currentContext, HashSMap.empty)
+    lvic.transformState(s0)
+    var s1 = s0
+    var map = HashSMap.empty[String, State.Value.Sym]
+    for (p <- lvic.idMap.entries) {
+      val (id, tipe) = p
+      val (s2, sym) = idIntro(pos, s1, currentContext, id, tipe, None())
+      map = map + id ~> sym
+      s1 = s2
+    }
+    return (rewriteLocals(s1, currentContext, map.keys)._1, map)
+  }
+
+  @pure def restoreLocals(pos: Position, s0: State, currentContext: ISZ[String],
+                          idMap: HashSMap[String, State.Value.Sym]): State = {
+    var s1 = s0
+    for (p <- idMap.entries) {
+      val (id, v) = p
+      val (s2, sym) = idIntro(pos, s1, currentContext, id, v.tipe, Some(pos))
+      s1 = s2.addClaim(State.Claim.Eq(sym, v))
+    }
+    return s1
   }
 }

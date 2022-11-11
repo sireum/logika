@@ -83,7 +83,8 @@ object LogikaTest {
       smt2Seq = F,
       branchPar = Config.BranchPar.All,
       branchParCores = Runtime.getRuntime.availableProcessors,
-      atLinesFresh = T
+      atLinesFresh = T,
+      interp = F,
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty

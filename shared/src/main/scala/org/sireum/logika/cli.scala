@@ -71,6 +71,8 @@ object cli {
           description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)")
       )),
       OptGroup(name = "Control", opts = ISZ(
+        Opt(name = "interprocedural", longKey = "interprocedural", shortKey = None(),
+          tpe = Type.Flag(F), description = "Enable inter-procedural verification for invoked methods without contracts"),
         Opt(name = "line", longKey = "line", shortKey = None(),
           tpe = Type.Num(None(), 0, Some(0), None()),
           description = "Focus verification to the specified program line number"),
