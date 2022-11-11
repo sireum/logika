@@ -200,7 +200,8 @@ object Logika {
               }
               taskMap = taskMap + ownerPos ~> (tasks :+ Task.Theorem(th, config, stmt, plugins))
             }
-          case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty && !noMethods(owner, stmt.sig.id.value) =>
+          case stmt: AST.Stmt.Method if stmt.bodyOpt.nonEmpty && !noMethods(owner, stmt.sig.id.value) &&
+            !(stmt.isHelper && stmt.contract.isEmpty) =>
             if (ownerPosOpt.nonEmpty) {
               stmt.mcontract match {
                 case contract: AST.MethodContract.Cases if contract.cases.size > 1 =>

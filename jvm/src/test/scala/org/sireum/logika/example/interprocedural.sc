@@ -14,3 +14,14 @@ def foo(): Unit = {
   x = 0
   assert(oldX + 1 == m)
 }
+
+@helper def incX(n: Z): Unit = {
+  x = x + n
+}
+
+def bar(): Unit = {
+  Contract(Modifies(x))
+  val oldX = x
+  incX(3)
+  assert(oldX + 3 == x)
+}
