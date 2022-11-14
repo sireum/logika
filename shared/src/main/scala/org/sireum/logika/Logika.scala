@@ -1793,8 +1793,8 @@ import Util._
         else info.sig.id.attr.posOpt
       val mpos = info.sig.id.attr.posOpt.get
 
-      val (s0, callerLocalMap): (State, HashSMap[String, State.Value.Sym]) = {
-        val (s1, m) = saveLocals(pos, s, context.methodName)
+      val (s0, callerLocalMap): (State, LocalSaveMap) = {
+        val (s1, m) = saveLocals(s, context.methodName)
         var s2 = s1
         receiverOpt match {
           case Some(receiver) =>
@@ -1867,7 +1867,7 @@ import Util._
             sym
           }
           s3 = rewriteLocals(s3, ctx, ids)._1
-          s3 = restoreLocals(pos, s3, context.methodName, callerLocalMap)
+          s3 = restoreLocals(s3, callerLocalMap)
           var s4s = ISZ(s3)
           for (assign <- assigns) {
             var s5s = ISZ[State]()

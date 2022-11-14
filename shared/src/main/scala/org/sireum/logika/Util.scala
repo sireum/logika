@@ -1706,14 +1706,27 @@ object Util {
     }
   }
 
-  @record class LocalVarIdCollector(val ctx: ISZ[String], var idMap: HashSMap[String, AST.Typed]) extends MStateTransformer {
+  @record class LocalSaver(val ctx: ISZ[String], var localMap: LocalSaveMap) extends MStateTransformer {
     override def preStateClaimLetCurrentId(o: State.Claim.Let.CurrentId): MStateTransformer.PreResult[State.Claim.Let] = {
       if (o.context == ctx) {
-        idMap = idMap + o.id ~> o.sym.tipe
+        val id = State.Claim.Let.Id(o.sym, o.context, o.id, 0, o.defPosOpt.toIS)
+        localMap = localMap + id ~> o
+        return MStateTransformer.PreResult(F, MSome(id))
       }
       return MStateTransformer.PreResultStateClaimLetCurrentId
     }
   }
+
+  @datatype class PrePostLocalRestorer(val localMap: LocalSaveMap) extends StateTransformer.PrePost[B] {
+    override def preStateClaimLetId(ctx: B, o: State.Claim.Let.Id): StateTransformer.PreResult[B, State.Claim.Let] = {
+      localMap.get(o) match {
+        case Some(id) => return StateTransformer.PreResult(ctx, F, Some(id))
+        case _ => return StateTransformer.PreResult(ctx, F, None())
+      }
+    }
+  }
+
+  type LocalSaveMap = HashMap[State.Claim.Let.Id, State.Claim.Let.CurrentId]
 
   val builtInTypeNames: HashSet[ISZ[String]] = HashSet ++ ISZ(
     AST.Typed.bName, AST.Typed.zName, AST.Typed.cName, AST.Typed.stringName, AST.Typed.f32Name, AST.Typed.f64Name,
@@ -1729,6 +1742,8 @@ object Util {
   val eqResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq))
   val equivResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv))
   val notResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot))
+
+  @strictpure def emptyLocalSaveMap: LocalSaveMap = HashMap.empty
 
   def collectLetClaims(enabled: B, claims: ISZ[State.Claim]): (HashMap[Z, ISZ[State.Claim.Let]], HashSSet[State.Value.Sym]) = {
     if (enabled) {
@@ -2578,28 +2593,13 @@ object Util {
     return cs2es.translate(claims)
   }
 
-  @pure def saveLocals(pos: Position, s0: State, currentContext: ISZ[String]): (State, HashSMap[String, State.Value.Sym]) = {
-    val lvic = LocalVarIdCollector(currentContext, HashSMap.empty)
-    lvic.transformState(s0)
-    var s1 = s0
-    var map = HashSMap.empty[String, State.Value.Sym]
-    for (p <- lvic.idMap.entries) {
-      val (id, tipe) = p
-      val (s2, sym) = idIntro(pos, s1, currentContext, id, tipe, None())
-      map = map + id ~> sym
-      s1 = s2
-    }
-    return (rewriteLocals(s1, currentContext, map.keys)._1, map)
+  @pure def saveLocals(s0: State, currentContext: ISZ[String]): (State, LocalSaveMap) = {
+    val lvic = LocalSaver(currentContext, emptyLocalSaveMap)
+    val s1 = lvic.transformState(s0).getOrElse(s0)
+    return (s1, lvic.localMap)
   }
 
-  @pure def restoreLocals(pos: Position, s0: State, currentContext: ISZ[String],
-                          idMap: HashSMap[String, State.Value.Sym]): State = {
-    var s1 = s0
-    for (p <- idMap.entries) {
-      val (id, v) = p
-      val (s2, sym) = idIntro(pos, s1, currentContext, id, v.tipe, Some(pos))
-      s1 = s2.addClaim(State.Claim.Eq(sym, v))
-    }
-    return s1
+  @pure def restoreLocals(s0: State, localMap: LocalSaveMap): State = {
+    return StateTransformer(PrePostLocalRestorer(localMap)).transformState(F, s0).resultOpt.getOrElse(s0)
   }
 }
