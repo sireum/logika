@@ -25,3 +25,16 @@ def bar(): Unit = {
   incX(3)
   assert(oldX + 3 == x)
 }
+
+@record class A(var x: Z) {
+  @helper def incX(n: Z): Unit = {
+    x = x + n
+  }
+
+  def foo(): Unit = {
+    Contract(Modifies(x))
+    val oldX = x
+    incX(1)
+    assert(oldX + 1 == x)
+  }
+}

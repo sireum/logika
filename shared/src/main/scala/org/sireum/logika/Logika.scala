@@ -1781,6 +1781,51 @@ import Util._
       else st"${(owner, ".")}#${res.id}"
     }
 
+    def resolveVirtualInvoke(posOpt: Option[Position], info: Context.InvokeMethodInfo, s0: State,
+                             receiver: State.Value.Sym, typeSubstMap: HashMap[String, AST.Typed]): ISZ[(State, Either[Info.Method, State.Value])] = {
+      var r = ISZ[(State, Either[Info.Method, State.Value])]()
+      val pos = posOpt.get
+      val t = receiver.tipe.asInstanceOf[AST.Typed.Name]
+      val subs: ISZ[AST.Typed.Name] = if (th.isAdtLeafType(t)) {
+        ISZ(t)
+      } else {
+        th.substLeavesOfType(posOpt, t) match {
+          case Either.Left(subsT) => subsT
+          case Either.Right(messages) =>
+            reporter.reports(messages)
+            return ISZ((s0(status = F), Either.Right(State.errorValue)))
+        }
+      }
+      if (subs.isEmpty) {
+        reporter.error(posOpt, Logika.kind, st"Could not find a ${if (th.isMutable(t)) "@record" else "@datatype"} class implementing ${(info.res.owner, ".")}".render)
+        return ISZ((s0(status = F), Either.Right(State.errorValue)))
+      }
+      for (sub <- subs) {
+        val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
+        val s2 = s1.addClaims(ISZ(State.Claim.Let.TypeTest(sym, T, receiver, sub), State.Claim.Prop(T, sym)))
+        if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+          st"Virtual invocation satisfiability on ${(sub.ids, ".")}".render, pos, s2.claims, reporter)) {
+          val adt = th.typeMap.get(sub.ids).get.asInstanceOf[TypeInfo.Adt]
+          if (adt.specVars.contains(info.res.id) || adt.specMethods.contains(info.res.id)) {
+            reporter.error(posOpt, Logika.kind, st"Could not virtually invoke @spec ${(sub.ids, ".")}#${info.res.id}".render)
+            r = r :+ ((s2(status = F), Either.Right(State.errorValue)))
+          } else if (adt.vars.contains(info.res.id)) {
+            halt("TODO")
+          } else {
+            val minfo = adt.methods.get(info.res.id).get
+            var sm = TypeChecker.buildTypeSubstMap(sub.ids, posOpt, adt.ast.typeParams, sub.args, reporter).get
+            for (i <- 0 until info.sig.typeParams.size) {
+              sm = sm + minfo.ast.sig.typeParams(i).id.value ~> typeSubstMap.get(info.sig.typeParams(i).id.value).get
+            }
+            r = r :+ ((s2, Either.Left(Info.substMethod(minfo, sm))))
+          }
+        } else {
+          r = r :+ ((s2(status = F), Either.Right(State.errorValue)))
+        }
+      }
+      return r
+    }
+
     def interprocedural(posOpt: Option[Position], info: Context.InvokeMethodInfo, s: State,
                         typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed, invokeReceiverOpt: Option[AST.Exp],
                         receiverOpt: Option[State.Value.Sym], paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): ISZ[(State, State.Value)] = {
@@ -1810,16 +1855,16 @@ import Util._
         (s2, m)
       }
 
-      val stateMethods: ISZ[(State, Info.Method)] = if (info.res.isInObject) {
+      var r = ISZ[(State, State.Value)]()
+
+      val stateMethods: ISZ[(State, Either[Info.Method, State.Value])] = if (info.res.isInObject) {
         th.nameMap.get(ctx).get match {
-          case minfo: Info.Method => ISZ((s0, Info.substMethod(minfo, typeSubstMap)))
-          case _ => halt(s"TODO: ${resST.render}")
+          case minfo: Info.Method => ISZ((s0, Either.Left(Info.substMethod(minfo, typeSubstMap))))
+          case _ => halt(s"Infeasible: ${resST.render}")
         }
       } else {
-        halt(s"TODO: ${resST.render}")
+        resolveVirtualInvoke(posOpt, info, s0, receiverOpt.get, typeSubstMap)
       }
-
-      var r = ISZ[(State, State.Value)]()
 
       def evalMethod(s1: State, minfo: Info.Method): Unit = {
         val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
@@ -1838,12 +1883,15 @@ import Util._
           var s3 = s2(status = T)
           var assigns = ISZ[(AST.Exp, State.Value.Sym)]()
           var ids = ISZ[String]()
-          invokeReceiverOpt match {
+          receiverOpt match {
             case Some(receiver) =>
-              val t = receiver.typedOpt.get.subst(typeSubstMap)
+              val t = receiver.tipe
               if (th.isMutable(t)) {
                 val (s4, sym) = idIntro(pos, s3, ctx, "this", t, None())
-                assigns = assigns :+ ((receiver, sym))
+                invokeReceiverOpt match {
+                  case Some(invokeReceiver) => assigns = assigns :+ ((invokeReceiver, sym))
+                  case _ => assigns = assigns :+ ((AST.Exp.This(AST.TypedAttr(posOpt, Some(t))), sym))
+                }
                 s3 = s4
               }
               ids = ids :+ "this"
@@ -1872,7 +1920,12 @@ import Util._
           for (assign <- assigns) {
             var s5s = ISZ[State]()
             for (s4 <- s4s) {
-              s5s = s5s ++ assignRec(split, smt2, cache, rtCheck, s4, assign._1, assign._2, reporter)
+              assign._1 match {
+                case lhs: AST.Exp.This =>
+                  s5s = s5s :+ evalAssignLocalH(F, s4, context.methodName, "this", assign._2, lhs.posOpt, reporter)
+                case lhs =>
+                  s5s = s5s ++ assignRec(split, smt2, cache, rtCheck, s4, lhs, assign._2, reporter)
+              }
             }
             s4s = s5s
           }
@@ -1883,7 +1936,10 @@ import Util._
       }
 
       for (p <- stateMethods) {
-        evalMethod(p._1, p._2)
+        p._2 match {
+          case Either.Left(method) => evalMethod(p._1, method)
+          case Either.Right(v) => r = r :+ ((p._1, v))
+        }
       }
 
       return r
