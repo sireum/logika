@@ -1839,7 +1839,7 @@ import Util._
       val mpos = info.sig.id.attr.posOpt.get
 
       val (s0, callerLocalMap): (State, LocalSaveMap) = {
-        val (s1, m) = saveLocals(s, context.methodName)
+        val (s1, m) = saveLocals(-(context.compMethods.size + 1), s, context.methodName)
         var s2 = s1
         receiverOpt match {
           case Some(receiver) =>

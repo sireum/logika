@@ -1706,10 +1706,10 @@ object Util {
     }
   }
 
-  @record class LocalSaver(val ctx: ISZ[String], var localMap: LocalSaveMap) extends MStateTransformer {
+  @record class LocalSaver(val depth: Z, val ctx: ISZ[String], var localMap: LocalSaveMap) extends MStateTransformer {
     override def preStateClaimLetCurrentId(o: State.Claim.Let.CurrentId): MStateTransformer.PreResult[State.Claim.Let] = {
       if (o.context == ctx) {
-        val id = State.Claim.Let.Id(o.sym, o.context, o.id, 0, o.defPosOpt.toIS)
+        val id = State.Claim.Let.Id(o.sym, o.context, o.id, depth, ISZ())
         localMap = localMap + id ~> o
         return MStateTransformer.PreResult(F, MSome(id))
       }
@@ -2593,8 +2593,8 @@ object Util {
     return cs2es.translate(claims)
   }
 
-  @pure def saveLocals(s0: State, currentContext: ISZ[String]): (State, LocalSaveMap) = {
-    val lvic = LocalSaver(currentContext, emptyLocalSaveMap)
+  @pure def saveLocals(depth: Z, s0: State, currentContext: ISZ[String]): (State, LocalSaveMap) = {
+    val lvic = LocalSaver(depth, currentContext, emptyLocalSaveMap)
     val s1 = lvic.transformState(s0).getOrElse(s0)
     return (s1, lvic.localMap)
   }
