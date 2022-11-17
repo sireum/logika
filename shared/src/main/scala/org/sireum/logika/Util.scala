@@ -802,6 +802,11 @@ object Util {
       else AST.Exp.Binary(e1, AST.Exp.BinaryOp.EquivUni, e2, AST.ResolvedAttr(posOpt, equivResOpt, Some(t)))
     }
 
+    @pure def inequate(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): AST.Exp = {
+      return if (th.isGroundType(t)) AST.Exp.Binary(e1, AST.Exp.BinaryOp.Ne, e2, AST.ResolvedAttr(posOpt, neResOpt, Some(t)))
+      else AST.Exp.Binary(e1, AST.Exp.BinaryOp.InequivUni, e2, AST.ResolvedAttr(posOpt, inequivResOpt, Some(t)))
+    }
+
     @pure def equateOpt(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): Option[AST.Exp] = {
       return if (e1 == e2) None() else Some(equate(t, e1, e2))
     }
@@ -974,6 +979,11 @@ object Util {
           }
           (valueToExp(let.left), valueToExp(let.right)) match {
             case (Some(left), Some(right)) =>
+              kind match {
+                case AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv => return Some(equate(let.left.tipe, left, right))
+                case AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv => return Some(inequate(let.left.tipe, left, right))
+                case _ =>
+              }
               return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt,
                 Some(AST.ResolvedInfo.BuiltIn(kind)), Some(sym.tipe))))
             case (_, _) => return None()
@@ -1740,7 +1750,9 @@ object Util {
   val leResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLe))
   val ltResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLt))
   val eqResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq))
+  val neResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryNe))
   val equivResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv))
+  val inequivResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv))
   val notResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot))
 
   @strictpure def emptyLocalSaveMap: LocalSaveMap = HashMap.empty
