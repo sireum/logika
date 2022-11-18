@@ -1907,7 +1907,7 @@ import Util._
         }
         for (s2v <- s2vs) {
           val (s2, retVal) = s2v
-          var s3 = s2(status = T)
+          var s3 = s2
           var assigns = ISZ[(AST.Exp, State.Value.Sym)]()
           var ids = ISZ[String]()
           receiverOpt match {
@@ -1964,7 +1964,8 @@ import Util._
         }
       }
 
-      return r
+      val nextFresh = maxStateValuesNextFresh(r)
+      return for (s6v <- r) yield (s6v._1(nextFresh = nextFresh), s6v._2)
     }
 
     def compositional(posOpt: Option[Position], info: Context.InvokeMethodInfo, s: State,
@@ -3338,7 +3339,7 @@ import Util._
           return (nextFresh, Some((cond, claims)))
         }
       } else {
-        if (isMatch && config.checkInfeasiblePatternMatch && !shouldSplit) {
+        if (isMatch && config.checkInfeasiblePatternMatch && !config.interp && !shouldSplit) {
           warn(posOpt, "Infeasible pattern matching case", reporter)
         }
       }
@@ -3529,7 +3530,7 @@ import Util._
           branches = branches :+ Branch("match case pattern", sym, c.body, m, bidMap)
         }
         val stmtPos = stmt.posOpt.get
-        if (smt2.satResult(cache, T, config.logVc, config.logVcDirOpt,
+        if (!config.interp && smt2.satResult(cache, T, config.logVc, config.logVcDirOpt,
           s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]", stmtPos,
           s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)), reporter)._2.kind == Smt2Query.Result.Kind.Sat) {
           error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
@@ -4010,65 +4011,46 @@ import Util._
         if (!current.status) {
           return ISZ(current)
         }
-        var r = ISZ[State]()
-        for (s1 <- checkExps(sp, smt2, cache, F, "Loop invariant", " at the beginning of while-loop", current,
-          whileStmt.invariants, reporter)) {
-          if (s1.status) {
-            for (p <- evalExp(sp, smt2, cache, rtCheck, s1, whileStmt.cond, reporter)) {
-              val (s2, v) = p
-              if (s2.status) {
-                val pos = whileStmt.cond.posOpt.get
-                val (s2w, cond) = value2Sym(s2, v, pos)
-                val s3 = s2w
-                val prop = State.Claim.Prop(T, cond)
-                val thenClaims = s3.claims :+ prop
-                val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-                  s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
-                for (s4 <- evalStmts(sp, smt2, cache, None(), rtCheck, s3(claims = thenClaims), whileStmt.body.stmts, reporter)) {
-                  val s6s: ISZ[State] = if (s4.status && thenSat) {
-                    if (config.loopBound <= 0 || numLoops <= config.loopBound) {
-                      whileRec(s4(status = thenSat), numLoops + 1)
-                    } else {
-                      if (config.loopBound > 0) {
-                        warn(whileStmt.cond.posOpt, s"Under-approximation due to loop unrolling capped with bound ${config.loopBound}",
-                          reporter)
-                        ISZ(s4(status = F))
-                      } else {
-                        ISZ(s4)
-                      }
-                    }
-                  } else {
-                    ISZ(s4)
-                  }
-                  val nextFresh = maxStatesNextFresh(s6s)
-                  for (s6 <- s6s) {
-                    if (s6.status) {
-                      val negProp = State.Claim.Prop(F, cond)
-                      val elseClaims = s3.claims :+ negProp
-                      val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-                        s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
-                      (thenSat, elseSat) match {
-                        case (T, T) => r = r ++ ISZ(s6(nextFresh = nextFresh), s3(nextFresh = nextFresh).addClaim(negProp))
-                        case (T, F) => r = r :+ s6(status = s6.status, nextFresh = nextFresh)
-                        case (F, T) => r = r :+ s3(status = s3.status, nextFresh = nextFresh).addClaim(negProp)
-                        case _ =>
-                          r = r ++ ISZ(s6(status = F, nextFresh = nextFresh),
-                            s3(status = F, nextFresh = nextFresh).addClaim(negProp))
-                      }
-                    } else {
-                      r = r :+ s6
-                    }
-                  }
+        if (config.loopBound > 0 && numLoops > config.loopBound) {
+          warn(whileStmt.cond.posOpt, s"Under-approximation due to loop unrolling capped with bound ${config.loopBound}",
+            reporter)
+          return ISZ(current(status = F))
+        }
+        var r = checkExps(sp, smt2, cache, F, "Loop invariant", "", current, whileStmt.invariants, reporter)
+        for (s1 <- r if !s1.status) {
+          return for (s2 <- r) yield s2(status = F)
+        }
+        r = ISZ[State]()
+        for (p <- evalExp(sp, smt2, cache, rtCheck, current, whileStmt.cond, reporter)) {
+          val (s2, v) = p
+          if (s2.status) {
+            val pos = whileStmt.cond.posOpt.get
+            val (s2w, cond) = value2Sym(s2, v, pos)
+            val s3 = s2w
+            val prop = State.Claim.Prop(T, cond)
+            val s4 = s3.addClaim(prop)
+            val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+              s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s4.claims, reporter)
+            if (thenSat) {
+              for (s5 <- evalStmts(sp, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
+                if (s5.status) {
+                  r = r ++ whileRec(s5, numLoops + 1)
+                } else {
+                  r = r :+ s5
                 }
-              } else {
-                r = r :+ s2
               }
             }
+            val negProp = State.Claim.Prop(F, cond)
+            val s6 = s3.addClaim(negProp)
+            val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+              s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s6.claims, reporter)
+            r = r :+ s6(status = elseSat)
           } else {
-            r = r :+ s1
+            r = r :+ s2
           }
         }
-        return r
+        val nextFresh = maxStatesNextFresh(r)
+        return for (s7 <- r) yield s7(nextFresh = nextFresh)
       }
 
       return whileRec(s0, 0)
@@ -4092,7 +4074,7 @@ import Util._
       }
       val mcontext = context.methodOpt.get
       if (config.interp && context.compMethods.size > 0) {
-        return for (s <- evalReturnH()) yield s(status = F)
+        return evalReturnH()
       } else {
         val invs = retrieveInvs(mcontext.owner, mcontext.isInObject)
         val ss = Util.checkMethodPost(this, smt2, cache, reporter, evalReturnH(), mcontext.posOpt, invs,
@@ -4523,6 +4505,15 @@ import Util._
     var r: Z = -1
     for (s <- ss if r < s.nextFresh) {
       r = s.nextFresh
+    }
+    assert(r >= 0)
+    return r
+  }
+
+  @pure def maxStateValuesNextFresh(svs: ISZ[(State, State.Value)]): Z = {
+    var r: Z = -1
+    for (p <- svs if r < p._1.nextFresh) {
+      r = p._1.nextFresh
     }
     assert(r >= 0)
     return r
