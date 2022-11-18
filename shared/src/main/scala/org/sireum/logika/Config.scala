@@ -32,9 +32,6 @@ import org.sireum._
                        val sat: B,
                        val rlimit: Z,
                        val timeoutInMs: Z,
-                       val defaultLoopBound: Z,
-                       val loopBounds: HashMap[LoopId, Z],
-                       val unroll: B,
                        val charBitWidth: Z,
                        val intBitWidth: Z,
                        val useReal: B,
@@ -55,7 +52,9 @@ import org.sireum._
                        val branchPar: Config.BranchPar.Type,
                        val branchParCores: Z,
                        val atLinesFresh: B,
-                       val interp: B)
+                       val interp: B,
+                       val loopBound: Z,
+                       val callBound: Z)
 
 object Config {
   @enum object BranchPar {

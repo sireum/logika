@@ -70,11 +70,15 @@ class LogikaRcTest extends SireumRcSpec {
     val p = if (isSimplified) path.dropRight(1) :+ path.last.replace(simplifiedSuffix, "") else path
     val reporter = Logika.Reporter.create
     var c = config(simplifiedQuery = isSimplified)
+    var line = 0
     p(p.size - 1) match {
       case "collection.sc" if isInGithubAction => c = filterSmt2Config(c, _.name.value == "cvc5")(timeoutInMs = c.timeoutInMs * 3)
+      case "loop-unroll.sc"  => c = c(interp = T)
       case "opsem.sc" => c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))(timeoutInMs = if (isInGithubAction) c.timeoutInMs * 2 else c.timeoutInMs)
       case "opsem-alt.sc"  => c = filterSmt2Config(c, _.name.value == "cvc5")
-      case "interprocedural.sc"  => c = c(interp = T)
+      case "interprocedural-1.sc"  => c = c(interp = T); line = 10
+      case "interprocedural-2.sc"  => c = c(interp = T); line = 10
+      case "interprocedural-instance.sc"  => c = c(interp = T); line = 9
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))
@@ -82,7 +86,7 @@ class LogikaRcTest extends SireumRcSpec {
     Logika.checkScript(Some(f.string), content, c,
       th => Smt2Impl.create(c.smt2Configs, ISZ(), th, c.timeoutInMs, c.fpRoundingMode, c.charBitWidth,
         c.intBitWidth, c.useReal, c.simplifiedQuery, c.smt2Seq, reporter),
-      Smt2.NoCache(), reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
+      Smt2.NoCache(), reporter, T, Logika.defaultPlugins, line, ISZ(), ISZ())
     reporter.printMessages()
     val name = f.name.value
     if (name.startsWith(failPrefix)) {

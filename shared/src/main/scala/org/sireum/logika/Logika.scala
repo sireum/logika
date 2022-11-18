@@ -1838,6 +1838,17 @@ import Util._
         else info.sig.id.attr.posOpt
       val mpos = info.sig.id.attr.posOpt.get
 
+      var recCount = 0
+      for (cm <- context.compMethods if cm == ctx) {
+        recCount = recCount + 1
+      }
+      if (config.callBound > 0 && recCount > config.callBound) {
+        reporter.warn(posOpt, Logika.kind,
+          st"""Under-approximation due to recursive call capped with bound ${config.callBound} on $resST:
+              |${for (i <- context.compMethods.size - 1 to 0) yield st"- ${(context.compMethods(i), ".")}"}""".render)
+        return ISZ((s(status = F), State.errorValue))
+      }
+
       val (s0, callerLocalMap): (State, LocalSaveMap) = {
         val (s1, m) = saveLocals(-(context.compMethods.size + 1), s, context.methodName)
         var s2 = s1
@@ -1872,14 +1883,30 @@ import Util._
           plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
-          this.context.compMethods + (res.owner :+ res.id)
+          this.context.compMethods :+ (res.owner :+ res.id)
         )
-        val ss = l.evalStmts(split, smt2, cache, None(), rtCheck, s1, minfo.ast.bodyOpt.get.stmts, reporter)
+        var s2vs = ISZ[(State, State.Value)]()
+        info.strictPureBodyOpt match {
+          case Some(body) => s2vs = evalAssignExpValue(split, smt2, cache, retType, rtCheck, s1, body, reporter)
+          case _ =>
+            if (retType == AST.Typed.unit) {
+              val unit = State.Value.Unit(pos)
+              for (s2 <- l.evalStmts(split, smt2, cache, None(), rtCheck, s1, minfo.ast.bodyOpt.get.stmts, reporter)) {
+                s2vs = s2vs :+ ((s2, unit))
+              }
+            } else {
+              for (s2 <- l.evalStmts(split, smt2, cache, None(), rtCheck, s1, minfo.ast.bodyOpt.get.stmts, reporter)) {
+                val (s3, sym) = idIntro(pos, s2, ctx, "Res", retType, None())
+                s2vs = s2vs :+ ((s3, sym))
+              }
+            }
+        }
         if (reporter.hasError) {
-          r = r ++ (for (s2 <- ss) yield (s2(status = F), State.errorValue.asInstanceOf[State.Value]))
+          r = r ++ (for (s2v <- s2vs) yield (s2v._1(status = F), s2v._2))
           return
         }
-        for (s2 <- ss) {
+        for (s2v <- s2vs) {
+          val (s2, retVal) = s2v
           var s3 = s2(status = T)
           var assigns = ISZ[(AST.Exp, State.Value.Sym)]()
           var ids = ISZ[String]()
@@ -1906,13 +1933,8 @@ import Util._
               s3 = s4
             }
           }
-          val retVal: State.Value = if (retType == AST.Typed.unit) {
-            State.Value.Unit(pos)
-          } else {
+          if (retType != AST.Typed.unit && info.strictPureBodyOpt.isEmpty) {
             ids = ids :+ "Res"
-            val (s4, sym) = idIntro(pos, s3, ctx, "Res", retType, None())
-            s3 = s4
-            sym
           }
           s3 = rewriteLocals(s3, ctx, ids)._1
           s3 = restoreLocals(s3, callerLocalMap)
@@ -1961,7 +1983,7 @@ import Util._
         if (info.isHelper || info.strictPureBodyOpt.nonEmpty) ISZ()
         else retrieveInvs(res.owner, res.isInObject)
       var r = ISZ[(State, State.Value)]()
-      if (context.compMethods.contains(res.owner :+ res.id)) {
+      for (cm <- context.compMethods if cm == ctx) {
         reporter.error(posOpt, kind, st"Cannot use ${(res.owner :+ res.id, ".")}'s contracts cyclicly".render)
         r = r :+ ((s(status = F), State.errorValue))
         return r
@@ -1992,7 +2014,7 @@ import Util._
           plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
-          this.context.compMethods + (res.owner :+ res.id)
+          this.context.compMethods :+ (res.owner :+ res.id)
         )
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
@@ -2039,7 +2061,7 @@ import Util._
           var ms1 = ms0
           val modObjectVars = contract.modifiedObjectVars
           val mpos = mposOpt.get
-          ms1 = rewriteObjectVars(this, smt2, cache, rtCheck, ms1, modObjectVars, mpos, reporter)
+          ms1 = rewriteObjectVars(logikaComp, smt2, cache, rtCheck, ms1, modObjectVars, mpos, reporter)
           var oldIdMap = HashMap.empty[ISZ[String], State.Value.Sym]
           for (pair <- modLocals.entries) {
             val (info, (t, _)) = pair
@@ -2047,7 +2069,7 @@ import Util._
             ms1 = ls0
             oldIdMap = oldIdMap + (info.context :+ info.id) ~> sym
           }
-          ms1 = rewriteLocalVars(ms1, modLocals.keys, mposOpt, reporter)
+          ms1 = rewriteLocalVars(logikaComp, ms1, modLocals.keys, mposOpt, reporter)
           for (pair <- modLocals.entries) {
             val (info, (t, pos)) = pair
             val oldSym = oldIdMap.get(info.context :+ info.id).get
@@ -2097,7 +2119,7 @@ import Util._
           if (receiverOpt.nonEmpty) {
             rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this")
           }
-          ms1 = rewriteLocalVars(ms1, rwLocals, modPosOpt, reporter)
+          ms1 = rewriteLocalVars(logikaComp, ms1, rwLocals, modPosOpt, reporter)
           if (newVars.nonEmpty) {
             for (q <- paramArgs) {
               val p = q._1
@@ -2208,7 +2230,7 @@ import Util._
             val p = idIntro(posOpt.get, s1, lcontext, "this", currentReceiverType, None())
             s1 = p._1
             if (receiverModified && context.methodName == lcontext) {
-              s1 = rewriteLocal(s1, lcontext, "this", posOpt, reporter)
+              s1 = rewriteLocal(this, s1, lcontext, "this", posOpt, reporter)
             }
             Some(p._2)
           case _ => None()
@@ -2458,11 +2480,11 @@ import Util._
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
 
-                if (info.strictPureBodyOpt.nonEmpty) {
+                if (config.interp) {
+                  r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt, receiverOpt,
+                    paramArgs)
+                } else if (info.strictPureBodyOpt.nonEmpty) {
                   r = r ++ strictPure(pos, info, s1, typeSubstMap, retType, receiverOpt, paramArgs)
-                } else if (config.interp && info.contract.isEmpty) {
-                  r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt,
-                    receiverOpt, paramArgs)
                 } else {
                   var default = T
                   if (jescmPlugins._5.nonEmpty) {
@@ -2944,7 +2966,7 @@ import Util._
 
   def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym,
                        idPosOpt: Option[Position], reporter: Reporter): State = {
-    val s1: State = if (decl) s0 else rewriteLocal(s0, lcontext, id, idPosOpt, reporter)
+    val s1: State = if (decl) s0 else rewriteLocal(this, s0, lcontext, id, idPosOpt, reporter)
     val (s2, lhs) = idIntro(idPosOpt.get, s1, lcontext, id, rhs.tipe, idPosOpt)
     return s2.addClaim(State.Claim.Eq(lhs, rhs))
   }
@@ -2952,7 +2974,7 @@ import Util._
   def evalAssignObjectVarH(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, ids: ISZ[String], rhs: State.Value.Sym,
                            namePosOpt: Option[Position], reporter: Reporter): State = {
     val poss = StateTransformer(CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
-    if (poss.isEmpty) {
+    if (poss.isEmpty && !config.interp) {
       reporter.error(namePosOpt, Logika.kind, st"Missing Modifies clause for ${(ids, ".")}.".render)
       return s0(status = F)
     }
@@ -3037,7 +3059,7 @@ import Util._
         lhs.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar =>
             context.methodOpt match {
-              case Some(mctx) if mctx.paramIds.contains(res.id) && !mctx.modLocalIds.contains(res.id) && res.context == mctx.name =>
+              case Some(mctx) if !config.interp && mctx.paramIds.contains(res.id) && !mctx.modLocalIds.contains(res.id) && res.context == mctx.name =>
                 reporter.error(lhs.posOpt, kind, s"Missing Modifies clause for ${res.id}")
               case _ =>
             }
@@ -3924,7 +3946,7 @@ import Util._
             } else {
               None()
             }
-            srw = rewriteLocalVars(srw, modLocalVars.keys, whileStmt.posOpt, reporter)
+            srw = rewriteLocalVars(this, srw, modLocalVars.keys, whileStmt.posOpt, reporter)
             for (p <- modLocalVars.entries) {
               val (res, (tipe, pos)) = p
               val (srw4, sym) = idIntro(pos, srw, res.context, res.id, tipe, Some(pos))
@@ -3983,13 +4005,7 @@ import Util._
       return r
     }
 
-    @pure def loopBound(ids: ISZ[String]): Z = {
-      return config.loopBounds.get(LoopId(ids)).getOrElse(config.defaultLoopBound)
-    }
-
     def evalWhileUnroll(sp: Split.Type, s0: State, whileStmt: AST.Stmt.While): ISZ[State] = {
-      val loopId: ISZ[String] = whileStmt.context
-
       def whileRec(current: State, numLoops: Z): ISZ[State] = {
         if (!current.status) {
           return ISZ(current)
@@ -4009,13 +4025,12 @@ import Util._
                 val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
                   s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
                 for (s4 <- evalStmts(sp, smt2, cache, None(), rtCheck, s3(claims = thenClaims), whileStmt.body.stmts, reporter)) {
-                  val s6s: ISZ[State] = if (s4.status) {
-                    val bound = loopBound(loopId)
-                    if (bound <= 0 || numLoops + 1 < loopBound(loopId)) {
+                  val s6s: ISZ[State] = if (s4.status && thenSat) {
+                    if (config.loopBound <= 0 || numLoops <= config.loopBound) {
                       whileRec(s4(status = thenSat), numLoops + 1)
                     } else {
-                      if (bound > 0) {
-                        warn(whileStmt.cond.posOpt, s"Under-approximation due to loop unrolling capped with bound $bound",
+                      if (config.loopBound > 0) {
+                        warn(whileStmt.cond.posOpt, s"Under-approximation due to loop unrolling capped with bound ${config.loopBound}",
                           reporter)
                         ISZ(s4(status = F))
                       } else {
@@ -4033,20 +4048,12 @@ import Util._
                       val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
                         s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
                       (thenSat, elseSat) match {
-                        case (T, T) =>
-                          if (s6.status) {
-                            r = r :+ mergeStates(s3, cond, s6, s3, nextFresh)
-                          } else {
-                            val claimsOps = ops.ISZOps(s3.claims)
-                            r = r :+ s3(status = s3.status && !reporter.hasError, nextFresh = nextFresh,
-                              claims = claimsOps.slice(0, s3.claims.size - 1) :+
-                                State.Claim.Imply(ISZ(negProp, s3.claims(s3.claims.size - 1))))
-                          }
-                        case (T, F) => r = r :+ s6(status = s6.status && !reporter.hasError, nextFresh = nextFresh)
-                        case (F, T) => r = r :+ s3(status = s3.status && !reporter.hasError, nextFresh = nextFresh)
+                        case (T, T) => r = r ++ ISZ(s6(nextFresh = nextFresh), s3(nextFresh = nextFresh).addClaim(negProp))
+                        case (T, F) => r = r :+ s6(status = s6.status, nextFresh = nextFresh)
+                        case (F, T) => r = r :+ s3(status = s3.status, nextFresh = nextFresh).addClaim(negProp)
                         case _ =>
-                          val s7 = mergeStates(s3, cond, s6, s3, nextFresh)
-                          r = r :+ s7(status = F)
+                          r = r ++ ISZ(s6(status = F, nextFresh = nextFresh),
+                            s3(status = F, nextFresh = nextFresh).addClaim(negProp))
                       }
                     } else {
                       r = r :+ s6
@@ -4084,10 +4091,14 @@ import Util._
         }
       }
       val mcontext = context.methodOpt.get
-      val invs = retrieveInvs(mcontext.owner, mcontext.isInObject)
-      val ss = Util.checkMethodPost(this, smt2, cache, reporter,  evalReturnH(), mcontext.posOpt, invs,
-        mcontext.ensures, config.logPc, config.logRawPc, returnStmt.posOpt)
-      return for (s <- ss) yield s(status = F)
+      if (config.interp && context.compMethods.size > 0) {
+        return for (s <- evalReturnH()) yield s(status = F)
+      } else {
+        val invs = retrieveInvs(mcontext.owner, mcontext.isInObject)
+        val ss = Util.checkMethodPost(this, smt2, cache, reporter, evalReturnH(), mcontext.posOpt, invs,
+          mcontext.ensures, config.logPc, config.logRawPc, returnStmt.posOpt)
+        return for (s <- ss) yield s(status = F)
+      }
     }
 
     def evalSpecBlock(sp: Split.Type, s0: State, block: AST.Stmt.SpecBlock): ISZ[State] = {
@@ -4241,14 +4252,10 @@ import Util._
           return evalIf(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.While =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
-          if (stmt.modifies.nonEmpty) {
-            return evalWhile(state, stmt)
-          } else {
-            if (!config.unroll) {
-              error(stmt.posOpt, "Modifies clause is required when loop unrolling is disabled", reporter)
-              return ISZ(state(status = F))
-            }
+          if (config.interp) {
             return evalWhileUnroll(split, state, stmt)
+          } else {
+            return evalWhile(state, stmt)
           }
         case stmt: AST.Stmt.For =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
@@ -4465,7 +4472,7 @@ import Util._
     var r = ISZ[State]()
     for (s1 <- evalStmts(split, smt2, cache, rOpt, rtCheck, s0, body.stmts, reporter)) {
       if (s1.status) {
-        r = r :+ rewriteLocalVars(s1, body.undecls, posOpt, reporter)
+        r = r :+ rewriteLocalVars(this, s1, body.undecls, posOpt, reporter)
       } else {
         r = r :+ s1
       }

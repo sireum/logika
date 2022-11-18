@@ -1800,7 +1800,7 @@ object Util {
                    params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position],
                    reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ref],
                    ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
-                   implicitContext: Option[(String, Position)], compMethods: HashSet[ISZ[String]]): Logika = {
+                   implicitContext: Option[(String, Position)], compMethods: ISZ[ISZ[String]]): Logika = {
     val mctx = Context.Method(owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
       HashMap.empty, HashMap.empty, HashMap.empty, posOpt, HashMap.empty)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext,
@@ -1935,7 +1935,7 @@ object Util {
         }
         val p = updateInVarMaps(logikaMethod(th, mconfig, res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes,
           method.sig.returnType.typedOpt.get, methodPosOpt, reads, requires, modifies, ensures,
-          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None(), HashSet.empty), smt2, cache, state, reporter)
+          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None(), ISZ()), smt2, cache, state, reporter)
         state = p._2
         p._1
       }
@@ -1992,9 +1992,10 @@ object Util {
     return StateTransformer(CurrentIdPossCollector(lcontext, id)).transformState(Set.empty, s0).ctx.elements
   }
 
-  def rewriteLocal(s0: State, lcontext: ISZ[String], id: String, posOpt: Option[Position], reporter: Reporter): State = {
+  def rewriteLocal(logika: Logika, s0: State, lcontext: ISZ[String], id: String, posOpt: Option[Position],
+                   reporter: Reporter): State = {
     val poss = collectLocalPoss(s0, lcontext, id)
-    if (poss.isEmpty) {
+    if (poss.isEmpty && !logika.config.interp) {
       reporter.error(posOpt, Logika.kind, s"Missing Modifies clause for $id")
       return s0(status = F)
     }
@@ -2023,7 +2024,8 @@ object Util {
     return (r.resultOpt.getOrElse(s1), locals)
   }
 
-  def rewriteLocalVars(state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar], posOpt: Option[Position], reporter: Reporter): State = {
+  def rewriteLocalVars(logika: Logika, state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar],
+                       posOpt: Option[Position], reporter: Reporter): State = {
     if (localVars.isEmpty) {
       return state
     }
@@ -2032,7 +2034,7 @@ object Util {
     for (l <- localVars) {
       val poss = StateTransformer(CurrentIdPossCollector(l.context, l.id)).
         transformState(Set.empty, current).ctx.elements
-      if (poss.isEmpty) {
+      if (poss.isEmpty && !logika.config.interp) {
         reporter.error(posOpt, Logika.kind, s"Missing Modifies clause for ${l.id}")
         return state(status = F)
       }
@@ -2057,7 +2059,7 @@ object Util {
       val ids = l.owner :+ l.id
       val poss = StateTransformer(CurrentNamePossCollector(ids)).
         transformState(ISZ(), current).ctx
-      if (poss.isEmpty) {
+      if (poss.isEmpty && !logika.config.interp) {
         reporter.error(Some(pos), Logika.kind, st"Missing Modifies clause for ${(ids, ".")}".render)
         return state(status = F)
       }
@@ -2130,7 +2132,7 @@ object Util {
         val context = pf.context :+ pf.id
         val logika: Logika = logikaMethod(th, config, pf.context, pf.id,  pf.receiverTypeOpt,
           ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins,
-          implicitContextOpt, HashSet.empty)
+          implicitContextOpt, ISZ())
         var s0 = state(claims = ISZ())
         val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
         val s2 = assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
@@ -2321,12 +2323,18 @@ object Util {
 
   def assumeObjectInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, name: ISZ[String], state: State, pos: Position,
                       reporter: Reporter): State = {
+    if (logika.config.interp) {
+      return state
+    }
     val (s0, conds) = addObjectInv(logika, smt2, cache, name, state, pos, reporter)
     return s0.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
   }
 
   def addValueInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
                   pos: Position, reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
+    if (logika.config.interp) {
+      return (state, ISZ())
+    }
     def addTupleInv(s0: State, t: AST.Typed.Tuple): (State, ISZ[State.Value.Sym]) = {
       var s1 = s0
       var i = 1
@@ -2406,6 +2414,9 @@ object Util {
 
   def assumeValueInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
                      pos: Position, reporter: Reporter): State = {
+    if (logika.config.interp) {
+      return state
+    }
     val (s0, conds) = addValueInv(logika, smt2, cache, rtCheck, state, receiver, pos, reporter)
     return s0.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
   }
@@ -2435,6 +2446,9 @@ object Util {
   def checkInvs(logika: Logika, posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Smt2.Cache,
                 rtCheck: B, s0: State, receiverTypeOpt: Option[AST.Typed], receiverOpt: Option[State.Value.Sym], invs: ISZ[Info.Inv],
                 substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
+    if (logika.config.interp) {
+      return s0
+    }
     val pos = posOpt.get
     def spInv(): Option[State] = {
       val claim: AST.Exp = logika.invs2exp(invs, substMap) match {

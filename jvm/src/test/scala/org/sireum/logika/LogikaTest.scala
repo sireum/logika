@@ -60,9 +60,6 @@ object LogikaTest {
       sat = T,
       rlimit = rlimit,
       timeoutInMs = timeoutInMs,
-      defaultLoopBound = 10,
-      loopBounds = HashMap.empty,
-      unroll = T,
       charBitWidth = 32,
       intBitWidth = 0,
       useReal = F,
@@ -85,6 +82,8 @@ object LogikaTest {
       branchParCores = Runtime.getRuntime.availableProcessors,
       atLinesFresh = T,
       interp = F,
+      loopBound = 3,
+      callBound= 3,
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
@@ -172,23 +171,6 @@ class LogikaTest extends TestSuite {
           |  case true => assert(false)
           |  case false =>
           |}""".stripMargin, "Cannot deduce")
-
-      * - failingWorksheet(
-        s"""import org.sireum._
-           |val m = Z.random
-           |val n = 11
-           |var i = 0
-           |var r = 0
-           |while (i < n) { // loop unrolling (no modify clause)
-           |  Invariant(
-           |    0 <= i,
-           |    i <= n,
-           |    r == m * i
-           |  )
-           |  r = r + m
-           |  i = i + 1
-           |}
-           |assert(r == m * n)""".stripMargin, "loop unrolling capped")
 
     }
 
