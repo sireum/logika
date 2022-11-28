@@ -1823,7 +1823,7 @@ object Util {
                      methodPosOpt: Option[Position], invs: ISZ[Info.Inv], requires: ISZ[AST.Exp]): State = {
     var s = state
     s = checkInv(T, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
-    for (r <- requires if s.status) {
+    for (r <- requires if s.ok) {
       s = logika.evalAssume(smt2, cache, T, "Precondition", s, r, r.posOpt, reporter)._1
     }
     return s
@@ -1834,16 +1834,16 @@ object Util {
                       postPosOpt: Option[Position]): ISZ[State] = {
     var r = ISZ[State]()
     for (state <- states) {
-      if (!state.status) {
+      if (!state.ok) {
         r = r :+ state
       } else {
         var s = state
         s = checkInv(F, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
-        for (e <- ensures if s.status) {
+        for (e <- ensures if s.ok) {
           s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
         }
-        if (postPosOpt.nonEmpty && s.status) {
-          logika.logPc(logPc, logRawPc, s(status = F), reporter, postPosOpt)
+        if (postPosOpt.nonEmpty && s.ok) {
+          logika.logPc(logPc, logRawPc, s(status = State.Status.Error), reporter, postPosOpt)
         }
         r = r :+ s
       }
@@ -1997,7 +1997,7 @@ object Util {
     val poss = collectLocalPoss(s0, lcontext, id)
     if (poss.isEmpty && !logika.config.interp) {
       reporter.error(posOpt, Logika.kind, s"Missing Modifies clause for $id")
-      return s0(status = F)
+      return s0(status = State.Status.Error)
     }
     val (s1, num) = s0.fresh
     val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
@@ -2036,7 +2036,7 @@ object Util {
         transformState(Set.empty, current).ctx.elements
       if (poss.isEmpty && !logika.config.interp) {
         reporter.error(posOpt, Logika.kind, s"Missing Modifies clause for ${l.id}")
-        return state(status = F)
+        return state(status = State.Status.Error)
       }
       val (s1, num) = current.fresh
       current = s1
@@ -2061,7 +2061,7 @@ object Util {
         transformState(ISZ(), current).ctx
       if (poss.isEmpty && !logika.config.interp) {
         reporter.error(Some(pos), Logika.kind, st"Missing Modifies clause for ${(ids, ".")}".render)
-        return state(status = F)
+        return state(status = State.Status.Error)
       }
       val (s1, num) = current.fresh
       current = s1
@@ -2128,7 +2128,7 @@ object Util {
     } else {
       val posOpt = body.asStmt.posOpt
       val pos = posOpt.get
-      val (svs, maxFresh, status): (ISZ[(State, State.Value.Sym)], Z, B) = {
+      val (svs, maxFresh, ok): (ISZ[(State, State.Value.Sym)], Z, B) = {
         val context = pf.context :+ pf.id
         val logika: Logika = logikaMethod(th, config, pf.context, pf.id,  pf.receiverTypeOpt,
           ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins,
@@ -2154,7 +2154,7 @@ object Util {
         var status = svs.isEmpty
         for (sv <- svs) {
           val (s, v) = sv
-          if (s.status) {
+          if (s.ok) {
             status = T
           }
           val (s2, sym) = logika.value2Sym(s, v, pos)
@@ -2167,12 +2167,12 @@ object Util {
         (for (ss <- sss) yield (ss._1(nextFresh = maxFresh), ss._2), maxFresh, status)
       }
 
-      if (status && svs.nonEmpty) {
+      if (ok && svs.nonEmpty) {
         smt2.addStrictPureMethod(pos, pf, svs, 0, reporter)
       }
 
-      val s1 = state(status = status, nextFresh = maxFresh)
-      if (config.sat && s1.status) {
+      val s1 = state(status = State.statusOf(ok), nextFresh = maxFresh)
+      if (config.sat && s1.ok) {
         val title: String = s"the derived proof function of $id"
         if (!smt2.sat(cache, T, config.logVc, config.logVcDirOpt, title, pos, ISZ(), reporter)) {
           reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
@@ -2461,7 +2461,7 @@ object Util {
       }
       val (owner, id) = Util.invOwnerId(invs, tOpt)
       val (s1, v) = evalExtractPureMethod(logika, smt2, cache, s0, receiverTypeOpt, receiverOpt, owner, id, claim, reporter)
-      if (!s1.status) {
+      if (!s1.ok) {
         return None()
       }
       val (s2, sym) = logika.value2Sym(s1, v, pos)
@@ -2470,7 +2470,7 @@ object Util {
         return Some(s3)
       } else {
         val s3 = logika.evalAssertH(T, smt2, cache, title, s2, sym, posOpt, reporter)
-        if (!s3.status) {
+        if (!s3.ok) {
           return None()
         }
         return Some(s3)
@@ -2485,7 +2485,7 @@ object Util {
       case _ =>
     }
     var s4 = s0
-    for (inv <- invs if s4.status) {
+    for (inv <- invs if s4.ok) {
       s4 = logika.evalInv(posOpt, isAssume, title, smt2, cache, rtCheck, s4, inv.ast, substMap, reporter)
     }
     return s4

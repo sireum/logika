@@ -31,9 +31,11 @@ import org.sireum.lang.ast.Typed
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.Position
 
-@datatype class State(val status: B,
+@datatype class State(val status: State.Status.Type,
                       val claims: ISZ[State.Claim],
                       val nextFresh: org.sireum.Z) {
+
+  @strictpure def ok: B = status == State.Status.Normal
 
   @pure def toST: ST = {
     val r =
@@ -74,7 +76,14 @@ import org.sireum.message.Position
 
 object State {
   type Scope = ISZ[String]
-  type Address = org.sireum.Z
+
+  @enum object Status {
+    "Normal"
+    "End"
+    "Error"
+  }
+
+  @strictpure def statusOf(ok: B): Status.Type = if (ok) Status.Normal else Status.Error
 
   @datatype trait Value {
 
@@ -1053,7 +1062,7 @@ object State {
   val stFalse: ST = st"F"
 
   @memoize def create: State = {
-    return State(T, ISZ(), 1)
+    return State(State.Status.Normal, ISZ(), 1)
   }
 
   @strictpure def shorten(ids: ISZ[String]): ISZ[String] =

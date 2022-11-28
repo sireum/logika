@@ -466,7 +466,7 @@ object Smt2 {
     val (decl, declClaim) = strictPureMethods.get(pf).get
 
     var ecs = ISZ[ST]()
-    for (sv <- svs if sv._1.status) {
+    for (sv <- svs if sv._1.ok) {
       val (s0, v) = sv
       var s1 = s0
       var args = ISZ[State.Value]()

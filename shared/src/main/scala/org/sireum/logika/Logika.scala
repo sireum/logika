@@ -45,7 +45,7 @@ object Logika {
 
   type Bindings = Map[String, (State.Value.Sym, AST.Typed, Position)]
 
-  type LeafClaims = ISZ[(State.Claim, ISZ[ISZ[State.Claim]])]
+  type LeafClaims = ISZ[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])]
 
   @datatype class Branch(val title: String,
                          val sym: State.Value.Sym,
@@ -542,7 +542,7 @@ import Util._
         case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
         case _ => (None(), posOpt, None())
       }
-    if (s2.status) {
+    if (s2.ok) {
       val r = smt2.valid(cache, T, config.logVc, config.logVcDirOpt, st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
         pos, s2.claims, claim, reporter)
       r.kind match {
@@ -553,7 +553,7 @@ import Util._
         case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
       }
     }
-    return s2(status = F)
+    return s2(status = State.Status.Error)
   }
 
   def evalLit(smt2: Smt2, lit: AST.Lit, reporter: Reporter): State.Value = {
@@ -689,7 +689,7 @@ import Util._
           if (nextFresh < s1.nextFresh) {
             nextFresh = s1.nextFresh
           }
-          if (s1.status) {
+          if (s1.ok) {
             currents = currents :+ ((s1, vs :+ v))
           } else {
             done = done :+ ((s1, vs :+ v))
@@ -727,7 +727,7 @@ import Util._
 
   def evalExp(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, e: AST.Exp,
               reporter: Reporter): ISZ[(State, State.Value)] = {
-    if (!state.status) {
+    if (!state.ok) {
       return ISZ((state, State.errorValue))
     }
     val ePlugins = jescmPlugins._2
@@ -749,7 +749,7 @@ import Util._
                 val s3 = s2.addClaim(State.Claim.Let.Binary(sym, z2SubZVal(ti, ti.ast.min, pos), AST.Exp.BinaryOp.Le, value, t))
                 s1 = evalAssertH(T, smt2, cache, s"Min range check for $t", s3, sym, e.posOpt, reporter)
               }
-              if (s1.status && ti.ast.hasMax) {
+              if (s1.ok && ti.ast.hasMax) {
                 val (s4, sym) = s1.freshSym(AST.Typed.b, pos)
                 val s5 = s4.addClaim(State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Le, z2SubZVal(ti, ti.ast.max, pos), t))
                 s1 = evalAssertH(T, smt2, cache, s"Max range check for $t", s5, sym, e.posOpt, reporter)
@@ -797,7 +797,7 @@ import Util._
           }
         case _ =>
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
-          return (s0(status = F), State.errorValue)
+          return (s0(status = State.Status.Error), State.errorValue)
       }
     }
 
@@ -822,7 +822,7 @@ import Util._
         case AST.ResolvedInfo.BuiltIn(kind) if th.isGroundType(exp.typedOpt.get) =>
           def evalUnaryExpH(p: (State, State.Value)): (State, State.Value) = {
             val (s1, v) = p
-            if (!s1.status) {
+            if (!s1.ok) {
               return (s1, State.errorValue)
             }
             kind match {
@@ -838,7 +838,7 @@ import Util._
           return for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.exp, reporter)) yield evalUnaryExpH(p)
         case _ =>
           reporter.warn(e.posOpt, kind, s"Not currently supported: $exp")
-          return ISZ((s0(status = F), State.errorValue))
+          return ISZ((s0(status = State.Status.Error), State.errorValue))
       }
     }
 
@@ -874,7 +874,7 @@ import Util._
       }
 
       def checkNonZero(s0: State, op: String, value: State.Value, pos: Position): State = {
-        if (!rtCheck || !s0.status) {
+        if (!rtCheck || !s0.ok) {
           return s0
         }
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
@@ -897,7 +897,7 @@ import Util._
           case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
           case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
         }
-        return s1(status = F)
+        return s1(status = State.Status.Error)
       }
 
       def evalBasic(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value): ISZ[(State, State.Value)] = {
@@ -908,7 +908,7 @@ import Util._
           } else {
             s1
           }
-          if (!s2.status) {
+          if (!s2.ok) {
             return (s2, State.errorValue)
           }
           val rTipe = e.typedOpt.get
@@ -942,7 +942,7 @@ import Util._
 
             def evalCondAndH(p: (State, State.Value)): ISZ[(State, State.Value)] = {
               val (s2, v2) = p
-              if (!s2.status) {
+              if (!s2.ok) {
                 return ISZ((s2, State.errorValue))
               }
               val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
@@ -956,7 +956,7 @@ import Util._
 
             def evalCondOrH(p: (State, State.Value)): ISZ[(State, State.Value)] = {
               val (s2, v2) = p
-              if (!s2.status) {
+              if (!s2.ok) {
                 return ISZ((s2, State.errorValue))
               }
               val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
@@ -970,7 +970,7 @@ import Util._
 
             def evalCondImplyH(p: (State, State.Value)): ISZ[(State, State.Value)] = {
               val (s2, v2) = p
-              if (!s2.status) {
+              if (!s2.ok) {
                 return ISZ((s2, State.errorValue))
               }
               val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
@@ -987,10 +987,10 @@ import Util._
         var r = ISZ[(State, State.Value)]()
         for (p1 <- evalExp(split, smt2, cache, rtCheck, s0, exp.left, reporter)) {
           val (s1, v1) = p1
-          if (s1.status) {
+          if (s1.ok) {
             for (p2 <- evalExp(split, smt2, cache, rtCheck, s1, exp.right, reporter)) {
               val (s2, v2) = p2
-              if (s2.status) {
+              if (s2.ok) {
                 val rTipe = e.typedOpt.get
                 val (s3, rExp) = s2.freshSym(rTipe, e.posOpt.get)
                 val s4 = s3.addClaim(State.Claim.Let.Binary(rExp, v1, exp.op, v2,
@@ -1015,7 +1015,7 @@ import Util._
           var maxFresh = s0.nextFresh
           for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.left, reporter)) {
             val (s1, v1) = p
-            if (s1.status) {
+            if (s1.ok) {
               if (kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo) {
                 for (svs2 <- evalMapsTo(s1, v1)) {
                   if (maxFresh < svs2._1.nextFresh) {
@@ -1040,7 +1040,7 @@ import Util._
                 }
               } else {
                 reporter.warn(e.posOpt, Logika.kind, s"Not currently supported: $e")
-                r = r :+ ((s1(status = F), State.errorValue))
+                r = r :+ ((s1(status = State.Status.Error), State.errorValue))
               }
             } else {
               r = r :+ ((s1, State.errorValue))
@@ -1056,7 +1056,7 @@ import Util._
             Either.Left(ISZ(exp.right)), exp.attr)
         case _ =>
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
-          return ISZ((s0(status = F), State.errorValue))
+          return ISZ((s0(status = State.Status.Error), State.errorValue))
       }
     }
 
@@ -1064,7 +1064,7 @@ import Util._
       var r = ISZ[(State, State.Value)]()
       for (p <- evalExp(split, smt2, cache, rtCheck, state, receiverOpt.get, reporter)) {
         val (s0, v) = p
-        if (s0.status) {
+        if (s0.ok) {
           val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
           val s2 = s1.addClaim(State.Claim.Let.TypeTest(cond, F, v, tipe))
           if (isCast) {
@@ -1073,7 +1073,7 @@ import Util._
               r = r :+ ((s3.addClaim(State.Claim.Let.Def(cv, v)), cv))
             } else {
               val s3 = evalAssertH(T, smt2, cache, "asInstanceOf", s2, cond, Some(pos), reporter)
-              if (s3.status) {
+              if (s3.ok) {
                 val (s4, cv) = s3.freshSym(tipe, pos)
                 r = r :+ ((s4.addClaim(State.Claim.Let.Def(cv, v)), cv))
               } else {
@@ -1122,7 +1122,7 @@ import Util._
             return (s5, sym)
           }
           val (s6, sym) = evalFieldH()
-          if (s6.status) {
+          if (s6.ok) {
             r = r :+ ((Util.assumeValueInv(this, smt2, cache, rtCheck, s6, sym, pos, reporter), sym))
           } else {
             r = r :+ ((s6, State.errorValue))
@@ -1140,7 +1140,7 @@ import Util._
         val (s0, sym) = state.freshSym(tipe, pos)
         for (p <- evalExp(split, smt2, cache, rtCheck, s0, receiverOpt.get, reporter)) {
           val (s1, v) = p
-          if (s1.status) {
+          if (s1.ok) {
             val s2 = s1.addClaim(State.Claim.Let.FieldLookup(sym, v, s"_${tres.index}"))
             r = r :+ ((Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym))
           } else {
@@ -1163,7 +1163,7 @@ import Util._
           return evalTupleProjection(res)
         case _ =>
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
-          return ISZ((state(status = F), State.errorValue))
+          return ISZ((state(status = State.Status.Error), State.errorValue))
       }
     }
 
@@ -1214,7 +1214,7 @@ import Util._
         val (s0, sym) = state.freshSym(t, attr.posOpt.get)
         for (p <- evalArgs(sp, smt2, cache, rtCheck, s0, -1, eargs, reporter)) {
           val (s1, args) = p
-          if (s1.status) {
+          if (s1.ok) {
             val it = t.args(0).asInstanceOf[AST.Typed.Name]
             var indices = ISZ[State.Value]()
             if (it == AST.Typed.z) {
@@ -1269,7 +1269,7 @@ import Util._
         for (p <- evalArgs(sp, smt2, cache, rtCheck, s1, params.size, eargs, reporter)) {
           val s2 = p._1
           val args = p._2.toMS
-          if (s2.status) {
+          if (s2.ok) {
             var s3 = s2
             eargs match {
               case Either.Right(_) =>
@@ -1288,7 +1288,7 @@ import Util._
             val s4 = s3.addClaim(State.Claim.Let.AdtLit(sym, args.toIS[Option[State.Value]].map((vOpt: Option[State.Value]) => vOpt.get)))
             val (s5, vs) = addValueInv(this, smt2, cache, T, s4, sym, attr.posOpt.get, reporter)
             var s6 = s5
-            for (v <- vs if s6.status) {
+            for (v <- vs if s6.ok) {
               s6 = evalAssertH(T, smt2, cache, st"Invariant on ${(ti.name, ".")} construction".render, s6, v, attr.posOpt, reporter)
             }
             r = r :+ ((s4(nextFresh = s6.nextFresh, status = s6.status), sym))
@@ -1408,7 +1408,7 @@ import Util._
             return (state, r.sym)
           case _ =>
             reporter.error(exp.posOpt, kind, st"Could not find .random of $t with the occurrence number $num".render)
-            return (state(status = F), State.errorValue)
+            return (state(status = State.Status.Error), State.errorValue)
         }
       }
       def local(res: AST.ResolvedInfo.LocalVar, num: Z): (State, State.Value) = {
@@ -1419,7 +1419,7 @@ import Util._
             return (state, r.sym)
           case _ =>
             reporter.error(exp.posOpt, kind, st"Could not find ${res.id} with the occurrence number $num".render)
-            return (state(status = F), State.errorValue)
+            return (state(status = State.Status.Error), State.errorValue)
         }
       }
       def global(res: AST.ResolvedInfo.Var, num: Z): (State, State.Value) = {
@@ -1430,7 +1430,7 @@ import Util._
             return (state, r.sym)
           case _ =>
             reporter.error(exp.posOpt, kind, st"Could not find ${(res.owner :+ res.id, ".")} with the occurrence number $num".render)
-            return (state(status = F), State.errorValue)
+            return (state(status = State.Status.Error), State.errorValue)
         }
       }
       exp.exp match {
@@ -1463,7 +1463,7 @@ import Util._
                 case Some(sym) => return (state, sym)
                 case _ =>
                   error(e.posOpt, s"Variable $e was not declared to be read/modified", reporter)
-                  return (state(status = F), State.Value.B(F, e.posOpt.get))
+                  return (state(status = State.Status.Error), State.Value.B(F, e.posOpt.get))
               }
             case res: AST.ResolvedInfo.Var =>
               if (res.isInObject) {
@@ -1472,7 +1472,7 @@ import Util._
                   case Some(sym) => return (state, sym)
                   case _ =>
                     error(e.posOpt, s"Variable $e was not declared to be read/modified", reporter)
-                    return (state(status = F), State.Value.B(F, e.posOpt.get))
+                    return (state(status = State.Status.Error), State.Value.B(F, e.posOpt.get))
                 }
               } else {
                 context.methodOpt.get.fieldVarInMap.get(res.id) match {
@@ -1480,7 +1480,7 @@ import Util._
                     return (state, sym)
                   case _ =>
                     error(e.posOpt, s"Variable $e was not declared to be read/modified", reporter)
-                    return (state(status = F), State.Value.B(F, e.posOpt.get))
+                    return (state(status = State.Status.Error), State.Value.B(F, e.posOpt.get))
                 }
               }
             case _ =>
@@ -1490,7 +1490,7 @@ import Util._
             case Some(sym) => return (state, sym)
             case _ =>
               error(e.posOpt, s"this was not declared to be modified", reporter)
-              return (state(status = F), State.Value.B(F, e.posOpt.get))
+              return (state(status = State.Status.Error), State.Value.B(F, e.posOpt.get))
           }
         case _ =>
       }
@@ -1520,7 +1520,7 @@ import Util._
       for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s1, quant.fun.exp, reporter)) {
         val (s8, v) = p
         val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
-        if (s9.status) {
+        if (s9.ok) {
           quantClaims = quantClaims ++ ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym)
         }
         if (nextFresh < s9.nextFresh) {
@@ -1530,7 +1530,7 @@ import Util._
       val vars: ISZ[State.Claim.Let.Quant.Var] =
         for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var(quant.fun.context, p.idOpt.get.value, p.typedOpt.get)
       if (quantClaims.isEmpty) {
-        return (s0(status = F), State.errorValue)
+        return (s0(status = State.Status.Error), State.errorValue)
       }
       val qcs: ISZ[State.Claim] = if (s0.claims.size != s1.claims.size) {
         val p = s1.claims(s0.claims.size)
@@ -1551,7 +1551,7 @@ import Util._
            p2 <- evalExp(sp, smt2, cache, rtCheck, p1._1, quant.hi, reporter)) {
         val (_, lo) = p1
         val (s2, hi) = p2
-        if (s2.status) {
+        if (s2.ok) {
           val (s3, ident) = evalIdentH(s2, quant.attr.resOpt.get, qVarType, quant.fun.params(0).idOpt.get.attr.posOpt.get)
           val (s4, loSym) = s3.freshSym(AST.Typed.b, quant.lo.posOpt.get)
           val s5 = s4.addClaim(State.Claim.Let.Binary(loSym, lo, AST.Exp.BinaryOp.Le, ident, qVarType))
@@ -1571,7 +1571,7 @@ import Util._
               if (quant.isForall) ISZ(State.Claim.Imply(ISZ(rangeProp, State.Claim.Prop(T, vSym))))
               else ISZ(rangeProp, State.Claim.Prop(T, vSym))
             )
-            if (s12.status) {
+            if (s12.ok) {
               val s12ClaimsOps = ops.ISZOps(s12.claims)
               quantClaims = quantClaims ++ s12ClaimsOps.slice(s2.claims.size, s9.claims.size) ++
                 s12ClaimsOps.slice(s9.claims.size + 1, s12.claims.size)
@@ -1581,7 +1581,7 @@ import Util._
             }
           }
           if (quantClaims.isEmpty) {
-            r = r :+ ((s2(status = F), State.errorValue))
+            r = r :+ ((s2(status = State.Status.Error), State.errorValue))
           } else {
             r = r :+ ((s2(nextFresh = nextFresh).addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym))
           }
@@ -1600,7 +1600,7 @@ import Util._
       var r = ISZ[(State, State.Value)]()
       for (p1 <- evalExp(sp, smt2, cache, rtCheck, s0, seqExp, reporter)) {
         val (s2, s) = p1
-        if (s2.status) {
+        if (s2.ok) {
           val (s3, ident) = evalIdentH(s2, quant.attr.resOpt.get, qVarType, quant.fun.params(0).idOpt.get.attr.posOpt.get)
           val (s4, inBoundSym) = s3.freshSym(AST.Typed.b, seqExp.posOpt.get)
           val s5 = s4.addClaim(State.Claim.Let.SeqInBound(inBoundSym, s, ident))
@@ -1617,7 +1617,7 @@ import Util._
               if (quant.isForall) ISZ(State.Claim.Imply(ISZ(inBoundProp, State.Claim.Prop(T, vSym))))
               else ISZ(inBoundProp, State.Claim.Prop(T, vSym))
             )
-            if (s9.status) {
+            if (s9.ok) {
               val s9ClaimsOps = ops.ISZOps(s9.claims)
               quantClaims = quantClaims ++ s9ClaimsOps.slice(s2.claims.size, s6.claims.size) ++
                 s9ClaimsOps.slice(s6.claims.size + 1, s9.claims.size)
@@ -1627,7 +1627,7 @@ import Util._
             }
           }
           if (quantClaims.isEmpty) {
-            r = r :+ ((s2(status = F), State.errorValue))
+            r = r :+ ((s2(status = State.Status.Error), State.errorValue))
           } else {
             r = r :+ ((s2(nextFresh = nextFresh).addClaim(
               State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym))
@@ -1653,7 +1653,7 @@ import Util._
       val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
       for (p <- evalExp(sp, smt2, cache, rtCheck, state, quant.seq, reporter)) {
         val (s0, seq) = p
-        if (s0.status) {
+        if (s0.ok) {
           val idx = s"${qVarRes.id}$idxSuffix"
           val (s1, qvarIdx) = idIntro(pos, s0, qVarRes.context, idx, iType, Some(pos))
           val (s2, inBound) = s1.freshSym(AST.Typed.b, pos)
@@ -1685,7 +1685,7 @@ import Util._
             val s13 = s12.addClaims(
               if (quant.isForall) ISZ(State.Claim.Imply(ISZ(inBoundProp, prop)))
               else ISZ(inBoundProp, prop))
-            if (s13.status) {
+            if (s13.ok) {
               val s13ClaimsOps = ops.ISZOps(s13.claims)
               quantClaims = quantClaims ++ s13ClaimsOps.slice(s0.claims.size, s10.claims.size) ++
                   s13ClaimsOps.slice(s10.claims.size + 1, s13.claims.size
@@ -1696,7 +1696,7 @@ import Util._
             }
           }
           if (quantClaims.isEmpty) {
-            r = r :+ ((s0(status = F), State.errorValue))
+            r = r :+ ((s0(status = State.Status.Error), State.errorValue))
           } else {
             r = r :+ ((s0(nextFresh = nextFresh).addClaim(
               State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym))
@@ -1793,12 +1793,12 @@ import Util._
           case Either.Left(subsT) => subsT
           case Either.Right(messages) =>
             reporter.reports(messages)
-            return ISZ((s0(status = F), Either.Right(State.errorValue)))
+            return ISZ((s0(status = State.Status.Error), Either.Right(State.errorValue)))
         }
       }
       if (subs.isEmpty) {
         reporter.error(posOpt, Logika.kind, st"Could not find a ${if (th.isMutable(t)) "@record" else "@datatype"} class implementing ${(info.res.owner, ".")}".render)
-        return ISZ((s0(status = F), Either.Right(State.errorValue)))
+        return ISZ((s0(status = State.Status.Error), Either.Right(State.errorValue)))
       }
       for (sub <- subs) {
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
@@ -1808,7 +1808,7 @@ import Util._
           val adt = th.typeMap.get(sub.ids).get.asInstanceOf[TypeInfo.Adt]
           if (adt.specVars.contains(info.res.id) || adt.specMethods.contains(info.res.id)) {
             reporter.error(posOpt, Logika.kind, st"Could not virtually invoke @spec ${(sub.ids, ".")}#${info.res.id}".render)
-            r = r :+ ((s2(status = F), Either.Right(State.errorValue)))
+            r = r :+ ((s2(status = State.Status.Error), Either.Right(State.errorValue)))
           } else if (adt.vars.contains(info.res.id)) {
             halt("TODO")
           } else {
@@ -1820,7 +1820,7 @@ import Util._
             r = r :+ ((s2, Either.Left(Info.substMethod(minfo, sm))))
           }
         } else {
-          r = r :+ ((s2(status = F), Either.Right(State.errorValue)))
+          r = r :+ ((s2(status = State.Status.Error), Either.Right(State.errorValue)))
         }
       }
       return r
@@ -1846,7 +1846,7 @@ import Util._
         reporter.warn(posOpt, Logika.kind,
           st"""Under-approximation due to recursive call capped with bound ${config.callBound} on $resST:
               |${for (i <- context.compMethods.size - 1 to 0) yield st"- ${(context.compMethods(i), ".")}"}""".render)
-        return ISZ((s(status = F), State.errorValue))
+        return ISZ((s(status = State.Status.Error), State.errorValue))
       }
 
       val (s0, callerLocalMap): (State, LocalSaveMap) = {
@@ -1901,58 +1901,58 @@ import Util._
               }
             }
         }
-        if (reporter.hasError) {
-          r = r ++ (for (s2v <- s2vs) yield (s2v._1(status = F), s2v._2))
-          return
-        }
         for (s2v <- s2vs) {
           val (s2, retVal) = s2v
-          var s3 = s2
-          var assigns = ISZ[(AST.Exp, State.Value.Sym)]()
-          var ids = ISZ[String]()
-          receiverOpt match {
-            case Some(receiver) =>
-              val t = receiver.tipe
-              if (th.isMutable(t)) {
-                val (s4, sym) = idIntro(pos, s3, ctx, "this", t, None())
-                invokeReceiverOpt match {
-                  case Some(invokeReceiver) => assigns = assigns :+ ((invokeReceiver, sym))
-                  case _ => assigns = assigns :+ ((AST.Exp.This(AST.TypedAttr(posOpt, Some(t))), sym))
+          if (s2.status == State.Status.Error) {
+            r = r :+ ((s2, State.errorValue))
+          } else {
+            var s3 = s2(status = State.Status.Normal)
+            var assigns = ISZ[(AST.Exp, State.Value.Sym)]()
+            var ids = ISZ[String]()
+            receiverOpt match {
+              case Some(receiver) =>
+                val t = receiver.tipe
+                if (th.isMutable(t)) {
+                  val (s4, sym) = idIntro(pos, s3, ctx, "this", t, None())
+                  invokeReceiverOpt match {
+                    case Some(invokeReceiver) => assigns = assigns :+ ((invokeReceiver, sym))
+                    case _ => assigns = assigns :+ ((AST.Exp.This(AST.TypedAttr(posOpt, Some(t))), sym))
+                  }
+                  s3 = s4
                 }
+                ids = ids :+ "this"
+              case _ =>
+            }
+            for (paramArg <- paramArgs) {
+              val (l, _, e, v) = paramArg
+              ids = ids :+ l.id
+              if (th.isMutable(v.tipe)) {
+                val (s4, sym) = idIntro(pos, s3, ctx, l.id, v.tipe, None())
+                assigns = assigns :+ ((e, sym))
                 s3 = s4
               }
-              ids = ids :+ "this"
-            case _ =>
-          }
-          for (paramArg <- paramArgs) {
-            val (l, _, e, v) = paramArg
-            ids = ids :+ l.id
-            if (th.isMutable(v.tipe)) {
-              val (s4, sym) = idIntro(pos, s3, ctx, l.id, v.tipe, None())
-              assigns = assigns :+ ((e, sym))
-              s3 = s4
             }
-          }
-          if (retType != AST.Typed.unit && info.strictPureBodyOpt.isEmpty) {
-            ids = ids :+ "Res"
-          }
-          s3 = rewriteLocals(s3, ctx, ids)._1
-          s3 = restoreLocals(s3, callerLocalMap)
-          var s4s = ISZ(s3)
-          for (assign <- assigns) {
-            var s5s = ISZ[State]()
-            for (s4 <- s4s) {
-              assign._1 match {
-                case lhs: AST.Exp.This =>
-                  s5s = s5s :+ evalAssignLocalH(F, s4, context.methodName, "this", assign._2, lhs.posOpt, reporter)
-                case lhs =>
-                  s5s = s5s ++ assignRec(split, smt2, cache, rtCheck, s4, lhs, assign._2, reporter)
+            if (retType != AST.Typed.unit && info.strictPureBodyOpt.isEmpty) {
+              ids = ids :+ "Res"
+            }
+            s3 = rewriteLocals(s3, ctx, ids)._1
+            s3 = restoreLocals(s3, callerLocalMap)
+            var s4s = ISZ(s3)
+            for (assign <- assigns) {
+              var s5s = ISZ[State]()
+              for (s4 <- s4s) {
+                assign._1 match {
+                  case lhs: AST.Exp.This =>
+                    s5s = s5s :+ evalAssignLocalH(F, s4, context.methodName, "this", assign._2, lhs.posOpt, reporter)
+                  case lhs =>
+                    s5s = s5s ++ assignRec(split, smt2, cache, rtCheck, s4, lhs, assign._2, reporter)
+                }
               }
+              s4s = s5s
             }
-            s4s = s5s
-          }
-          for (s4 <- s4s) {
-            r = r :+ ((s4, retVal))
+            for (s4 <- s4s) {
+              r = r :+ ((s4, retVal))
+            }
           }
         }
       }
@@ -1986,7 +1986,7 @@ import Util._
       var r = ISZ[(State, State.Value)]()
       for (cm <- context.compMethods if cm == ctx) {
         reporter.error(posOpt, kind, st"Cannot use ${(res.owner :+ res.id, ".")}'s contracts cyclicly".render)
-        r = r :+ ((s(status = F), State.errorValue))
+        r = r :+ ((s(status = State.Status.Error), State.errorValue))
         return r
       }
 
@@ -2143,7 +2143,7 @@ import Util._
           var requireSyms = ISZ[State.Value]()
           var i = 0
           var csr0 = cs1
-          for (require <- requires if csr0.status) {
+          for (require <- requires if csr0.ok) {
             val title: String =
               if (requires.size == 1) st"${label}re-condition of $resST".render
               else st"${label}re-condition#$i of $resST".render
@@ -2168,7 +2168,7 @@ import Util._
           val claims: ISZ[AST.Exp] = for (ensure <- ensures) yield AST.Util.substExp(ensure, typeSubstMap)
           var i = 0
           var cse3 = cs1
-          for (ensure <- claims if cse3.status) {
+          for (ensure <- claims if cse3.ok) {
             val title: String =
               if (ensures.size == 1) st"${label}ost-condition of $resST".render
               else st"${label}ost-condition#$i of $resST".render
@@ -2185,14 +2185,14 @@ import Util._
           case _ => ("P", cs0)
         }
         val (cs2, requireSyms) = evalRequires(cs1, label, rep)
-        if (!cs2.status) {
+        if (!cs2.ok) {
           val (cs3, rsym) = cs2.freshSym(AST.Typed.b, pos)
           return Context.ContractCaseResult(F, cs3.addClaim(State.Claim.Let.And(rsym, requireSyms)),
             State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
         }
         val (cs4, result) = modVarsResult(cs2, posOpt)
         val cs5 = evalEnsures(cs4, label, rep)
-        if (!cs5.status) {
+        if (!cs5.ok) {
           val (cs6, rsym) = cs5.freshSym(AST.Typed.b, pos)
           return Context.ContractCaseResult(T, cs6.addClaim(State.Claim.Let.And(rsym, requireSyms)),
             State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
@@ -2250,11 +2250,11 @@ import Util._
         s1(status = pis.status, nextFresh = pis.nextFresh)
       }
       contract match {
-        case contract: AST.MethodContract.Simple if s1.status =>
+        case contract: AST.MethodContract.Simple if s1.ok =>
           val ccr = evalContractCase(lComp, callerReceiverOpt, F, s1, None(), contract.requires, contract.ensures)
           reporter.reports(ccr.messages)
           r = r :+ ((ccr.state, ccr.retVal))
-        case contract: AST.MethodContract.Cases if s1.status =>
+        case contract: AST.MethodContract.Cases if s1.ok =>
           val root = s1
           var isPreOK = F
           var ccrs = ISZ[Context.ContractCaseResult]()
@@ -2275,7 +2275,7 @@ import Util._
             }
           }
           if (!isPreOK || okCcrs.isEmpty) {
-            r = r :+ ((s1(status = F), State.errorValue))
+            r = r :+ ((s1(status = State.Status.Error), State.errorValue))
           } else if (okCcrs.size == 1) {
             val ccr = okCcrs(0)
             s1 = s1(claims = ccr.state.claims :+ ccr.requiresClaim)
@@ -2437,7 +2437,7 @@ import Util._
         val receiverOpt = t._3
         for (p <- evalArgs(split, smt2, cache, rtCheck, t._1, info.sig.params.size, eargs, reporter)) {
           val (s1, vs) = p
-          if (s1.status) {
+          if (s1.ok) {
             val argTypes = MSZ.create[AST.Typed](info.sig.params.size, AST.Typed.nothing)
             var paramArgs = ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]()
             eargs match {
@@ -2520,7 +2520,7 @@ import Util._
       var nextFresh: Z = -1
       for (p <- evalExps(Split.Default, smt2, cache, rtCheck, state, tuple.args.size, (i: Z) => tuple.args(i), reporter)) {
         val (s0, args) = p
-        if (s0.status) {
+        if (s0.ok) {
           val (s1, sym) = s0.freshSym(tuple.typedOpt.get, tuple.posOpt.get)
           r = r :+ ((s1.addClaim(State.Claim.Let.TupleLit(sym, args)), sym))
           if (nextFresh < s1.nextFresh) {
@@ -2547,7 +2547,7 @@ import Util._
       val pos = ifExp.posOpt.get
       for (p <- evalExp(sp, smt2, cache, rtCheck, state, ifExp.cond, reporter)) {
         val (s0, cond) = p
-        if (s0.status) {
+        if (s0.ok) {
           val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
@@ -2587,7 +2587,7 @@ import Util._
               }
             case (T, F) => r = r ++ evalExp(sp, smt2, cache, rtCheck, s1, ifExp.thenExp, reporter)
             case (F, T) => r = r ++ evalExp(sp, smt2, cache, rtCheck, s1, ifExp.elseExp, reporter)
-            case (_, _) => r = r :+ ((s0(status = F), State.errorValue))
+            case (_, _) => r = r :+ ((s0(status = State.Status.Error), State.errorValue))
           }
         } else {
           r = r :+ ((s0, State.errorValue))
@@ -2661,7 +2661,7 @@ import Util._
       var r = ISZ[(State, State.Value)]()
       for (p <- evalArgs(split, smt2, cache, rtCheck, state, t.args.size, Either.Left(args), reporter)) {
         val (s0, valueOpts) = p
-        if (s0.status && ops.ISZOps(valueOpts).forall((vOpt: Option[State.Value]) => vOpt.nonEmpty)) {
+        if (s0.ok && ops.ISZOps(valueOpts).forall((vOpt: Option[State.Value]) => vOpt.nonEmpty)) {
           val (s1, sym) = s0.freshSym(t.ret, pos)
           r = r :+ ((s1.addClaim(State.Claim.Let.Apply(sym, isLocal, context, id, for (vOpt <- valueOpts) yield vOpt.get, t)), sym))
         } else {
@@ -2725,7 +2725,7 @@ import Util._
       }
       for (p <- evalArgs(split, smt2, cache, rtCheck, state, cond.args.size, Either.Left[ISZ[AST.Exp], ISZ[AST.NamedArg]](cond.args), reporter)) {
         val (s0, argOpts) = p
-        if (!s0.status) {
+        if (!s0.ok) {
           if (nextFresh < s0.nextFresh) {
             nextFresh = s0.nextFresh
           }
@@ -2739,7 +2739,7 @@ import Util._
 
     def expH(s0: State): ISZ[(State, State.Value)] = {
       e match {
-        case _: AST.Exp.LitStepId => return ISZ((s0(status = F), State.errorValue))
+        case _: AST.Exp.LitStepId => return ISZ((s0(status = State.Status.Error), State.errorValue))
         case lit: AST.Lit => return ISZ((s0, evalLit(smt2, lit, reporter)))
         case lit: AST.Exp.StringInterpolate =>
           lit.prefix match {
@@ -2788,7 +2788,7 @@ import Util._
             case _ =>
           }
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
-          return ISZ((s0(status = F), State.errorValue))
+          return ISZ((s0(status = State.Status.Error), State.errorValue))
         case e: AST.Exp.InvokeNamed =>
           e.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Method =>
@@ -2812,7 +2812,7 @@ import Util._
             case _ =>
           }
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
-          return ISZ((s0(status = F), State.errorValue))
+          return ISZ((s0(status = State.Status.Error), State.errorValue))
         case e: AST.Exp.Result => return ISZ(evalResult(e))
         case e: AST.Exp.Input => return ISZ(evalInput(e))
         case e: AST.Exp.QuantType => return ISZ(evalQuantType(e))
@@ -2836,7 +2836,7 @@ import Util._
         case e: AST.Exp.Sym => return ISZ[(State, State.Value)]((state, State.Value.Sym(e.num, e.typedOpt.get, e.posOpt.get)))
         case _ =>
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
-          return ISZ((s0(status = F), State.errorValue))
+          return ISZ((s0(status = State.Status.Error), State.errorValue))
       }
     }
 
@@ -2853,7 +2853,7 @@ import Util._
         if (nextFresh < 0) {
           return F
         }
-        return svs.size == 1 || ops.ISZOps(svs).forall((p: (State, State.Value)) => !p._1.status || nextFresh == p._1.nextFresh)
+        return svs.size == 1 || ops.ISZOps(svs).forall((p: (State, State.Value)) => !p._1.ok || nextFresh == p._1.nextFresh)
       }
       assert(check())
       return svs
@@ -2874,11 +2874,11 @@ import Util._
   def evalAssumeH(reportQuery: B, smt2: Smt2, cache: Smt2.Cache, title: String, s0: State, sym: State.Value.Sym,
                   posOpt: Option[Position], reporter: Reporter): State = {
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
-    if (config.sat && s1.status) {
+    if (config.sat && s1.ok) {
       val pos = posOpt.get
       val sat = smt2.sat(cache, reportQuery, config.logVc, config.logVcDirOpt,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
-      return s1(status = sat)
+      return s1(status = State.statusOf(sat))
     } else {
       return s1
     }
@@ -2887,7 +2887,7 @@ import Util._
   def evalAssume(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp, posOpt: Option[Position],
                  reporter: Reporter): (State, State.Value.Sym) = {
     val (s1, v) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s0, cond, reporter))
-    if (!s1.status) {
+    if (!s1.ok) {
       return value2Sym(s1, v, cond.posOpt.get)
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
@@ -2896,7 +2896,7 @@ import Util._
 
   def evalAssertH(reportQuery: B, smt2: Smt2, cache: Smt2.Cache, title: String, s0: State, sym: State.Value.Sym,
                   posOpt: Option[Position], reporter: Reporter): State = {
-    if (s0.status) {
+    if (s0.ok) {
       val conclusion = State.Claim.Prop(T, sym)
       val pos = posOpt.get
       val r = smt2.valid(cache, reportQuery, config.logVc, config.logVcDirOpt,
@@ -2909,13 +2909,13 @@ import Util._
         case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower} holds", reporter)
       }
     }
-    return s0(status = F)
+    return s0(status = State.Status.Error)
   }
 
   def evalAssert(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp,
                  posOpt: Option[Position], reporter: Reporter): (State, State.Value.Sym) = {
     val (s1, v) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s0, cond, reporter))
-    if (!s1.status) {
+    if (!s1.ok) {
       return value2Sym(s1, v, cond.posOpt.get)
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
@@ -2932,7 +2932,7 @@ import Util._
             for (p <- evalExprInvoke(split, smt2, cache, rtCheck, s0, ae, e, reporter)) {
               val (s1, v) = p
               rOpt match {
-                case Some(re) if s1.status => r = r :+ s1.addClaim(State.Claim.Let.Def(re, v))
+                case Some(re) if s1.ok => r = r :+ s1.addClaim(State.Claim.Let.Def(re, v))
                 case _ => r = r :+ s1
               }
             }
@@ -2942,7 +2942,7 @@ import Util._
             for (p <- evalExp(split, smt2, cache, rtCheck, s0, ae.exp, reporter)) {
               val (s1, v) = p
               rOpt match {
-                case Some(re) if s1.status => r = r :+ s1.addClaim(State.Claim.Let.Def(re, v))
+                case Some(re) if s1.ok => r = r :+ s1.addClaim(State.Claim.Let.Def(re, v))
                 case _ => r = r :+ s1
               }
             }
@@ -2977,7 +2977,7 @@ import Util._
     val poss = StateTransformer(CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
     if (poss.isEmpty && !config.interp) {
       reporter.error(namePosOpt, Logika.kind, st"Missing Modifies clause for ${(ids, ".")}.".render)
-      return s0(status = F)
+      return s0(status = State.Status.Error)
     }
     val (s1, num) = s0.fresh
     val objectVars = HashMap.empty[ISZ[String], (ISZ[Position], Z)] + ids ~> ((poss, num))
@@ -3086,7 +3086,7 @@ import Util._
           val (_, a) = p1
           val (s2, i) = p2
           val s3 = checkSeqIndexing(smt2, cache, T, s2, a, i, lhs.args(0).posOpt, reporter)
-          if (s3.status) {
+          if (s3.ok) {
             val (s4, newSym) = s3.freshSym(t, receiverPos)
             r = r ++ assignRec(split, smt2, cache, rtCheck, s4.addClaim(State.Claim.Let.SeqStore(newSym, a, i, rhs)),
               receiver, newSym, reporter)
@@ -3107,7 +3107,7 @@ import Util._
         var r = ISZ[State]()
         for (p <- evalExp(split, smt2, cache, T, s0, receiver, reporter)) {
           val (s1, o) = p
-          if (s1.status) {
+          if (s1.ok) {
             val (s2, newSym) = s1.freshSym(t, receiverPos)
             val id = lhs.id.value
             val s3 = s2.addClaim(State.Claim.Let.FieldStore(newSym, o, id, rhs))
@@ -3306,34 +3306,31 @@ import Util._
 
   def evalBranch(isMatch: B, split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State,
                  lcontext: ISZ[String], branches: ISZ[Branch], i: Z, rOpt: Option[State.Value.Sym],
-                 reporter: Reporter): (Z, Option[(State.Claim, ISZ[ISZ[State.Claim]])]) = {
+                 reporter: Reporter): (Z, Option[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])]) = {
     val shouldSplit: B = split match {
       case Split.Default => config.splitAll || (isMatch && config.splitMatch)
       case Split.Enabled => T
       case Split.Disabled => F
     }
     var nextFresh = s0.nextFresh
-    val s1 = s0
     val Branch(title, sym, body, m, bidMap) = branches(i)
     val cond = State.Claim.And(
       (for (j <- 0 until i) yield State.Claim.Prop(F, branches(j).sym).asInstanceOf[State.Claim]) :+
         State.Claim.Prop(T, sym))
     val pos = sym.pos
     val posOpt: Option[Position] = Some(pos)
-    val s10 = s1.addClaim(cond)
-    if (s10.status) {
+    val s1 = s0.addClaim(cond)
+    if (s1.ok) {
       if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-        s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s10.claims, reporter)) {
-        val s11 = assumeBindings(s10, lcontext, m, bidMap)
-        var claims = ISZ[ISZ[State.Claim]]()
-        for (s12 <- evalBody(split, smt2, cache, rOpt, rtCheck, s11, body, posOpt, reporter)) {
-          val s13 = rewriteLocals(s12, lcontext, m.keys)._1
-          if (nextFresh < s13.nextFresh) {
-            nextFresh = s13.nextFresh
+        s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)) {
+        val s2 = assumeBindings(s1, lcontext, m, bidMap)
+        var claims = ISZ[(State.Status.Type, ISZ[State.Claim])]()
+        for (s3 <- evalBody(split, smt2, cache, rOpt, rtCheck, s2, body, posOpt, reporter)) {
+          val s4 = rewriteLocals(s3, lcontext, m.keys)._1
+          if (nextFresh < s4.nextFresh) {
+            nextFresh = s4.nextFresh
           }
-          if (s13.status) {
-            claims = claims :+ s13.claims
-          }
+          claims = claims :+ ((s4.status, s4.claims))
         }
         if (claims.nonEmpty) {
           return (nextFresh, Some((cond, claims)))
@@ -3357,29 +3354,20 @@ import Util._
       return T
     }
     var leafClaims: LeafClaims = ISZ()
-    if (config.branchPar != Config.BranchPar.Disabled && config.branchParCores > 1) {
+    if ((allReturns && config.branchPar != Config.BranchPar.Disabled) ||
+      (config.branchPar == Config.BranchPar.All && config.branchParCores > 1)) {
       val inputs: ISZ[Z] = branches.indices
-      if (allReturns) {
-        def computeBranch(i: Z): (Option[(State.Claim, ISZ[ISZ[State.Claim]])], Z, ISZ[Message]) = {
-          val rep = reporter.empty
-          val lsmt2 = smt2
-          val (nextFresh, lcsOpt) = evalBranch(isMatch, split, lsmt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
-          return (lcsOpt, nextFresh, rep.messages)
-        }
-        val outputs = ops.ISZOps(inputs).mParMapCores(computeBranch _, config.branchParCores)
-        for (i <- 0 until outputs.size) {
-          reporter.reports(outputs(i)._3)
-        }
-        return (s0, leafClaims)
-      } else if (!(branches.size == 2 && (branches(1).body.stmts.isEmpty || branches(0).body.stmts.isEmpty))) {
-        def computeBranchSmt2(i: Z): (Option[(State.Claim, ISZ[ISZ[State.Claim]])], Z, Smt2, ISZ[Message]) = {
-          val rep = reporter.empty
-          val lsmt2 = smt2
-          val (nextFresh, lcsOpt) = evalBranch(isMatch, split, lsmt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
-          return (lcsOpt, nextFresh, lsmt2, rep.messages)
-        }
+
+      def computeBranch(i: Z): (Option[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])], Z, Smt2, ISZ[Message]) = {
+        val rep = reporter.empty
+        val lsmt2 = smt2
+        val (nextFresh, lcsOpt) = evalBranch(isMatch, split, lsmt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
+        return (lcsOpt, nextFresh, lsmt2, rep.messages)
+      }
+
+      if (!(branches.size == 2 && (branches(1).body.stmts.isEmpty || branches(0).body.stmts.isEmpty))) {
         var first: Z = -1
-        val outputs = ops.MSZOps(inputs.toMS).mParMapCores(computeBranchSmt2 _, config.branchParCores)
+        val outputs = ops.MSZOps(inputs.toMS).mParMapCores(computeBranch _, config.branchParCores)
         for (i <- 0 until outputs.size) {
           smt2.combineWith(outputs(i)._3)
           reporter.reports(outputs(i)._4)
@@ -3390,7 +3378,7 @@ import Util._
           }
         }
         if (first < 0) {
-          return (s0(status = F), leafClaims)
+          return (s0(status = State.Status.Error), leafClaims)
         }
         leafClaims = leafClaims :+ outputs(first)._1.get
         var nextFreshGap = outputs(first)._2 - s0.nextFresh
@@ -3398,13 +3386,14 @@ import Util._
           outputs(i)._1 match {
             case Some((cond, claimss)) =>
               val gap = outputs(i)._2 - s0.nextFresh
-              if (gap > 0) {
+              assert(gap >= 0)
+              if (!allReturns && gap > 0) {
                 val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap, jescmPlugins._4)
                 val newCond = rw.transformStateClaim(cond).getOrElseEager(cond)
-                var newClaimss = ISZ[ISZ[State.Claim]]()
-                for (claims <- claimss) {
-                  newClaimss = newClaimss :+ (for (claim <- claims) yield
-                    rw.transformStateClaim(claim).getOrElseEager(claim))
+                var newClaimss = ISZ[(State.Status.Type, ISZ[State.Claim])]()
+                for (statusClaims <- claimss) {
+                  newClaimss = newClaimss :+ ((statusClaims._1, for (claim <- statusClaims._2) yield
+                    rw.transformStateClaim(claim).getOrElseEager(claim)))
                 }
                 leafClaims = leafClaims :+ ((newCond, newClaimss))
                 nextFreshGap = nextFreshGap + gap
@@ -3432,55 +3421,81 @@ import Util._
 
   def mergeBranches(shouldSplit: B, s0: State, leafClaims: LeafClaims): ISZ[State] = {
     if (leafClaims.isEmpty) {
-      return ISZ(s0(status = F))
+      return ISZ(s0(status = State.Status.Error))
     } else if (shouldSplit || leafClaims.size == 1) {
-      return for (p <- leafClaims; cs <- p._2) yield s0(claims = (ops.ISZOps(cs).slice(0, s0.claims.size) :+ p._1) ++
-        ops.ISZOps(cs).slice(s0.claims.size + 1, cs.size))
+      return for (p <- leafClaims; cs <- p._2) yield s0(status = cs._1, claims = (ops.ISZOps(cs._2).slice(0, s0.claims.size) :+ p._1) ++
+        ops.ISZOps(cs._2).slice(s0.claims.size + 1, cs._2.size))
     }
-    var scss = ISZ[ISZ[(State.Claim, ISZ[State.Claim])]](for (cs <- leafClaims(0)._2) yield (leafClaims(0)._1, cs))
-    for (i <- 1 until leafClaims.size) {
+    var r = ISZ[State]()
+    var scss = ISZ[ISZ[(State.Claim, ISZ[State.Claim])]]()
+    for (leafClaim <- leafClaims) {
       var newScss = ISZ[ISZ[(State.Claim, ISZ[State.Claim])]]()
-      val (cond, claimss) = leafClaims(i)
-      for (scs <- scss; claims <- claimss) {
-         newScss = newScss :+ (scs :+ ((cond, claims)))
+      val (cond, claimss) = leafClaim
+      def processClaimss(scs: ISZ[(State.Claim, ISZ[State.Claim])]): Unit = {
+        for (statusClaims <- claimss) {
+          val (status, claims) = statusClaims
+          if (status == State.Status.Normal) {
+            newScss = newScss :+ (scs :+ ((cond, claims)))
+          } else {
+            r = r :+ s0(status = status, claims = (ops.ISZOps(claims).slice(0, s0.claims.size) :+ cond) ++
+              ops.ISZOps(claims).slice(s0.claims.size + 1, claims.size))
+          }
+        }
+      }
+      if (scss.isEmpty) {
+        processClaimss(ISZ())
+      } else {
+        for (scs <- scss) {
+          processClaimss(scs)
+        }
       }
       scss = newScss
     }
-    var r = ISZ[State]()
-    for (scs <- scss) {
-      @pure def computeDiffIndices(): (ISZ[State.Claim], ISZ[Z]) = {
-        var commonClaimPrefix = ISZ[State.Claim]()
-        var diffIndices = ISZ[Z]()
-        for (i <- 0 until s0.claims.size) {
-          val c = scs(0)._2(i)
-          var ok = T
-          var j = 1
-          while (ok && j < scs.size) {
-            if (c != scs(j)._2(i)) {
-              ok = F
-            }
-            j = j + 1
-          }
-          if (ok) {
-            commonClaimPrefix = commonClaimPrefix :+ c
-          } else {
-            commonClaimPrefix = commonClaimPrefix :+ trueClaim
-            diffIndices = diffIndices :+ i
-          }
-        }
-        return (commonClaimPrefix, diffIndices)
-      }
-      val (commonClaimPrefix, diffIndices) = computeDiffIndices()
+    if (scss.size == 1 && scss(0).size == 1) {
       var claims = ISZ[State.Claim]()
-      for (sc <- scs) {
-        for (i <- diffIndices) {
-          claims = claims :+ State.Claim.Imply(ISZ(sc._1, sc._2(i)))
-        }
-        for (i <- s0.claims.size + 1 until sc._2.size) {
-          claims = claims :+ State.Claim.Imply(ISZ(sc._1, sc._2(i)))
-        }
+      val sc = scss(0)(0)
+      claims = claims :+ sc._1
+      for (i <- s0.claims.size + 1 until sc._2.size) {
+        claims = claims :+ sc._2(i)
       }
-      r = r :+ s0(claims = commonClaimPrefix ++ claims)
+      r = r :+ s0(claims = s0.claims ++ claims)
+    } else {
+      for (scs <- scss) {
+        @pure def computeDiffIndices(): (ISZ[State.Claim], ISZ[Z]) = {
+          var commonClaimPrefix = ISZ[State.Claim]()
+          var diffIndices = ISZ[Z]()
+          for (i <- 0 until s0.claims.size) {
+            val c = scs(0)._2(i)
+            var ok = T
+            var j = 1
+            while (ok && j < scs.size) {
+              if (c != scs(j)._2(i)) {
+                ok = F
+              }
+              j = j + 1
+            }
+            if (ok) {
+              commonClaimPrefix = commonClaimPrefix :+ c
+            } else {
+              commonClaimPrefix = commonClaimPrefix :+ trueClaim
+              diffIndices = diffIndices :+ i
+            }
+          }
+          return (commonClaimPrefix, diffIndices)
+        }
+
+        val (commonClaimPrefix, diffIndices) = computeDiffIndices()
+        var claims = ISZ[State.Claim]()
+        for (sc <- scs) {
+          for (i <- diffIndices) {
+            claims = claims :+ State.Claim.Imply(ISZ(sc._1, sc._2(i)))
+          }
+          for (i <- s0.claims.size + 1 until sc._2.size) {
+            claims = claims :+ State.Claim.Imply(ISZ(sc._1, sc._2(i)))
+          }
+        }
+        r = r :+ s0(claims = commonClaimPrefix ++ claims)
+      }
     }
     return r
   }
@@ -3521,7 +3536,7 @@ import Util._
 
     for (p <- evalExp(split, smt2, cache, rtCheck, state, stmt.exp, reporter)) {
       val (s0, v) = p
-      if (s0.status) {
+      if (s0.ok) {
         var branches = ISZ[Branch]()
         var s1 = s0
         for (c <- stmt.cases) {
@@ -3534,7 +3549,7 @@ import Util._
           s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]", stmtPos,
           s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)), reporter)._2.kind == Smt2Query.Result.Kind.Sat) {
           error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
-          r = r :+ s1(status = F)
+          r = r :+ s1(status = State.Status.Error)
         } else {
           val (s3, leafClaims) = evalBranches(T, split, smt2, cache, rtCheck, rOpt, lcontext, s1, branches, reporter)
           val shouldSplit: B = split match {
@@ -3597,7 +3612,7 @@ import Util._
       for (arg <- e.args) {
         var newSS = ISZ[State]()
         for (s <- ss) {
-          if (s.status) {
+          if (s.ok) {
             val svs = evalExp(split, smt2, cache, rtCheck, s, arg, reporter)
             for (sv <- svs) {
               val s2 = sv._1
@@ -3645,11 +3660,11 @@ import Util._
           case AST.ResolvedInfo.BuiltIn.Kind.Eprint => return printH()
           case AST.ResolvedInfo.BuiltIn.Kind.Eprintln => return printH()
           case AST.ResolvedInfo.BuiltIn.Kind.Halt =>
-            val s0 = state(status = F)
+            val s0 = state(status = State.Status.Error)
             return ISZ((s0, State.errorValue))
           case _ =>
             reporter.warn(e.posOpt, Logika.kind, s"Not currently supported: $stmt")
-            return ISZ((state(status = F), State.errorValue))
+            return ISZ((state(status = State.Status.Error), State.errorValue))
         }
       case _ =>
         return evalExp(split, smt2, cache, rtCheck, state, e, reporter)
@@ -3678,25 +3693,27 @@ import Util._
     step match {
       case step: AST.ProofAst.Step.Regular =>
         for (plugin <- jescmPlugins._1 if plugin.canHandle(this, step.just)) {
-          val Plugin.Result(r, nextFresh, claims) =
+          val Plugin.Result(ok, nextFresh, claims) =
             plugin.handle(this, smt2, cache, m, s0, step, reporter)
-          return (s0(status = r, nextFresh = nextFresh).addClaims(claims),
+          return (s0(status = State.statusOf(ok),
+            nextFresh = nextFresh).addClaims(claims),
             m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims))
         }
         reporter.error(step.just.posOpt, Logika.kind, "Could not recognize justification form")
-        return (s0(status = F), m)
+        return (s0(status = State.Status.Error), m)
       case step: AST.ProofAst.Step.Assume =>
-        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
-        return (s0(status = status, nextFresh = nextFresh, claims = (s0.claims ++ claims) :+ claim),
+        val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
+        return (s0(status = State.statusOf(ok), nextFresh = nextFresh,
+          claims = (s0.claims ++ claims) :+ claim),
           m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.SubProof =>
-        for (sub <- step.steps if s0.status) {
+        for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
           s0 = p._1
           m  = p._2
         }
         s0 = stateMap._1(status = s0.status, nextFresh = s0.nextFresh)
-        if (s0.status) {
+        if (s0.ok) {
           m = stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
             th.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps))
           return (s0, m)
@@ -3705,35 +3722,36 @@ import Util._
         }
       case step: AST.ProofAst.Step.Assert =>
         var provenClaims = HashSet.empty[AST.Exp]
-        for (sub <- step.steps if s0.status) {
+        for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
           s0 = p._1
           m  = p._2
           sub match {
-            case sub: AST.ProofAst.Step.Regular if s0.status => provenClaims = provenClaims +
+            case sub: AST.ProofAst.Step.Regular if s0.ok => provenClaims = provenClaims +
               th.normalizeExp(sub.claim)
             case _ =>
           }
         }
         s0 = stateMap._1(nextFresh = s0.nextFresh)
-        if (!s0.status) {
-          return (s0(status = F), stateMap._2)
+        if (!s0.ok) {
+          return (s0(status = State.Status.Error), stateMap._2)
         }
         if (!provenClaims.contains(th.normalizeExp(step.claim))) {
           reporter.error(step.claim.posOpt, Logika.kind, "The claim is not proven in the assertion's sub-proof")
-          return (s0(status = F), stateMap._2)
+          return (s0(status = State.Status.Error), stateMap._2)
         }
-        val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
-        return (s0(status = status, nextFresh = nextFresh, claims = (s0.claims ++ claims) :+ claim),
+        val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
+        return (s0(status = State.statusOf(ok), nextFresh = nextFresh,
+          claims = (s0.claims ++ claims) :+ claim),
           m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.Let =>
-        for (sub <- step.steps if s0.status) {
+        for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
           s0 = p._1
           m  = p._2
         }
         s0 = stateMap._1(status = s0.status, nextFresh = s0.nextFresh)
-        if (s0.status) {
+        if (s0.ok) {
           if (step.steps.nonEmpty && step.steps(0).isInstanceOf[AST.ProofAst.Step.Assume]) {
             return (s0,
               stateMap._2 + stepNo ~> StepProofContext.FreshAssumeSubProof(stepNo, step.params,
@@ -3748,7 +3766,7 @@ import Util._
         }
       case step: AST.ProofAst.Step.StructInduction =>
         reporter.warn(step.id.posOpt, kind, s"Not currently supported: $step")
-        return (s0(status = F), HashSMap.empty)
+        return (s0(status = State.Status.Error), HashSMap.empty)
     }
   }
 
@@ -3759,7 +3777,7 @@ import Util._
       val (s1, v) = sv
       val (s2, sym) = value2Sym(s1, v, posOpt.get)
       val vProp = State.Claim.Prop(T, sym)
-      return (s2.status, s2.nextFresh, ops.ISZOps(s2.claims).slice(s0.claims.size, s2.claims.size), vProp)
+      return (s2.ok, s2.nextFresh, ops.ISZOps(s2.claims).slice(s0.claims.size, s2.claims.size), vProp)
     }
     return (F, s0.nextFresh, s0.claims, trueClaim)
   }
@@ -3796,7 +3814,7 @@ import Util._
     var i = 0
     val isSingle = invStmt.claims.size == 1
     val id = invStmt.id.value
-    for (c <- invStmt.claims if s1.status) {
+    for (c <- invStmt.claims if s1.ok) {
       val claim = AST.Util.substExp(c, substMap)
       val (titl, pOpt): (String, Option[Position]) = if (posOpt.isEmpty) {
         (if (isSingle) s"$title $id" else s"$title $id#$i", claim.posOpt)
@@ -3814,7 +3832,7 @@ import Util._
   }
 
   def evalStmt(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, stmt: AST.Stmt, reporter: Reporter): ISZ[State] = {
-    if (!state.status) {
+    if (!state.ok) {
       return ISZ(state)
     }
     val sPlugins = jescmPlugins._3
@@ -3829,7 +3847,7 @@ import Util._
       var r = ISZ[State]()
       for (p <- evalAssignExpValue(split, smt2, cache, lhsType, rtCheck, s0, rhs, reporter)) {
         val (s1, init) = p
-        if (s1.status) {
+        if (s1.ok) {
           val (s2, sym) = value2Sym(s1, init, rhs.asStmt.posOpt.get)
           r = r :+ evalAssignLocalH(decl, s2, lcontext, id, sym, idPosOpt, reporter)
         } else {
@@ -3843,7 +3861,7 @@ import Util._
       var r = ISZ[State]()
       for (p <- evalAssignExpValue(split, smt2, cache, assignStmt.lhs.typedOpt.get, rtCheck, s0, assignStmt.rhs, reporter)) {
         val (s1, init) = p
-        if (s1.status) {
+        if (s1.ok) {
           val (s2, sym) = value2Sym(s1, init, assignStmt.rhs.asStmt.posOpt.get)
           r = r ++ assignRec(split, smt2, cache, rtCheck, s2, assignStmt.lhs, sym, reporter)
         } else {
@@ -3919,14 +3937,14 @@ import Util._
       }
 
       reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
-      return ISZ(s0(status = F))
+      return ISZ(s0(status = State.Status.Error))
     }
 
     def evalWhile(s0: State, whileStmt: AST.Stmt.While): ISZ[State] = {
       var r = ISZ[State]()
       for (s0w <- checkExps(split, smt2, cache, F, "Loop invariant", " at the beginning of while-loop", s0,
         whileStmt.invariants, reporter)) {
-        if (s0w.status) {
+        if (s0w.ok) {
           val s1 = s0w
           val s0R: State = {
             val modObjectVars = whileStmt.contract.modifiedObjectVars
@@ -3963,10 +3981,11 @@ import Util._
             }
             srw
           }
-          val s2 = State(T, s0R.claims ++ (for (i <- s0.claims.size until s1.claims.size) yield s1.claims(i)), s0R.nextFresh)
+          val s2 = s0R(claims = s0R.claims ++ (for (i <- s0.claims.size until s1.claims.size) yield s1.claims(i)),
+            nextFresh = s0R.nextFresh)
           for (p <- evalExp(split, smt2, cache, rtCheck, s2, whileStmt.cond, reporter)) {
             val (s3, v) = p
-            if (s3.status) {
+            if (s3.ok) {
               val pos = whileStmt.cond.posOpt.get
               val (s4, cond) = value2Sym(s3, v, pos)
               val prop = State.Claim.Prop(T, cond)
@@ -3976,7 +3995,7 @@ import Util._
               var nextFresh: Z = s4.nextFresh
               if (thenSat) {
                 for (s5 <- evalStmts(split, smt2, cache, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)) {
-                  if (s5.status) {
+                  if (s5.ok) {
                     for (s6 <- checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop",
                       s5, whileStmt.invariants, reporter)) {
                       if (nextFresh < s6.nextFresh) {
@@ -3994,7 +4013,8 @@ import Util._
               val elseClaims = s4.claims :+ negProp
               val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
                 s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
-              r = r :+ State(status = elseSat, claims = elseClaims, nextFresh = nextFresh)
+              r = r :+ State(status = State.statusOf(elseSat),
+                claims = elseClaims, nextFresh = nextFresh)
             } else {
               r = r :+ s3
             }
@@ -4008,22 +4028,22 @@ import Util._
 
     def evalWhileUnroll(sp: Split.Type, s0: State, whileStmt: AST.Stmt.While): ISZ[State] = {
       def whileRec(current: State, numLoops: Z): ISZ[State] = {
-        if (!current.status) {
+        if (!current.ok) {
           return ISZ(current)
         }
         if (config.loopBound > 0 && numLoops > config.loopBound) {
           warn(whileStmt.cond.posOpt, s"Under-approximation due to loop unrolling capped with bound ${config.loopBound}",
             reporter)
-          return ISZ(current(status = F))
+          return ISZ(current(status = State.Status.Error))
         }
         var r = checkExps(sp, smt2, cache, F, "Loop invariant", "", current, whileStmt.invariants, reporter)
-        for (s1 <- r if !s1.status) {
-          return for (s2 <- r) yield s2(status = F)
+        for (s1 <- r if !s1.ok) {
+          return for (s2 <- r) yield s2(status = State.Status.Error)
         }
         r = ISZ[State]()
         for (p <- evalExp(sp, smt2, cache, rtCheck, current, whileStmt.cond, reporter)) {
           val (s2, v) = p
-          if (s2.status) {
+          if (s2.ok) {
             val pos = whileStmt.cond.posOpt.get
             val (s2w, cond) = value2Sym(s2, v, pos)
             val s3 = s2w
@@ -4033,7 +4053,7 @@ import Util._
               s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s4.claims, reporter)
             if (thenSat) {
               for (s5 <- evalStmts(sp, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
-                if (s5.status) {
+                if (s5.ok) {
                   r = r ++ whileRec(s5, numLoops + 1)
                 } else {
                   r = r :+ s5
@@ -4044,7 +4064,7 @@ import Util._
             val s6 = s3.addClaim(negProp)
             val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
               s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s6.claims, reporter)
-            r = r :+ s6(status = elseSat)
+            r = r :+ s6(status = State.statusOf(elseSat))
           } else {
             r = r :+ s2
           }
@@ -4072,15 +4092,16 @@ import Util._
           case _ => return ISZ(state)
         }
       }
-      val mcontext = context.methodOpt.get
-      if (config.interp && context.compMethods.size > 0) {
-        return evalReturnH()
+      val ss: ISZ[State] = if (config.interp) {
+        evalReturnH()
       } else {
+        val mcontext = context.methodOpt.get
         val invs = retrieveInvs(mcontext.owner, mcontext.isInObject)
-        val ss = Util.checkMethodPost(this, smt2, cache, reporter, evalReturnH(), mcontext.posOpt, invs,
+        Util.checkMethodPost(this, smt2, cache, reporter, evalReturnH(), mcontext.posOpt, invs,
           mcontext.ensures, config.logPc, config.logRawPc, returnStmt.posOpt)
-        return for (s <- ss) yield s(status = F)
       }
+      val r: ISZ[State] = for (s <- ss) yield s(status = if (s.ok) State.Status.End else s.status)
+      return r
     }
 
     def evalSpecBlock(sp: Split.Type, s0: State, block: AST.Stmt.SpecBlock): ISZ[State] = {
@@ -4090,16 +4111,16 @@ import Util._
     def evalDeduceSteps(s0: State, deduceStmt: AST.Stmt.DeduceSteps): ISZ[State] = {
       var p = (s0, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
       var stepIds = ISZ[AST.ProofAst.StepId]()
-      for (step <- deduceStmt.steps if p._1.status) {
+      for (step <- deduceStmt.steps if p._1.ok) {
         p = evalProofStep(smt2, cache, p, step, reporter)
         step match {
-          case step: AST.ProofAst.Step.Regular if p._1.status => stepIds = stepIds :+ step.id
+          case step: AST.ProofAst.Step.Regular if p._1.ok => stepIds = stepIds :+ step.id
           case _ =>
         }
       }
       val m = p._2
       var s1 = s0(nextFresh = p._1.nextFresh)
-      if (p._1.status) {
+      if (p._1.ok) {
         for (stepId <- stepIds) {
           val spc = m.get(stepId).get.asInstanceOf[StepProofContext.Regular]
           s1 = s1.addClaims(spc.claims)
@@ -4113,40 +4134,41 @@ import Util._
         var r = HashSMap.empty[AST.ProofAst.StepId, StepProofContext]
         var id = AST.ProofAst.StepId.Num(-1, AST.Attr(None()))
         var st0 = st
-        for (premise <- sequent.premises if st0.status) {
-          val (status, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, st0, premise, premise.posOpt, reporter)
+        for (premise <- sequent.premises if st0.ok) {
+          val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, st0, premise, premise.posOpt, reporter)
           r = r + id ~> StepProofContext.Regular(id(attr = AST.Attr(premise.posOpt)), premise, claims :+ claim)
           id = id(no = id.no - 1)
-          st0 = st0(status = status, nextFresh = nextFresh, claims = (st0.claims ++ claims) :+ claim)
+          st0 = st0(status = State.statusOf(ok), nextFresh = nextFresh,
+            claims = (st0.claims ++ claims) :+ claim)
         }
         return (st0, r)
       }
       var st0 = s0
-      for (sequent <- deduceStmt.sequents if st0.status) {
+      for (sequent <- deduceStmt.sequents if st0.ok) {
         if (deduceStmt.justOpt.isEmpty && sequent.steps.isEmpty) {
           var i = 0
-          for (premise <- sequent.premises if st0.status) {
+          for (premise <- sequent.premises if st0.ok) {
             st0 = evalAssume(smt2, cache, rtCheck, s"Premise #$i", st0, premise, premise.posOpt, reporter)._1
             i = i + 1
           }
-          if (st0.status) {
+          if (st0.ok) {
             st0 = evalAssert(smt2, cache, rtCheck, "Conclusion", st0, sequent.conclusion, sequent.conclusion.posOpt, reporter)._1
           }
         } else {
           var p = premises(st0, sequent)
-          for (step <- sequent.steps if p._1.status) {
+          for (step <- sequent.steps if p._1.ok) {
             p = evalProofStep(smt2, cache, p, step, reporter)
           }
           st0 = s0(status = p._1.status, nextFresh = p._1.nextFresh, claims = s0.claims)
           val provenClaims = HashSet ++ (for (spc <- p._2.values if spc.isInstanceOf[StepProofContext.Regular]) yield
             th.normalizeExp(spc.asInstanceOf[StepProofContext.Regular].exp))
-          if (st0.status && !provenClaims.contains(th.normalizeExp(sequent.conclusion))) {
+          if (st0.ok && !provenClaims.contains(th.normalizeExp(sequent.conclusion))) {
             reporter.error(sequent.conclusion.posOpt, Logika.kind, "The sequent's conclusion has not been proven")
-            st0 = st0(status = F)
+            st0 = st0(status = State.Status.Error)
           }
         }
       }
-      if (st0.status) {
+      if (st0.ok) {
         st0 = st0(claims = s0.claims)
         @strictpure def bin(e1: AST.Exp, op: String, opKind: AST.ResolvedInfo.BuiltIn.Kind.Type, e2: AST.Exp,
                             posOpt: Option[Position]): AST.Exp =
@@ -4178,7 +4200,7 @@ import Util._
       for (p <- evalAssignExpValue(split, smt2, cache, varPattern.pattern.typedOpt.get, rtCheck, state, varPattern.init,
         reporter)) {
         val (s1, init) = p
-        val s9: State = if (s1.status) {
+        val s9: State = if (s1.ok) {
           val (s2, sym) = value2Sym(s1, init, varPattern.init.asStmt.posOpt.get)
           val (s3, cond, m) = evalPattern(smt2, cache, rtCheck, s2, sym, varPattern.pattern, reporter)
           var s4 = s3
@@ -4221,7 +4243,7 @@ import Util._
                 stmt.id.attr.posOpt)
             case _ =>
               reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
-              return ISZ(state(status = F))
+              return ISZ(state(status = State.Status.Error))
           }
         case stmt: AST.Stmt.VarPattern =>
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
@@ -4243,7 +4265,7 @@ import Util._
           logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           if (stmt.modifies.isEmpty) {
             reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
-            return ISZ(state(status = F))
+            return ISZ(state(status = State.Status.Error))
           }
           return evalFor(state, stmt)
         case stmt: AST.Stmt.Return =>
@@ -4279,7 +4301,7 @@ import Util._
         case _: AST.Stmt.Theorem => return ISZ(state)
         case _ =>
           reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
-          return ISZ(state(status = F))
+          return ISZ(state(status = State.Status.Error))
       }
     }
 
@@ -4296,7 +4318,7 @@ import Util._
         if (nextFresh < 0) {
           return F
         }
-        return ss.size == 1 || ops.ISZOps(ss).forall((s: State) => !s.status || nextFresh == s.nextFresh)
+        return ss.size == 1 || ops.ISZOps(ss).forall((s: State) => s.status == State.Status.Error || nextFresh == s.nextFresh)
       }
       assert(check())
       return ss
@@ -4352,7 +4374,7 @@ import Util._
       val (s2, sym) = value2Sym(s1, v, pos)
       val prop = State.Claim.Prop(T, sym)
       var ok = F
-      if (s2.status) {
+      if (s2.ok) {
         val rvalid = smt2.valid(cache, T, config.logVc, config.logVcDirOpt,
           s"$title$titleSuffix at [${pos.beginLine}, ${pos.beginColumn}]", pos, s2.claims, prop, reporter)
         rvalid.kind match {
@@ -4366,7 +4388,7 @@ import Util._
       if (ok) {
         r = r :+ s2.addClaim(prop)
       } else {
-        r = r :+ s2(status = F)
+        r = r :+ s2(status = State.Status.Error)
       }
     }
     return r
@@ -4380,7 +4402,7 @@ import Util._
       val cs = currents
       currents = ISZ()
       for (current <- cs) {
-        if (current.status) {
+        if (current.ok) {
           currents = currents ++ checkExp(split, smt2, cache, rtCheck, title, titleSuffix, current, exp, reporter)
         } else {
           done = done :+ current
@@ -4416,7 +4438,7 @@ import Util._
       prefixClaims = prefixClaims :+ c
       i = j
     }
-    return State(sT.status && sF.status, prefixClaims :+
+    return State(State.statusOf(sT.ok & sF.ok), prefixClaims :+
       State.Claim.If(cond, ops.ISZOps(sT.claims).drop(size + 1),
         ops.ISZOps(sF.claims).drop(size + 1)), nextFresh)
   }
@@ -4431,7 +4453,7 @@ import Util._
       val cs = currents
       currents = ISZ()
       for (current <- cs) {
-        if (current.status) {
+        if (current.ok) {
           currents = currents ++ evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
         } else {
           done = done :+ current
@@ -4453,7 +4475,7 @@ import Util._
     val s0 = state
     var r = ISZ[State]()
     for (s1 <- evalStmts(split, smt2, cache, rOpt, rtCheck, s0, body.stmts, reporter)) {
-      if (s1.status) {
+      if (s1.ok) {
         r = r :+ rewriteLocalVars(this, s1, body.undecls, posOpt, reporter)
       } else {
         r = r :+ s1

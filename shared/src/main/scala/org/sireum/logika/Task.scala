@@ -74,7 +74,7 @@ object Task {
         fact.claims
       }
       var i = 1
-      for (claim <- claims if s0.status) {
+      for (claim <- claims if s0.ok) {
         val pos = claim.posOpt.get
         val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, smt2, cache, T, s0, claim, reporter)
         val (s2, sym) = logika.value2Sym(s1, v, pos)
@@ -82,7 +82,7 @@ object Task {
         if (smt2.satResult(cache, T, config.logVc, config.logVcDirOpt, s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos,
           s3.claims, reporter)._2.kind == Smt2Query.Result.Kind.Unsat) {
           reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
-          s0 = s3(status = F)
+          s0 = s3(status = State.Status.Error)
         } else {
           s0 = s3
         }
@@ -102,10 +102,10 @@ object Task {
         smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.isImmutable), reporter)
       }
       var p = (State.create, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
-      for (step <- theorem.proof.steps if p._1.status) {
+      for (step <- theorem.proof.steps if p._1.ok) {
         p = logika.evalProofStep(smt2, cache, p, step, reporter)
       }
-      if (!p._1.status) {
+      if (!p._1.ok) {
         return reporter.messages
       }
       val normClaim: AST.Exp = th.normalizeExp(
@@ -145,10 +145,10 @@ object Task {
         p match {
           case p: plugin.StmtsPlugin =>
             val (done, ss) = p.handle(th, plugins, stmts, config, smt2, cache, reporter)
-            for (state <- ss if state.status) {
+            for (state <- ss if state.ok) {
               if (stmts.nonEmpty) {
                 val lastPos = stmts(stmts.size - 1).posOpt.get
-                logika.logPc(config.logPc, config.logRawPc, state(status = F), reporter, Some(lastPos))
+                logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.Error), reporter, Some(lastPos))
               }
             }
             if (done) {
@@ -157,10 +157,10 @@ object Task {
           case _ =>
         }
       }
-      for (state <- logika.evalStmts(Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.status) {
+      for (state <- logika.evalStmts(Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.ok) {
         if (stmts.nonEmpty) {
           val lastPos = stmts(stmts.size - 1).posOpt.get
-          logika.logPc(config.logPc, config.logRawPc, state(status = F), reporter, Some(lastPos))
+          logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.Error), reporter, Some(lastPos))
         }
       }
       return reporter.messages

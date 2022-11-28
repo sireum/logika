@@ -136,7 +136,7 @@ object Context {
                                      val retVal: State.Value.Sym,
                                      val requiresClaim: State.Claim.Prop,
                                      val messages: ISZ[message.Message]) {
-    @strictpure def isOK: B = state.status
+    @strictpure def isOK: B = state.ok
   }
 
   @strictpure def empty: Context = Context(ISZ(), None(), ISZ(), None(), ISZ(), HashMap.empty)
