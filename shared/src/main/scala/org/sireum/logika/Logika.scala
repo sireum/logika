@@ -559,14 +559,18 @@ import Util._
   def evalLit(smt2: Smt2, lit: AST.Lit, reporter: Reporter): State.Value = {
     lit match {
       case e: AST.Exp.LitB => return State.Value.B(e.value, e.posOpt.get)
-      case e: AST.Exp.LitC => return State.Value.C(e.value, e.posOpt.get)
+      case e: AST.Exp.LitC =>
+        smt2.addType(AST.Typed.c, reporter)
+        return State.Value.C(e.value, e.posOpt.get)
       case e: AST.Exp.LitF32 =>
         smt2.addType(AST.Typed.f32, reporter)
         return State.Value.F32(e.value, e.posOpt.get)
       case e: AST.Exp.LitF64 =>
         smt2.addType(AST.Typed.f64, reporter)
         return State.Value.F64(e.value, e.posOpt.get)
-      case e: AST.Exp.LitR => return State.Value.R(e.value, e.posOpt.get)
+      case e: AST.Exp.LitR =>
+        smt2.addType(AST.Typed.r, reporter)
+        return State.Value.R(e.value, e.posOpt.get)
       case e: AST.Exp.LitString => return State.Value.String(e.value, e.posOpt.get)
       case e: AST.Exp.LitZ => return State.Value.Z(e.value, e.posOpt.get)
       case e: AST.Exp.LitStepId => halt(s"Infeasible: $e")
