@@ -2002,7 +2002,7 @@ object Util {
     val (s1, num) = s0.fresh
     val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
     val r = StateTransformer(CurrentIdRewriter(locals)).transformState(F, s1)
-    val s2 = r.resultOpt.get
+    val s2 = r.resultOpt.getOrElse(s1)
     return s2
   }
 
