@@ -4058,23 +4058,24 @@ import Util._
             if (thenSat) {
               for (s5 <- evalStmts(sp, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
                 if (s5.ok) {
-                  r = r ++ whileRec(s5, numLoops + 1)
+                  val s6 = rewriteLocalVars(this, s5, whileStmt.body.undecls, whileStmt.posOpt, reporter)
+                  r = r ++ whileRec(s6, numLoops + 1)
                 } else {
                   r = r :+ s5
                 }
               }
             }
             val negProp = State.Claim.Prop(F, cond)
-            val s6 = s3.addClaim(negProp)
+            val s7 = s3.addClaim(negProp)
             val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
-              s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s6.claims, reporter)
-            r = r :+ s6(status = State.statusOf(elseSat))
+              s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s7.claims, reporter)
+            r = r :+ s7(status = State.statusOf(elseSat))
           } else {
             r = r :+ s2
           }
         }
         val nextFresh = maxStatesNextFresh(r)
-        return for (s7 <- r) yield s7(nextFresh = nextFresh)
+        return for (s8 <- r) yield s8(nextFresh = nextFresh)
       }
 
       return whileRec(s0, 0)
