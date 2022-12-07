@@ -2495,8 +2495,8 @@ import Util._
                   if (jescmPlugins._5.nonEmpty) {
                     for (p <- jescmPlugins._5 if default && p.canHandleCompositional(th, info)) {
                       default = F
-                      r = r ++ p.handleCompositional(this, posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt,
-                        receiverOpt, paramArgs)
+                      r = r ++ p.handleCompositional(this, smt2, cache, rtCheck, split, posOpt, info, s1,
+                        typeSubstMap, retType, invokeReceiverOpt, receiverOpt, paramArgs, reporter)
                     }
                   }
                   if (default) {

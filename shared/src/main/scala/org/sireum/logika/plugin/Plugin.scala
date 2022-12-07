@@ -105,10 +105,12 @@ object Plugin {
 
   @pure def canHandleCompositional(th: TypeHierarchy, info: Context.InvokeMethodInfo): B
 
-  def handleCompositional(logika: Logika, posOpt: Option[message.Position], info: Context.InvokeMethodInfo,
+  def handleCompositional(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, split: Logika.Split.Type,
+                          posOpt: Option[message.Position], info: Context.InvokeMethodInfo,
                           state: State, typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed,
                           invokeReceiverOpt: Option[AST.Exp], receiverOpt: Option[State.Value.Sym],
-                          paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)]): ISZ[(State, State.Value)]
+                          paramArgs: ISZ[(AST.ResolvedInfo.LocalVar, AST.Typed, AST.Exp, State.Value)],
+                          reporter: Reporter): ISZ[(State, State.Value)]
 }
 
 
