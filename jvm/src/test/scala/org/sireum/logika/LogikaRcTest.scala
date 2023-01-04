@@ -78,6 +78,7 @@ class LogikaRcTest extends SireumRcSpec {
       case "opsem-alt.sc"  => c = filterSmt2Config(c, _.name.value == "cvc5")
       case "interprocedural-1.sc"  => c = c(interp = T); line = 10
       case "interprocedural-2.sc"  => c = c(interp = T); line = 10
+      case "interprocedural-contract.sc"  => c = c(interp = T, interpContracts = T); line = 13
       case "interprocedural-instance.sc"  => c = c(interp = T); line = 9
       case _ =>
     }

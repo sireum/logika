@@ -54,7 +54,8 @@ import org.sireum._
                        val atLinesFresh: B,
                        val interp: B,
                        val loopBound: Z,
-                       val callBound: Z)
+                       val callBound: Z,
+                       val interpContracts: B)
 
 object Config {
   @enum object BranchPar {

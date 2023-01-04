@@ -2485,7 +2485,7 @@ import Util._
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
 
-                if (config.interp) {
+                if (config.interp && !(config.interpContracts && info.contract.nonEmpty)) {
                   r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt, receiverOpt,
                     paramArgs)
                 } else if (info.strictPureBodyOpt.nonEmpty) {
