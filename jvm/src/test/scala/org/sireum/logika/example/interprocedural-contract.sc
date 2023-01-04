@@ -8,6 +8,7 @@ var x: Z = 0
     Ensures(Res == x + n)
   )
   assert(F)
+  return 0
 }
 
 def foo(): Unit = {
