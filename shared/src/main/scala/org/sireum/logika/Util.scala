@@ -1282,7 +1282,6 @@ object Util {
                               info.owner, let.id)), Some(sym.tipe))))
                         case _ =>
                       }
-                      assert(let.id == "size" && (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName))
                       val info = ti.methods.get(let.id).get
                       val tOpt: Option[AST.Typed.Fun] = info.typedOpt match {
                         case Some(_: AST.Typed.Method) => Some(AST.Typed.Fun(T, T, ISZ(), sym.tipe))
@@ -1420,7 +1419,7 @@ object Util {
         case let: State.Claim.Let.Random =>
           return Some(symAt(".random", let.sym))
         case let: State.Claim.Let.FieldStore =>
-          halt(s"Infeasible: $let")
+          return Some(symAt(".todo", let.sym)) // TODO
       }
 
     }
