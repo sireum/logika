@@ -583,15 +583,15 @@ object Util {
     }
   }
 
-  @record class LetEqNumMapCollector(var letMap: HashMap[Z, HashSet[State.Claim.Let]],
-                                     var eqMap: HashMap[Z, HashSet[State.Claim.Eq]],
+  @record class LetEqNumMapCollector(var letMap: HashMap[Z, HashSSet[State.Claim.Let]],
+                                     var eqMap: HashMap[Z, HashSSet[State.Claim.Eq]],
                                      var lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
                                      var vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]]) extends MStateTransformer {
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
       o match {
         case o: State.Claim.Eq =>
           o.v2 match {
-            case v2: State.Value.Sym => eqMap = eqMap + v2.num ~> (eqMap.get(v2.num).getOrElse(HashSet.empty) + o)
+            case v2: State.Value.Sym => eqMap = eqMap + v2.num ~> (eqMap.get(v2.num).getOrElse(HashSSet.empty) + o)
             case _ =>
           }
         case o: State.Claim.Let.Id =>
@@ -604,7 +604,7 @@ object Util {
               map = map + key2 ~> map.size
               lNumMap = lNumMap + key ~> map
           }
-          letMap = letMap + o.sym.num ~> (letMap.get(o.sym.num).getOrElse(HashSet.empty) + o)
+          letMap = letMap + o.sym.num ~> (letMap.get(o.sym.num).getOrElse(HashSSet.empty) + o)
         case o: State.Claim.Let.Name =>
           val key = o.ids
           var map = vNumMap.get(key).getOrElse(HashMap.empty)
@@ -615,10 +615,10 @@ object Util {
               map = map + key2 ~> map.size
               vNumMap = vNumMap + key ~> map
           }
-          letMap = letMap + o.sym.num ~> (letMap.get(o.sym.num).getOrElse(HashSet.empty) + o)
+          letMap = letMap + o.sym.num ~> (letMap.get(o.sym.num).getOrElse(HashSSet.empty) + o)
         case o: State.Claim.Let =>
           val key = o.sym.num
-          letMap = letMap + key ~> (letMap.get(key).getOrElse(HashSet.empty) + o)
+          letMap = letMap + key ~> (letMap.get(key).getOrElse(HashSSet.empty) + o)
         case _ =>
       }
       return MStateTransformer.PreResultStateClaimProp
@@ -630,8 +630,8 @@ object Util {
                              val context: ISZ[String],
                              val th: TypeHierarchy,
                              val includeFreshLines: B,
-                             val letMap: HashMap[Z, HashSet[State.Claim.Let]],
-                             val eqMap: HashMap[Z, HashSet[State.Claim.Eq]],
+                             val letMap: HashMap[Z, HashSSet[State.Claim.Let]],
+                             val eqMap: HashMap[Z, HashSSet[State.Claim.Eq]],
                              val lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
                              val vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]],
                              var symNumMap: HashMap[(String, AST.Typed), HashMap[Z, Z]]) {
@@ -1680,7 +1680,7 @@ object Util {
           }
           claim.v2 match {
             case right: State.Value.Sym =>
-              letMap.get(right.num).getOrElse(HashSet.empty[State.Claim.Let]).elements match {
+              letMap.get(right.num).getOrElse(HashSSet.empty[State.Claim.Let]).elements match {
                 case ISZ(let: State.Claim.Let.FieldStore) =>
                   valueToExp(claim.v1) match {
                     case Some(v1) => return fieldStoreToExp(v1, let)
