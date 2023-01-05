@@ -119,7 +119,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
     }
 
     val status: B = if (stat) {
-      val r = lsmt2.valid(cache, T, logika.config.logVc, logika.config.logVcDirOpt,
+      val r = lsmt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt,
         s"${just.invokeIdent.id.value} Justification", posOpt.get, premises, conclusion, reporter)
       def error(msg: String): B = {
         reporter.error(posOpt, Logika.kind, msg)

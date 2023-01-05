@@ -55,7 +55,9 @@ import org.sireum._
                        val interp: B,
                        val loopBound: Z,
                        val callBound: Z,
-                       val interpContracts: B)
+                       val interpContracts: B,
+                       val elideEncoding: B,
+                       val rawInscription: B)
 
 object Config {
   @enum object BranchPar {

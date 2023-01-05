@@ -2174,7 +2174,7 @@ object Util {
       val s1 = state(status = State.statusOf(ok), nextFresh = maxFresh)
       if (config.sat && s1.ok) {
         val title: String = s"the derived proof function of $id"
-        if (!smt2.sat(cache, T, config.logVc, config.logVcDirOpt, title, pos, ISZ(), reporter)) {
+        if (!smt2.sat(pf.context :+ pf.id, cache, T, config.logVc, config.logVcDirOpt, title, pos, ISZ(), reporter)) {
           reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
         }
       }

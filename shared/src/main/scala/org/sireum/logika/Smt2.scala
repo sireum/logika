@@ -354,6 +354,12 @@ object Smt2 {
 
   @pure def smt2Seq: B
 
+  @pure def rawInscription: B
+
+  @pure def elideEncoding: B
+
+  @pure def includeFreshLines: B
+
   def configs: ISZ[Smt2Config]
 
   def types: HashSet[AST.Typed]
@@ -630,21 +636,18 @@ object Smt2 {
     return if (typeHierarchy.isAdtType(t)) st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
   }
 
-  def satResult(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
-                claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
+  def satResult(context: ISZ[String], cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String],
+                title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
     val startTime = extension.Time.currentMillis
     val (r, smt2res) = checkSat(cache, satQuery(claims, None(), reporter).render)
     val header =
       st"""; Satisfiability check for $title
           |${smt2res.info}"""
+    val queryOpt: Option[String] = if (elideEncoding) None() else Some(smt2res.query)
     val res = smt2res(info = header.render, query =
       st"""$header
-          |;
-          |; Claims:
-          |;
-          |${(toSTs(claims, ClaimDefs.empty), "\n")}
-          |;
-          |${smt2res.query}""".render
+          |${if (rawInscription) toClaimST(F, claims, pos) else toExpST(F, context, claims, pos)}
+          |$queryOpt""".render
     )
     if (reportQuery) {
       reporter.query(pos, title, extension.Time.currentMillis - startTime, res)
@@ -663,9 +666,9 @@ object Smt2 {
     return (r, smt2res)
   }
 
-  def sat(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
-          claims: ISZ[State.Claim], reporter: Reporter): B = {
-    return satResult(cache, reportQuery, log, logDirOpt, title, pos, claims, reporter)._1
+  def sat(context: ISZ[String], cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
+          pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): B = {
+    return satResult(context, cache, reportQuery, log, logDirOpt, title, pos, claims, reporter)._1
   }
 
   def toVal(t: AST.Typed.Name, n: Z): ST = {
@@ -1474,28 +1477,71 @@ object Smt2 {
     return query(seqLitDecls, decls.values, claimSmts)
   }
 
-  @strictpure def toSTs(claims: ISZ[State.Claim], defs: ClaimDefs): ISZ[ST] =
-    for (cST <- State.Claim.claimsSTs(claims, defs)) yield
-      st"${(for (line <- ops.StringOps(cST.render).split(c => c == '\n')) yield st"; $line", "\n")}"
+  @strictpure def commentLines(s: String): ISZ[ST] = for (line <- ops.StringOps(s).split(c => c == '\n')) yield st"; $line"
 
-  def valid(cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String, pos: message.Position,
-            premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
-    val startTime = extension.Time.currentMillis
-    val (_, smt2res) = checkUnsat(cache, satQuery(premises, Some(conclusion), reporter).render)
+  @strictpure def toSTs(claims: ISZ[State.Claim], defs: ClaimDefs): ISZ[ST] =
+    for (cST <- State.Claim.claimsSTs(claims, defs)) yield st"${(commentLines(cST.render), "\n")}"
+
+  @strictpure def toClaimST(isSequent: B, claims: ISZ[State.Claim], pos: message.Position): ST = {
+    val premises = ops.ISZOps(claims).dropRight(1)
+    val conclusion = claims(claims.size - 1)
     val defs = ClaimDefs.empty
-    val header =
-      st"""; Validity Check for $title
-          |${smt2res.info}"""
-    val res = smt2res(info = header.render, query =
-      st"""$header
-          |;
+    val r: ST = if (isSequent) {
+      st""";
           |; Sequent:
           |;
           |${(toSTs(premises, defs), ",\n")}
           |; ⊢
           |${(toSTs(ISZ(conclusion), defs), ",\n")}
+          |;"""
+    } else {
+      st""";
+          |; Claims:
           |;
-          |${smt2res.query}""".render
+          |${(toSTs(claims, ClaimDefs.empty), "\n")}
+          |;"""
+    }
+    return r
+  }
+
+  @pure def toExpST(isSequent: B, context: ISZ[String], claims: ISZ[State.Claim], pos: message.Position): ST = {
+    val exps = Util.claimsToExps(plugins, pos, context, claims, typeHierarchy, includeFreshLines)
+    val r: ST = if (isSequent) {
+      if (exps.isEmpty) {
+        return toClaimST(isSequent, claims, pos)
+      }
+      val premises = ops.ISZOps(exps).dropRight(1)
+      val conclusion = exps(exps.size - 1)
+      st""";
+          |; Sequent
+          |;
+          |${(commentLines(st"""${(premises, ",\n")}""".render), "\n")}
+          |; ⊢
+          |${(commentLines(conclusion.string), "\n")}
+          |;"""
+    } else {
+      st""";
+          |; Claims:
+          |;
+          |${(commentLines(st"""${(exps, ",\n")}""".render), "\n")}
+          |;"""
+    }
+    return r
+  }
+
+  def valid(context: ISZ[String], cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
+            pos: message.Position, premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
+    val startTime = extension.Time.currentMillis
+    val (_, smt2res) = checkUnsat(cache, satQuery(premises, Some(conclusion), reporter).render)
+    val header =
+      st"""; Validity Check for $title
+          |${smt2res.info}"""
+    val queryOpt: Option[String] = if (elideEncoding) None() else Some(smt2res.query)
+    val claims = premises :+ conclusion
+    val res = smt2res(info = header.render, query =
+      st"""$header
+          |${if (rawInscription) toClaimST(T, claims, pos) else toExpST(T, context, claims, pos)}
+          |$queryOpt""".render
     )
     if (reportQuery) {
       reporter.query(pos, title, extension.Time.currentMillis - startTime, res)

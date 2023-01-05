@@ -138,6 +138,12 @@ object cli {
           description = "Split on match expressions and statements"),
       )),
       OptGroup(name = "SMT2", opts = ISZ(
+        Opt(name = "elideEncoding", longKey = "elide-encoding", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Strip out SMT2 encoding in feedback"),
+        Opt(name = "rawInscription", longKey = "raw-inscription", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Use raw sequent/sat preamble inscription"),
         Opt(name = "rlimit", longKey = "rlimit", shortKey = None(),
           tpe = Type.Num(None(), Smt2.rlimit, Some(0), None()),
           description = "SMT2 solver resource limit"

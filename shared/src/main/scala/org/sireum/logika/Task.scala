@@ -61,12 +61,14 @@ object Task {
         smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.isImmutable), reporter)
       }
       var s0 = State.create
+      var context = logika.context.methodName
       val claims: ISZ[AST.Exp] = if (fact.isFun) {
         val first = fact.claims(0).asInstanceOf[AST.Exp.Quant]
+        context = first.fun.context
         for (p <- first.fun.params) {
           val id = p.idOpt.get
           val pos = id.attr.posOpt.get
-          val s1 = Util.idIntro(pos, s0, first.fun.context, id.value, p.typedOpt.get, Some(pos))._1
+          val s1 = Util.idIntro(pos, s0, context, id.value, p.typedOpt.get, Some(pos))._1
           s0 = s1
         }
         for (c <- fact.claims) yield c.asInstanceOf[AST.Exp.Quant].fun.exp.asInstanceOf[AST.Stmt.Expr].exp
@@ -79,8 +81,9 @@ object Task {
         val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, smt2, cache, T, s0, claim, reporter)
         val (s2, sym) = logika.value2Sym(s1, v, pos)
         val s3 = s2.addClaim(State.Claim.Prop(T, sym))
-        if (smt2.satResult(cache, T, config.logVc, config.logVcDirOpt, s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos,
-          s3.claims, reporter)._2.kind == Smt2Query.Result.Kind.Unsat) {
+        if (smt2.satResult(context, cache, T, config.logVc, config.logVcDirOpt,
+          s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos, s3.claims, reporter)._2.kind ==
+          Smt2Query.Result.Kind.Unsat) {
           reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
           s0 = s3(status = State.Status.Error)
         } else {

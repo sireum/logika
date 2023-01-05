@@ -543,7 +543,8 @@ import Util._
         case _ => (None(), posOpt, None())
       }
     if (s2.ok) {
-      val r = smt2.valid(cache, T, config.logVc, config.logVcDirOpt, st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
+      val r = smt2.valid(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+        st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
         pos, s2.claims, claim, reporter)
       r.kind match {
         case Smt2Query.Result.Kind.Unsat => return s0
@@ -891,7 +892,7 @@ import Util._
             case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
             case _ => (None(), Some(pos), None())
           }
-        val r = smt2.valid(cache, T, config.logVc, config.logVcDirOpt,
+        val r = smt2.valid(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
           st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
         r.kind match {
@@ -1807,7 +1808,7 @@ import Util._
       for (sub <- subs) {
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val s2 = s1.addClaims(ISZ(State.Claim.Let.TypeTest(sym, T, receiver, sub), State.Claim.Prop(T, sym)))
-        if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+        if (smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
           st"Virtual invocation satisfiability on ${(sub.ids, ".")}".render, pos, s2.claims, reporter)) {
           val adt = th.typeMap.get(sub.ids).get.asInstanceOf[TypeInfo.Adt]
           if (adt.specVars.contains(info.res.id) || adt.specMethods.contains(info.res.id)) {
@@ -2555,9 +2556,9 @@ import Util._
           val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
-          val thenBranch = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+          val thenBranch = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
             s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
-          val elseBranch = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+          val elseBranch = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
             s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
@@ -2880,7 +2881,7 @@ import Util._
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
     if (config.sat && s1.ok) {
       val pos = posOpt.get
-      val sat = smt2.sat(cache, reportQuery, config.logVc, config.logVcDirOpt,
+      val sat = smt2.sat(context.methodName, cache, reportQuery, config.logVc, config.logVcDirOpt,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
       return s1(status = State.statusOf(sat))
     } else {
@@ -2903,7 +2904,7 @@ import Util._
     if (s0.ok) {
       val conclusion = State.Claim.Prop(T, sym)
       val pos = posOpt.get
-      val r = smt2.valid(cache, reportQuery, config.logVc, config.logVcDirOpt,
+      val r = smt2.valid(context.methodName, cache, reportQuery, config.logVc, config.logVcDirOpt,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s0.claims, conclusion, reporter)
       r.kind match {
         case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
@@ -3325,7 +3326,7 @@ import Util._
     val posOpt: Option[Position] = Some(pos)
     val s1 = s0.addClaim(cond)
     if (s1.ok) {
-      if (smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+      if (smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)) {
         val s2 = assumeBindings(s1, lcontext, m, bidMap)
         var claims = ISZ[(State.Status.Type, ISZ[State.Claim])]()
@@ -3549,7 +3550,7 @@ import Util._
           branches = branches :+ Branch("match case pattern", sym, c.body, m, bidMap)
         }
         val stmtPos = stmt.posOpt.get
-        if (!config.interp && smt2.satResult(cache, T, config.logVc, config.logVcDirOpt,
+        if (!config.interp && smt2.satResult(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
           s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]", stmtPos,
           s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)), reporter)._2.kind == Smt2Query.Result.Kind.Sat) {
           error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
@@ -3994,7 +3995,7 @@ import Util._
               val (s4, cond) = value2Sym(s3, v, pos)
               val prop = State.Claim.Prop(T, cond)
               val thenClaims = s4.claims :+ prop
-              val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+              val thenSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
                 s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
               var nextFresh: Z = s4.nextFresh
               if (thenSat) {
@@ -4015,7 +4016,7 @@ import Util._
               }
               val negProp = State.Claim.Prop(F, cond)
               val elseClaims = s4.claims :+ negProp
-              val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+              val elseSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
                 s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
               r = r :+ State(status = State.statusOf(elseSat),
                 claims = elseClaims, nextFresh = nextFresh)
@@ -4053,7 +4054,7 @@ import Util._
             val s3 = s2w
             val prop = State.Claim.Prop(T, cond)
             val s4 = s3.addClaim(prop)
-            val thenSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+            val thenSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
               s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s4.claims, reporter)
             if (thenSat) {
               for (s5 <- evalStmts(sp, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
@@ -4067,7 +4068,7 @@ import Util._
             }
             val negProp = State.Claim.Prop(F, cond)
             val s7 = s3.addClaim(negProp)
-            val elseSat = smt2.sat(cache, T, config.logVc, config.logVcDirOpt,
+            val elseSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
               s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s7.claims, reporter)
             r = r :+ s7(status = State.statusOf(elseSat))
           } else {
@@ -4380,7 +4381,7 @@ import Util._
       val prop = State.Claim.Prop(T, sym)
       var ok = F
       if (s2.ok) {
-        val rvalid = smt2.valid(cache, T, config.logVc, config.logVcDirOpt,
+        val rvalid = smt2.valid(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
           s"$title$titleSuffix at [${pos.beginLine}, ${pos.beginColumn}]", pos, s2.claims, prop, reporter)
         rvalid.kind match {
           case Smt2Query.Result.Kind.Unsat => ok = T

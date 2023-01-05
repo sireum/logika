@@ -162,8 +162,8 @@ import org.sireum.logika.Logika.Reporter
 
     var status = stat
     if (status) {
-      val r = smt2.valid(cache, T, logika.config.logVc, logika.config.logVcDirOpt, s"$id Justification", pos, premises,
-        conclusion, reporter)
+      val r = smt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt,
+        s"$id Justification", pos, premises, conclusion, reporter)
 
       def error(msg: String): B = {
         reporter.error(posOpt, Logika.kind, msg)

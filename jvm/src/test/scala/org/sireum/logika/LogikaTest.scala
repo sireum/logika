@@ -84,7 +84,9 @@ object LogikaTest {
       interp = F,
       loopBound = 3,
       callBound= 3,
-      interpContracts = F
+      interpContracts = F,
+      rawInscription = F,
+      elideEncoding = F
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
@@ -193,7 +195,8 @@ class LogikaTest extends TestSuite {
     Smt2Invoke.haltOnError = T
     Logika.checkScript(None(), input, config,
       th => Smt2Impl.create(config.smt2Configs, ISZ(), th, config.timeoutInMs, config.fpRoundingMode,
-        config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, config.smt2Seq, reporter),
+        config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, config.smt2Seq,
+        config.rawInscription, config.elideEncoding, config.atLinesFresh, reporter),
       Smt2.NoCache(), reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {
