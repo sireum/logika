@@ -1416,73 +1416,32 @@ object Util {
             Some(let.tipe)))
           return Some(AST.Exp.Invoke(None(), ident, ISZ(), es, AST.ResolvedAttr(symPosOpt, ident.resOpt,
             Some(sym.tipe))))
+        case let: State.Claim.Let.FieldStore =>
+          (rcvOptIdent(let.adt, symPosOpt), valueToExp(let.value)) match {
+            case (Some((rcvOpt, ident)), Some(e)) =>
+              val t = let.adt.tipe.asInstanceOf[AST.Typed.Name]
+                th.typeMap.get(t.ids).get match {
+                  case info: TypeInfo.Adt =>
+                    val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), Reporter.create)
+                    val index = ops.ISZOps(resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames).indexOf(let.id)
+                    val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
+                      e, index)), AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
+                    return Some(r)
+                  case info: TypeInfo.Sig =>
+                    val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), Reporter.create)
+                    val index = ops.ISZOps(resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames).indexOf(let.id)
+                    val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
+                      e, index)), AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
+                    return Some(r)
+                  case info => halt(s"Infeasible: $info")
+                }
+            case _ =>
+          }
+          return None()
         case let: State.Claim.Let.Random =>
           return Some(symAt(".random", let.sym))
-        case let: State.Claim.Let.FieldStore =>
-          return Some(symAt(".todo", let.sym)) // TODO
       }
 
-    }
-
-    def fieldStoreToExp(left: AST.Exp, let: State.Claim.Let.FieldStore): Option[AST.Exp] = {
-      val sym = let.sym
-      val symPosOpt = Option.some(sym.pos)
-      rcvOptIdent(let.adt, symPosOpt) match {
-        case Some((rcvOpt, ident)) =>
-          val t = let.adt.tipe.asInstanceOf[AST.Typed.Name]
-          val (vars, specVars, idResOpt, sm): (ISZ[Info.Var], ISZ[Info.SpecVar], Option[AST.ResolvedInfo], HashMap[String, AST.Typed]) =
-            th.typeMap.get(t.ids).get match {
-              case info: TypeInfo.Adt =>
-                val paramIds = HashSet.empty[String] ++ (for (p <- info.ast.params) yield p.id.value)
-                if (paramIds.contains(let.id)) {
-                  val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(th, symPosOpt, t, ISZ(let.id), Reporter.create)
-                  val paramNames = resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames
-                  val index = ops.ISZOps(paramNames).indexOf(let.id)
-                  valueToExp(let.value) match {
-                    case Some(e) =>
-                      return Some(equate(sym.tipe, left, AST.Exp.InvokeNamed(rcvOpt, ident,
-                        ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)), e, index)),
-                        AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))))
-                    case _ => return None()
-                  }
-                }
-                ((info.vars -- (paramIds.elements :+ let.id)).values, (info.specVars -- ISZ(let.id)).values,
-                  info.vars.get(let.id).map((x: Info.Var) => x.resOpt).getOrElse(info.specVars.get(let.id).get.resOpt),
-                  TypeChecker.buildTypeSubstMap(info.name, symPosOpt, info.ast.typeParams, t.args, Reporter.create).get)
-              case info: TypeInfo.Sig =>
-                (ISZ(), (info.specVars -- ISZ(let.id)).values, info.specVars.get(let.id).get.resOpt,
-                  TypeChecker.buildTypeSubstMap(info.name, symPosOpt, info.ast.typeParams, t.args, Reporter.create).get)
-              case info => halt(s"Infeasible: $info")
-            }
-          (valueToExp(let.adt), valueToExp(let.value)) match {
-            case (Some(o1), Some(e)) =>
-              val attr = AST.Attr(symPosOpt)
-              var exps = ISZ[AST.Exp](
-                equate(sym.tipe, left, o1),
-                equate(let.value.tipe, AST.Exp.Select(Some(left), AST.Id(let.id, attr), ISZ(),
-                  AST.ResolvedAttr(symPosOpt, idResOpt, Some(let.value.tipe))), e),
-              )
-              for (x <- vars) {
-                val id = AST.Id(x.ast.id.value, attr)
-                val tOpt = Option.some(x.typedOpt.get.subst(sm))
-                val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
-                val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
-                val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
-                exps = exps :+ equate(tOpt.get, l, r)
-              }
-              for (x <- specVars) {
-                val id = AST.Id(x.ast.id.value, attr)
-                val tOpt = Option.some(x.typedOpt.get.subst(sm))
-                val resolvedAttr = AST.ResolvedAttr(symPosOpt, x.resOpt, tOpt)
-                val l = AST.Exp.Select(Some(left), id, ISZ(), resolvedAttr)
-                val r = AST.Exp.Select(Some(o1), id, ISZ(), resolvedAttr)
-                exps = exps :+ equate(tOpt.get, l, r)
-              }
-              return Some(bigAndExp(exps))
-            case (_, _) => return None()
-          }
-        case _ => return None()
-      }
     }
 
     def valueToExp(value: State.Value): Option[AST.Exp] = {
@@ -1672,18 +1631,6 @@ object Util {
                   (valueToExp(v1), valueToExp(claim.v2)) match {
                     case (Some(e1), Some(e2)) => return equateOpt(v1.tipe, e1, e2)
                     case (_, _) => return None()
-                  }
-                case _ =>
-              }
-            case _ =>
-          }
-          claim.v2 match {
-            case right: State.Value.Sym =>
-              letMap.get(right.num).getOrElse(HashSSet.empty[State.Claim.Let]).elements match {
-                case ISZ(let: State.Claim.Let.FieldStore) =>
-                  valueToExp(claim.v1) match {
-                    case Some(v1) => return fieldStoreToExp(v1, let)
-                    case _ => return None()
                   }
                 case _ =>
               }
