@@ -1,5 +1,6 @@
 // #Sireum #Logika
 import org.sireum._
+import org.sireum.justification.Premise
 
 @sig trait AParent2[T] {
   @spec var x: T = $
@@ -37,6 +38,10 @@ object B {
     Spec {
       a.x = a.x + inc
       a.y = a.y + a.x
+      Deduce(
+        At(a, 1) ≡ At(a, 0)(x = At(a, 0).x + B.inc) by Premise,
+        a ≡ At(a, 1)(y = At(a, 1).y + At(a, 1).x) by Premise
+      )
     }
   }
 }

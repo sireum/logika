@@ -95,4 +95,26 @@ object Smt2Formatter_Ext {
     return fname + '.' + System.identityHashCode(Thread.currentThread)
   }
 
+  def formatTime(milis: Z): ST = {
+    val ms = JString.format("%03d", (milis % 1000).toInt)
+    var t = milis / 1000
+    if (t >= 60) {
+      val s = JString.format("%02d", (t % 60).toInt)
+      t = t / 60
+      if (t >= 60) {
+        val m = JString.format("%02d", (t % 60).toInt)
+        t = t / 60
+        if (t > 0) {
+          return st"$t:$m:$s.$ms"
+        } else {
+          return st"$m:$s.$ms"
+        }
+      } else {
+        return st"$s.${ms}s"
+      }
+    } else {
+      return st"0.${ms}s"
+    }
+  }
+
 }

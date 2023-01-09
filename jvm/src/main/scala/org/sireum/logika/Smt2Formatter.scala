@@ -33,4 +33,5 @@ import org.sireum._
   def formatF64(useReal: B, value: F64): ST = $
   def formatR(n: R): ST = $
   def formatFilename(filename: String): String = $
+  def formatTime(milis: Z): ST = $
 }

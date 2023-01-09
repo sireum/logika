@@ -172,7 +172,14 @@ object Smt2Impl {
 
   def checkSat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result) = {
     val r = checkQuery(cache, T, query)
-    return (r.kind != Smt2Query.Result.Kind.Unsat, r)
+    val b: B = r.kind match {
+      case Smt2Query.Result.Kind.Unsat => F
+      case Smt2Query.Result.Kind.Sat => T
+      case Smt2Query.Result.Kind.Error => F
+      case Smt2Query.Result.Kind.Timeout => T
+      case Smt2Query.Result.Kind.Unknown => T
+    }
+    return (b, r)
   }
 
   def checkUnsat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result) = {
@@ -198,6 +205,10 @@ object Smt2Impl {
 
   def formatR(value: R): ST = {
     return Smt2Formatter.formatR(value)
+  }
+
+  def formatTime(value: Z): ST = {
+    return Smt2Formatter.formatTime(value)
   }
 
   def withConfig(isSat: B, options: String, timeout: Z, resourceLimit: Z, reporter: Logika.Reporter): MEither[Smt2, String] = {

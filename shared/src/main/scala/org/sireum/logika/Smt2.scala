@@ -621,6 +621,8 @@ object Smt2 {
 
   def formatR(value: R): ST
 
+  def formatTime(value: Z): ST
+
   @memoize def adtId(tipe: AST.Typed): ST = {
     tipe match {
       case tipe: AST.Typed.Name if typeHierarchy.isAdt(tipe) => return st"ADT"
@@ -638,19 +640,19 @@ object Smt2 {
 
   def satResult(context: ISZ[String], cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String],
                 title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
-    val startTime = extension.Time.currentMillis
     val (r, smt2res) = checkSat(cache, satQuery(claims, None(), reporter).render)
     val header =
       st"""; Satisfiability check for $title
-          |${smt2res.info}"""
-    val queryOpt: Option[String] = if (elideEncoding) None() else Some(smt2res.query)
+          |${smt2res.info}
+          |; Time: ${formatTime(smt2res.timeMillis)}"""
+    val queryOpt: Option[String] = if (elideEncoding && !r) None() else Some(smt2res.query)
     val res = smt2res(info = header.render, query =
       st"""$header
           |${if (rawInscription) toClaimST(F, claims, pos) else toExpST(F, context, claims, pos)}
           |$queryOpt""".render
     )
     if (reportQuery) {
-      reporter.query(pos, title, extension.Time.currentMillis - startTime, res)
+      reporter.query(pos, title, smt2res.timeMillis, res)
     }
     if (log) {
       reporter.info(None(), Logika.kind, res.query)
@@ -1531,12 +1533,13 @@ object Smt2 {
 
   def valid(context: ISZ[String], cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
             pos: message.Position, premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
-    val startTime = extension.Time.currentMillis
     val (_, smt2res) = checkUnsat(cache, satQuery(premises, Some(conclusion), reporter).render)
     val header =
       st"""; Validity Check for $title
-          |${smt2res.info}"""
-    val queryOpt: Option[String] = if (elideEncoding) None() else Some(smt2res.query)
+          |${smt2res.info}
+          |; Time: ${formatTime(smt2res.timeMillis)}"""
+    val queryOpt: Option[String] =
+      if (elideEncoding && smt2res.kind != Smt2Query.Result.Kind.Unsat) None() else Some(smt2res.query)
     val claims = premises :+ conclusion
     val res = smt2res(info = header.render, query =
       st"""$header
@@ -1544,7 +1547,7 @@ object Smt2 {
           |$queryOpt""".render
     )
     if (reportQuery) {
-      reporter.query(pos, title, extension.Time.currentMillis - startTime, res)
+      reporter.query(pos, title, smt2res.timeMillis, res)
     }
     if (log) {
       reporter.info(None(), Logika.kind, res.query)
