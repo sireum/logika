@@ -2554,15 +2554,27 @@ object Util {
     return State.Claim.And(cs)
   }
 
-  @pure def claimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
-                         claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ISZ[AST.Exp] = {
+  @pure def createClaimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
+                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ClaimsToExps = {
     val collector = LetEqNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty, HashMap.empty)
     for (claim <- claims) {
       collector.transformStateClaim(claim)
     }
     val cs2es = ClaimsToExps(plugins, pos, context, th, includeFreshLines, collector.letMap, collector.eqMap,
       collector.lNumMap, collector.vNumMap, HashMap.empty)
-    return cs2es.translate(claims)
+    return cs2es
+  }
+
+  @strictpure def claimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
+                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ISZ[AST.Exp] =
+    createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines).translate(claims)
+
+  @strictpure def claimsToExpsLastOpt(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
+                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): (ISZ[AST.Exp], Option[AST.Exp]) = {
+    val c2es = createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines)
+    val l = c2es.translate(ops.ISZOps(claims).dropRight(1))
+    val r: ISZ[AST.Exp] = if (claims.nonEmpty) c2es.translate(ISZ(claims(claims.size - 1))) else ISZ()
+    return (l, if (r.isEmpty) None() else Some(r(0)))
   }
 
   @pure def saveLocals(depth: Z, s0: State, currentContext: ISZ[String]): (State, LocalSaveMap) = {

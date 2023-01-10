@@ -1485,10 +1485,10 @@ object Smt2 {
     for (cST <- State.Claim.claimsSTs(claims, defs)) yield st"${(commentLines(cST.render), "\n")}"
 
   @strictpure def toClaimST(isSequent: B, claims: ISZ[State.Claim], pos: message.Position): ST = {
-    val premises = ops.ISZOps(claims).dropRight(1)
-    val conclusion = claims(claims.size - 1)
     val defs = ClaimDefs.empty
     val r: ST = if (isSequent) {
+      val premises = ops.ISZOps(claims).dropRight(1)
+      val conclusion = claims(claims.size - 1)
       st""";
           |; Sequent:
           |;
@@ -1507,28 +1507,27 @@ object Smt2 {
   }
 
   @pure def toExpST(isSequent: B, context: ISZ[String], claims: ISZ[State.Claim], pos: message.Position): ST = {
-    val exps = Util.claimsToExps(plugins, pos, context, claims, typeHierarchy, includeFreshLines)
-    val r: ST = if (isSequent) {
-      if (exps.isEmpty) {
-        return toClaimST(isSequent, claims, pos)
-      }
-      val premises = ops.ISZOps(exps).dropRight(1)
-      val conclusion = exps(exps.size - 1)
-      st""";
-          |; Sequent
-          |;
-          |${(commentLines(st"""${(premises, ",\n")}""".render), "\n")}
-          |; ⊢
-          |${(commentLines(conclusion.string), "\n")}
-          |;"""
-    } else {
-      st""";
-          |; Claims:
-          |;
-          |${(commentLines(st"""${(exps, ",\n")}""".render), "\n")}
-          |;"""
+    val (exps, lastOpt) = Util.claimsToExpsLastOpt(plugins, pos, context, claims, typeHierarchy, includeFreshLines)
+    lastOpt match {
+      case Some(last) =>
+        val r: ST = if (isSequent) {
+          st""";
+              |; Sequent
+              |;
+              |${(commentLines(st"""${(exps, ",\n")}""".render), "\n")}
+              |; ⊢
+              |${(commentLines(last.string), "\n")}
+              |;"""
+        } else {
+          st""";
+              |; Claims:
+              |;
+              |${(commentLines(st"""${(exps :+ last, ",\n")}""".render), "\n")}
+              |;"""
+        }
+        return r
+      case _ => return toClaimST(isSequent, claims, pos)
     }
-    return r
   }
 
   def valid(context: ISZ[String], cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
