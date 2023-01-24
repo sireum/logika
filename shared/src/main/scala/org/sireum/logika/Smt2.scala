@@ -1182,9 +1182,15 @@ object Smt2 {
         else None()
       (ti.ast.isSigned, ti.ast.isBitVector) match {
         case (T, T) =>
+          val bwM1 = ti.ast.bitWidth - 1
+          val bwM2 = bwM1 - 1
+          val n = ti.ast.max + 1
           addSort(t,
             st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
-                |(declare-fun $t2ZId ($tId) Z)
+                |(define-fun $t2ZId ((x $tId)) Z
+                |  (ite (= ((_ extract $bwM1 $bwM1) x) #b0)
+                |       (bv2nat ((_ extract $bwM2 0) x))
+                |       (- (bv2nat ((_ extract $bwM2 0) x)) $n)))
                 |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
                 |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
                 |(define-fun $tLeId ((x $tId) (y $tId)) B (bvsle x y))
@@ -1206,7 +1212,7 @@ object Smt2 {
         case (F, T) =>
           addSort(t,
             st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
-                |(declare-fun $t2ZId ($tId) Z)
+                |(define-fun $t2ZId ((x $tId)) Z (bv2nat x))
                 |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
                 |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
                 |(define-fun $tLeId ((x $tId) (y $tId)) B (bvule x y))

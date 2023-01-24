@@ -1182,13 +1182,10 @@ import Util._
       }
       def toZ(tpe: AST.Typed.Name): ISZ[(State, State.Value)] = {
         val info = th.typeMap.get(tpe.ids).get.asInstanceOf[TypeInfo.SubZ]
-        if (info.ast.isBitVector) {
-          halt("TODO: @bits#toZ")
-        }
         var r = ISZ[(State, State.Value)]()
         for (p <- evalExp(split, smt2, cache, rtCheck, state, exp.receiverOpt.get, reporter)) {
           val (s0, sym) = p._1.freshSym(AST.Typed.z, pos)
-          val s1 = s0.addClaim(State.Claim.Let.Def(sym, p._2))
+          val s1 = s0.addClaim(State.Claim.Let.FieldLookup(sym, p._2, "toZ"))
           r = r :+ ((s1, sym))
         }
         return r

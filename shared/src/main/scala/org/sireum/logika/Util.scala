@@ -1291,6 +1291,11 @@ object Util {
                       return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                         AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Method(info.isInObject, AST.MethodMode.Method, ISZ(),
                           info.owner, let.id, ISZ(), tOpt, ISZ(), ISZ())), Some(sym.tipe))))
+                    case _: TypeInfo.SubZ =>
+                      assert(let.id == "toZ")
+                      return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                        AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.ToZ)),
+                          Some(sym.tipe))))
                     case ti => halt(s"Infeasible: $ti")
                   }
                 case t: AST.Typed.Tuple =>
