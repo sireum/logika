@@ -683,33 +683,6 @@ object Smt2 {
     return formatVal(bw, n)
   }
 
-  def addTypeVarIndex(t: AST.Typed.TypeVar): Unit = {
-    if (types.contains(t)) {
-      return
-    }
-    val tid = typeId(t)
-    addSort(t, st"(define-sort $tid () Z)")
-    val t2zId = typeOpId(t, "toZ")
-    val oneId = typeOpId(t, "1")
-    val minId = typeOpId(t, "Min")
-    val leId = typeOpId(t, "<=")
-    val eqId = typeOpId(t, "==")
-    val neId = typeOpId(t, "!=")
-    val addId = typeOpId(t, "+")
-    val subId = typeOpId(t, "-")
-    addSort(t,
-      st"""(define-fun $eqId ((n1 $tid) (n2 $tid)) B (= n1 n2))
-          |(define-fun $neId ((n1 $tid) (n2 $tid)) B (not (= n1 n2)))
-          |(define-fun $leId ((n1 $tid) (n2 $tid)) B (<= n1 n2))
-          |(define-fun $addId ((n1 $tid) (n2 $tid)) $tid (+ n1 n2))
-          |(define-fun $subId ((n1 $tid) (n2 $tid)) $tid (- n1 n2))
-          |(define-fun $t2zId ((n $tid)) Z n)
-          |(define-const $oneId $tid 1)
-          |(define-const $minId $tid 0)"""
-    )
-    typesUp(types + t)
-  }
-
   @strictpure def sTypeOfName(t: AST.Typed): ST = t match {
     case t: AST.Typed.Name => st"|type-of-${t.ids(t.ids.size - 1)}-${typeIdRaw(t.args(0))}-${typeIdRaw(t.args(1))}|"
     case _ => halt("Infeasible")
@@ -1278,14 +1251,36 @@ object Smt2 {
 
     def addTypeVar(t: AST.Typed.TypeVar): Unit = {
       val tid = typeId(t)
-      addSort(t, st"(declare-sort $tid 0)")
-      val eqId = typeOpId(t, "==")
-      val neId = typeOpId(t, "!=")
-      addSort(t,
-        st"""(declare-fun $eqId ($tid $tid) B)
-            |${Smt2.eqProp(eqId, tid)}
-            |(define-fun $neId ((x $tid) (y $tid)) B (not ($eqId x y)))"""
-      )
+      if (t.isIndex) {
+        addSort(t, st"(define-sort $tid () Z)")
+        val t2zId = typeOpId(t, "toZ")
+        val oneId = typeOpId(t, "1")
+        val minId = typeOpId(t, "Min")
+        val leId = typeOpId(t, "<=")
+        val eqId = typeOpId(t, "==")
+        val neId = typeOpId(t, "!=")
+        val addId = typeOpId(t, "+")
+        val subId = typeOpId(t, "-")
+        addSort(t,
+          st"""(define-fun $eqId ((n1 $tid) (n2 $tid)) B (= n1 n2))
+              |(define-fun $neId ((n1 $tid) (n2 $tid)) B (not (= n1 n2)))
+              |(define-fun $leId ((n1 $tid) (n2 $tid)) B (<= n1 n2))
+              |(define-fun $addId ((n1 $tid) (n2 $tid)) $tid (+ n1 n2))
+              |(define-fun $subId ((n1 $tid) (n2 $tid)) $tid (- n1 n2))
+              |(define-fun $t2zId ((n $tid)) Z n)
+              |(define-const $oneId $tid 1)
+              |(define-const $minId $tid 0)"""
+        )
+      } else {
+        addSort(t, st"(declare-sort $tid 0)")
+        val eqId = typeOpId(t, "==")
+        val neId = typeOpId(t, "!=")
+        addSort(t,
+          st"""(declare-fun $eqId ($tid $tid) B)
+              |${Smt2.eqProp(eqId, tid)}
+              |(define-fun $neId ((x $tid) (y $tid)) B (not ($eqId x y)))"""
+        )
+      }
     }
 
     def addTuple(t: AST.Typed.Tuple): Unit = {

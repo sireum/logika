@@ -1180,8 +1180,7 @@ import Util._
         val s2 = s1.addClaim(State.Claim.Let.Random(sym, pos))
         return ISZ((Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym))
       }
-      def toZ(tpe: AST.Typed.Name): ISZ[(State, State.Value)] = {
-        val info = th.typeMap.get(tpe.ids).get.asInstanceOf[TypeInfo.SubZ]
+      def toZ(): ISZ[(State, State.Value)] = {
         var r = ISZ[(State, State.Value)]()
         for (p <- evalExp(split, smt2, cache, rtCheck, state, exp.receiverOpt.get, reporter)) {
           val (s0, sym) = p._1.freshSym(AST.Typed.z, pos)
@@ -1192,7 +1191,7 @@ import Util._
       }
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.ToZ =>
-          return toZ(exp.receiverOpt.get.typedOpt.get.asInstanceOf[AST.Typed.Name])
+          return toZ()
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random =>
           return random(exp.typedOpt.get)
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.IsInstanceOf ||

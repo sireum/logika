@@ -1302,6 +1302,11 @@ object Util {
                   return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                     AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Tuple(t.args.size,
                       Z(ops.StringOps(let.id).substring(1, let.id.size)).get)), Some(sym.tipe))))
+                case t: AST.Typed.TypeVar if t.isIndex =>
+                  assert(let.id == "toZ")
+                  return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                    AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.ToZ)),
+                      Some(sym.tipe))))
                 case t => halt(s"Infeasible: $t")
               }
             case _ => return None()
@@ -1903,6 +1908,9 @@ object Util {
         if (stmts.nonEmpty) stmts(stmts.size - 1).posOpt else None())
     }
 
+    for (p <- method.sig.params) {
+      smt2.addType(p.tipe.typedOpt.get, reporter)
+    }
     if (method.mcontract.isEmpty) {
       checkCase(None(), ISZ(), ISZ(), ISZ(), ISZ())
     } else {

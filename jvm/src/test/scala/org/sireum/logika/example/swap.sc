@@ -1,7 +1,7 @@
 // #Sireum #Logika
 import org.sireum._
 
-def swap[I, T](s: MS[I, T], i: I, j: I): Unit = {
+def swap[@index I, T](s: MS[I, T], i: I, j: I): Unit = {
   Contract(
     Reads(),
     Requires(s.isInBound(i), s.isInBound(j)),

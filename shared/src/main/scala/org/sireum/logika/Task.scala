@@ -39,18 +39,6 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Task {
 
-  @record class IndexTypeVarCollector(var s: HashSet[AST.Typed.TypeVar]) extends AST.MTransformer {
-    override def postTypedName(o: AST.Typed.Name): MOption[AST.Typed] = {
-      if (o.ids == AST.Typed.isName || o.ids == AST.Typed.msName) {
-        o.args(0) match {
-          case t: AST.Typed.TypeVar => s = s + t
-          case _ =>
-        }
-      }
-      return AST.MTransformer.PostResultTypedName
-    }
-  }
-
   @datatype class Fact(val th: TypeHierarchy,
                        val config: Config,
                        val fact: AST.Stmt.Fact,
@@ -58,7 +46,7 @@ object Task {
     override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       for (tp <- fact.typeParams) {
-        smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.isImmutable), reporter)
+        smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
       var s0 = State.create
       var context = logika.context.methodName
@@ -102,7 +90,7 @@ object Task {
     override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       for (tp <- theorem.typeParams) {
-        smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.isImmutable), reporter)
+        smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
       var p = (State.create, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
       for (step <- theorem.proof.steps if p._1.ok) {
@@ -136,18 +124,11 @@ object Task {
                         val plugins: ISZ[Plugin]) extends Task {
     override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
-      val itvc = IndexTypeVarCollector(HashSet.empty)
-      for (stmt <- stmts) {
-        itvc.transformStmt(stmt)
-      }
       val csmt2 = smt2
-      for (tv <- itvc.s.elements) {
-        csmt2.addTypeVarIndex(tv)
-      }
       for (p <- plugins) {
         p match {
           case p: plugin.StmtsPlugin =>
-            val (done, ss) = p.handle(th, plugins, stmts, config, smt2, cache, reporter)
+            val (done, ss) = p.handle(th, plugins, stmts, config, csmt2, cache, reporter)
             for (state <- ss if state.ok) {
               if (stmts.nonEmpty) {
                 val lastPos = stmts(stmts.size - 1).posOpt.get
@@ -182,13 +163,7 @@ object Task {
         reporter.reports(ms)
         return reporter.messages
       }
-      val itvc = IndexTypeVarCollector(HashSet.empty)
-      itvc.transformStmt(method)
-      val tvs = itvc.s.elements
       val csmt2 = smt2
-      for (tv <- tvs) {
-        csmt2.addTypeVarIndex(tv)
-      }
       for (p <- plugins) {
         p match {
           case p: plugin.MethodPlugin if p.canHandle(th, method) =>
