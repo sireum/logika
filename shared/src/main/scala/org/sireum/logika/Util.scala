@@ -1291,10 +1291,11 @@ object Util {
                       return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                         AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Method(info.isInObject, AST.MethodMode.Method, ISZ(),
                           info.owner, let.id, ISZ(), tOpt, ISZ(), ISZ())), Some(sym.tipe))))
-                    case _: TypeInfo.SubZ =>
+                    case info: TypeInfo.SubZ =>
                       assert(let.id == "toZ")
                       return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-                        AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.ToZ)),
+                        AST.ResolvedAttr(symPosOpt, TypeChecker.extResOpt(F, info.name, let.id, ISZ(),
+                          AST.Typed.Fun(T, T, ISZ(), AST.Typed.z)),
                           Some(sym.tipe))))
                     case ti => halt(s"Infeasible: $ti")
                   }
@@ -1305,7 +1306,8 @@ object Util {
                 case t: AST.Typed.TypeVar if t.isIndex =>
                   assert(let.id == "toZ")
                   return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-                    AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.ToZ)),
+                    AST.ResolvedAttr(symPosOpt, TypeChecker.extResOpt(F, ISZ(t.id), let.id, ISZ(),
+                      AST.Typed.Fun(T, T, ISZ(), AST.Typed.z)),
                       Some(sym.tipe))))
                 case t => halt(s"Infeasible: $t")
               }

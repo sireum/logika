@@ -1190,22 +1190,23 @@ import Util._
         return r
       }
       exp.attr.resOpt.get match {
-        case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.ToZ =>
-          return toZ()
-        case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Random =>
-          return random(exp.typedOpt.get)
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.IsInstanceOf ||
           res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf =>
           return evalInstanceOfAs(res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf, exp.receiverOpt,
             exp.targs(0).typedOpt.get, exp.posOpt.get)
-        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext  =>
-          if (res.owner.size == 3 && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName && res.id == "random") {
-            return random(res.tpeOpt.get.ret)
-          } else {
-            val mType = res.tpeOpt.get
-            val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
-            return evalInvoke(state, None(), AST.Exp.Ident(exp.id, exp.attr), Either.Left(ISZ()), attr)
+        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext =>
+          if ((res.owner.size == 3 && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName) ||
+            th.isSubZName(res.owner) || (exp.receiverOpt.nonEmpty &&
+            exp.receiverOpt.get.typedOpt.get.isInstanceOf[AST.Typed.TypeVar])) {
+            res.id.native match {
+              case "random" if res.isInObject => return random(res.tpeOpt.get.ret)
+              case "toZ" if !res.isInObject => return toZ()
+              case _ =>
+            }
           }
+          val mType = res.tpeOpt.get
+          val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
+          return evalInvoke(state, None(), AST.Exp.Ident(exp.id, exp.attr), Either.Left(ISZ()), attr)
         case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName &&
           !Logika.builtInByNameMethods.contains((res.isInObject, res.owner, res.id)) =>
           val mType = res.tpeOpt.get
