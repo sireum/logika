@@ -2488,6 +2488,17 @@ import Util._
           }
         case _ =>
       }
+      receiverExpOpt match {
+        case Some(receiver) => receiver.typedOpt match {
+          case Some(t: AST.Typed.TypeVar) if t.isIndex =>
+            res.id.native match {
+              case "toZ" => return toZ()
+              case _ =>
+            }
+          case _ =>
+        }
+        case _ =>
+      }
       return None()
     }
 
