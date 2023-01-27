@@ -608,7 +608,7 @@ import Util._
       val s0 = p._1
       val pos = lit.posOpt.get
       val (s1, v) = s0.freshSym(if (isST) AST.Typed.st else AST.Typed.string, pos)
-      r = r :+ ((s1.addClaim(State.Claim.Let.Random(v, pos)), v))
+      r = r :+ ((s1.addClaim(State.Claim.Let.Random(v, F, pos)), v))
     }
     val tOpt: String = if (isST) " template" else ""
     reporter.warn(lit.posOpt, kind, s"String$tOpt interpolation is currently over-approximated to produce an unconstrained string$tOpt")
@@ -1174,41 +1174,13 @@ import Util._
 
     def evalSelect(exp: AST.Exp.Select): ISZ[(State, State.Value)] = {
       val pos = exp.id.attr.posOpt.get
-      @pure def random(tpe: AST.Typed): ISZ[(State, State.Value)] = {
-        val s0 = state
-        val (s1, sym) = s0.freshSym(tpe, pos)
-        val s2 = s1.addClaim(State.Claim.Let.Random(sym, pos))
-        return ISZ((Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym))
-      }
-      def toZ(): ISZ[(State, State.Value)] = {
-        var r = ISZ[(State, State.Value)]()
-        for (p <- evalExp(split, smt2, cache, rtCheck, state, exp.receiverOpt.get, reporter)) {
-          val (s0, sym) = p._1.freshSym(AST.Typed.z, pos)
-          val s1 = s0.addClaim(State.Claim.Let.FieldLookup(sym, p._2, "toZ"))
-          r = r :+ ((s1, sym))
-        }
-        return r
-      }
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.IsInstanceOf ||
           res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf =>
           return evalInstanceOfAs(res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf, exp.receiverOpt,
             exp.targs(0).typedOpt.get, exp.posOpt.get)
-        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Ext =>
-          if ((res.owner.size == 3 && ops.ISZOps(res.owner).dropRight(1) == AST.Typed.sireumName) ||
-            th.isSubZName(res.owner) || (exp.receiverOpt.nonEmpty &&
-            exp.receiverOpt.get.typedOpt.get.isInstanceOf[AST.Typed.TypeVar])) {
-            res.id.native match {
-              case "random" if res.isInObject => return random(res.tpeOpt.get.ret)
-              case "toZ" if !res.isInObject => return toZ()
-              case _ =>
-            }
-          }
-          val mType = res.tpeOpt.get
-          val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
-          return evalInvoke(state, None(), AST.Exp.Ident(exp.id, exp.attr), Either.Left(ISZ()), attr)
-        case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Method && res.tpeOpt.get.isByName &&
-          !Logika.builtInByNameMethods.contains((res.isInObject, res.owner, res.id)) =>
+        case res: AST.ResolvedInfo.Method if (res.mode == AST.MethodMode.Method || res.mode == AST.MethodMode.Ext) &&
+          res.tpeOpt.get.isByName && !Logika.builtInByNameMethods.contains((res.isInObject, res.owner, res.id)) =>
           val mType = res.tpeOpt.get
           val attr = AST.ResolvedAttr(exp.id.attr.posOpt, exp.attr.resOpt, Some(mType.ret))
           return evalInvoke(state, exp.receiverOpt, AST.Exp.Ident(exp.id, exp.attr), Either.Left(ISZ()), attr)
@@ -2403,6 +2375,122 @@ import Util._
       return r
     }
 
+    def evalInvokeSynthetic(s0: State, res: AST.ResolvedInfo.Method, receiverExpOpt: Option[AST.Exp],
+                            eargs: Either[ISZ[AST.Exp], ISZ[AST.NamedArg]],
+                            pos: Position): Option[ISZ[(State, State.Value)]] = {
+      def fromZ(t: AST.Typed, minOpt: Option[Z], maxOpt: Option[Z]): Option[ISZ[(State, State.Value)]] = {
+        val argExp: AST.Exp = eargs match {
+          case Either.Left(s) => s(0)
+          case Either.Right(s) => s(0).arg
+        }
+        var r = ISZ[(State, State.Value)]()
+        for (p <- evalExp(split, smt2, cache, rtCheck, s0, argExp, reporter)) {
+          val arg = p._2
+          val s5: State = (minOpt, maxOpt) match {
+            case (Some(min), Some(max)) =>
+              val (s1, symLe) = p._1.freshSym(AST.Typed.b, pos)
+              val (s2, symGe) = s1.freshSym(AST.Typed.b, pos)
+              val (s3, symCond) = s2.freshSym(AST.Typed.b, pos)
+              val s4 = s3.addClaims(ISZ(
+                State.Claim.Let.Binary(symLe, State.Value.Z(min, pos), AST.Exp.BinaryOp.Le, arg, AST.Typed.z),
+                State.Claim.Let.Binary(symGe, arg, AST.Exp.BinaryOp.Le, State.Value.Z(max, pos), AST.Typed.z),
+                State.Claim.Let.Binary(symCond, symLe, AST.Exp.BinaryOp.And, symGe, AST.Typed.b)
+              ))
+              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s4, symCond, Some(pos), reporter)
+            case (Some(min), _) =>
+              val (s1, symCond) = s0.freshSym(AST.Typed.b, pos)
+              val s2 = s1.addClaim(
+                State.Claim.Let.Binary(symCond, State.Value.Z(min, pos), AST.Exp.BinaryOp.Le, arg, AST.Typed.z)
+              )
+              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), reporter)
+            case (_, Some(max)) =>
+              val (s1, symCond) = s0.freshSym(AST.Typed.b, pos)
+              val s2 = s1.addClaim(
+                State.Claim.Let.Binary(symCond, arg, AST.Exp.BinaryOp.Le, State.Value.Z(max, pos), AST.Typed.z)
+              )
+              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), reporter)
+            case (_, _) => s0
+          }
+          val (s6, symT) = s5.freshSym(t, pos)
+          val (s7, symZ) = s6.freshSym(AST.Typed.z, pos)
+          r = r :+ ((s7.addClaims(ISZ(
+            State.Claim.Let.Random(symT, T, pos),
+            State.Claim.Let.FieldLookup(symZ, symT, "toZ"),
+            State.Claim.Eq(symZ, arg)
+          )), symT))
+        }
+        return Some(r)
+      }
+      def toZ(): Option[ISZ[(State, State.Value)]] = {
+        var r = ISZ[(State, State.Value)]()
+        for (p <- evalExp(split, smt2, cache, rtCheck, s0, receiverExpOpt.get, reporter)) {
+          val (s1, sym) = p._1.freshSym(AST.Typed.z, pos)
+          r = r :+ ((s1.addClaim(State.Claim.Let.FieldLookup(sym, p._2, "toZ")), sym))
+        }
+        return Some(r)
+      }
+      def random(tpe: AST.Typed): Option[ISZ[(State, State.Value)]] = {
+        val (s1, sym) = s0.freshSym(tpe, pos)
+        val s2 = s1.addClaim(State.Claim.Let.Random(sym, F, pos))
+        return Some(ISZ((Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym)))
+      }
+
+      res.owner match {
+        case AST.Typed.bName =>
+          res.id.native match {
+            case "random" => return random(AST.Typed.b)
+            case _ =>
+          }
+        case AST.Typed.cName =>
+          res.id.native match {
+            case "fromZ" => return fromZ(AST.Typed.c, Some(0), Some(0x110000))
+            case "toZ" => return toZ()
+            case "random" => return random(AST.Typed.c)
+            case _ =>
+          }
+        case AST.Typed.zName =>
+          res.id.native match {
+            case "random" => return random(AST.Typed.z)
+            case _ =>
+          }
+        case AST.Typed.rName =>
+          res.id.native match {
+            case "random" => return random(AST.Typed.r)
+            case _ =>
+          }
+        case AST.Typed.f32Name =>
+          res.id.native match {
+            case "random" => return random(AST.Typed.f32)
+            case _ =>
+          }
+        case AST.Typed.f64Name =>
+          res.id.native match {
+            case "random" => return random(AST.Typed.f64)
+            case _ =>
+          }
+        case AST.Typed.stringName =>
+          res.id.native match {
+            case "random" => return random(AST.Typed.string)
+            case _ =>
+          }
+        case _ =>
+      }
+      th.typeMap.get(res.owner) match {
+        case Some(info: TypeInfo.SubZ) =>
+          res.id.native match {
+            case "fromZ" =>
+              val minOpt: Option[Z] = if (info.ast.hasMin || info.ast.isBitVector) Some(info.ast.min) else None()
+              val maxOpt: Option[Z] = if (info.ast.hasMax || info.ast.isBitVector) Some(info.ast.max) else None()
+              return fromZ(AST.Typed.Name(info.name, ISZ()), minOpt, maxOpt)
+            case "toZ" => return toZ()
+            case "random" => return random(AST.Typed.Name(info.name, ISZ()))
+            case _ =>
+          }
+        case _ =>
+      }
+      return None()
+    }
+
     def evalInvoke(s0: State,
                    invokeReceiverOpt: Option[AST.Exp],
                    ident: AST.Exp.Ident,
@@ -2414,6 +2502,12 @@ import Util._
       val receiverPosOpt: Option[Position] =
         if (invokeReceiverOpt.nonEmpty) invokeReceiverOpt.get.posOpt
         else ident.posOpt
+
+      evalInvokeSynthetic(s0, res, invokeReceiverOpt, eargs, pos) match {
+        case Some(r) => return r
+        case _ =>
+      }
+
       val info = methodInfo(res.isInObject, res.owner, res.id)
       val ctx = res.owner :+ res.id
 
@@ -2616,7 +2710,7 @@ import Util._
     def evalRandomInt(): ISZ[(State, State.Value)] = {
       val pos = e.posOpt.get
       val (s1, sym) = state.freshSym(AST.Typed.z, pos)
-      return ISZ((s1.addClaim(State.Claim.Let.Random(sym, pos)), sym))
+      return ISZ((s1.addClaim(State.Claim.Let.Random(sym, F, pos)), sym))
     }
 
     def evalSeqIndexValidSize(targ: AST.Type, arg: AST.Exp): ISZ[(State, State.Value)] = {

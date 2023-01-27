@@ -94,7 +94,8 @@ object Smt2 {
         |(define-fun |C.%| ((x C) (y C)) C (bvurem x y))
         |(define-fun |C.<<| ((x C) (y C)) C (bvshl x y))
         |(define-fun |C.>>| ((x C) (y C)) C (bvlshr x y))
-        |(define-fun |C.>>>| ((x C) (y C)) C (bvlshr x y))"""
+        |(define-fun |C.>>>| ((x C) (y C)) C (bvlshr x y))
+        |(define-fun |C.toZ| ((x C)) Z (bv2nat x))"""
 
   @strictpure def zST(intBitWidth: Z): ST =
     if (intBitWidth == 0)

@@ -1451,7 +1451,7 @@ object Util {
           }
           return None()
         case let: State.Claim.Let.Random =>
-          return Some(symAt(".random", let.sym))
+          return if (let.hidden) None() else Some(symAt(".random", let.sym))
       }
 
     }

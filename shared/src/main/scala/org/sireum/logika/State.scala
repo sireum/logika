@@ -645,7 +645,7 @@ object State {
         }
       }
 
-      @datatype class Random(val sym: Value.Sym, val pos: Position) extends Let {
+      @datatype class Random(val sym: Value.Sym, val hidden: B, val pos: Position) extends Let {
         @pure override def toRawST: ST = {
           return st"${sym.toRawST} ≜ ${sym.tipe}.random@[${pos.beginLine},${pos.beginColumn}]#${sym.num}"
         }
