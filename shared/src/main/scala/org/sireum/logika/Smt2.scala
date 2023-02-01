@@ -95,7 +95,9 @@ object Smt2 {
         |(define-fun |C.<<| ((x C) (y C)) C (bvshl x y))
         |(define-fun |C.>>| ((x C) (y C)) C (bvlshr x y))
         |(define-fun |C.>>>| ((x C) (y C)) C (bvlshr x y))
-        |(define-fun |C.toZ| ((x C)) Z (bv2nat x))"""
+        |(define-fun |C.toZ| ((x C)) Z (bv2nat x))
+        |(declare-fun |C.randomSeed(Z)| (Z) C)
+        |(declare-fun |C.randomSeedBetween(Z, C, C)| (Z C C) C)"""
 
   @strictpure def zST(intBitWidth: Z): ST =
     if (intBitWidth == 0)
@@ -111,7 +113,10 @@ object Smt2 {
           |(define-fun |Z.-| ((x Z) (y Z)) Z (- x y))
           |(define-fun |Z.*| ((x Z) (y Z)) Z (* x y))
           |(define-fun |Z./| ((x Z) (y Z)) Z (div x y))
-          |(define-fun |Z.%| ((x Z) (y Z)) Z (mod x y))"""
+          |(define-fun |Z.%| ((x Z) (y Z)) Z (mod x y))
+          |(declare-fun |Z.randomSeed(Z)| (Z) Z)
+          |(declare-fun |Z.randomSeedBetween(Z, Z, Z)| (Z Z Z) Z)
+          |(declare-fun |B.randomSeed(Z)| (Z) B)"""
     else
       st"""(define-sort Z () (_ BitVec $intBitWidth))
           |(define-fun |Z.unary_-| ((x Z)) Z (bvneg x))
@@ -125,7 +130,10 @@ object Smt2 {
           |(define-fun |Z.-| ((x Z) (y Z)) Z (bvsub x y))
           |(define-fun |Z.*| ((x Z) (y Z)) Z (bvmul x y))
           |(define-fun |Z./| ((x Z) (y Z)) Z (bvsdiv x y))
-          |(define-fun |Z.%| ((x Z) (y Z)) Z (bvsrem x y))"""
+          |(define-fun |Z.%| ((x Z) (y Z)) Z (bvsrem x y))
+          |(declare-fun |Z.randomSeed(Z)| (Z) Z)
+          |(declare-fun |Z.randomSeedBetween(Z, Z, Z)| (Z Z Z) Z)
+          |(declare-fun |B.randomSeed(Z)| (Z) B)"""
 
   val rST: ST =
     st"""(define-sort R () Real)
@@ -139,7 +147,9 @@ object Smt2 {
         |(define-fun |R.+| ((x R) (y R)) R (+ x y))
         |(define-fun |R.-| ((x R) (y R)) R (- x y))
         |(define-fun |R.*| ((x R) (y R)) R (* x y))
-        |(define-fun |R./| ((x R) (y R)) R (/ x y))"""
+        |(define-fun |R./| ((x R) (y R)) R (/ x y))
+        |(declare-fun |R.randomSeed(Z)| (Z) R)
+        |(declare-fun |R.randomSeedBetween(Z, R, R)| (Z R R) R)"""
 
   @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
 
@@ -275,7 +285,9 @@ object Smt2 {
         |(define-fun |F32.-| ((x F32) (y F32)) F32 (- x y))
         |(define-fun |F32.*| ((x F32) (y F32)) F32 (* x y))
         |(define-fun |F32./| ((x F32) (y F32)) F32 (/ x y))
-        |(declare-fun |F32.%| (F32 F32) F32)"""
+        |(declare-fun |F32.%| (F32 F32) F32)
+        |(declare-fun |F32.randomSeed(Z)| (Z) F32)
+        |(declare-fun |F32.randomSeedBetween(Z, F32, F32)| (Z F32 F32) F32)"""
   } else {
     st"""(define-sort F32 () Float32)
         |(define-const |F32.PInf| F32 (_ +oo 8 24))
@@ -296,7 +308,9 @@ object Smt2 {
         |(define-fun |F32.-| ((x F32) (y F32)) F32 (fp.sub $fpRoundingMode x y))
         |(define-fun |F32.*| ((x F32) (y F32)) F32 (fp.mul $fpRoundingMode x y))
         |(define-fun |F32./| ((x F32) (y F32)) F32 (fp.div $fpRoundingMode x y))
-        |(define-fun |F32.%| ((x F32) (y F32)) F32 (fp.rem x y))"""
+        |(define-fun |F32.%| ((x F32) (y F32)) F32 (fp.rem x y))
+        |(declare-fun |F32.randomSeed(Z)| (Z) F32)
+        |(declare-fun |F32.randomSeedBetween(Z, F32, F32)| (Z F32 F32) F32)"""
   }
 
   @strictpure def f64ST: ST = if (useReal) {
@@ -319,7 +333,9 @@ object Smt2 {
         |(define-fun |F64.-| ((x F64) (y F64)) F64 (- x y))
         |(define-fun |F64.*| ((x F64) (y F64)) F64 (* x y))
         |(define-fun |F64./| ((x F64) (y F64)) F64 (/ x y))
-        |(declare-fun |F64.%| (F64 F64) F64)"""
+        |(declare-fun |F64.%| (F64 F64) F64)
+        |(declare-fun |F64.randomSeed(Z)| (Z) F64)
+        |(declare-fun |F64.randomSeedBetween(Z, F64, F64)| (Z F64 F64) F64)"""
   } else {
     st"""(define-sort F64 () Float64)
         |(define-const |F64.PInf| F64 (_ +oo 11 53))
@@ -340,7 +356,9 @@ object Smt2 {
         |(define-fun |F64.-| ((x F64) (y F64)) F64 (fp.sub $fpRoundingMode x y))
         |(define-fun |F64.*| ((x F64) (y F64)) F64 (fp.mul $fpRoundingMode x y))
         |(define-fun |F64./| ((x F64) (y F64)) F64 (fp.div $fpRoundingMode x y))
-        |(define-fun |F64.%| ((x F64) (y F64)) F64 (fp.rem x y))"""
+        |(define-fun |F64.%| ((x F64) (y F64)) F64 (fp.rem x y))
+        |(declare-fun |F64.randomSeed(Z)| (Z) F64)
+        |(declare-fun |F64.randomSeedBetween(Z, F64, F64)| (Z F64 F64) F64)"""
   }
 
   @pure def timeoutInMs: Z
@@ -419,8 +437,8 @@ object Smt2 {
       case _ => st"."
     }
     val pTypes: ST = st"(${(for (pt <- pf.paramTypes) yield typeIdRaw(pt), ", ")})"
-    if (pf.context.isEmpty) st"|${pf.id}$pTypes|"
-    else st"|${(pf.context, ".")}$targs${pf.id}$pTypes|"
+    val context: ISZ[String] = if (pf.context.size == 3 && pf.context(0) == "org" && pf.context(1) == "sireum") ISZ(pf.context(2)) else pf.context
+    if (context.isEmpty) st"|${pf.id}$pTypes|" else st"|${(context, ".")}$targs${pf.id}$pTypes|"
   }
 
   def addStrictPureMethodDecl(pf: State.ProofFun, sym: State.Value.Sym, invClaims: ISZ[State.Claim], reporter: Reporter): Unit = {
@@ -1147,6 +1165,8 @@ object Smt2 {
       val tShlId = typeOpId(t, "<<")
       val tShrId = typeOpId(t, ">>")
       val tUshrId = typeOpId(t, ">>>")
+      val tRandomSeedId = typeOpId(t, "randomSeed(Z)")
+      val tRandomSeedBetweenId = typeOpId(t, st"randomSeedBetween(Z, $tId, $tId)".render)
       val t2ZId = typeOpId(t, "toZ")
       val tMaxOpt: Option[ST] =
         if (ti.ast.hasMax) Some(st"(define-const ${typeOpId(t, "MAX")} $tId ${toVal(t, ti.ast.max)})")
@@ -1181,6 +1201,8 @@ object Smt2 {
                 |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
                 |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvashr x y))
                 |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
+                |(declare-fun $tRandomSeedId (Z) $tId)
+                |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
                 |$tMaxOpt
                 |$tMinOpt""")
         case (F, T) =>
@@ -1203,6 +1225,8 @@ object Smt2 {
                 |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
                 |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvlshr x y))
                 |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
+                |(declare-fun $tRandomSeedId (Z) $tId)
+                |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
                 |$tMaxOpt
                 |$tMinOpt""")
         case (_, _) =>
@@ -1221,6 +1245,8 @@ object Smt2 {
                 |(define-fun $tMulId ((x $tId) (y $tId)) $tId (* x y))
                 |(define-fun $tDivId ((x $tId) (y $tId)) $tId (div x y))
                 |(define-fun $tRemId ((x $tId) (y $tId)) $tId (mod x y))
+                |(declare-fun $tRandomSeedId (Z) $tId)
+                |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
                 |$tMaxOpt
                 |$tMinOpt""")
       }
@@ -1231,13 +1257,17 @@ object Smt2 {
       val owner = ops.ISZOps(ti.name).dropRight(1)
       val eqOp = typeOpId(t, "==")
       val neOp = typeOpId(t, "!=")
+      val randomSeedOp = typeOpId(t, "randomSeed(Z)")
+      val randomSeedBetweenOp = typeOpId(t, st"randomSeedBetween(Z, $tid, $tid)".render)
       val ordinalOp = typeOpId(t, "ordinal")
       addSort(t,
         st"""(declare-datatypes (($tid 0)) ((
             |  ${(for (element <- ti.elements.keys) yield st"(${typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})", " ")})))
             |(declare-fun $ordinalOp ($tid) Int)
             |(define-fun $eqOp ((x $tid) (y $tid)) B (= x y))
-            |(define-fun $neOp ((x $tid) (y $tid)) B (not (= x y)))""")
+            |(define-fun $neOp ((x $tid) (y $tid)) B (not (= x y)))
+            |(declare-fun $randomSeedOp (Z) $tid)
+            |(declare-fun $randomSeedBetweenOp (Z $tid $tid) $tid)""")
       val elements: ISZ[ST] = for (element <- ti.elements.keys) yield enumId(owner, element)
       var ordinal = 0
       for (element <- elements) {

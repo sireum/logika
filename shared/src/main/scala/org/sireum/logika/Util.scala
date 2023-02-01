@@ -1405,7 +1405,25 @@ object Util {
             val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = th.nameMap.get(name) match {
               case Some(info: Info.Method) => (info.resOpt, info.typedOpt)
               case Some(info: Info.SpecMethod) => (info.resOpt, info.typedOpt)
-              case _ => (None(), None())
+              case Some(info: Info.ExtMethod) => (info.resOpt, info.typedOpt)
+              case _ =>
+                th.typeMap.get(let.pf.context) match {
+                  case Some(_: TypeInfo.SubZ) =>
+                    let.pf.id.native match {
+                      case "randomSeed" =>
+                        val paramNames = ISZ[String]("seed")
+                        val f = AST.Typed.Fun(T, F, ISZ(AST.Typed.z), sym.tipe)
+                        (TypeChecker.extResOpt(T, let.pf.context, let.pf.id, paramNames, f),
+                          Some(AST.Typed.Method(T, AST.MethodMode.Ext, ISZ(), let.pf.context, let.pf.id, paramNames, f)))
+                      case "randomSeedBetween" =>
+                        val paramNames = ISZ[String]("seed", "min", "max")
+                        val f = AST.Typed.Fun(T, F, ISZ(AST.Typed.z, sym.tipe, sym.tipe), sym.tipe)
+                        (TypeChecker.extResOpt(T, let.pf.context, let.pf.id, paramNames, f),
+                          Some(AST.Typed.Method(T, AST.MethodMode.Ext, ISZ(), let.pf.context, let.pf.id, paramNames, f)))
+                      case _ => halt(s"Unexpected: $let")
+                    }
+                  case _ => (None(), None())
+                }
             }
             if (resOpt.isEmpty) {
               return None()
@@ -1433,13 +1451,13 @@ object Util {
             case (Some((rcvOpt, ident)), Some(e)) =>
               val t = let.adt.tipe.asInstanceOf[AST.Typed.Name]
                 th.typeMap.get(t.ids).get match {
-                  case info: TypeInfo.Adt =>
+                  case _: TypeInfo.Adt =>
                     val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), Reporter.create)
                     val index = ops.ISZOps(resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames).indexOf(let.id)
                     val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
                       e, index)), AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
                     return Some(r)
-                  case info: TypeInfo.Sig =>
+                  case _: TypeInfo.Sig =>
                     val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), Reporter.create)
                     val index = ops.ISZOps(resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames).indexOf(let.id)
                     val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),

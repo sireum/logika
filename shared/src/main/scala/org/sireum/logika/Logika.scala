@@ -135,7 +135,7 @@ object Logika {
     (F, AST.Typed.isName, "firstIndex"), (F, AST.Typed.msName, "firstIndex"),
     (F, AST.Typed.isName, "lastIndex"), (F, AST.Typed.msName, "lastIndex"),
     (F, AST.Typed.f32Name, "isNaN"), (F, AST.Typed.f32Name, "isInfinite"),
-    (F, AST.Typed.f64Name, "isNaN"), (F, AST.Typed.f64Name, "isInfinite"),
+    (F, AST.Typed.f64Name, "isNaN"), (F, AST.Typed.f64Name, "isInfinite")
   )
   val indexingFields: HashSet[String] = HashSet ++ ISZ[String]("firstIndex", "lastIndex")
   val emptyBindings: Bindings = Map.empty[String, (State.Value.Sym, AST.Typed, Position)]
@@ -2429,16 +2429,79 @@ import Util._
         }
         return Some(r)
       }
-      def random(tpe: AST.Typed): Option[ISZ[(State, State.Value)]] = {
+      def random(tpe: AST.Typed.Name): Option[ISZ[(State, State.Value)]] = {
         val (s1, sym) = s0.freshSym(tpe, pos)
         val s2 = s1.addClaim(State.Claim.Let.Random(sym, F, pos))
         return Some(ISZ((Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym)))
+      }
+      def randomSeed(tpe: AST.Typed.Name): Option[ISZ[(State, State.Value)]] = {
+        var r = ISZ[(State, State.Value)]()
+        val pf = State.ProofFun(None(), tpe.ids, "randomSeed", ISZ("seed"), ISZ(AST.Typed.z), tpe)
+        for (p <- evalArgs(split, smt2, cache, rtCheck, s0, 1, eargs, reporter)) {
+          val s1 = p._1
+          val args: ISZ[State.Value] = for (argOpt <- p._2) yield argOpt.get
+          val (s2, sym) = s1.freshSym(tpe, pos)
+          val s3 = s2.addClaim(State.Claim.Let.ProofFunApply(sym, pf, args))
+          r = r :+ ((assumeValueInv(this, smt2, cache, rtCheck, s3, sym, pos, reporter), sym))
+        }
+        return Some(r)
+      }
+      def randomBetween(tpe: AST.Typed.Name): Option[ISZ[(State, State.Value)]] = {
+        var r = ISZ[(State, State.Value)]()
+        val posOpt = Option.some(pos)
+        for (p <- evalArgs(split, smt2, cache, rtCheck, s0, 2, eargs, reporter)) {
+          val s1 = p._1
+          val args: ISZ[State.Value] = for (argOpt <- p._2) yield argOpt.get
+          val (s2, cond) = s1.freshSym(AST.Typed.b, pos)
+          val min = args(0)
+          val max = args(1)
+          val s3 = evalAssertH(T, smt2, cache, s"$tpe.randomBetween min <= max", s2.addClaim(
+            State.Claim.Let.Binary(cond, min, AST.Exp.BinaryOp.Le, max, tpe)), cond, posOpt, reporter)
+          val (s4, sym) = s3.freshSym(tpe, pos)
+          val (s5, condMin) = s4.freshSym(AST.Typed.b, pos)
+          val (s6, condMax) = s5.freshSym(AST.Typed.b, pos)
+          r = r :+ ((s6.addClaims(ISZ(
+            State.Claim.Let.Random(sym, F, pos),
+            State.Claim.Let.Binary(condMin, min, AST.Exp.BinaryOp.Le, sym, tpe),
+            State.Claim.Let.Binary(condMax, sym, AST.Exp.BinaryOp.Le, max, tpe),
+            State.Claim.Prop(T, condMin),
+            State.Claim.Prop(T, condMax)
+          )), sym))
+        }
+        return Some(r)
+      }
+      def randomSeedBetween(tpe: AST.Typed.Name): Option[ISZ[(State, State.Value)]] = {
+        var r = ISZ[(State, State.Value)]()
+        val posOpt = Option.some(pos)
+        val pf = State.ProofFun(None(), tpe.ids, "randomSeedBetween", ISZ("seed", "min", "max"),
+          ISZ(AST.Typed.z, tpe, tpe), tpe)
+        for (p <- evalArgs(split, smt2, cache, rtCheck, s0, 3, eargs, reporter)) {
+          val s1 = p._1
+          val args: ISZ[State.Value] = for (argOpt <- p._2) yield argOpt.get
+          val (s2, cond) = s1.freshSym(AST.Typed.b, pos)
+          val min = args(1)
+          val max = args(2)
+          val s3 = evalAssertH(T, smt2, cache, s"$tpe.randomSeedBetween min <= max", s2.addClaim(
+            State.Claim.Let.Binary(cond, min, AST.Exp.BinaryOp.Le, max, tpe)), cond, posOpt, reporter)
+          val (s4, sym) = s3.freshSym(tpe, pos)
+          val (s5, condMin) = s4.freshSym(AST.Typed.b, pos)
+          val (s6, condMax) = s5.freshSym(AST.Typed.b, pos)
+          r = r :+ ((s6.addClaims(ISZ(
+            State.Claim.Let.ProofFunApply(sym, pf, args),
+            State.Claim.Let.Binary(condMin, min, AST.Exp.BinaryOp.Le, sym, tpe),
+            State.Claim.Let.Binary(condMax, sym, AST.Exp.BinaryOp.Le, max, tpe),
+            State.Claim.Prop(T, condMin),
+            State.Claim.Prop(T, condMax)
+          )), sym))
+        }
+        return Some(r)
       }
 
       res.owner match {
         case AST.Typed.bName =>
           res.id.native match {
             case "random" => return random(AST.Typed.b)
+            case "randomSeed" => return randomSeed(AST.Typed.b)
             case _ =>
           }
         case AST.Typed.cName =>
@@ -2446,26 +2509,41 @@ import Util._
             case "fromZ" => return fromZ(AST.Typed.c, Some(0), Some(0x110000))
             case "toZ" => return toZ()
             case "random" => return random(AST.Typed.c)
+            case "randomBetween" => return randomBetween(AST.Typed.c)
+            case "randomSeed" => return randomSeed(AST.Typed.c)
+            case "randomSeedBetween" => return randomSeedBetween(AST.Typed.c)
             case _ =>
           }
         case AST.Typed.zName =>
           res.id.native match {
             case "random" => return random(AST.Typed.z)
+            case "randomBetween" => return randomBetween(AST.Typed.z)
+            case "randomSeed" => return randomSeed(AST.Typed.z)
+            case "randomSeedBetween" => return randomSeedBetween(AST.Typed.z)
             case _ =>
           }
         case AST.Typed.rName =>
           res.id.native match {
             case "random" => return random(AST.Typed.r)
+            case "randomBetween" => return randomBetween(AST.Typed.r)
+            case "randomSeed" => return randomSeed(AST.Typed.r)
+            case "randomSeedBetween" => return randomSeedBetween(AST.Typed.r)
             case _ =>
           }
         case AST.Typed.f32Name =>
           res.id.native match {
             case "random" => return random(AST.Typed.f32)
+            case "randomBetween" => return randomBetween(AST.Typed.f32)
+            case "randomSeed" => return randomSeed(AST.Typed.f32)
+            case "randomSeedBetween" => return randomSeedBetween(AST.Typed.f32)
             case _ =>
           }
         case AST.Typed.f64Name =>
           res.id.native match {
             case "random" => return random(AST.Typed.f64)
+            case "randomBetween" => return randomBetween(AST.Typed.f64)
+            case "randomSeed" => return randomSeed(AST.Typed.f64)
+            case "randomSeedBetween" => return randomSeedBetween(AST.Typed.f64)
             case _ =>
           }
         case AST.Typed.stringName =>
@@ -2477,13 +2555,17 @@ import Util._
       }
       th.typeMap.get(res.owner) match {
         case Some(info: TypeInfo.SubZ) =>
+          val t = AST.Typed.Name(info.name, ISZ())
           res.id.native match {
             case "fromZ" =>
               val minOpt: Option[Z] = if (info.ast.hasMin || info.ast.isBitVector) Some(info.ast.min) else None()
               val maxOpt: Option[Z] = if (info.ast.hasMax || info.ast.isBitVector) Some(info.ast.max) else None()
-              return fromZ(AST.Typed.Name(info.name, ISZ()), minOpt, maxOpt)
+              return fromZ(t, minOpt, maxOpt)
             case "toZ" => return toZ()
-            case "random" => return random(AST.Typed.Name(info.name, ISZ()))
+            case "random" => return random(t)
+            case "randomBetween" => return randomBetween(t)
+            case "randomSeed" => return randomSeed(t)
+            case "randomSeedBetween" => return randomSeedBetween(t)
             case _ =>
           }
         case _ =>
