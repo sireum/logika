@@ -7,7 +7,7 @@ val n = Z.random
 println(B.random)
 assert(B.randomSeed(n) == B.randomSeed(n))
 
-println(C.random)
+println(ops.COps(C.random).escapeString)
 assert(C.randomSeed(n) == C.randomSeed(n))
 assert(C.randomBetween('b', 'z') > 'a')
 assert(C.randomSeedBetween(n, 'b', 'z') > 'a')
