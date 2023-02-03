@@ -2554,6 +2554,15 @@ import Util._
         case _ =>
       }
       th.typeMap.get(res.owner) match {
+        case Some(info: TypeInfo.Enum) =>
+          val t = AST.Typed.Name(info.name :+ "Type", ISZ())
+          res.id.native match {
+            case "random" => return random(t)
+            case "randomBetween" => return randomBetween(t)
+            case "randomSeed" => return randomSeed(t)
+            case "randomSeedBetween" => return randomSeedBetween(t)
+            case _ =>
+          }
         case Some(info: TypeInfo.SubZ) =>
           val t = AST.Typed.Name(info.name, ISZ())
           res.id.native match {

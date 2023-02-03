@@ -2,6 +2,21 @@
 import org.sireum._
 import org.sireum.U64._
 
+@enum object Day {
+  "Sunday"
+  "Monday"
+  "Tuesday"
+  "Wednesday"
+  "Thursday"
+  "Friday"
+  "Saturday"
+}
+
+//println(Day.random)
+//println(Day.randomBetween(Day.Tuesday, Day.Friday).ordinal > Day.Monday.ordinal)
+
+//println(Day.Monday.ordinal)
+
 val n = Z.random
 
 println(B.random)
