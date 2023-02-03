@@ -2397,18 +2397,21 @@ import Util._
                 State.Claim.Let.Binary(symCond, symLe, AST.Exp.BinaryOp.And, symGe, AST.Typed.b)
               ))
               evalAssertH(T, smt2, cache, s"$t.fromZ range check", s4, symCond, Some(pos), reporter)
+              p._1
             case (Some(min), _) =>
-              val (s1, symCond) = s0.freshSym(AST.Typed.b, pos)
+              val (s1, symCond) = p._1.freshSym(AST.Typed.b, pos)
               val s2 = s1.addClaim(
                 State.Claim.Let.Binary(symCond, State.Value.Z(min, pos), AST.Exp.BinaryOp.Le, arg, AST.Typed.z)
               )
               evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), reporter)
+              p._1
             case (_, Some(max)) =>
-              val (s1, symCond) = s0.freshSym(AST.Typed.b, pos)
+              val (s1, symCond) = p._1.freshSym(AST.Typed.b, pos)
               val s2 = s1.addClaim(
                 State.Claim.Let.Binary(symCond, arg, AST.Exp.BinaryOp.Le, State.Value.Z(max, pos), AST.Typed.z)
               )
               evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), reporter)
+
             case (_, _) => s0
           }
           val (s6, symT) = s5.freshSym(t, pos)
@@ -2421,11 +2424,11 @@ import Util._
         }
         return Some(r)
       }
-      def toZ(): Option[ISZ[(State, State.Value)]] = {
+      def fieldLookup(id: String, t: AST.Typed): Option[ISZ[(State, State.Value)]] = {
         var r = ISZ[(State, State.Value)]()
         for (p <- evalExp(split, smt2, cache, rtCheck, s0, receiverExpOpt.get, reporter)) {
-          val (s1, sym) = p._1.freshSym(AST.Typed.z, pos)
-          r = r :+ ((s1.addClaim(State.Claim.Let.FieldLookup(sym, p._2, "toZ")), sym))
+          val (s1, sym) = p._1.freshSym(t, pos)
+          r = r :+ ((s1.addClaim(State.Claim.Let.FieldLookup(sym, p._2, id)), sym))
         }
         return Some(r)
       }
@@ -2507,7 +2510,7 @@ import Util._
         case AST.Typed.cName =>
           res.id.native match {
             case "fromZ" => return fromZ(AST.Typed.c, Some(0), Some(0x10FFFF))
-            case "toZ" => return toZ()
+            case "toZ" => return fieldLookup(res.id, AST.Typed.z)
             case "random" => return random(AST.Typed.c)
             case "randomBetween" => return randomBetween(AST.Typed.c)
             case "randomSeed" => return randomSeed(AST.Typed.c)
@@ -2553,37 +2556,70 @@ import Util._
           }
         case _ =>
       }
-      th.typeMap.get(res.owner) match {
-        case Some(info: TypeInfo.Enum) =>
-          val t = AST.Typed.Name(info.name :+ "Type", ISZ())
-          res.id.native match {
-            case "random" => return random(t)
-            case "randomBetween" => return randomBetween(t)
-            case "randomSeed" => return randomSeed(t)
-            case "randomSeedBetween" => return randomSeedBetween(t)
-            case _ =>
-          }
-        case Some(info: TypeInfo.SubZ) =>
-          val t = AST.Typed.Name(info.name, ISZ())
-          res.id.native match {
-            case "fromZ" =>
-              val minOpt: Option[Z] = if (info.ast.hasMin || info.ast.isBitVector) Some(info.ast.min) else None()
-              val maxOpt: Option[Z] = if (info.ast.hasMax || info.ast.isBitVector) Some(info.ast.max) else None()
-              return fromZ(t, minOpt, maxOpt)
-            case "toZ" => return toZ()
-            case "random" => return random(t)
-            case "randomBetween" => return randomBetween(t)
-            case "randomSeed" => return randomSeed(t)
-            case "randomSeedBetween" => return randomSeedBetween(t)
-            case _ =>
-          }
-        case _ =>
+      if (res.isInObject) {
+        th.typeMap.get(res.owner) match {
+          case Some(info: TypeInfo.SubZ) =>
+            val t = AST.Typed.Name(info.name, ISZ())
+            res.id.native match {
+              case "fromZ" =>
+                val minOpt: Option[Z] = if (info.ast.hasMin || info.ast.isBitVector) Some(info.ast.min) else None()
+                val maxOpt: Option[Z] = if (info.ast.hasMax || info.ast.isBitVector) Some(info.ast.max) else None()
+                return fromZ(t, minOpt, maxOpt)
+              case "random" => return random(t)
+              case "randomBetween" => return randomBetween(t)
+              case "randomSeed" => return randomSeed(t)
+              case "randomSeedBetween" => return randomSeedBetween(t)
+              case _ =>
+            }
+          case _ =>
+            th.nameMap.get(res.owner) match {
+              case Some(info: Info.Enum) =>
+                val t = AST.Typed.Name(info.name :+ "Type", ISZ())
+                res.id.native match {
+                  case "random" => return random(t)
+                  case "randomBetween" => return randomBetween(t)
+                  case "randomSeed" => return randomSeed(t)
+                  case "randomSeedBetween" => return randomSeedBetween(t)
+                  case "numOfElements" => return Some(ISZ((s0, State.Value.Z(info.elements.size, pos))))
+                  case "elements" =>
+                    val elements = info.elements.keys
+                    val (s1, sym) = s0.freshSym(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.string)), pos)
+                    return Some(ISZ((
+                      s1.addClaim(State.Claim.Let.SeqLit(sym, for (i <- elements.indices) yield
+                        State.Claim.Let.SeqLit.Arg(State.Value.Z(i, pos), State.Value.String(elements(i), pos)))),
+                      sym)))
+                  case "byName" =>
+                    reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
+                    return Some(ISZ((s0(status = State.Status.End), State.errorValue)))
+                  case "byOrdinal" =>
+                    reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
+                    return Some(ISZ((s0(status = State.Status.End), State.errorValue)))
+                  case _ =>
+                }
+              case _ =>
+            }
+        }
+      } else {
+        th.typeMap.get(res.owner) match {
+          case Some(_: TypeInfo.Enum) =>
+            res.id.native match {
+              case "ordinal" => return fieldLookup(res.id, AST.Typed.z)
+              case "name" => return fieldLookup(res.id, AST.Typed.string)
+              case _ =>
+            }
+          case Some(_: TypeInfo.SubZ) =>
+            res.id.native match {
+              case "toZ" => return fieldLookup(res.id, AST.Typed.z)
+              case _ =>
+            }
+          case _ =>
+        }
       }
       receiverExpOpt match {
         case Some(receiver) => receiver.typedOpt match {
           case Some(t: AST.Typed.TypeVar) if t.isIndex =>
             res.id.native match {
-              case "toZ" => return toZ()
+              case "toZ" => return fieldLookup(res.id, AST.Typed.z)
               case _ =>
             }
           case _ =>

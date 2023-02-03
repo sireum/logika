@@ -1297,6 +1297,12 @@ object Util {
                         AST.ResolvedAttr(symPosOpt, TypeChecker.extResOpt(F, info.name, let.id, ISZ(),
                           AST.Typed.Fun(T, T, ISZ(), AST.Typed.z)),
                           Some(sym.tipe))))
+                    case info: TypeInfo.Enum =>
+                      assert(let.id == "ordinal" || let.id == "name")
+                      return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                        AST.ResolvedAttr(symPosOpt, TypeChecker.extResOpt(F, info.name, let.id, ISZ(),
+                          AST.Typed.Fun(T, T, ISZ(), AST.Typed.z)),
+                          Some(sym.tipe))))
                     case ti => halt(s"Infeasible: $ti")
                   }
                 case t: AST.Typed.Tuple =>
@@ -1400,8 +1406,12 @@ object Util {
                 case _ => return None()
               }
             }
+            val nameExp: ISZ[String] = th.typeMap.get(let.pf.context) match {
+              case Some(info: TypeInfo.Enum) => info.owner
+              case _ => let.pf.context
+            }
             val name = let.pf.context :+ let.pf.id
-            val rcvOpt: Option[AST.Exp] = if (let.pf.context.nonEmpty) Some(th.nameToExp(let.pf.context, symPos).asExp) else None()
+            val rcvOpt: Option[AST.Exp] = if (let.pf.context.nonEmpty) Some(th.nameToExp(nameExp, symPos).asExp) else None()
             val (resOpt, typedOpt): (Option[AST.ResolvedInfo], Option[AST.Typed]) = th.nameMap.get(name) match {
               case Some(info: Info.Method) => (info.resOpt, info.typedOpt)
               case Some(info: Info.SpecMethod) => (info.resOpt, info.typedOpt)

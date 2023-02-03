@@ -1257,25 +1257,32 @@ object Smt2 {
       val owner = ops.ISZOps(ti.name).dropRight(1)
       val eqOp = typeOpId(t, "==")
       val neOp = typeOpId(t, "!=")
+      val leOp = typeOpId(t, "<=")
       val randomSeedOp = typeOpId(t, "randomSeed(Z)")
-      val randomSeedBetweenOp = typeOpId(t, st"randomSeedBetween(Z, $tid, $tid)".render)
+      val randomSeedBetweenOp = typeOpId(t, st"randomSeedBetween(Z, $t, $t)".render)
       val ordinalOp = typeOpId(t, "ordinal")
+      val nameOp = typeOpId(t, "name")
       addSort(t,
         st"""(declare-datatypes (($tid 0)) ((
             |  ${(for (element <- ti.elements.keys) yield st"(${typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})", " ")})))
-            |(declare-fun $ordinalOp ($tid) Int)
+            |(declare-fun $ordinalOp ($tid) Z)
+            |(declare-fun $nameOp ($tid) String)
             |(define-fun $eqOp ((x $tid) (y $tid)) B (= x y))
             |(define-fun $neOp ((x $tid) (y $tid)) B (not (= x y)))
+            |(define-fun $leOp ((x $tid) (y $tid)) B (<= ($ordinalOp x) ($ordinalOp y)))
             |(declare-fun $randomSeedOp (Z) $tid)
             |(declare-fun $randomSeedBetweenOp (Z $tid $tid) $tid)""")
-      val elements: ISZ[ST] = for (element <- ti.elements.keys) yield enumId(owner, element)
       var ordinal = 0
-      for (element <- elements) {
+      var elements = ISZ[ST]()
+      for (elementId <- ti.elements.keys) {
+        val element = enumId(owner, elementId)
+        elements = elements :+ element
         addSort(t, st"(declare-const $element $tid)")
         addSort(t, st"(assert (= ($ordinalOp $element) $ordinal))")
+        addSort(t, st"""(assert (= ($nameOp $element) "$elementId"))""")
         ordinal = ordinal + 1
       }
-      if (elements.size > 1) {
+      if (ti.elements.size > 1) {
         addSort(t, st"(assert (distinct ${(elements, " ")}))")
       }
     }

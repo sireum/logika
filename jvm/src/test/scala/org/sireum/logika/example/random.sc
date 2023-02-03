@@ -2,21 +2,6 @@
 import org.sireum._
 import org.sireum.U64._
 
-@enum object Day {
-  "Sunday"
-  "Monday"
-  "Tuesday"
-  "Wednesday"
-  "Thursday"
-  "Friday"
-  "Saturday"
-}
-
-//println(Day.random)
-//println(Day.randomBetween(Day.Tuesday, Day.Friday).ordinal > Day.Monday.ordinal)
-
-//println(Day.Monday.ordinal)
-
 val n = Z.random
 
 println(B.random)
@@ -52,3 +37,19 @@ assert(U64.randomSeed(n) == U64.randomSeed(n))
 assert(U64.randomBetween(u64"1", u64"10") > u64"0")
 assert(U64.randomSeedBetween(n, u64"1", u64"10") > u64"0")
 assert(U64.randomSeedBetween(n, u64"1", u64"10") == U64.randomSeedBetween(n, u64"1", u64"10"))
+
+@enum object Day {
+  "Sunday"
+  "Monday"
+  "Tuesday"
+  "Wednesday"
+  "Thursday"
+  "Friday"
+  "Saturday"
+}
+
+println(Day.random)
+assert(Day.randomSeed(n) == Day.randomSeed(n))
+assert(Day.randomBetween(Day.Tuesday, Day.Friday).ordinal > Day.Monday.ordinal)
+assert(Day.randomSeedBetween(n, Day.Tuesday, Day.Friday).ordinal > Day.Monday.ordinal)
+assert(Day.randomSeedBetween(n, Day.Tuesday, Day.Friday) == Day.randomSeedBetween(n, Day.Tuesday, Day.Friday))
