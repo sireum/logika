@@ -2411,8 +2411,8 @@ import Util._
                 State.Claim.Let.Binary(symCond, arg, AST.Exp.BinaryOp.Le, State.Value.Z(max, pos), AST.Typed.z)
               )
               evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), reporter)
-
-            case (_, _) => s0
+              p._1
+            case (_, _) => p._1
           }
           val (s6, symT) = s5.freshSym(t, pos)
           val (s7, symZ) = s6.freshSym(AST.Typed.z, pos)
@@ -2458,9 +2458,9 @@ import Util._
           val (s2, cond) = s1.freshSym(AST.Typed.b, pos)
           val min = args(0)
           val max = args(1)
-          val s3 = evalAssertH(T, smt2, cache, s"$tpe.randomBetween min <= max", s2.addClaim(
+          evalAssertH(T, smt2, cache, s"$tpe.randomBetween min <= max", s2.addClaim(
             State.Claim.Let.Binary(cond, min, AST.Exp.BinaryOp.Le, max, tpe)), cond, posOpt, reporter)
-          val (s4, sym) = s3.freshSym(tpe, pos)
+          val (s4, sym) = s1.freshSym(tpe, pos)
           val (s5, condMin) = s4.freshSym(AST.Typed.b, pos)
           val (s6, condMax) = s5.freshSym(AST.Typed.b, pos)
           r = r :+ ((s6.addClaims(ISZ(
@@ -2484,9 +2484,9 @@ import Util._
           val (s2, cond) = s1.freshSym(AST.Typed.b, pos)
           val min = args(1)
           val max = args(2)
-          val s3 = evalAssertH(T, smt2, cache, s"$tpe.randomSeedBetween min <= max", s2.addClaim(
+          evalAssertH(T, smt2, cache, s"$tpe.randomSeedBetween min <= max", s2.addClaim(
             State.Claim.Let.Binary(cond, min, AST.Exp.BinaryOp.Le, max, tpe)), cond, posOpt, reporter)
-          val (s4, sym) = s3.freshSym(tpe, pos)
+          val (s4, sym) = s1.freshSym(tpe, pos)
           val (s5, condMin) = s4.freshSym(AST.Typed.b, pos)
           val (s6, condMax) = s5.freshSym(AST.Typed.b, pos)
           r = r :+ ((s6.addClaims(ISZ(
