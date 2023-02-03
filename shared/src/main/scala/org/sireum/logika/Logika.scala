@@ -2506,7 +2506,7 @@ import Util._
           }
         case AST.Typed.cName =>
           res.id.native match {
-            case "fromZ" => return fromZ(AST.Typed.c, Some(0), Some(0x110000))
+            case "fromZ" => return fromZ(AST.Typed.c, Some(0), Some(0x10FFFF))
             case "toZ" => return toZ()
             case "random" => return random(AST.Typed.c)
             case "randomBetween" => return randomBetween(AST.Typed.c)
