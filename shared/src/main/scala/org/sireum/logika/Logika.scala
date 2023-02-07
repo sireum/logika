@@ -1388,35 +1388,34 @@ import Util._
     }
 
     def evalAt(exp: AST.Exp.At): (State, State.Value) = {
+      val t = exp.tipeOpt.get.typedOpt.get
+      val pos = exp.posOpt.get
+      val (_, atMap) = Util.claimsToExps(jescmPlugins._4, pos, context.methodName, state.claims, th, F)
       def rand(num: Z): (State, State.Value) = {
-        val t = exp.tipeOpt.get.typedOpt.get
-        val finder = Util.RandomFinder(t, num, HashMap.empty, None())
-        finder.transformState(state)
-        finder.rOpt match {
-          case Some(r) =>
-            return (state, r.sym)
+        val key: ClaimsToExps.AtKey = (ISZ(), ".random", t, exp.num.value)
+        atMap.get(key) match {
+          case Some(num) =>
+            return (state, State.Value.Sym(num, t, pos))
           case _ =>
             reporter.error(exp.posOpt, kind, st"Could not find .random of $t with the occurrence number $num".render)
             return (state(status = State.Status.Error), State.errorValue)
         }
       }
       def local(res: AST.ResolvedInfo.LocalVar, num: Z): (State, State.Value) = {
-        val finder = Util.LocalVarIdFinder(res, num, HashMap.empty, None())
-        finder.transformState(state)
-        finder.rOpt match {
-          case Some(r) =>
-            return (state, r.sym)
+        val key: ClaimsToExps.AtKey = (res.context, res.id, t, exp.num.value)
+        atMap.get(key) match {
+          case Some(num) =>
+            return (state, State.Value.Sym(num, t, pos))
           case _ =>
             reporter.error(exp.posOpt, kind, st"Could not find ${res.id} with the occurrence number $num".render)
             return (state(status = State.Status.Error), State.errorValue)
         }
       }
       def global(res: AST.ResolvedInfo.Var, num: Z): (State, State.Value) = {
-        val finder = Util.VarNameFinder(res, num, HashMap.empty, None())
-        finder.transformState(state)
-        finder.rOpt match {
-          case Some(r) =>
-            return (state, r.sym)
+        val key: ClaimsToExps.AtKey = (res.owner :+ res.id, "", t, exp.num.value)
+        atMap.get(key) match {
+          case Some(num) =>
+            return (state, State.Value.Sym(num, t, pos))
           case _ =>
             reporter.error(exp.posOpt, kind, st"Could not find ${(res.owner :+ res.id, ".")} with the occurrence number $num".render)
             return (state(status = State.Status.Error), State.errorValue)
@@ -4584,7 +4583,7 @@ import Util._
         if (raw) {
           State.Claim.claimsRawSTs(state.claims)
         } else {
-          val es = Util.claimsToExps(jescmPlugins._4, posOpt.get, context.methodName, state.claims, th, config.atLinesFresh)
+          val (es, _) = Util.claimsToExps(jescmPlugins._4, posOpt.get, context.methodName, state.claims, th, config.atLinesFresh)
           for (e <- es) yield e.prettyST
         }
       if (sts.isEmpty) {

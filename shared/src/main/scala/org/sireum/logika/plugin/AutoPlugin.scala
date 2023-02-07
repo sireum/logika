@@ -111,7 +111,7 @@ import org.sireum.logika.Logika.Reporter
                 |""".render)
           return Plugin.Result(T, state.nextFresh, spc.claims)
         case _ =>
-          val pathConditions = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos,
+          val (pathConditions, _) = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos,
             logika.context.methodName, state.claims, logika.th, logika.config.atLinesFresh)
           val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield logika.th.normalizeExp(e))
           if (normPathConditions.contains(claimNorm)) {

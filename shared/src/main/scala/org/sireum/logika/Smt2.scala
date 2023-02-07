@@ -1546,7 +1546,7 @@ object Smt2 {
   }
 
   @pure def toExpST(isSequent: B, context: ISZ[String], claims: ISZ[State.Claim], pos: message.Position): ST = {
-    val (exps, lastOpt) = Util.claimsToExpsLastOpt(plugins, pos, context, claims, typeHierarchy, includeFreshLines)
+    val (exps, lastOpt, _) = Util.claimsToExpsLastOpt(plugins, pos, context, claims, typeHierarchy, includeFreshLines)
     lastOpt match {
       case Some(last) =>
         val r: ST = if (isSequent) {

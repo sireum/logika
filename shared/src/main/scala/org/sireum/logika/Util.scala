@@ -490,103 +490,8 @@ object Util {
     }
   }
 
-  @record class LocalVarIdFinder(val res: AST.ResolvedInfo.LocalVar,
-                                 val num: Z,
-                                 var numMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
-                                 var rOpt: Option[State.Claim.Let.Id]) extends MStateTransformer {
-    override def preStateClaimLetId(o: State.Claim.Let.Id): MStateTransformer.PreResult[State.Claim.Let] = {
-      val key = (o.context, o.id)
-      val n: Z = {
-        var map = numMap.get(key).getOrElse(HashMap.empty)
-        val key2 = (o.num, o.poss)
-        map.get(key2) match {
-          case Some(m) => m
-          case _ =>
-            map = map + key2 ~> map.size
-            numMap = numMap + key ~> map
-            map.size - 1
-        }
-      }
-      if ((n == num) && rOpt.isEmpty && o.id == res.id && o.context == res.context) {
-        rOpt = Some(o)
-      }
-      return MStateTransformer.PreResultStateClaimLetId
-    }
-
-    override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
-      if (rOpt.isEmpty) {
-        return super.preStateClaim(o)
-      }
-      return MStateTransformer.PreResult(F, MNone())
-    }
-  }
-
-  @record class VarNameFinder(val res: AST.ResolvedInfo.Var,
-                              val num: Z,
-                              var numMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]],
-                              var rOpt: Option[State.Claim.Let.Name]) extends MStateTransformer {
-    override def preStateClaimLetName(o: State.Claim.Let.Name): MStateTransformer.PreResult[State.Claim.Let] = {
-      val key = o.ids
-      val n: Z = {
-        var map = numMap.get(key).getOrElse(HashMap.empty)
-        val key2 = (o.num, o.poss)
-        map.get(key2) match {
-          case Some(m) => m
-          case _ =>
-            map = map + key2 ~> map.size
-            numMap = numMap + key ~> map
-            map.size - 1
-        }
-      }
-      if ((n == num) && rOpt.isEmpty && o.ids == (res.owner :+ res.id)) {
-        rOpt = Some(o)
-      }
-      return MStateTransformer.PreResultStateClaimLetName
-    }
-
-    override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
-      if (rOpt.isEmpty) {
-        return super.preStateClaim(o)
-      }
-      return MStateTransformer.PreResult(F, MNone())
-    }
-  }
-
-  @record class RandomFinder(val t: AST.Typed,
-                             val num: Z,
-                             var numMap: HashMap[AST.Typed, HashMap[Z, Z]],
-                             var rOpt: Option[State.Claim.Let.Random]) extends MStateTransformer {
-    override def preStateClaimLetRandom(o: State.Claim.Let.Random): MStateTransformer.PreResult[State.Claim.Let] = {
-      val key = o.sym.tipe
-      val n: Z = {
-        var map = numMap.get(key).getOrElse(HashMap.empty)
-        val key2 = o.sym.num
-        map.get(key2) match {
-          case Some(m) => m
-          case _ =>
-            map = map + key2 ~> map.size
-            numMap = numMap + key ~> map
-            map.size - 1
-        }
-      }
-      if (n == num && rOpt.isEmpty && t == o.sym.tipe) {
-        rOpt = Some(o)
-      }
-      return MStateTransformer.PreResultStateClaimLetId
-    }
-
-    override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
-      if (rOpt.isEmpty) {
-        return super.preStateClaim(o)
-      }
-      return MStateTransformer.PreResult(F, MNone())
-    }
-  }
-
   @record class LetEqNumMapCollector(var letMap: HashMap[Z, HashSSet[State.Claim.Let]],
-                                     var eqMap: HashMap[Z, HashSSet[State.Claim.Eq]],
-                                     var lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
-                                     var vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]]) extends MStateTransformer {
+                                     var eqMap: HashMap[Z, HashSSet[State.Claim.Eq]]) extends MStateTransformer {
     override def preStateClaim(o: State.Claim): MStateTransformer.PreResult[State.Claim] = {
       o match {
         case o: State.Claim.Eq =>
@@ -594,28 +499,6 @@ object Util {
             case v2: State.Value.Sym => eqMap = eqMap + v2.num ~> (eqMap.get(v2.num).getOrElse(HashSSet.empty) + o)
             case _ =>
           }
-        case o: State.Claim.Let.Id =>
-          val key = (o.context, o.id)
-          var map = lNumMap.get(key).getOrElse(HashMap.empty)
-          val key2 = (o.num, o.poss)
-          map.get(key2) match {
-            case Some(_) =>
-            case _ =>
-              map = map + key2 ~> map.size
-              lNumMap = lNumMap + key ~> map
-          }
-          letMap = letMap + o.sym.num ~> (letMap.get(o.sym.num).getOrElse(HashSSet.empty) + o)
-        case o: State.Claim.Let.Name =>
-          val key = o.ids
-          var map = vNumMap.get(key).getOrElse(HashMap.empty)
-          val key2 = (o.num, o.poss)
-          map.get(key2) match {
-            case Some(_) =>
-            case _ =>
-              map = map + key2 ~> map.size
-              vNumMap = vNumMap + key ~> map
-          }
-          letMap = letMap + o.sym.num ~> (letMap.get(o.sym.num).getOrElse(HashSSet.empty) + o)
         case o: State.Claim.Let =>
           val key = o.sym.num
           letMap = letMap + key ~> (letMap.get(key).getOrElse(HashSSet.empty) + o)
@@ -625,6 +508,12 @@ object Util {
     }
   }
 
+  object ClaimsToExps {
+    type AtPossKey = (ISZ[String], String, AST.Typed)
+    type AtKey = (ISZ[String], String, AST.Typed, Z)
+    type AtMap = HashMap[AtKey, Z]
+  }
+
   @record class ClaimsToExps(val plugins: ISZ[plugin.ClaimPlugin],
                              val pos: Position,
                              val context: ISZ[String],
@@ -632,13 +521,24 @@ object Util {
                              val includeFreshLines: B,
                              val letMap: HashMap[Z, HashSSet[State.Claim.Let]],
                              val eqMap: HashMap[Z, HashSSet[State.Claim.Eq]],
-                             val lNumMap: HashMap[(ISZ[String], String), HashMap[(Z, ISZ[Position]), Z]],
-                             val vNumMap: HashMap[ISZ[String], HashMap[(Z, ISZ[Position]), Z]],
-                             var symNumMap: HashMap[(String, AST.Typed), HashMap[Z, Z]]) {
+                             var atPossMap: HashMap[ClaimsToExps.AtPossKey, HashMap[ISZ[Position], (Z, Z)]]) {
 
     val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
     val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
     val posOpt: Option[Position] = Some(pos)
+
+    def atMap: ClaimsToExps.AtMap = {
+      var r: ClaimsToExps.AtMap = HashMap.empty
+      for (p <- atPossMap.entries) {
+        val ((ctx, id, t), m) = p
+        for (p2 <- m.values) {
+          val (n, symNum) = p2
+          val key = (ctx, id, t, n)
+          r = r + key ~> symNum
+        }
+      }
+      return r
+    }
 
     @pure def ignore(claim: State.Claim): B = {
       claim match {
@@ -869,7 +769,6 @@ object Util {
         case let: State.Claim.Let.CurrentName =>
           return Some(th.nameToExp(let.ids, symPos).asExp)
         case let: State.Claim.Let.Id =>
-          val n = lNumMap.get((let.context, let.id)).get.get((let.num, let.poss)).get
           val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
             (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
           } else {
@@ -877,16 +776,39 @@ object Util {
           }
           val attr = AST.Attr(symPosOpt)
           if (let.context == context || let.context.isEmpty) {
+            val key: ClaimsToExps.AtPossKey = (let.context, let.id, sym.tipe)
+            val m = atPossMap.get(key).getOrElse(HashMap.empty)
+            val n: Z = m.get(let.poss) match {
+              case Some((v, _)) => v
+              case _ =>
+                atPossMap = atPossMap + key ~> (m + let.poss ~> ((m.size, let.sym.num)))
+                m.size - 1
+            }
             return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
               Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
               Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr))
           } else {
+            val key: ClaimsToExps.AtPossKey = (ISZ[String](), st"${(let.context :+ let.id, ".")}".render, sym.tipe)
+            val m = atPossMap.get(key).getOrElse(HashMap.empty)
+            val n: Z = m.get(let.poss) match {
+              case Some((v, _)) => v
+              case _ =>
+                atPossMap = atPossMap + key ~> (m + let.poss ~> ((m.size, let.sym.num)))
+                m.size - 1
+            }
             return Some(AST.Exp.At(Some(typedToType(sym.tipe)),
-              AST.Exp.LitString(st"${(let.context :+ let.id, ".")}".render, AST.Attr(symPosOpt)),
+              AST.Exp.LitString(key._2, AST.Attr(symPosOpt)),
               AST.Exp.LitZ(n, attr), linesFresh, attr))
           }
         case let: State.Claim.Let.Name =>
-          val n = vNumMap.get(let.ids).get.get((let.num, let.poss)).get
+          val key: ClaimsToExps.AtPossKey = (let.ids, "", sym.tipe)
+          val m = atPossMap.get(key).getOrElse(HashMap.empty)
+          val n: Z = m.get(let.poss) match {
+            case Some((v, _)) => v
+            case _ =>
+              atPossMap = atPossMap + key ~> (m + let.poss ~> ((m.size, let.sym.num)))
+              m.size - 1
+          }
           val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
             (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
           } else {
@@ -1565,15 +1487,14 @@ object Util {
 
     def symAt(id: String, sym: State.Value.Sym): AST.Exp.At = {
       val attr = AST.Attr(Some(sym.pos))
-      val key = (id, sym.tipe)
-      val map = symNumMap.get(key).getOrElse(HashMap.empty)
-      val key2 = sym.num
-      val n: Z = map.get(key2) match {
-        case Some(m) => m
+      val key: ClaimsToExps.AtPossKey = (ISZ[String](), id, sym.tipe)
+      val m = atPossMap.get(key).getOrElse(HashMap.empty)
+      val poss = ISZ(sym.pos)
+      val n: Z = m.get(poss) match {
+        case Some((v, _)) => v
         case _ =>
-          val m = map.size
-          symNumMap = symNumMap + key ~> (map + key2 ~> m)
-          m
+          atPossMap = atPossMap + key ~> (m + poss ~> ((m.size, sym.num)))
+          m.size - 1
       }
       val linesFresh: ISZ[AST.Exp.LitZ] =
         if (includeFreshLines) ISZ(AST.Exp.LitZ(sym.pos.beginLine, attr), AST.Exp.LitZ(sym.num, attr))
@@ -2599,25 +2520,28 @@ object Util {
 
   @pure def createClaimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
                                claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ClaimsToExps = {
-    val collector = LetEqNumMapCollector(HashMap.empty, HashMap.empty, HashMap.empty, HashMap.empty)
+    val collector = LetEqNumMapCollector(HashMap.empty, HashMap.empty)
     for (claim <- claims) {
       collector.transformStateClaim(claim)
     }
     val cs2es = ClaimsToExps(plugins, pos, context, th, includeFreshLines, collector.letMap, collector.eqMap,
-      collector.lNumMap, collector.vNumMap, HashMap.empty)
+      HashMap.empty)
     return cs2es
   }
 
-  @strictpure def claimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
-                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ISZ[AST.Exp] =
-    createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines).translate(claims)
+  @pure def claimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
+                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): (ISZ[AST.Exp], ClaimsToExps.AtMap) = {
+    val cs2es =createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines)
+    val r = cs2es.translate(claims)
+    return (r, cs2es.atMap)
+  }
 
-  @strictpure def claimsToExpsLastOpt(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
-                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): (ISZ[AST.Exp], Option[AST.Exp]) = {
-    val c2es = createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines)
-    val l = c2es.translate(ops.ISZOps(claims).dropRight(1))
-    val r: ISZ[AST.Exp] = if (claims.nonEmpty) c2es.translate(ISZ(claims(claims.size - 1))) else ISZ()
-    return (l, if (r.isEmpty) None() else Some(r(0)))
+  @pure def claimsToExpsLastOpt(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
+                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): (ISZ[AST.Exp], Option[AST.Exp], ClaimsToExps.AtMap) = {
+    val cs2es = createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines)
+    val l = cs2es.translate(ops.ISZOps(claims).dropRight(1))
+    val r: ISZ[AST.Exp] = if (claims.nonEmpty) cs2es.translate(ISZ(claims(claims.size - 1))) else ISZ()
+    return (l, if (r.isEmpty) None() else Some(r(0)), cs2es.atMap)
   }
 
   @pure def saveLocals(depth: Z, s0: State, currentContext: ISZ[String]): (State, LocalSaveMap) = {
