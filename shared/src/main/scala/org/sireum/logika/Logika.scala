@@ -900,7 +900,7 @@ import Util._
           case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly zero second operand for ${exp.op}$suffixOpt".render, reporter)
           case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
           case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
-          case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}$suffixOpt\n${r.info}".render, reporter)
         }
         return s1(status = State.Status.Error)
       }
@@ -3157,7 +3157,7 @@ import Util._
         case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
         case Smt2Query.Result.Kind.Unknown => error(posOpt, s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
         case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower} holds", reporter)
-        case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower} holds", reporter)
+        case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower} holds\n${r.info}", reporter)
       }
     }
     return s0(status = State.Status.Error)
@@ -4634,7 +4634,7 @@ import Util._
           case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
           case Smt2Query.Result.Kind.Unknown => error(Some(pos), s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds$titleSuffix", reporter)
           case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
-          case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix", reporter)
+          case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower}$titleSuffix\n${rvalid.info}", reporter)
         }
       }
       if (ok) {
