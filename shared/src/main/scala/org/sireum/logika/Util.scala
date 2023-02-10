@@ -782,7 +782,7 @@ object Util {
               case Some((v, _)) => v
               case _ =>
                 atPossMap = atPossMap + key ~> (m + let.poss ~> ((m.size, let.sym.num)))
-                m.size - 1
+                m.size
             }
             return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
               Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
@@ -794,7 +794,7 @@ object Util {
               case Some((v, _)) => v
               case _ =>
                 atPossMap = atPossMap + key ~> (m + let.poss ~> ((m.size, let.sym.num)))
-                m.size - 1
+                m.size
             }
             return Some(AST.Exp.At(Some(typedToType(sym.tipe)),
               AST.Exp.LitString(key._2, AST.Attr(symPosOpt)),
@@ -807,7 +807,7 @@ object Util {
             case Some((v, _)) => v
             case _ =>
               atPossMap = atPossMap + key ~> (m + let.poss ~> ((m.size, let.sym.num)))
-              m.size - 1
+              m.size
           }
           val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
             (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
@@ -1494,7 +1494,7 @@ object Util {
         case Some((v, _)) => v
         case _ =>
           atPossMap = atPossMap + key ~> (m + poss ~> ((m.size, sym.num)))
-          m.size - 1
+          m.size
       }
       val linesFresh: ISZ[AST.Exp.LitZ] =
         if (includeFreshLines) ISZ(AST.Exp.LitZ(sym.pos.beginLine, attr), AST.Exp.LitZ(sym.num, attr))
