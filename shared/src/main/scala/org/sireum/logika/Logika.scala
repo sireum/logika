@@ -1388,7 +1388,7 @@ import Util._
     }
 
     def evalAt(exp: AST.Exp.At): (State, State.Value) = {
-      val t = exp.tipeOpt.get.typedOpt.get
+      val t = exp.typedOpt.get
       val pos = exp.posOpt.get
       val (_, atMap) = Util.claimsToExps(jescmPlugins._4, pos, context.methodName, state.claims, th, F)
       def rand(num: Z): (State, State.Value) = {
