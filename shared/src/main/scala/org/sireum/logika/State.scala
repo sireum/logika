@@ -281,7 +281,7 @@ object State {
           case Some(d) =>
             return if (d.size == 1) d(0).toST(numMap, defs)
             else Some(toRawST)
-          case _ => Some(toRawST)
+          case _ => return Some(toRawST)
         }
       }
     }

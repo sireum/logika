@@ -645,7 +645,7 @@ object Smt2 {
   @memoize def adtId(tipe: AST.Typed): ST = {
     tipe match {
       case tipe: AST.Typed.Name if typeHierarchy.isAdt(tipe) => return st"ADT"
-      case _ => typeId(tipe)
+      case _ => return typeId(tipe)
     }
   }
 

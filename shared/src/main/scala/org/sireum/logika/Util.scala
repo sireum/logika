@@ -2010,7 +2010,7 @@ object Util {
       resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Assume)),
       typedOpt = Some(AST.Typed.Fun(F, F, ISZ(AST.Typed.b), AST.Typed.unit))
     )
-    AST.Stmt.Expr(AST.Exp.Invoke(
+    return AST.Stmt.Expr(AST.Exp.Invoke(
       None(), AST.Exp.Ident(AST.Id("assume", AST.Attr(posOpt)), assumeResAttr), ISZ(), ISZ(cond),
       AST.ResolvedAttr(assumeResAttr.posOpt, assumeResAttr.resOpt, AST.Typed.unitOpt)
     ), AST.TypedAttr(posOpt, AST.Typed.unitOpt))
