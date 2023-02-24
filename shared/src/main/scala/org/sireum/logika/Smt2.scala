@@ -664,7 +664,7 @@ object Smt2 {
       st"""; Satisfiability check for $title
           |${smt2res.info}
           |; Time: ${formatTime(smt2res.timeMillis)}"""
-    val queryOpt: Option[String] = if (elideEncoding && !r) None() else Some(smt2res.query)
+    val queryOpt: Option[String] = if (elideEncoding && r) None() else Some(smt2res.query)
     val res = smt2res(info = header.render, query =
       st"""$header
           |${if (rawInscription) toClaimST(F, claims, pos) else toExpST(F, context, claims, pos)}
@@ -1577,7 +1577,7 @@ object Smt2 {
           |${smt2res.info}
           |; Time: ${formatTime(smt2res.timeMillis)}"""
     val queryOpt: Option[String] =
-      if (elideEncoding && smt2res.kind != Smt2Query.Result.Kind.Unsat) None() else Some(smt2res.query)
+      if (elideEncoding && smt2res.kind == Smt2Query.Result.Kind.Unsat) None() else Some(smt2res.query)
     val claims = premises :+ conclusion
     val res = smt2res(info = header.render, query =
       st"""$header
