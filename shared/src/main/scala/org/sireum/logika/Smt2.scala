@@ -671,7 +671,7 @@ object Smt2 {
           |$queryOpt""".render
     )
     if (reportQuery) {
-      reporter.query(pos, title, smt2res.timeMillis, res)
+      reporter.query(pos, title, smt2res.timeMillis, F, res)
     }
     if (log) {
       reporter.info(None(), Logika.kind, res.query)
@@ -1551,7 +1551,7 @@ object Smt2 {
       case Some(last) =>
         val r: ST = if (isSequent) {
           st""";
-              |; Sequent
+              |; Sequent:
               |;
               |${(commentLines(st"""${(exps, ",\n")}""".render), "\n")}
               |; ⊢
@@ -1584,8 +1584,9 @@ object Smt2 {
           |${if (rawInscription) toClaimST(T, claims, pos) else toExpST(T, context, claims, pos)}
           |$queryOpt""".render
     )
-    if (reportQuery) {
-      reporter.query(pos, title, smt2res.timeMillis, res)
+    val forceReport = smt2res.kind != Smt2Query.Result.Kind.Unsat
+    if (reportQuery || forceReport) {
+      reporter.query(pos, title, smt2res.timeMillis, forceReport, res)
     }
     if (log) {
       reporter.info(None(), Logika.kind, res.query)

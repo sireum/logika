@@ -68,7 +68,7 @@ object Logika {
     def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
               th: TypeHierarchy, s: State, atLinesFresh: B): Unit
 
-    def query(pos: Position, title: String, time: Z, r: Smt2Query.Result): Unit
+    def query(pos: Position, title: String, time: Z, forceReport: B, r: Smt2Query.Result): Unit
 
     def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit
 
@@ -86,7 +86,7 @@ object Logika {
                        th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
     }
 
-    override def query(pos: Position, title: String, time: Z, r: Smt2Query.Result): Unit = {
+    override def query(pos: Position, title: String, time: Z, forceReport: B, r: Smt2Query.Result): Unit = {
     }
 
     override def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit = {
