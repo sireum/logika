@@ -129,6 +129,7 @@ object Context {
                                    val sig: AST.MethodSig,
                                    val contract: AST.MethodContract,
                                    val res: AST.ResolvedInfo.Method,
+                                   val hasBody: B,
                                    val strictPureBodyOpt: Option[AST.AssignExp])
 
   @datatype class ContractCaseResult(val isPreOK: B,

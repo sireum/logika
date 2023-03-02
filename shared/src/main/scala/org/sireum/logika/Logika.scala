@@ -1692,13 +1692,13 @@ import Util._
         th.nameMap.get(owner :+ id) match {
           case Some(mi: lang.symbol.Info.Method) =>
             return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.sig, mi.ast.contract,
-              extractResolvedInfo(mi.ast.attr), extractAssignExpOpt(mi))
+              extractResolvedInfo(mi.ast.attr), mi.ast.bodyOpt.nonEmpty, extractAssignExpOpt(mi))
           case Some(mi: lang.symbol.Info.ExtMethod) =>
-            return Context.InvokeMethodInfo(T, mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), None())
+            return Context.InvokeMethodInfo(T, mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), F, None())
           case Some(mi: lang.symbol.Info.SpecMethod) =>
             val typedAttr = AST.TypedAttr(mi.ast.sig.id.attr.posOpt, mi.ast.sig.returnType.typedOpt)
             return Context.InvokeMethodInfo(T, mi.ast.sig, AST.MethodContract.Simple.empty,
-              extractResolvedInfo(mi.ast.attr), Some(AST.Stmt.Expr(
+              extractResolvedInfo(mi.ast.attr), F, Some(AST.Stmt.Expr(
                 AST.Exp.Result(None(), typedAttr), typedAttr)))
           case info => halt(s"Infeasible: $owner.$id => $info")
         }
@@ -1708,12 +1708,12 @@ import Util._
             info.methods.get(id) match {
               case Some(mi) =>
                 return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.sig, mi.ast.contract,
-                  extractResolvedInfo(mi.ast.attr), extractAssignExpOpt(mi))
+                  extractResolvedInfo(mi.ast.attr), mi.ast.bodyOpt.nonEmpty, extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
                     return Context.InvokeMethodInfo(T, mi.ast.sig, AST.MethodContract.Simple.empty,
-                      extractResolvedInfo(mi.ast.attr), None())
+                      extractResolvedInfo(mi.ast.attr), F, None())
                   case _ => halt("Infeasible")
                 }
             }
@@ -1721,12 +1721,12 @@ import Util._
             info.methods.get(id) match {
               case Some(mi) =>
                 return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.sig, mi.ast.contract,
-                  extractResolvedInfo(mi.ast.attr), extractAssignExpOpt(mi))
+                  extractResolvedInfo(mi.ast.attr), mi.ast.bodyOpt.nonEmpty, extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
                     return Context.InvokeMethodInfo(T, mi.ast.sig, AST.MethodContract.Simple.empty,
-                      extractResolvedInfo(mi.ast.attr), None())
+                      extractResolvedInfo(mi.ast.attr), F, None())
                   case _ => halt("Infeasible")
                 }
             }
@@ -2705,7 +2705,7 @@ import Util._
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
 
-                if (config.interp && !(config.interpContracts && info.contract.nonEmpty)) {
+                if (config.interp && !(config.interpContracts && info.contract.nonEmpty) && info.hasBody) {
                   r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt, receiverOpt,
                     paramArgs)
                 } else if (info.strictPureBodyOpt.nonEmpty) {
