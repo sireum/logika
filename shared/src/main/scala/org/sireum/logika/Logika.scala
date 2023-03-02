@@ -942,13 +942,13 @@ import Util._
       def evalCond(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): ISZ[(State, State.Value)] = {
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
-            return evalIfExp("&&", T, split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(F, AST.Attr(exp.left.posOpt)),
+            return evalIfExp("&&", F, split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(F, AST.Attr(exp.left.posOpt)),
               AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr =>
-            return evalIfExp("||", T, split, AST.Exp.If(exp.left, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)), exp.right,
+            return evalIfExp("||", F, split, AST.Exp.If(exp.left, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)), exp.right,
               AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply =>
-            return evalIfExp("-->:", T, split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)),
+            return evalIfExp("-->:", F, split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)),
               AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case _ => halt("Infeasible")
         }
