@@ -1327,19 +1327,25 @@ import Util._
           }
         case _ => evalIdent(exp.ident)
       }
-      for (p0 <- srcv; p1 <- evalExp(split, smt2, cache, rtCheck, p0._1, exp.args(0), reporter)) {
-        val (_, seq) = p0
-        val (s1, iv) = p1
-        val AST.Typed.Tuple(ISZ(iType, vType)) = iv.tipe
-        val pos = exp.posOpt.get
-        val (s2, i) = s1.freshSym(iType, pos)
-        val (s3, v) = s2.freshSym(vType, pos)
-        val (s4, newSeq) = s3.freshSym(seq.tipe, pos)
-        r = r :+ ((s4.addClaims(ISZ(
-          State.Claim.Let.FieldLookup(i, iv, "_1"),
-          State.Claim.Let.FieldLookup(v, iv, "_2"),
-          State.Claim.Let.SeqStore(newSeq, seq, i, v)
-        )), newSeq))
+      for (p0 <- srcv) {
+        var p1 = p0
+        for (arg <- exp.args) {
+          val (s0, seq) = p1
+          for (p2 <- evalExp(split, smt2, cache, rtCheck, s0, arg, reporter)) {
+            val (s1, iv) = p2
+            val AST.Typed.Tuple(ISZ(iType, vType)) = iv.tipe
+            val pos = exp.posOpt.get
+            val (s2, i) = s1.freshSym(iType, pos)
+            val (s3, v) = s2.freshSym(vType, pos)
+            val (s4, newSeq) = s3.freshSym(seq.tipe, pos)
+            p1 = (s4.addClaims(ISZ(
+              State.Claim.Let.FieldLookup(i, iv, "_1"),
+              State.Claim.Let.FieldLookup(v, iv, "_2"),
+              State.Claim.Let.SeqStore(newSeq, seq, i, v)
+            )), newSeq)
+          }
+        }
+        r = r :+ p1
       }
       return r
     }

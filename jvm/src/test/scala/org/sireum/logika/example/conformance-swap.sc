@@ -3,14 +3,9 @@ import org.sireum._
 
 def swap(s: ZS, i: Z, j: Z): Unit = {
   Contract(
-    Requires(0 <= i, i < s.size, 0 <= j, j < s.size),
+    Requires(s.isInBound(i), s.isInBound(j)),
     Modifies(s),
-    Ensures(
-      s.size == In(s).size,
-      s(i) == In(s)(j),
-      s(j) == In(s)(i),
-      All(s.indices)(k => (k != i & k != j) ->: (s(k) == In(s)(k)))
-    )
+    Ensures(s == In(s)(i ~> In(s)(j), j ~> In(s)(i)))
   )
   val t: Z = s(i)
   s(i) = s(j)
