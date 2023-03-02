@@ -466,7 +466,7 @@ object Smt2 {
     val (decls, claim) = addTypeConstraints(T, paramIdTypes :+ ((v2ST(sym), pf.returnType)),
       st"""(=>
           |    (= ${v2ST(sym)} $app)
-          |    ${embeddedClaims(F, invClaims, ISZ(), None(), HashSMap.empty)})"""
+          |    ${embeddedClaims(F, T, invClaims, ISZ(), None(), HashSMap.empty)})"""
     )
     val declClaim: ST = if (invClaims.size == 0) st"" else
       st"""(assert (forall (${(decls, " ")})
@@ -507,7 +507,7 @@ object Smt2 {
         State.Claim.And(ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)),
         State.Claim.Let.Def(v, v3)
       ))
-      ecs = ecs :+ embeddedClaims(T, ISZ(claims), ISZ(), None(), HashSMap.empty)
+      ecs = ecs :+ embeddedClaims(T, T, ISZ(claims), ISZ(), None(), HashSMap.empty)
     }
     val ec: ST = if (ecs.isEmpty) {
       val ignore = reporter.ignore
@@ -1788,6 +1788,7 @@ object Smt2 {
   }
 
   def embeddedClaims(isImply: B,
+                     simplify: B,
                      claims: ISZ[State.Claim],
                      initSyms: ISZ[State.Value.Sym],
                      letsOpt: Option[HashMap[Z, ISZ[State.Claim.Let]]],
@@ -1826,6 +1827,7 @@ object Smt2 {
       }
     }
     val lids = collectLids(claims) -- declIds.keys
+    val simp = simplifiedQuery || simplify
     def raw: ST = {
       var lets = ISZ[State.Claim.Let]()
       var lsyms = ISZ[State.Value.Sym]()
@@ -1876,7 +1878,7 @@ object Smt2 {
     }
 
     def simplified: ST = {
-      var (lets, lsyms) = Util.collectLetClaims(simplifiedQuery, claims)
+      var (lets, lsyms) = Util.collectLetClaims(simp, claims)
       letsOpt match {
         case Some(ls) =>
           for (p <- ls.entries) {
@@ -1916,7 +1918,7 @@ object Smt2 {
       return r
     }
 
-    return if (simplifiedQuery) simplified else raw
+    return if (simp) simplified else raw
   }
 
   @strictpure def addTypeConstraints(isImply: B, ps: ISZ[(ST, AST.Typed)], claim: ST): (ISZ[ST], ST) =
@@ -1978,7 +1980,7 @@ object Smt2 {
         return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2st(c.value)}) ${typeHierarchyId(c.tipe)})"
       case c: State.Claim.Let.Quant =>
         val (qvars, body) = addTypeConstraints(c.isAll, for (qvar <- c.vars) yield (qvar2ST(qvar), qvar.tipe),
-          embeddedClaims(c.isAll, c.claims, ISZ(), Some(lets), declIds))
+          embeddedClaims(c.isAll, T, c.claims, ISZ(), Some(lets), declIds))
         return if (c.isAll)
           st"""(forall (${(qvars, " ")})
               |  $body
