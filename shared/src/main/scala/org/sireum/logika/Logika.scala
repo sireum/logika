@@ -940,7 +940,6 @@ import Util._
       }
 
       def evalCond(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): ISZ[(State, State.Value)] = {
-        val pos = exp.left.posOpt.get
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
             return evalIfExp("&&", split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(F, AST.Attr(exp.left.posOpt)),
@@ -2811,7 +2810,8 @@ import Util._
           r = r :+ ((s0, State.errorValue))
         }
       }
-      return r
+      val nextFresh = maxStateValuesNextFresh(r)
+      return for (p <- r) yield (p._1(nextFresh = nextFresh), p._2)
     }
 
     def evalRandomInt(): ISZ[(State, State.Value)] = {
@@ -3071,7 +3071,11 @@ import Util._
         if (nextFresh < 0) {
           return F
         }
-        return svs.size == 1 || ops.ISZOps(svs).forall((p: (State, State.Value)) => !p._1.ok || nextFresh == p._1.nextFresh)
+        val r = svs.size == 1 || ops.ISZOps(svs).forall((p: (State, State.Value)) => !p._1.ok || nextFresh == p._1.nextFresh)
+        if (!r) {
+          println("Here")
+        }
+        return r
       }
       assert(check())
       return svs
