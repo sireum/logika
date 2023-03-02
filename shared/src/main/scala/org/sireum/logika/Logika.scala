@@ -939,7 +939,7 @@ import Util._
         return for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.right, reporter)) yield evalMapsToH(p)
       }
 
-      def evalCond(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value.Sym): ISZ[(State, State.Value)] = {
+      def evalCond(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): ISZ[(State, State.Value)] = {
         val pos = exp.left.posOpt.get
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
@@ -983,42 +983,38 @@ import Util._
 
       exp.attr.resOpt.get match {
         case AST.ResolvedInfo.BuiltIn(kind) =>
-          var r = ISZ[(State, State.Value)]()
-          var maxFresh = s0.nextFresh
-          for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.left, reporter)) {
-            val (s1, v1) = p
-            if (s1.ok) {
-              if (kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo) {
-                for (svs2 <- evalMapsTo(s1, v1)) {
-                  if (maxFresh < svs2._1.nextFresh) {
-                    maxFresh = svs2._1.nextFresh
+          if (isCond(kind)) {
+            return evalCond(kind)
+          } else {
+            var r = ISZ[(State, State.Value)]()
+            var maxFresh = s0.nextFresh
+            for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp.left, reporter)) {
+              val (s1, v1) = p
+              if (s1.ok) {
+                if (kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo) {
+                  for (svs2 <- evalMapsTo(s1, v1)) {
+                    if (maxFresh < svs2._1.nextFresh) {
+                      maxFresh = svs2._1.nextFresh
+                    }
+                    r = r :+ svs2
                   }
-                  r = r :+ svs2
-                }
-              } else if (isCond(kind)) {
-                val (s2, left) = value2Sym(s1, v1, exp.left.posOpt.get)
-                for (svs2 <-evalCond(s2, kind, left)) {
-                  if (maxFresh < svs2._1.nextFresh) {
-                    maxFresh = svs2._1.nextFresh
+                } else if (TypeChecker.eqBinops.contains(exp.op) || th.isGroundType(v1.tipe)) {
+                  for (svs2 <- evalBasic(s1, kind, v1)) {
+                    if (maxFresh < svs2._1.nextFresh) {
+                      maxFresh = svs2._1.nextFresh
+                    }
+                    r = r :+ svs2
                   }
-                  r = r :+ svs2
-                }
-              } else if (TypeChecker.eqBinops.contains(exp.op) || th.isGroundType(v1.tipe)) {
-                for (svs2 <- evalBasic(s1, kind, v1)) {
-                  if (maxFresh < svs2._1.nextFresh) {
-                    maxFresh = svs2._1.nextFresh
-                  }
-                  r = r :+ svs2
+                } else {
+                  reporter.warn(e.posOpt, Logika.kind, s"Not currently supported: $e")
+                  r = r :+ ((s1(status = State.Status.Error), State.errorValue))
                 }
               } else {
-                reporter.warn(e.posOpt, Logika.kind, s"Not currently supported: $e")
-                r = r :+ ((s1(status = State.Status.Error), State.errorValue))
+                r = r :+ ((s1, State.errorValue))
               }
-            } else {
-              r = r :+ ((s1, State.errorValue))
             }
+            return for (svs <- r) yield (svs._1(nextFresh = maxFresh), svs._2)
           }
-          return for (svs <- r) yield (svs._1(nextFresh = maxFresh), svs._2)
         case m: AST.ResolvedInfo.Method =>
           if (isSeq(m)) {
             return evalSeq(s0, m)
