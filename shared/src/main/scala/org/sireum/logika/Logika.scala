@@ -1959,7 +1959,7 @@ import Util._
       if (ctx == context.methodName) {
         for (paramArg <- paramArgs) {
           val id = paramArg._1.id
-          val (s2, sym) = idIntro(pos, s1, ctx, paramArg._1.id, paramArg._4.tipe, None())
+          val (s2, sym) = idIntro(pos, s1, ctx, paramArg._1.id, paramArg._4.tipe.subst(typeSubstMap), None())
           oldVars = oldVars + id ~> sym
           s1 = s2
         }
@@ -2016,7 +2016,7 @@ import Util._
           localInMap = localInMap))))
       }
 
-      val (receiverModified, modLocals) = contract.modifiedLocalVars(lComp.context.receiverLocalTypeOpt)
+      val (receiverModified, modLocals) = contract.modifiedLocalVars(lComp.context.receiverLocalTypeOpt, typeSubstMap)
 
       def evalContractCase(logikaComp: Logika, callerReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
                            labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
@@ -4178,7 +4178,7 @@ import Util._
               val srw2 = assumeValueInv(this, smt2, cache, rtCheck, srw1, sym, pos, reporter)
               srw = srw2.addClaim(State.Claim.Let.CurrentName(sym, res.owner :+ res.id, Some(pos)))
             }
-            val (receiverModified, modLocalVars) = whileStmt.contract.modifiedLocalVars(context.receiverLocalTypeOpt)
+            val (receiverModified, modLocalVars) = whileStmt.contract.modifiedLocalVars(context.receiverLocalTypeOpt, HashMap.empty)
             val receiverOpt: Option[State.Value.Sym] = if (receiverModified) {
               val (srw3, sym) = idIntro(whileStmt.posOpt.get, srw, context.methodName, "this",
                 context.receiverLocalTypeOpt.get._2, None())

@@ -1,13 +1,13 @@
 // #Sireum #Logika
 import org.sireum._
 
-def swap(s: ZS, i: Z, j: Z): Unit = {
+def swap[@index I, E](s: MS[I, E], i: I, j: I): Unit = {
   Contract(
     Requires(s.isInBound(i), s.isInBound(j)),
     Modifies(s),
     Ensures(s == In(s)(i ~> In(s)(j), j ~> In(s)(i)))
   )
-  val t: Z = s(i)
+  val t = s(i)
   s(i) = s(j)
   s(j) = t
 }
