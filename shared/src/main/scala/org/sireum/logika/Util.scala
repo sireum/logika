@@ -524,7 +524,7 @@ object Util {
                              var atPossMap: HashMap[ClaimsToExps.AtPossKey, HashMap[ISZ[Position], (Z, Z)]]) {
 
     val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
-    val falseLit: AST.Exp = AST.Exp.LitB(T, trueLit.attr)
+    val falseLit: AST.Exp = AST.Exp.LitB(F, trueLit.attr)
     val posOpt: Option[Position] = Some(pos)
 
     def atMap: ClaimsToExps.AtMap = {

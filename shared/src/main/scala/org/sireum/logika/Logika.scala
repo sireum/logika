@@ -943,47 +943,14 @@ import Util._
         val pos = exp.left.posOpt.get
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
-            val s1 = s0.addClaim(State.Claim.Prop(T, v1))
-
-            def evalCondAndH(p: (State, State.Value)): ISZ[(State, State.Value)] = {
-              val (s2, v2) = p
-              if (!s2.ok) {
-                return ISZ((s2, State.errorValue))
-              }
-              val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
-              val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(F, pos)))
-              return ISZ((s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r))
-            }
-
-            return for (p <- evalExp(split, smt2, cache, rtCheck, s1, exp.right, reporter); r <- evalCondAndH(p)) yield r
+            return evalIfExp("&&", split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(F, AST.Attr(exp.left.posOpt)),
+              AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr =>
-            val s1 = s0.addClaim(State.Claim.Prop(F, v1))
-
-            def evalCondOrH(p: (State, State.Value)): ISZ[(State, State.Value)] = {
-              val (s2, v2) = p
-              if (!s2.ok) {
-                return ISZ((s2, State.errorValue))
-              }
-              val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
-              val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, State.Value.B(T, pos), v2))
-              return ISZ((s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r))
-            }
-
-            return for (p <- evalExp(split, smt2, cache, rtCheck, s1, exp.right, reporter); r <- evalCondOrH(p)) yield r
+            return evalIfExp("||", split, AST.Exp.If(exp.left, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)), exp.right,
+              AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply =>
-            val s1 = s0.addClaim(State.Claim.Prop(T, v1))
-
-            def evalCondImplyH(p: (State, State.Value)): ISZ[(State, State.Value)] = {
-              val (s2, v2) = p
-              if (!s2.ok) {
-                return ISZ((s2, State.errorValue))
-              }
-              val (s3, r) = s2.freshSym(AST.Typed.b, exp.right.posOpt.get)
-              val s4 = s3.addClaim(State.Claim.Let.Ite(r, v1, v2, State.Value.B(T, pos)))
-              return ISZ((s4(claims = s0.claims ++ ops.ISZOps(s4.claims).slice(s1.claims.size, s4.claims.size)), r))
-            }
-
-            return for (p <- evalExp(split, smt2, cache, rtCheck, s1, exp.right, reporter); r <- evalCondImplyH(p)) yield r
+            return evalIfExp("-->:", split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)),
+              AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case _ => halt("Infeasible")
         }
       }
@@ -1512,7 +1479,11 @@ import Util._
         val (s8, v) = p
         val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
         if (s9.ok) {
-          quantClaims = quantClaims ++ ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym)
+          quantClaims = quantClaims :+ (if (quant.isForall)
+            State.Claim.Imply(ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym))
+          else State.Claim.And(
+            ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym))
+          )
         }
         if (nextFresh < s9.nextFresh) {
           nextFresh = s9.nextFresh
@@ -1524,10 +1495,11 @@ import Util._
         return (s0(status = State.Status.Error), State.errorValue)
       }
       val qcs: ISZ[State.Claim] = if (s0.claims.size != s1.claims.size) {
-        val p = s1.claims(s0.claims.size)
-        if (quant.isForall) ISZ(State.Claim.Imply(ISZ(p, bigAnd(quantClaims)))) else p +: quantClaims
+        val invs = ops.ISZOps(s1.claims).slice(s0.claims.size, s1.claims.size)
+        if (quant.isForall) ISZ(State.Claim.Imply(invs :+ bigAnd(quantClaims)))
+        else invs ++ quantClaims
       } else {
-        quantClaims
+        if (quant.isForall) ISZ(bigAnd(quantClaims)) else quantClaims
       }
       return (s0(nextFresh = nextFresh).addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, qcs)), sym)
     }
@@ -2787,7 +2759,7 @@ import Util._
       return if (r.size > 1) r else for (p <- r) yield (p._1(nextFresh = nextFresh), p._2)
     }
 
-    def evalIfExp(sp: Split.Type, ifExp: AST.Exp.If): ISZ[(State, State.Value)] = {
+    def evalIfExp(construct: String, sp: Split.Type, ifExp: AST.Exp.If): ISZ[(State, State.Value)] = {
       var r = ISZ[(State, State.Value)]()
       val shouldSplit: B = sp match {
         case Split.Default => config.splitAll || config.splitIf
@@ -2803,9 +2775,9 @@ import Util._
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
           val thenBranch = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
-            s"if-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
+            s"$construct-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
           val elseBranch = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
-            s"if-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
+            s"$construct-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
               val (s2, re) = s1.freshSym(t, pos)
@@ -2831,9 +2803,7 @@ import Util._
                   val (s3, tv) = s3v
                   val (s4, ev) = s4v
                   val s5 = mergeStates(s1, sym, s3, s4, s4.nextFresh)
-                  r = r :+ ((s5.addClaim(State.Claim.If(sym,
-                    ISZ(State.Claim.Let.Def(re, tv)),
-                    ISZ(State.Claim.Let.Def(re, ev)))), re))
+                  r = r :+ ((s5.addClaim(State.Claim.Let.Ite(re, sym, tv, ev)), re))
                 }
               }
             case (T, F) => r = r ++ evalExp(sp, smt2, cache, rtCheck, s1, ifExp.thenExp, reporter)
@@ -3003,7 +2973,7 @@ import Util._
         case e: AST.Exp.Select => return evalSelect(e)
         case e: AST.Exp.Unary => return evalUnaryExp(e)
         case e: AST.Exp.Binary => return evalBinaryExp(e)
-        case e: AST.Exp.If => return evalIfExp(split, e)
+        case e: AST.Exp.If => return evalIfExp("if", split, e)
         case e: AST.Exp.Tuple => return evalTupleExp(e)
         case e: AST.Exp.Invoke =>
           e.attr.resOpt.get match {
