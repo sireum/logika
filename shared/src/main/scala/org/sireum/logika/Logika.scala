@@ -1474,16 +1474,12 @@ import Util._
         s2
       }
       var nextFresh = s1.nextFresh
-      val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
+      val sp: Split.Type = Split.Disabled
       for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s1, quant.fun.exp, reporter)) {
         val (s8, v) = p
         val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
         if (s9.ok) {
-          quantClaims = quantClaims :+ (if (quant.isForall)
-            State.Claim.Imply(ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym))
-          else State.Claim.And(
-            ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym))
-          )
+          quantClaims = quantClaims ++ ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym)
         }
         if (nextFresh < s9.nextFresh) {
           nextFresh = s9.nextFresh
@@ -1496,10 +1492,9 @@ import Util._
       }
       val qcs: ISZ[State.Claim] = if (s0.claims.size != s1.claims.size) {
         val invs = ops.ISZOps(s1.claims).slice(s0.claims.size, s1.claims.size)
-        if (quant.isForall) ISZ(State.Claim.Imply(invs :+ bigAnd(quantClaims)))
-        else invs ++ quantClaims
+        invs ++ quantClaims
       } else {
-        if (quant.isForall) ISZ(bigAnd(quantClaims)) else quantClaims
+        quantClaims
       }
       return (s0(nextFresh = nextFresh).addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, qcs)), sym)
     }
@@ -1508,7 +1503,7 @@ import Util._
       val qVarType = quant.attr.typedOpt.get
       val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
       val s0 = state
-      val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
+      val sp: Split.Type = Split.Disabled
       var r = ISZ[(State, State.Value)]()
       for (p1 <- evalExp(sp, smt2, cache, rtCheck, s0, quant.lo, reporter);
            p2 <- evalExp(sp, smt2, cache, rtCheck, p1._1, quant.hi, reporter)) {
@@ -1559,7 +1554,7 @@ import Util._
       val qVarType = quant.attr.typedOpt.get
       val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
       val s0 = state
-      val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
+      val sp: Split.Type = Split.Disabled
       var r = ISZ[(State, State.Value)]()
       for (p1 <- evalExp(sp, smt2, cache, rtCheck, s0, seqExp, reporter)) {
         val (s2, s) = p1
@@ -1613,7 +1608,7 @@ import Util._
       val eType = sType.args(1)
       val pos = quant.fun.params(0).idOpt.get.attr.posOpt.get
       var r = ISZ[(State, State.Value)]()
-      val sp: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
+      val sp: Split.Type = Split.Disabled
       for (p <- evalExp(sp, smt2, cache, rtCheck, state, quant.seq, reporter)) {
         val (s0, seq) = p
         if (s0.ok) {
