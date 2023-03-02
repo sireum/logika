@@ -942,13 +942,13 @@ import Util._
       def evalCond(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): ISZ[(State, State.Value)] = {
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
-            return evalIfExp("&&", split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(F, AST.Attr(exp.left.posOpt)),
+            return evalIfExp("&&", T, split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(F, AST.Attr(exp.left.posOpt)),
               AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr =>
-            return evalIfExp("||", split, AST.Exp.If(exp.left, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)), exp.right,
+            return evalIfExp("||", T, split, AST.Exp.If(exp.left, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)), exp.right,
               AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply =>
-            return evalIfExp("-->:", split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)),
+            return evalIfExp("-->:", T, split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)),
               AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case _ => halt("Infeasible")
         }
@@ -2755,7 +2755,7 @@ import Util._
       return if (r.size > 1) r else for (p <- r) yield (p._1(nextFresh = nextFresh), p._2)
     }
 
-    def evalIfExp(construct: String, sp: Split.Type, ifExp: AST.Exp.If): ISZ[(State, State.Value)] = {
+    def evalIfExp(construct: String, disableSat: B, sp: Split.Type, ifExp: AST.Exp.If): ISZ[(State, State.Value)] = {
       var r = ISZ[(State, State.Value)]()
       val shouldSplit: B = sp match {
         case Split.Default => config.splitAll || config.splitIf
@@ -2770,9 +2770,9 @@ import Util._
           val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
-          val thenBranch = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+          val thenBranch = disableSat || smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
             s"$construct-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
-          val elseBranch = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+          val elseBranch = disableSat || smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
             s"$construct-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
@@ -2970,7 +2970,7 @@ import Util._
         case e: AST.Exp.Select => return evalSelect(e)
         case e: AST.Exp.Unary => return evalUnaryExp(e)
         case e: AST.Exp.Binary => return evalBinaryExp(e)
-        case e: AST.Exp.If => return evalIfExp("if", split, e)
+        case e: AST.Exp.If => return evalIfExp("if", F, split, e)
         case e: AST.Exp.Tuple => return evalTupleExp(e)
         case e: AST.Exp.Invoke =>
           e.attr.resOpt.get match {
@@ -3072,9 +3072,6 @@ import Util._
           return F
         }
         val r = svs.size == 1 || ops.ISZOps(svs).forall((p: (State, State.Value)) => !p._1.ok || nextFresh == p._1.nextFresh)
-        if (!r) {
-          println("Here")
-        }
         return r
       }
       assert(check())
