@@ -4744,6 +4744,9 @@ import Util._
     if (svs.isEmpty) {
       return ps(0)
     }
+    if (svs.size == 1) {
+      return svs(0)
+    }
     val (s0, v0) = svs(0)
     var nextFreshGap = s0.nextFresh - state.nextFresh
     for (i <- 1 until svs.size) {
