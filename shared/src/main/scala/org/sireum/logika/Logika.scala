@@ -1846,7 +1846,7 @@ import Util._
         )
         var s2vs = ISZ[(State, State.Value)]()
         info.strictPureBodyOpt match {
-          case Some(body) => s2vs = evalAssignExpValue(split, smt2, cache, retType, rtCheck, s1, body, reporter)
+          case Some(body) => s2vs = l.evalAssignExpValue(split, smt2, cache, retType, rtCheck, s1, body, reporter)
           case _ =>
             if (retType == AST.Typed.unit) {
               val unit = State.Value.Unit(pos)
@@ -3105,11 +3105,12 @@ import Util._
 
   def evalAssume(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp, posOpt: Option[Position],
                  reporter: Reporter): (State, State.Value.Sym) = {
-    val (s1, v) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s0, cond, reporter))
+    val pos = cond.posOpt.get
+    val (s1, v) = singleStateValue(pos, s0, evalExp(Split.Disabled, smt2, cache, rtCheck, s0, cond, reporter))
     if (!s1.ok) {
-      return value2Sym(s1, v, cond.posOpt.get)
+      return value2Sym(s1, v, pos)
     }
-    val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
+    val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, pos)
     return (evalAssumeH(T, smt2, cache, title, s2, sym, posOpt, reporter), sym)
   }
 
@@ -3133,11 +3134,12 @@ import Util._
 
   def evalAssert(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp,
                  posOpt: Option[Position], reporter: Reporter): (State, State.Value.Sym) = {
-    val (s1, v) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s0, cond, reporter))
+    val pos = cond.posOpt.get
+    val (s1, v) = singleStateValue(pos, s0, evalExp(Split.Disabled, smt2, cache, rtCheck, s0, cond, reporter))
     if (!s1.ok) {
-      return value2Sym(s1, v, cond.posOpt.get)
+      return value2Sym(s1, v, pos)
     }
-    val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, cond.posOpt.get)
+    val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, pos)
     return (evalAssertH(T, smt2, cache, title, s2, sym, posOpt, reporter), sym)
   }
 
@@ -3728,9 +3730,10 @@ import Util._
       var conds = ISZ(pcond)
       val s6: State = c.condOpt match {
         case Some(cond) =>
-          val (s4, ccond) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s3, cond, reporter))
+          val condPos = cond.posOpt.get
+          val (s4, ccond) = singleStateValue(condPos, s3, evalExp(Split.Disabled, smt2, cache, rtCheck, s3, cond, reporter))
           if (bindings.nonEmpty) {
-            val (s5, sym) = s4.freshSym(AST.Typed.b, cond.posOpt.get)
+            val (s5, sym) = s4.freshSym(AST.Typed.b, condPos)
             conds = conds :+ sym
             s5.addClaim(State.Claim.Let.Imply(sym, (for (b <- bindings) yield b.asInstanceOf[State.Value]) :+ ccond))
           } else {
@@ -3800,8 +3803,8 @@ import Util._
              stmt: AST.Stmt.If, reporter: Reporter): ISZ[State] = {
     var branches = ISZ[Branch]()
     def evalConds(s0: State, ifStmt: AST.Stmt.If): State = {
-      val (s1, cond) = singleStateValue(evalExp(Split.Disabled, smt2, cache, rtCheck, s0, ifStmt.cond, reporter))
       val pos = ifStmt.cond.posOpt.get
+      val (s1, cond) = singleStateValue(pos, s0, evalExp(Split.Disabled, smt2, cache, rtCheck, s0, ifStmt.cond, reporter))
       val (s2, sym) = value2Sym(s1, cond, pos)
       branches = branches :+ Branch("if-then", sym, ifStmt.thenBody, Map.empty, HashMap.empty)
       ifStmt.elseBody.stmts match {
@@ -4733,9 +4736,69 @@ import Util._
     return is
   }
 
-  @pure def singleStateValue(ps: ISZ[(State, State.Value)]): (State, State.Value) = {
-    assert(ps.size == 1)
-    return ps(0)
+  @pure def singleStateValue(pos: Position, state: State, ps: ISZ[(State, State.Value)]): (State, State.Value) = {
+    if (ps.size == 1) {
+      return ps(0)
+    }
+    var svs: ISZ[(State, State.Value)] = for (p <- ps if p._1.ok) yield p
+    if (svs.isEmpty) {
+      return ps(0)
+    }
+    val (s0, v0) = svs(0)
+    var nextFreshGap = s0.nextFresh - state.nextFresh
+    for (i <- 1 until svs.size) {
+      val (si, vi) = svs(i)
+      val gap = si.nextFresh - state.nextFresh
+      assert(gap >= 0)
+      val rw = Util.SymAddRewriter(state.nextFresh, nextFreshGap, jescmPlugins._4)
+      svs = svs(i ~> (si(claims = for (c <- si.claims) yield rw.transformStateClaim(c).getOrElse(c)),
+        rw.transformStateValue(vi).getOrElse(vi)))
+      nextFreshGap = nextFreshGap + gap
+    }
+    val nextFresh = state.nextFresh + nextFreshGap
+    val sym = State.Value.Sym(nextFresh, v0.tipe, pos)
+    var commonClaims = ISZ[State.Claim]()
+    var claimss = ISZ.create(svs.size, ISZ[State.Claim]())
+    val s0ClaimsSize = s0.claims.size
+    var maxClaims = s0ClaimsSize
+    for (i <- 1 until svs.size if svs(i)._1.ok) {
+      if (svs(i)._1.claims.size > maxClaims) {
+        maxClaims = svs(i)._1.claims.size
+      }
+    }
+    for (j <- 0 until maxClaims) {
+      var hasDiff = F
+      for (i <- 1 until svs.size if svs(i)._1.ok) {
+        val (si, vi) = svs(i)
+        if (j < s0ClaimsSize) {
+          if (j < si.claims.size) {
+            val c = si.claims(j)
+            if (s0.claims(j) != c) {
+              hasDiff = T
+              claimss = claimss(i ~> (claimss(i) :+ c))
+            }
+          } else {
+            hasDiff = T
+          }
+        } else {
+          hasDiff = T
+          if (j < si.claims.size) {
+            claimss = claimss(i ~> (claimss(i) :+ si.claims(j)))
+          }
+        }
+        claimss = claimss(i ~> (claimss(i) :+ State.Claim.Let.Def(sym, vi)))
+      }
+      if (hasDiff) {
+        if (j < s0ClaimsSize) {
+          claimss = claimss(0 ~> (claimss(0) :+ s0.claims(j)))
+        }
+      } else {
+        commonClaims = commonClaims :+ s0.claims(j)
+      }
+    }
+    claimss = claimss(0 ~> (claimss(0) :+ State.Claim.Let.Def(sym, v0)))
+    val claims: ISZ[State.Claim] = commonClaims :+ State.Claim.Or(for (claims <- claimss) yield State.Claim.And(claims))
+    return (State(status = State.Status.Normal, claims = claims, nextFresh = nextFresh + 1), sym)
   }
 
   @pure def singleState(ss: ISZ[State]): State = {
