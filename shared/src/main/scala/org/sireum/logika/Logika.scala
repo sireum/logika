@@ -3575,8 +3575,8 @@ import Util._
       return T
     }
     var leafClaims: LeafClaims = ISZ()
-    if ((allReturns && config.branchPar != Config.BranchPar.Disabled) ||
-      (config.branchPar == Config.BranchPar.All && config.branchParCores > 1)) {
+    if (config.parCores > 1 && (config.branchPar == Config.BranchPar.All ||
+      (allReturns && config.branchPar == Config.BranchPar.OnlyAllReturns))) {
       val inputs: ISZ[Z] = branches.indices
 
       def computeBranch(i: Z): (Option[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])], Z, Smt2, ISZ[Message]) = {
@@ -3608,7 +3608,7 @@ import Util._
             case Some((cond, claimss)) =>
               val gap = outputs(i)._2 - s0.nextFresh
               assert(gap >= 0)
-              if (!allReturns && gap > 0) {
+              if ((!allReturns || config.interp) && gap > 0) {
                 val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap, jescmPlugins._4)
                 val newCond = rw.transformStateClaim(cond).getOrElseEager(cond)
                 var newClaimss = ISZ[(State.Status.Type, ISZ[State.Claim])]()
