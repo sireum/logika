@@ -537,7 +537,7 @@ object Util {
             val (num, n) = p3
             val key = (ctx, id, t, n)
             r.get(key) match {
-              case Some((_, _)) =>
+              case Some((poss2, num2)) =>
               case _ => r = r + key ~> ((poss, num))
             }
           }
@@ -761,6 +761,24 @@ object Util {
       return r.elements
     }
 
+    def computeAtNum(key: ClaimsToExps.AtPossKey, poss: ISZ[Position], num: Z): Z = {
+      val m = atPossMap.get(key).getOrElse(HashMap.empty)
+      val m2: HashMap[Z, Z] = m.get(poss) match {
+        case Some(m3) => m3
+        case _ => HashMap.empty[Z, Z]
+      }
+      m2.get(num) match {
+        case Some(v) => return v
+        case _ =>
+          var n: Z = 0
+          for (m2 <- m.values) {
+            n = n + m2.size
+          }
+          atPossMap = atPossMap + key ~> (m + poss ~> (m2 + num ~> n))
+          return n
+      }
+    }
+
     def letToExp(let: State.Claim.Let): Option[AST.Exp] = {
       val sym = let.sym
       val symPos = sym.pos
@@ -783,56 +801,20 @@ object Util {
           val attr = AST.Attr(symPosOpt)
           if (let.context == context || let.context.isEmpty) {
             val key: ClaimsToExps.AtPossKey = (let.context, let.id, sym.tipe)
-            val m = atPossMap.get(key).getOrElse(HashMap.empty)
-            val n: Z = {
-              val m2: HashMap[Z, Z] = m.get(let.poss) match {
-                case Some(m3) => m3
-                case _ => HashMap.empty[Z, Z]
-              }
-              m2.get(let.num) match {
-                case Some(v) => v
-                case _ =>
-                  atPossMap = atPossMap + key ~> (m + let.poss ~> (m2 + let.num ~> m.size))
-                  m.size
-              }
-            }
+            val n: Z = computeAtNum(key, let.poss, let.num)
             return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
               Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
               Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr))
           } else {
             val key: ClaimsToExps.AtPossKey = (ISZ[String](), st"${(let.context :+ let.id, ".")}".render, sym.tipe)
-            val m = atPossMap.get(key).getOrElse(HashMap.empty)
-            val n: Z = {
-              val m2: HashMap[Z, Z] = m.get(let.poss) match {
-                case Some(m3) => m3
-                case _ => HashMap.empty[Z, Z]
-              }
-              m2.get(let.num) match {
-                case Some(v) => v
-                case _ =>
-                  atPossMap = atPossMap + key ~> (m + let.poss ~> (m2 + let.num ~> m.size))
-                  m.size
-              }
-            }
+            val n = computeAtNum(key, let.poss, let.num)
             return Some(AST.Exp.At(Some(typedToType(sym.tipe)),
               AST.Exp.LitString(key._2, AST.Attr(symPosOpt)),
               AST.Exp.LitZ(n, attr), linesFresh, attr))
           }
         case let: State.Claim.Let.Name =>
           val key: ClaimsToExps.AtPossKey = (let.ids, "", sym.tipe)
-          val m = atPossMap.get(key).getOrElse(HashMap.empty)
-          val n: Z = {
-            val m2: HashMap[Z, Z] = m.get(let.poss) match {
-              case Some(m3) => m3
-              case _ => HashMap.empty[Z, Z]
-            }
-            m2.get(let.num) match {
-              case Some(v) => v
-              case _ =>
-                atPossMap = atPossMap + key ~> (m + let.poss ~> (m2 + let.num ~> m.size))
-                m.size
-            }
-          }
+          val n = computeAtNum(key, let.poss, let.num)
           val linesFresh: ISZ[AST.Exp.LitZ] = if (includeFreshLines) {
             (for (pos <- let.poss) yield AST.Exp.LitZ(pos.beginLine, AST.Attr(Some(pos)))) :+ AST.Exp.LitZ(let.num, AST.Attr(symPosOpt))
           } else {
@@ -1512,20 +1494,7 @@ object Util {
     def symAt(id: String, sym: State.Value.Sym): AST.Exp.At = {
       val attr = AST.Attr(Some(sym.pos))
       val key: ClaimsToExps.AtPossKey = (ISZ[String](), id, sym.tipe)
-      val m = atPossMap.get(key).getOrElse(HashMap.empty)
-      val poss = ISZ(sym.pos)
-      val n: Z = {
-        val m2: HashMap[Z, Z] = m.get(poss) match {
-          case Some(m3) => m3
-          case _ => HashMap.empty[Z, Z]
-        }
-        m2.get(0) match {
-          case Some(v) => v
-          case _ =>
-            atPossMap = atPossMap + key ~> (m + poss ~> (m2 + 0 ~> m.size))
-            m.size
-        }
-      }
+      val n = computeAtNum(key, ISZ(sym.pos), 0)
       val linesFresh: ISZ[AST.Exp.LitZ] =
         if (includeFreshLines) ISZ(AST.Exp.LitZ(sym.pos.beginLine, attr), AST.Exp.LitZ(sym.num, attr))
         else ISZ()
@@ -2561,7 +2530,7 @@ object Util {
 
   @pure def claimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
                                claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): (ISZ[AST.Exp], ClaimsToExps.AtMap) = {
-    val cs2es =createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines)
+    val cs2es = createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines)
     val r = cs2es.translate(claims)
     return (r, cs2es.atMap)
   }
