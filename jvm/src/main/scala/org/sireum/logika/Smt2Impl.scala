@@ -27,6 +27,7 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.lang.symbol.Info
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 
@@ -46,7 +47,7 @@ object Smt2Impl {
 }
 
 @record class Smt2Impl(val plugins: ISZ[plugin.ClaimPlugin],
-                       val typeHierarchy: TypeHierarchy,
+                       var typeHierarchy: TypeHierarchy,
                        val timeoutInMs: Z,
                        val charBitWidth: Z,
                        val intBitWidth: Z,
@@ -70,6 +71,10 @@ object Smt2Impl {
                        var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)],
                        var filenameCount: HashMap[String, Z],
                        var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
+
+  def typeHierarchyNamesUp(entry : (ISZ[String], Info)): Unit = {
+    typeHierarchy = typeHierarchy(nameMap = typeHierarchy.nameMap + entry)
+  }
 
   def combineWith(that: Smt2): Unit = {
     types = types ++ that.types.elements
@@ -220,5 +225,6 @@ object Smt2Impl {
       case Either.Right(msg) => return MEither.Right(msg)
     }
   }
+
 }
 

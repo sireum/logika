@@ -605,6 +605,8 @@ object Smt2 {
     constraintsUp(newConstraints)
   }
 
+  def typeHierarchyNamesUp(entry : (ISZ[String], Info)): Unit
+
   def typeHierarchyIds: HashSMap[AST.Typed, ST]
 
   def typeHierarchyIdsUp(newTypeHierarchyIds: HashSMap[AST.Typed, ST]): Unit
