@@ -440,6 +440,14 @@ object Util {
     }
   }
 
+  @datatype class CurrentIdCollector(val context: ISZ[String]) extends StateTransformer.PrePost[Set[String]] {
+    override def preStateClaimLetCurrentId(ctx: Set[String],
+                                           o: State.Claim.Let.CurrentId): StateTransformer.PreResult[Set[String], State.Claim.Let] = {
+      return if (o.context == context) StateTransformer.PreResult(ctx + o.id, T, None())
+      else StateTransformer.PreResult(ctx, T, None())
+    }
+  }
+
   @datatype class CurrentNamePossCollector(val ids: ISZ[String]) extends StateTransformer.PrePost[ISZ[Position]] {
     override def preStateClaimLetCurrentName(ctx: ISZ[Position],
                                              o: State.Claim.Let.CurrentName): StateTransformer.PreResult[ISZ[Position], State.Claim.Let] = {
@@ -1899,6 +1907,10 @@ object Util {
 
   def collectLocalPoss(s0: State, lcontext: ISZ[String], id: String): ISZ[Position] = {
     return StateTransformer(CurrentIdPossCollector(lcontext, id)).transformState(Set.empty, s0).ctx.elements
+  }
+
+  def collectLocals(s0: State, lcontext: ISZ[String]): ISZ[String] = {
+    return StateTransformer(CurrentIdCollector(lcontext)).transformState(Set.empty, s0).ctx.elements
   }
 
   def rewriteLocal(logika: Logika, s0: State, lcontext: ISZ[String], id: String, posOpt: Option[Position],

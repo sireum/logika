@@ -1867,7 +1867,7 @@ import Util._
           } else {
             var s3 = s2(status = State.Status.Normal)
             var assigns = ISZ[(AST.Exp, State.Value.Sym)]()
-            var ids = ISZ[String]()
+            val ids = Util.collectLocals(s3, ctx)
             receiverOpt match {
               case Some(receiver) =>
                 val t = receiver.tipe
@@ -1879,20 +1879,15 @@ import Util._
                   }
                   s3 = s4
                 }
-                ids = ids :+ "this"
               case _ =>
             }
             for (paramArg <- paramArgs) {
               val (l, _, e, v) = paramArg
-              ids = ids :+ l.id
               if (th.isMutable(v.tipe)) {
                 val (s4, sym) = idIntro(pos, s3, ctx, l.id, v.tipe, None())
                 assigns = assigns :+ ((e, sym))
                 s3 = s4
               }
-            }
-            if (retType != AST.Typed.unit && info.strictPureBodyOpt.isEmpty) {
-              ids = ids :+ "Res"
             }
             s3 = rewriteLocals(s3, ctx, ids)._1
             s3 = restoreLocals(s3, callerLocalMap)
@@ -4535,11 +4530,8 @@ import Util._
           return F
         }
         var nextFresh: Z = -1
-        for (s <- ss if nextFresh == -1) {
+        for (s <- ss if nextFresh == -1 && s.status != State.Status.Error) {
           nextFresh = s.nextFresh
-        }
-        if (nextFresh < 0) {
-          return F
         }
         return ss.size == 1 || ops.ISZOps(ss).forall((s: State) => s.status == State.Status.Error || nextFresh == s.nextFresh)
       }
