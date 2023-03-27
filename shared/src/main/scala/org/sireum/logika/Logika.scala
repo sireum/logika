@@ -4763,8 +4763,8 @@ import Util._
     }
     for (j <- 0 until maxClaims) {
       var hasDiff = F
-      for (i <- 1 until svs.size if svs(i)._1.ok) {
-        val (si, vi) = svs(i)
+      for (i <- 1 until svs.size) {
+        val si = svs(i)._1
         if (j < s0ClaimsSize) {
           if (j < si.claims.size) {
             val c = si.claims(j)
@@ -4781,7 +4781,6 @@ import Util._
             claimss = claimss(i ~> (claimss(i) :+ si.claims(j)))
           }
         }
-        claimss = claimss(i ~> (claimss(i) :+ State.Claim.Let.Def(sym, vi)))
       }
       if (hasDiff) {
         if (j < s0ClaimsSize) {
@@ -4791,7 +4790,9 @@ import Util._
         commonClaims = commonClaims :+ s0.claims(j)
       }
     }
-    claimss = claimss(0 ~> (claimss(0) :+ State.Claim.Let.Def(sym, v0)))
+    for (i <- 0 until svs.size) {
+      claimss = claimss(i ~> (claimss(i) :+ State.Claim.Let.Def(sym, svs(i)._2)))
+    }
     val claims: ISZ[State.Claim] = commonClaims :+ State.Claim.Or(for (claims <- claimss) yield State.Claim.And(claims))
     return (State(status = State.Status.Normal, claims = claims, nextFresh = nextFresh + 1), sym)
   }
