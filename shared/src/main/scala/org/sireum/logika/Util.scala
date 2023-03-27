@@ -1559,7 +1559,29 @@ object Util {
                 if (claim.isPos) e
                 else AST.Exp.Unary(AST.Exp.UnaryOp.Not, e, AST.ResolvedAttr(posOpt,
                   Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)), AST.Typed.bOpt)))
-            case _ => return None()
+            case _ =>
+              if (claim.isPos) {
+                letMap.get(claim.value.num) match {
+                  case Some(letSet) =>
+                    val lets = letSet.elements
+                    if (ops.ISZOps(lets).forall((let: State.Claim.Let) => let.isInstanceOf[State.Claim.Let.Def])) {
+                      var r: AST.Exp = valueToExp(lets(0).asInstanceOf[State.Claim.Let.Def].value) match {
+                        case Some(e) => e
+                        case _ => return None()
+                      }
+                      for (i <- 1 until lets.size) {
+                        r = valueToExp(lets(i).asInstanceOf[State.Claim.Let.Def].value) match {
+                          case Some(e) => AST.Exp.Binary(r, AST.Exp.BinaryOp.Or, e, AST.ResolvedAttr(e.posOpt,
+                            Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)), AST.Typed.bOpt))
+                          case _ => return None()
+                        }
+                      }
+                      return Some(r)
+                    }
+                  case _ =>
+                }
+              }
+              return None()
           }
         case claim: State.Claim.If =>
           val condOpt = valueToExp(claim.cond)
