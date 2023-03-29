@@ -96,8 +96,11 @@ object SubstitutionPlugin {
                   repl
                 } else {
                   val flattenedOp = optFlattenableOp.get
-                    val leftTree = ISZOps(ISZOps(restL).takeRight(restL.size - 1)).foldLeft((r, t) => AST.Exp.Binary(r, flattenedOp, t, emptyResolvedAttr), restL(0))
-                    AST.Exp.Binary(leftTree, flattenedOp, repl, emptyResolvedAttr)
+                  @pure def f(r: AST.Exp, t: AST.Exp): AST.Exp = {
+                    return AST.Exp.Binary(r, flattenedOp, t, emptyResolvedAttr)
+                  }
+                  val leftTree = ISZOps(ISZOps(restL).takeRight(restL.size - 1)).foldLeft((r: AST.Exp, t: AST.Exp) => f(r,t), restL(0))
+                  AST.Exp.Binary(leftTree, flattenedOp, repl, emptyResolvedAttr)
                 }
               } else {
                 exp
