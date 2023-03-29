@@ -20,7 +20,6 @@ import org.sireum.message.Position
 
   val iszStepIdTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.stepId)))
 
-
   @pure override def canHandle(logika: Logika, just: Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Ref =>
