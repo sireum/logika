@@ -3198,7 +3198,7 @@ import Util._
     val (s1, num) = s0.fresh
     val objectVars = HashMap.empty[ISZ[String], (ISZ[Position], Z)] + ids ~> ((poss, num))
     val rt = StateTransformer(CurrentNameRewriter(objectVars)).transformState(HashMap.empty, s1)
-    val s2 = rt.resultOpt.get
+    val s2 = rt.resultOpt.getOrElse(s1)
     val pos = namePosOpt.get
     val (s3, lhs) = nameIntro(namePosOpt.get, s2, ids, rhs.tipe, namePosOpt)
     val s4 = s3.addClaim(State.Claim.Eq(lhs, rhs))
