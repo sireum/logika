@@ -86,7 +86,8 @@ object LogikaTest {
       callBound= 3,
       interpContracts = F,
       elideEncoding = F,
-      rawInscription = F
+      rawInscription = F,
+      interpStrictPure = F
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
