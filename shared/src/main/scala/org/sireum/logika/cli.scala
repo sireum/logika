@@ -72,9 +72,11 @@ object cli {
       )),
       OptGroup(name = "Control", opts = ISZ(
         Opt(name = "interprocedural", longKey = "interprocedural", shortKey = None(),
-          tpe = Type.Flag(F), description = "Enable inter-procedural verification for all invoked methods"),
+          tpe = Type.Flag(F), description = "Enable inter-procedural verification on non-strict-pure methods"),
         Opt(name = "interproceduralContracts", longKey = "interprocedural-contracts", shortKey = None(),
           tpe = Type.Flag(F), description = "Use contracts in inter-procedural verification"),
+        Opt(name = "interproceduralStrictPure", longKey = "interprocedural-strictpure", shortKey = None(),
+          tpe = Type.Flag(F), description = "Enable inter-procedural verification on strict-pure methods"),
         Opt(name = "line", longKey = "line", shortKey = None(),
           tpe = Type.Num(None(), 0, Some(0), None()),
           description = "Focus verification to the specified program line number"),
