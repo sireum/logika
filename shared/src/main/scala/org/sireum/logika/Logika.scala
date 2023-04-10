@@ -2329,7 +2329,7 @@ import Util._
         }
       }
       val (s2, pf) = strictPureMethod(th, config, plugins, smt2, cache, s1, receiverTypeOpt, funType, mres.owner,
-        mres.id, for (p <- info.sig.params) yield p.id, body, reporter, context.implicitCheckTitlePosOpt)
+        mres.id, info.isHelper, for (p <- info.sig.params) yield p.id, body, reporter, context.implicitCheckTitlePosOpt)
       val (s3, re) = s2.freshSym(retType, pos)
       var args: ISZ[State.Value] = for (q <- paramArgs) yield q._4
       receiverOpt match {
