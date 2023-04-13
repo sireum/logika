@@ -1527,7 +1527,7 @@ object Smt2 {
 
   @strictpure def toClaimST(isSequent: B, claims: ISZ[State.Claim], pos: message.Position): ST = {
     val defs = ClaimDefs.empty
-    val r: ST = if (isSequent) {
+    if (isSequent) {
       val premises = ops.ISZOps(claims).dropRight(1)
       val conclusion = claims(claims.size - 1)
       st""";
@@ -1544,7 +1544,6 @@ object Smt2 {
           |${(toSTs(claims, ClaimDefs.empty), "\n")}
           |;"""
     }
-    return r
   }
 
   @pure def toExpST(isSequent: B, context: ISZ[String], claims: ISZ[State.Claim], pos: message.Position): ST = {
