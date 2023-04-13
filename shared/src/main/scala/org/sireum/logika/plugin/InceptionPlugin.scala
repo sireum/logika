@@ -38,16 +38,19 @@ import org.sireum.logika.Logika.Reporter
   val name: String = "InceptionPlugin"
 
   @pure def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
-    @strictpure def canHandleRes(res: AST.ResolvedInfo): B = res match {
-      case res: AST.ResolvedInfo.Method =>
-        logika.th.nameMap.get(res.owner :+ res.id).get match {
-          case _: Info.Method => T
-          case info: Info.JustMethod if info.ast.etaOpt.nonEmpty => T
-          case _ => F
-        }
-      case _: AST.ResolvedInfo.Fact => T
-      case _: AST.ResolvedInfo.Theorem => T
-      case _ => F
+    @pure def canHandleRes(res: AST.ResolvedInfo): B = {
+      val r: B = res match {
+        case res: AST.ResolvedInfo.Method =>
+          logika.th.nameMap.get(res.owner :+ res.id).get match {
+            case _: Info.Method => T
+            case info: Info.JustMethod if info.ast.etaOpt.nonEmpty => T
+            case _ => F
+          }
+        case _: AST.ResolvedInfo.Fact => T
+        case _: AST.ResolvedInfo.Theorem => T
+        case _ => F
+      }
+      return r
     }
     just match {
       case just: AST.ProofAst.Step.Justification.Apply => return canHandleRes(just.invokeIdent.attr.resOpt.get)

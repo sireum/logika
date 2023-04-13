@@ -318,7 +318,9 @@ object State {
       return r.elements
     }
 
-    @strictpure override def string: String = toRawST.render
+    @pure override def string: String = {
+      return toRawST.render
+    }
   }
 
   object Claim {
@@ -1032,7 +1034,9 @@ object State {
     }
 
     @datatype class Custom(data: Data) extends Claim {
-      @strictpure override def toRawST: ST = data.toRawST
+      @pure override def toRawST: ST = {
+        return data.toRawST
+      }
 
       override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
         data.toSTs(claimSTs, numMap, defs)
@@ -1044,7 +1048,7 @@ object State {
     @sig trait Data {
       @pure def toRawST: ST
       def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit
-      @pure def types: ISZ[AST.Typed]
+      @strictpure def types: ISZ[AST.Typed]
     }
 
   }
@@ -1065,7 +1069,8 @@ object State {
     return State(State.Status.Normal, ISZ(), 1)
   }
 
-  @strictpure def shorten(ids: ISZ[String]): ISZ[String] =
-    if (ids.size > 2 && ids(0) == "org" && ids(1) == "sireum") ops.ISZOps(ids).slice(2, ids.size) else ids
+  @pure def shorten(ids: ISZ[String]): ISZ[String] = {
+    return if (ids.size > 2 && ids(0) == "org" && ids(1) == "sireum") ops.ISZOps(ids).slice(2, ids.size) else ids
+  }
 
 }

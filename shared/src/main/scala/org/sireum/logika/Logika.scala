@@ -1669,7 +1669,7 @@ import Util._
 
     def methodInfo(isInObject: B, owner: QName, id: String): Context.InvokeMethodInfo = {
       def extractAssignExpOpt(mi: lang.symbol.Info.Method): Option[AST.AssignExp] = {
-        if (mi.ast.purity == AST.Purity.StrictPure) {
+        if (mi.ast.purity == AST.Purity.StrictPure && mi.ast.bodyOpt.nonEmpty) {
           mi.ast.bodyOpt.get.stmts match {
             case ISZ(stmt: AST.Stmt.Var, _: AST.Stmt.Return) => return stmt.initOpt
             case stmts => halt(s"Infeasible: $stmts")
@@ -2694,7 +2694,7 @@ import Util._
               case Some(sm) =>
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
-                val isStrictPure = info.strictPureBodyOpt.nonEmpty
+                val isStrictPure = info.strictPureBodyOpt.nonEmpty && info.contract.isEmpty
                 if ((config.interp && !isStrictPure || config.interpStrictPure && isStrictPure) &&
                   !(config.interpContracts && info.contract.nonEmpty) && info.hasBody) {
                   r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt, receiverOpt,

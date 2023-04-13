@@ -1440,7 +1440,9 @@ object Util {
     }
 
     def valueToExp(value: State.Value): Option[AST.Exp] = {
-      @strictpure def subZPrefix(t: AST.Typed.Name): String = ops.StringOps(t.ids(t.ids.size - 1)).firstToLower
+      @pure def subZPrefix(t: AST.Typed.Name): String = {
+        return ops.StringOps(t.ids(t.ids.size - 1)).firstToLower
+      }
 
       val attr = AST.Attr(Some(value.pos))
       value match {
@@ -2054,13 +2056,15 @@ object Util {
     ), AST.TypedAttr(posOpt, AST.Typed.unitOpt))
   }
 
-  @strictpure def afterPos(pos: Position): Position = message.FlatPos(pos.uriOpt,
-    conversions.Z.toU32(pos.endLine + 1),
-    conversions.Z.toU32(1),
-    conversions.Z.toU32(pos.endLine + 1),
-    conversions.Z.toU32(2),
-    conversions.Z.toU32(pos.offset),
-    conversions.Z.toU32(1))
+  @pure def afterPos(pos: Position): Position = {
+    return message.FlatPos(pos.uriOpt,
+      conversions.Z.toU32(pos.endLine + 1),
+      conversions.Z.toU32(1),
+      conversions.Z.toU32(pos.endLine + 1),
+      conversions.Z.toU32(2),
+      conversions.Z.toU32(pos.offset),
+      conversions.Z.toU32(1))
+  }
 
   @pure def normType(t: AST.Typed): AST.Typed = {
     t match {
@@ -2212,7 +2216,9 @@ object Util {
     }
   }
 
-  @strictpure def strictPureClaimId(i: Z, pos: Position): String = s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
+  @pure def strictPureClaimId(i: Z, pos: Position): String = {
+    return s"claim_${i}_${pos.beginLine}_${pos.beginColumn}"
+  }
 
   def detectUnsupportedFeatures(stmt: AST.Stmt.Method): ISZ[message.Message] = {
     val ufd = UnsupportedFeatureDetector(stmt.sig.id.attr.posOpt, stmt.sig.id.value, Reporter.create)

@@ -33,12 +33,14 @@ object Smt2Invoke {
 
   var haltOnError: B = F
 
-  @strictpure def isSupportedPlatform: B = Os.kind match {
-    case Os.Kind.Mac => T
-    case Os.Kind.Linux => T
-    case Os.Kind.Win => T
-    case Os.Kind.LinuxArm => F
-    case Os.Kind.Unsupported => F
+  @pure def isSupportedPlatform: B = {
+    Os.kind match {
+      case Os.Kind.Mac => return T
+      case Os.Kind.Linux => return T
+      case Os.Kind.Win => return T
+      case Os.Kind.LinuxArm => return F
+      case Os.Kind.Unsupported => return F
+    }
   }
 
   @pure def nameExePathMap(sireumHome: Os.Path): HashMap[String, String] = {
@@ -53,7 +55,7 @@ object Smt2Invoke {
     return HashMap.empty[String, String] ++ ISZ[(String, String)](
       "cvc4" ~> (platformHome / "cvc").string,
       "cvc5" ~> (platformHome / "cvc5").string,
-      "z3" ~> (platformHome / "z3" / "bin" / "z3").string,
+      "z3" ~> (platformHome / "z3" / "bin" / "z3").string
     ) ++ (if (altErgoOpen.exists) ISZ(altErgoOpen.name ~> altErgoOpen.string) else ISZ[(String, String)]()) ++
       (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
         "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
