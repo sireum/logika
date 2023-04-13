@@ -534,6 +534,26 @@ object Util {
     val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
     val falseLit: AST.Exp = AST.Exp.LitB(F, trueLit.attr)
     val posOpt: Option[Position] = Some(pos)
+    val mulSymDefs: HashSet[Z] = {
+      var r = HashSet.empty[Z]
+      for (p <- letMap.entries) {
+        val (key, lets) = p
+        if (lets.size > 1) {
+          var foundIdOrName = F
+          for (l <- lets.elements if !foundIdOrName) {
+            l match {
+              case _: State.Claim.Let.Id => foundIdOrName = T
+              case _: State.Claim.Let.Name => foundIdOrName = T
+              case _ =>
+            }
+          }
+          if (!foundIdOrName) {
+            r = r + key
+          }
+        }
+      }
+      r
+    }
 
     def atMap: ClaimsToExps.AtMap = {
       var r: ClaimsToExps.AtMap = HashMap.empty
@@ -544,9 +564,8 @@ object Util {
           for (p3 <- m.entries) {
             val (num, n) = p3
             val key = (ctx, id, t, n)
-            r.get(key) match {
-              case Some((poss2, num2)) =>
-              case _ => r = r + key ~> ((poss, num))
+            if (r.get(key).isEmpty) {
+              r = r + key ~> ((poss, num))
             }
           }
         }
@@ -1426,31 +1445,32 @@ object Util {
       val attr = AST.Attr(Some(value.pos))
       value match {
         case value: State.Value.Sym =>
-          letMap.get(value.num) match {
-            case Some(lets) =>
-              if (lets.size == 1) {
-                return letToExp(lets.elements(0))
-              } else {
-                for (let <- lets.elements) {
-                  let match {
-                    case _: State.Claim.Let.Id =>
-                      letToExp(let) match {
-                        case Some(e) => return Some(e)
-                        case _ =>
-                      }
-                    case _: State.Claim.Let.Name =>
-                      letToExp(let) match {
-                        case Some(e) => return Some(e)
-                        case _ =>
-                      }
-                    case _ =>
+          if (!mulSymDefs.contains(value.num)) {
+            letMap.get(value.num) match {
+              case Some(lets) =>
+                if (lets.size == 1) {
+                  return letToExp(lets.elements(0))
+                } else {
+                  for (let <- lets.elements) {
+                    let match {
+                      case _: State.Claim.Let.Id =>
+                        letToExp(let) match {
+                          case Some(e) => return Some(e)
+                          case _ =>
+                        }
+                      case _: State.Claim.Let.Name =>
+                        letToExp(let) match {
+                          case Some(e) => return Some(e)
+                          case _ =>
+                        }
+                      case _ =>
+                    }
                   }
                 }
-                return None()
-              }
-            case _ =>
-              return Some(symAt(".cx", value))
+              case _ =>
+            }
           }
+          return Some(symAt(".temp", value))
         case value: State.Value.B => return Some(AST.Exp.LitB(value.value, attr))
         case value: State.Value.Z => return Some(AST.Exp.LitZ(value.value, attr))
         case value: State.Value.R => return Some(AST.Exp.LitR(value.value, attr))
@@ -1560,27 +1580,6 @@ object Util {
                 else AST.Exp.Unary(AST.Exp.UnaryOp.Not, e, AST.ResolvedAttr(posOpt,
                   Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)), AST.Typed.bOpt)))
             case _ =>
-              if (claim.isPos) {
-                letMap.get(claim.value.num) match {
-                  case Some(letSet) =>
-                    val lets = letSet.elements
-                    if (ops.ISZOps(lets).forall((let: State.Claim.Let) => let.isInstanceOf[State.Claim.Let.Def])) {
-                      var r: AST.Exp = valueToExp(lets(0).asInstanceOf[State.Claim.Let.Def].value) match {
-                        case Some(e) => e
-                        case _ => return None()
-                      }
-                      for (i <- 1 until lets.size) {
-                        r = valueToExp(lets(i).asInstanceOf[State.Claim.Let.Def].value) match {
-                          case Some(e) => AST.Exp.Binary(r, AST.Exp.BinaryOp.Or, e, AST.ResolvedAttr(e.posOpt,
-                            Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)), AST.Typed.bOpt))
-                          case _ => return None()
-                        }
-                      }
-                      return Some(r)
-                    }
-                  case _ =>
-                }
-              }
               return None()
           }
         case claim: State.Claim.If =>
