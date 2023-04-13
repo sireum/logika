@@ -2694,12 +2694,12 @@ import Util._
               case Some(sm) =>
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
-                val isStrictPure = info.strictPureBodyOpt.nonEmpty && info.contract.isEmpty
+                val isStrictPure = info.strictPureBodyOpt.nonEmpty
                 if ((config.interp && !isStrictPure || config.interpStrictPure && isStrictPure) &&
                   !(config.interpContracts && info.contract.nonEmpty) && info.hasBody) {
                   r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt, receiverOpt,
                     paramArgs)
-                } else if (isStrictPure) {
+                } else if (isStrictPure && info.contract.isEmpty) {
                   r = r ++ strictPure(pos, info, s1, typeSubstMap, retType, receiverOpt, paramArgs)
                 } else {
                   var default = T
