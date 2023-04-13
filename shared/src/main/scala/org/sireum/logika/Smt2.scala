@@ -151,7 +151,9 @@ object Smt2 {
         |(declare-fun |R.randomSeed(Z)| (Z) R)
         |(declare-fun |R.randomSeedBetween(Z, R, R)| (Z R R) R)"""
 
-  @strictpure def quotedEscape(s: String): String = ops.StringOps(s).replaceAllChars('|', '│')
+  @pure def quotedEscape(s: String): String = {
+    return ops.StringOps(s).replaceAllChars('|', '│')
+  }
 
   val topPrefix: String = "_"
 
@@ -263,7 +265,7 @@ object Smt2 {
 
 @msig trait Smt2 {
 
-  @pure def fpRoundingMode: String
+  @strictpure def fpRoundingMode: String
 
   @strictpure def f32ST: ST = if (useReal) {
     st"""(define-sort F32 () Real)
@@ -361,23 +363,23 @@ object Smt2 {
         |(declare-fun |F64.randomSeedBetween(Z, F64, F64)| (Z F64 F64) F64)"""
   }
 
-  @pure def timeoutInMs: Z
+  @strictpure def timeoutInMs: Z
 
-  @pure def simplifiedQuery: B
+  @strictpure def simplifiedQuery: B
 
-  @pure def charBitWidth: Z
+  @strictpure def charBitWidth: Z
 
-  @pure def intBitWidth: Z
+  @strictpure def intBitWidth: Z
 
-  @pure def useReal: B
+  @strictpure def useReal: B
 
-  @pure def smt2Seq: B
+  @strictpure def smt2Seq: B
 
-  @pure def rawInscription: B
+  @strictpure def rawInscription: B
 
-  @pure def elideEncoding: B
+  @strictpure def elideEncoding: B
 
-  @pure def includeFreshLines: B
+  @strictpure def includeFreshLines: B
 
   def configs: ISZ[Smt2Config]
 
@@ -429,7 +431,7 @@ object Smt2 {
 
   def plugins: ISZ[plugin.ClaimPlugin]
 
-  @strictpure def proofFunId(pf: State.ProofFun): ST = {
+  @pure def proofFunId(pf: State.ProofFun): ST = {
     val targs: ST = pf.receiverTypeOpt match {
       case Some(receiverType: AST.Typed.Name) =>
         if (receiverType.args.isEmpty) st"#"
@@ -438,7 +440,7 @@ object Smt2 {
     }
     val pTypes: ST = st"(${(for (pt <- pf.paramTypes) yield typeIdRaw(pt), ", ")})"
     val context: ISZ[String] = if (pf.context.size == 3 && pf.context(0) == "org" && pf.context(1) == "sireum") ISZ(pf.context(2)) else pf.context
-    if (context.isEmpty) st"|${pf.id}$pTypes|" else st"|${(context, ".")}$targs${pf.id}$pTypes|"
+    return if (context.isEmpty) st"|${pf.id}$pTypes|" else st"|${(context, ".")}$targs${pf.id}$pTypes|"
   }
 
   def addStrictPureMethodDecl(pf: State.ProofFun, sym: State.Value.Sym, invClaims: ISZ[State.Claim], reporter: Reporter): Unit = {
@@ -704,14 +706,18 @@ object Smt2 {
     return formatVal(bw, n)
   }
 
-  @strictpure def sTypeOfName(t: AST.Typed): ST = t match {
-    case t: AST.Typed.Name => st"|type-of-${t.ids(t.ids.size - 1)}-${typeIdRaw(t.args(0))}-${typeIdRaw(t.args(1))}|"
-    case _ => halt("Infeasible")
+  @pure def sTypeOfName(t: AST.Typed): ST = {
+    t match {
+      case t: AST.Typed.Name => return st"|type-of-${t.ids(t.ids.size - 1)}-${typeIdRaw(t.args(0))}-${typeIdRaw(t.args(1))}|"
+      case _ => halt("Infeasible")
+    }
   }
 
-  @strictpure def tupleTypeOfName(t: AST.Typed): ST = t match {
-    case t: AST.Typed.Tuple => st"|type-of-${typeIdRaw(t)}|"
-    case _ => halt("Infeasible")
+  @pure def tupleTypeOfName(t: AST.Typed): ST = {
+    t match {
+      case t: AST.Typed.Tuple => return st"|type-of-${typeIdRaw(t)}|"
+      case _ => halt("Infeasible")
+    }
   }
 
   def addType(tipe: AST.Typed, reporter: Reporter): Unit = {
@@ -759,11 +765,12 @@ object Smt2 {
       addSort(t, st"(define-sort $tId () (Array $itId $etId))")
       addSort(t, st"""(declare-const $thId Type)""")
       addSort(t, st"""(declare-fun $typeofName ($tId) Type)""")
-      @strictpure def etThidSubtypeOpt(x: String): Option[ST] =
-        if (etAdt) Some(st"(${if (typeHierarchy.isAdtLeafType(et)) "=" else "sub-type"} (type-of $x) $etThid)")
+      @pure def etThidSubtypeOpt(x: String): Option[ST] = {
+        return if (etAdt) Some(st"(${if (typeHierarchy.isAdtLeafType(et)) "=" else "sub-type"} (type-of $x) $etThid)")
         else if (etS) Some(st"(= (${sTypeOfName(et)} $x) $etThid)")
         else if (etTuple) Some(st"(= (${tupleTypeOfName(et)} $x) $etThid)")
         else None()
+      }
       @strictpure def thidTypeOpt(x: String): ST = st"(= ($typeofName $x) $thId)"
       addSTypeDecl(t, st"(declare-fun $sizeId ($tId) Z)")
       addSTypeDecl(t, st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
@@ -1520,14 +1527,17 @@ object Smt2 {
     return query(seqLitDecls, decls.values, claimSmts)
   }
 
-  @strictpure def commentLines(s: String): ISZ[ST] = for (line <- ops.StringOps(s).split(c => c == '\n')) yield st"; $line"
+  @pure def commentLines(s: String): ISZ[ST] = {
+    return for (line <- ops.StringOps(s).split(c => c == '\n')) yield st"; $line"
+  }
 
-  @strictpure def toSTs(claims: ISZ[State.Claim], defs: ClaimDefs): ISZ[ST] =
-    for (cST <- State.Claim.claimsSTs(claims, defs)) yield st"${(commentLines(cST.render), "\n")}"
+  @pure def toSTs(claims: ISZ[State.Claim], defs: ClaimDefs): ISZ[ST] = {
+    return for (cST <- State.Claim.claimsSTs(claims, defs)) yield st"${(commentLines(cST.render), "\n")}"
+  }
 
-  @strictpure def toClaimST(isSequent: B, claims: ISZ[State.Claim], pos: message.Position): ST = {
+  @pure def toClaimST(isSequent: B, claims: ISZ[State.Claim], pos: message.Position): ST = {
     val defs = ClaimDefs.empty
-    if (isSequent) {
+    val r: ST = if (isSequent) {
       val premises = ops.ISZOps(claims).dropRight(1)
       val conclusion = claims(claims.size - 1)
       st""";
@@ -1544,6 +1554,7 @@ object Smt2 {
           |${(toSTs(claims, ClaimDefs.empty), "\n")}
           |;"""
     }
+    return r
   }
 
   @pure def toExpST(isSequent: B, context: ISZ[String], claims: ISZ[State.Claim], pos: message.Position): ST = {
@@ -1714,7 +1725,9 @@ object Smt2 {
     }
   }
 
-  @strictpure def escapeId(id: String): String = st"${(for (c <- conversions.String.toCis(id)) yield escapeIdC(c), "")}".render
+  @pure def escapeId(id: String): String = {
+    return st"${(for (c <- conversions.String.toCis(id)) yield escapeIdC(c), "")}".render
+  }
 
   @memoize def ids2ST(ids: ISZ[String]): ST = {
     return st"${(for (id <- ids) yield escapeId(id), ".")}"
@@ -1922,8 +1935,9 @@ object Smt2 {
     return if (simp) simplified else raw
   }
 
-  @strictpure def addTypeConstraints(isImply: B, ps: ISZ[(ST, AST.Typed)], claim: ST): (ISZ[ST], ST) =
-    addTypeConstraintsH(isImply, for (p <- ps) yield (p._1, p._2, T), claim)
+  @pure def addTypeConstraints(isImply: B, ps: ISZ[(ST, AST.Typed)], claim: ST): (ISZ[ST], ST) = {
+    return addTypeConstraintsH(isImply, for (p <- ps) yield (p._1, p._2, T), claim)
+  }
 
   @pure def addTypeConstraintsH(isImply: B, ps: ISZ[(ST, AST.Typed, B)], claim: ST): (ISZ[ST], ST) = {
     var varDecls = ISZ[ST]()
