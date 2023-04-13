@@ -41,9 +41,9 @@ import org.sireum.logika.Logika.Reporter
     @strictpure def canHandleRes(res: AST.ResolvedInfo): B = res match {
       case res: AST.ResolvedInfo.Method =>
         logika.th.nameMap.get(res.owner :+ res.id).get match {
-          case _: Info.Method => return T
-          case info: Info.JustMethod if info.ast.etaOpt.nonEmpty => return T
-          case _ => return F
+          case _: Info.Method => T
+          case info: Info.JustMethod if info.ast.etaOpt.nonEmpty => T
+          case _ => F
         }
       case _: AST.ResolvedInfo.Fact => T
       case _: AST.ResolvedInfo.Theorem => T
