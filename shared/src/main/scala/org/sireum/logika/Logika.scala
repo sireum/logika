@@ -4201,42 +4201,35 @@ import Util._
             }
             srw
           }
-          val s2 = s0R(claims = s0R.claims ++ (for (i <- s0.claims.size until s1.claims.size) yield s1.claims(i)),
-            nextFresh = s0R.nextFresh)
-          for (p <- evalExp(split, smt2, cache, rtCheck, s2, whileStmt.cond, reporter)) {
-            val (s3, v) = p
-            if (s3.ok) {
+          for (p <- evalExp(split, smt2, cache, rtCheck, s0R, whileStmt.cond, reporter)) {
+            val (s2, v) = p
+            if (s2.ok) {
               val pos = whileStmt.cond.posOpt.get
-              val (s4, cond) = value2Sym(s3, v, pos)
+              val (s3, cond) = value2Sym(s2, v, pos)
               val prop = State.Claim.Prop(T, cond)
-              val thenClaims = s4.claims :+ prop
+              val thenClaims = s3.claims :+ prop
               val thenSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
                 s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
-              var nextFresh: Z = s4.nextFresh
               if (thenSat) {
-                for (s5 <- evalStmts(split, smt2, cache, None(), rtCheck, s4(claims = thenClaims), whileStmt.body.stmts, reporter)) {
+                for (s4 <- assumeExps(split, smt2, cache, rtCheck, s3(claims = thenClaims), whileStmt.invariants, reporter);
+                     s5 <- evalStmts(split, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
                   if (s5.ok) {
                     for (s6 <- checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop",
                       s5, whileStmt.invariants, reporter)) {
-                      if (nextFresh < s6.nextFresh) {
-                        nextFresh = s6.nextFresh
-                      }
-                    }
-                  } else {
-                    if (nextFresh < s5.nextFresh) {
-                      nextFresh = s5.nextFresh
                     }
                   }
                 }
               }
               val negProp = State.Claim.Prop(F, cond)
-              val elseClaims = s4.claims :+ negProp
+              val elseClaims = s3.claims :+ negProp
               val elseSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
                 s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
-              r = r :+ State(status = State.statusOf(elseSat),
-                claims = elseClaims, nextFresh = nextFresh)
-            } else {
-              r = r :+ s3
+              val s4 = s3(status = State.statusOf(elseSat), claims = elseClaims)
+              if (elseSat) {
+                r = r ++ assumeExps(split, smt2, cache, rtCheck, s4, whileStmt.invariants, reporter)
+              } else {
+                r = r :+ s4
+              }
             }
           }
         } else {
@@ -4622,6 +4615,36 @@ import Util._
       for (current <- cs) {
         if (current.ok) {
           currents = currents ++ checkExp(split, smt2, cache, rtCheck, title, titleSuffix, current, exp, reporter)
+        } else {
+          done = done :+ current
+        }
+      }
+    }
+    return currents ++ done
+  }
+
+  def assumeExp(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, exp: AST.Exp, reporter: Reporter): ISZ[State] = {
+    var r = ISZ[State]()
+    for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp, reporter)) {
+      val (s1, v) = p
+      val pos = exp.posOpt.get
+      val (s2, sym) = value2Sym(s1, v, pos)
+      val prop = State.Claim.Prop(T, sym)
+      r = r :+ s2.addClaim(prop)
+    }
+    return r
+  }
+
+  def assumeExps(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, exps: ISZ[AST.Exp],
+                 reporter: Reporter): ISZ[State] = {
+    var currents = ISZ(s0)
+    var done = ISZ[State]()
+    for (exp <- exps) {
+      val cs = currents
+      currents = ISZ()
+      for (current <- cs) {
+        if (current.ok) {
+          currents = currents ++ assumeExp(split, smt2, cache, rtCheck, current, exp, reporter)
         } else {
           done = done :+ current
         }
