@@ -173,8 +173,8 @@ object Smt2Invoke {
         val kinds = Set.empty[String] ++ (for (t <- sortedTs) yield t._3.string)
         Smt2Query.Result(Smt2Query.Result.Kind.Unknown, "all", queryString,
           st"""; Result: ${(ops.ISZOps(kinds.elements).sortWith((s1: String, s2: String) => s1 < s2), " or ")}
-              |; Solver and arguments:
-              |${(for (t <- sortedTs) yield st"; * ${t._3}: ${t._1} ${(t._2, " ")}", "\n")}""".render,
+              |; Solvers and arguments:
+              |${(for (t <- sortedTs) yield st"; * ${t._3}: ${t._1}, ${(t._2, " ")}", "\n")}""".render,
           "", 0, F)
     }
     r = r(timeMillis = extension.Time.currentMillis - start)
