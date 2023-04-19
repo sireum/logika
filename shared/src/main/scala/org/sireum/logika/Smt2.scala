@@ -381,6 +381,8 @@ object Smt2 {
 
   @strictpure def includeFreshLines: B
 
+  @pure def emptyCache: Smt2
+
   def configs: ISZ[Smt2Config]
 
   def types: HashSet[AST.Typed]
