@@ -413,7 +413,7 @@ object Impl {
           ?(exp) { (exp: AST.Exp.VarRef) =>
             (state.status == State.Status.Normal) ->: (state.store.get(exp.id) == Some(rv)) ->:
               (Spec.evalExp(state, exp) ≡ ((state, rv)))
-          } by Spec.evalExpVarRef(state, exp, rv),
+          } by Spec.evalExpVarRef(state, exp, rv)
         )
         return (state, rv)
       case _ =>
