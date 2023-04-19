@@ -33,7 +33,7 @@ import org.sireum.logika.Logika.Reporter
 
 @datatype class AutoPlugin extends JustificationPlugin {
 
-  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("Auto", "Auto_*", "Premise")
+  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("Auto", "Auto_*", "Premise", "Tauto")
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
@@ -95,6 +95,29 @@ import org.sireum.logika.Logika.Reporter
     val pos = posOpt.get
     val args = argsOpt.get
 
+    def checkValid(psmt2: Smt2, stat: B, nextFresh: Z, premises: ISZ[State.Claim], conclusion: State.Claim,
+                   claims: ISZ[State.Claim]): Plugin.Result = {
+      var status = stat
+      if (status) {
+        val r = psmt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt,
+          s"$id Justification", pos, premises, conclusion, reporter)
+
+        def error(msg: String): B = {
+          reporter.error(posOpt, Logika.kind, msg)
+          return F
+        }
+
+        status = r.kind match {
+          case Smt2Query.Result.Kind.Unsat => T
+          case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step ${step.id}")
+          case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step ${step.id}")
+          case Smt2Query.Result.Kind.Timeout => error(s"Timed out when deducing the claim of proof step ${step.id}")
+          case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step ${step.id}")
+        }
+      }
+      return Plugin.Result(status, nextFresh, claims)
+    }
+
     val provenClaims = HashMap ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
       (logika.th.normalizeExp(spc.asInstanceOf[StepProofContext.Regular].exp), spc.asInstanceOf[StepProofContext.Regular]))
 
@@ -132,19 +155,30 @@ import org.sireum.logika.Logika.Reporter
       }
     }
 
-    val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) = if (args.isEmpty) {
-      val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-      ((q._1, q._2, state.claims ++ q._3, q._4), q._3 :+ q._4)
+    if (args.isEmpty) {
+      if (id == "Auto_*" || id == "Tauto") {
+        val psmt2 = smt2.emptyCache
+        val (stat, nextFresh, premises, conclusion) =
+          logika.evalRegularStepClaim(psmt2, cache, state(claims = ISZ()), step.claim, step.id.posOpt, reporter)
+        val r = checkValid(psmt2, stat, nextFresh, premises, conclusion, premises :+ conclusion)
+        smt2.combineWith(psmt2)
+        return r
+      } else {
+        val (stat, nextFresh, premises, conclusion) =
+          logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+        return checkValid(smt2, stat, nextFresh, state.claims ++ premises, conclusion, premises :+ conclusion)
+      }
     } else {
-      var s0 = state(claims = ISZ())
+      val psmt2 = smt2.emptyCache
+      var s1 = state(claims = ISZ())
       var ok = T
-      for (arg <- args) {
+      for (arg <- args if ok) {
         val stepNo = arg
         spcMap.get(stepNo) match {
           case Some(spc: StepProofContext.Regular) =>
-            val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, smt2, cache, T, s0, spc.exp, reporter)
-            val (s2, sym) = logika.value2Sym(s1, v, spc.exp.posOpt.get)
-            s0 = s2.addClaim(State.Claim.Prop(T, sym))
+            val ISZ((s2, v)) = logika.evalExp(Logika.Split.Disabled, psmt2, cache, T, s1, spc.exp, reporter)
+            val (s3, sym) = logika.value2Sym(s2, v, spc.exp.posOpt.get)
+            s1 = s3.addClaim(State.Claim.Prop(T, sym))
           case Some(_) =>
             reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for $id")
             ok = F
@@ -154,31 +188,14 @@ import org.sireum.logika.Logika.Reporter
         }
       }
       if (!ok) {
-        return Plugin.Result(F, s0.nextFresh, ISZ())
+        return Plugin.Result(F, state.nextFresh, ISZ())
       }
-      val q = logika.evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
-      ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
+      val (stat, nextFresh, premises, conclusion) =
+        logika.evalRegularStepClaim(psmt2, cache, s1, step.claim, step.id.posOpt, reporter)
+      val r = checkValid(psmt2, stat, nextFresh, s1.claims ++ premises, conclusion, premises :+ conclusion)
+      smt2.combineWith(psmt2)
+      return r
     }
-
-    var status = stat
-    if (status) {
-      val r = smt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt,
-        s"$id Justification", pos, premises, conclusion, reporter)
-
-      def error(msg: String): B = {
-        reporter.error(posOpt, Logika.kind, msg)
-        return F
-      }
-
-      status = r.kind match {
-        case Smt2Query.Result.Kind.Unsat => T
-        case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step ${step.id}")
-        case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step ${step.id}")
-        case Smt2Query.Result.Kind.Timeout => error(s"Timed out when deducing the claim of proof step ${step.id}")
-        case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step ${step.id}")
-      }
-    }
-    return Plugin.Result(status, nextFresh, claims)
   }
 
 }

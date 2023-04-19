@@ -72,6 +72,38 @@ object Smt2Impl {
                        var filenameCount: HashMap[String, Z],
                        var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
 
+  @pure def emptyCache: Smt2 = {
+    val r = Smt2Impl(
+      plugins = plugins,
+      typeHierarchy = typeHierarchy,
+      timeoutInMs = timeoutInMs,
+      charBitWidth = charBitWidth,
+      intBitWidth = intBitWidth,
+      useReal = useReal,
+      simplifiedQuery = simplifiedQuery,
+      smt2Seq = smt2Seq,
+      fpRoundingMode = fpRoundingMode,
+      rawInscription = rawInscription,
+      elideEncoding = elideEncoding,
+      includeFreshLines = includeFreshLines,
+      configs = configs,
+      types = HashSet.empty[AST.Typed] + AST.Typed.b,
+      poset = Poset.empty,
+      sorts = HashSMap.empty,
+      adtDecls = HashSMap.empty,
+      sTypeDecls = HashSMap.empty,
+      typeDecls = HashSMap.empty,
+      constraints = HashSMap.empty,
+      typeHierarchyIds = HashSMap.empty,
+      shortIds = shortIds,
+      strictPureMethods = HashSMap.empty,
+      filenameCount = filenameCount,
+      seqLits = HashSSet.empty
+    )
+    r.addType(AST.Typed.z, Logika.Reporter.create)
+    return r
+  }
+
   def typeHierarchyNamesUp(entry : (ISZ[String], Info)): Unit = {
     typeHierarchy = typeHierarchy(nameMap = typeHierarchy.nameMap + entry)
   }
