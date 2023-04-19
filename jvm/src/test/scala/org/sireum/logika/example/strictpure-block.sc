@@ -41,12 +41,6 @@ def absOpt(zOpt: Option[Z]): Option[Z] = {
 def unfoldAuto(): Unit = {
 
   Deduce(
-    ⊢(sum(ISZ(1, 2, 3), 0) == 6),
-    ⊢(sum(ISZ(1, 2, 3), 1) == 5),
-    ⊢(sum(ISZ(1, 2, 3), 2) == 3)
-  )
-
-  Deduce(
 
     (sum(ISZ(1, 2, 3), 2) == {
       val s0 = ISZ[Z](1, 2, 3)
@@ -111,4 +105,35 @@ def unfoldAuto(): Unit = {
     (sum(ISZ(1, 2, 3), 2) == 3) by Tauto
   )
 
+  Deduce(
+    ⊢(sum(ISZ(1, 2, 3), 0) == 6),
+    ⊢(sum(ISZ(1, 2, 3), 1) == 5),
+    ⊢(sum(ISZ(1, 2, 3), 2) == 3)
+  )
+
+}
+
+def unfoldAuto2(s: ISZ[Z], i: Z): Unit = {
+  Deduce(
+
+    (sum(s, i) == {
+      val s0 = s
+      val i0 = i
+      if (s0.isInBound(i0)) {
+        s0(i0) + sum(s0, i0 + 1)
+      } else {
+        0
+      }
+    }) by Tauto,
+
+    (sum(s, i + 1) == {
+      val s0 = s
+      val i0 = i + 1
+      if (s0.isInBound(i0)) {
+        s0(i0) + sum(s0, i0 + 1)
+      } else {
+        0
+      }
+    }) by Tauto
+  )
 }
