@@ -3992,7 +3992,12 @@ import Util._
 
   def evalRegularStepClaim(smt2: Smt2, cache: Smt2.Cache, s0: State, claim: AST.Exp, posOpt: Option[Position],
                            reporter: Reporter): (B, Z, ISZ[State.Claim], State.Claim) = {
-    val svs = evalExp(Logika.Split.Disabled, smt2, cache, T, s0, claim, reporter)
+    return evalRegularStepClaimRtCheck(smt2, cache, T, s0, claim, posOpt, reporter)
+  }
+
+  def evalRegularStepClaimRtCheck(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, claim: AST.Exp,
+                                  posOpt: Option[Position], reporter: Reporter): (B, Z, ISZ[State.Claim], State.Claim) = {
+    val svs = evalExp(Logika.Split.Disabled, smt2, cache, rtCheck, s0, claim, reporter)
     for (sv <- svs) {
       val (s1, v) = sv
       val (s2, sym) = value2Sym(s1, v, posOpt.get)
