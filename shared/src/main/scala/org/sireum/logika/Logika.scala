@@ -3050,6 +3050,7 @@ import Util._
         case e: AST.Exp.Sym => return ISZ[(State, State.Value)]((state, State.Value.Sym(e.num, e.typedOpt.get, e.posOpt.get)))
         case e: AST.Exp.StrictPureBlock => return evalAssignExpValue(split, smt2, cache, e.typedOpt.get, rtCheck,
           s0, e.block, reporter)
+        case e: AST.Exp.Labeled => return evalExp(split, smt2, cache, rtCheck, state, e.exp, reporter)
         case _ =>
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
           return ISZ((s0(status = State.Status.Error), State.errorValue))
