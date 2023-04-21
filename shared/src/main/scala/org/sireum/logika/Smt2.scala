@@ -34,17 +34,6 @@ import org.sireum.logika.Logika.Reporter
 import Util._
 
 object Smt2 {
-  @msig trait Cache {
-    def get(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result]
-    def set(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit
-  }
-
-  @record class NoCache extends Cache {
-    def get(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result] = {
-      return None()
-    }
-    def set(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit = {}
-  }
 
   @datatype class SeqLit(val t: AST.Typed.Name, val size: Z)
 
@@ -634,9 +623,9 @@ object Smt2 {
 
   def typeHierarchy: TypeHierarchy
 
-  def checkSat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result)
+  def checkSat(cache: Logika.Cache, query: String): (B, Smt2Query.Result)
 
-  def checkUnsat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result)
+  def checkUnsat(cache: Logika.Cache, query: String): (B, Smt2Query.Result)
 
   def formatVal(width: Z, n: Z): ST
 
@@ -663,7 +652,7 @@ object Smt2 {
     return if (typeHierarchy.isAdtType(t)) st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
   }
 
-  def satResult(context: ISZ[String], cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String],
+  def satResult(context: ISZ[String], cache: Logika.Cache, reportQuery: B, log: B, logDirOpt: Option[String],
                 title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
     val (r, smt2res) = checkSat(cache, satQuery(claims, None(), reporter).render)
     val header =
@@ -693,7 +682,7 @@ object Smt2 {
     return (r, smt2res)
   }
 
-  def sat(context: ISZ[String], cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
+  def sat(context: ISZ[String], cache: Logika.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
           pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): B = {
     return satResult(context, cache, reportQuery, log, logDirOpt, title, pos, claims, reporter)._1
   }
@@ -1583,7 +1572,7 @@ object Smt2 {
     }
   }
 
-  def valid(context: ISZ[String], cache: Smt2.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
+  def valid(context: ISZ[String], cache: Logika.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
             pos: message.Position, premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
     val (_, smt2res) = checkUnsat(cache, satQuery(premises, Some(conclusion), reporter).render)
     val header =

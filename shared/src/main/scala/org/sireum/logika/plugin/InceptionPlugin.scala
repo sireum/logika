@@ -61,7 +61,7 @@ import org.sireum.logika.Logika.Reporter
 
   def handle(logika: Logika,
              smt2: Smt2,
-             cache: Smt2.Cache,
+             cache: Logika.Cache,
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,

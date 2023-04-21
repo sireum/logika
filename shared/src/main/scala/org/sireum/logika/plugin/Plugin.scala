@@ -58,7 +58,7 @@ object Plugin {
 
   def handle(logika: Logika,
              smt2: Smt2,
-             cache: Smt2.Cache,
+             cache: Logika.Cache,
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,
@@ -71,7 +71,7 @@ object Plugin {
 
   def handle(logika: Logika,
              smt2: Smt2,
-             cache: Smt2.Cache,
+             cache: Logika.Cache,
              state: State,
              exp: AST.Exp,
              reporter: Reporter): ISZ[(State, State.Value)]
@@ -84,7 +84,7 @@ object Plugin {
 
   def handle(logika: Logika,
              smt2: Smt2,
-             cache: Smt2.Cache,
+             cache: Logika.Cache,
              state: State,
              stmt: AST.Stmt,
              reporter: Reporter): ISZ[State]
@@ -100,12 +100,12 @@ object Plugin {
              caseIndex: Z,
              config: logika.Config,
              smt2: Smt2,
-             cache: Smt2.Cache,
+             cache: Logika.Cache,
              reporter: Reporter): B
 
   @pure def canHandleCompositional(th: TypeHierarchy, info: Context.InvokeMethodInfo): B
 
-  def handleCompositional(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, split: Logika.Split.Type,
+  def handleCompositional(logika: Logika, smt2: Smt2, cache: Logika.Cache, rtCheck: B, split: Logika.Split.Type,
                           posOpt: Option[message.Position], info: Context.InvokeMethodInfo,
                           state: State, typeSubstMap: HashMap[String, AST.Typed], retType: AST.Typed,
                           invokeReceiverOpt: Option[AST.Exp], receiverOpt: Option[State.Value.Sym],
@@ -123,7 +123,7 @@ object Plugin {
              stmts: ISZ[AST.Stmt],
              config: logika.Config,
              smt2: Smt2,
-             cache: Smt2.Cache,
+             cache: Logika.Cache,
              reporter: Reporter): (B, ISZ[State])
 
 }

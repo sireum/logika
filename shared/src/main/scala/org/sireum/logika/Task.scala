@@ -34,7 +34,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 
 @datatype trait Task {
-  def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message]
+  def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message]
 }
 
 object Task {
@@ -43,7 +43,7 @@ object Task {
                        val config: Config,
                        val fact: AST.Stmt.Fact,
                        val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
+    override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       for (tp <- fact.typeParams) {
         smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
@@ -87,7 +87,7 @@ object Task {
                        val config: Config,
                        val theorem: AST.Stmt.Theorem,
                        val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
+    override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       for (tp <- theorem.typeParams) {
         smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
@@ -122,7 +122,7 @@ object Task {
                         val config: Config,
                         val stmts: ISZ[AST.Stmt],
                         val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
+    override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       val csmt2 = smt2
       for (p <- plugins) {
@@ -157,7 +157,7 @@ object Task {
                          val method: AST.Stmt.Method,
                          val caseIndex: Z,
                          val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, cache: Smt2.Cache, reporter: Reporter): ISZ[Message] = {
+    override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
       val ms = Util.detectUnsupportedFeatures(method)
       if (ms.nonEmpty) {
         reporter.reports(ms)

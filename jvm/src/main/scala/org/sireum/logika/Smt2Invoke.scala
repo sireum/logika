@@ -62,7 +62,7 @@ object Smt2Invoke {
   }
 
   @pure def queryDefault(sireumHome: Os.Path,
-                         cache: Smt2.Cache,
+                         cache: Logika.Cache,
                          isSat: B,
                          smt2Seq: B,
                          queryString: String,
@@ -75,7 +75,7 @@ object Smt2Invoke {
   }
 
   @pure def query(smt2Configs: ISZ[Smt2Config],
-                  cache: Smt2.Cache,
+                  cache: Logika.Cache,
                   isSat: B,
                   smt2Seq: B,
                   queryString: String,

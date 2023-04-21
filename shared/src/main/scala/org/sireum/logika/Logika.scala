@@ -53,6 +53,92 @@ object Logika {
                          val bindings: Bindings,
                          val bindingIdMap: HashMap[String, (Z, ISZ[Position])])
 
+  @msig trait Cache {
+    def get(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result]
+
+    def set(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit
+
+    def keys: ISZ[String]
+
+    def getValue(key: Cache.Key): Option[Cache.Value]
+
+    def setValue(key: Cache.Key, value: Cache.Value): Unit
+
+    def clearValue(key: Cache.Key): Unit
+
+    def startSession(): Unit
+
+    def endSession(): Unit
+
+    def sessionKeys: ISZ[String]
+
+    def getSessionValue(key: Cache.Key): Option[Cache.Value]
+
+    def setSessionValue(key: Cache.Key, value: Cache.Value): Unit
+
+    def clearSessionValue(key: Cache.Key): Unit
+
+  }
+
+  object Cache {
+    type Key = String
+
+    @sig trait Value
+  }
+
+  object NoSmt2Cache {
+    @strictpure def create: NoSmt2Cache = NoSmt2Cache(HashSMap.empty, HashSMap.empty)
+  }
+
+  @record class NoSmt2Cache(var properties: HashSMap[Cache.Key, Cache.Value],
+                            var sessionProperties: HashSMap[Cache.Key, Cache.Value]) extends Cache {
+    def get(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result] = {
+      return None()
+    }
+
+    def set(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit = {}
+
+    def keys: ISZ[String] = {
+      return properties.keys
+    }
+
+    def getValue(key: Cache.Key): Option[Cache.Value] = {
+      return properties.get(key)
+    }
+
+    def setValue(key: Cache.Key, value: Cache.Value): Unit = {
+      properties = properties + key ~> value
+    }
+
+    def clearValue(key: Cache.Key): Unit = {
+      properties = properties -- ISZ(key)
+    }
+
+    def startSession(): Unit = {
+      sessionProperties = HashSMap.empty
+    }
+
+    def endSession(): Unit = {
+      sessionProperties = HashSMap.empty
+    }
+
+    def sessionKeys: ISZ[String] = {
+      return sessionProperties.keys
+    }
+
+    def getSessionValue(key: Cache.Key): Option[Cache.Value] = {
+      return sessionProperties.get(key)
+    }
+
+    def setSessionValue(key: Cache.Key, value: Cache.Value): Unit = {
+      sessionProperties = sessionProperties + key ~> value
+    }
+
+    def clearSessionValue(key: Cache.Key): Unit = {
+      sessionProperties = sessionProperties -- ISZ(key)
+    }
+  }
+
   object Reporter {
     object Info {
       @enum object Kind {
@@ -143,7 +229,7 @@ object Logika {
   val idxSuffix: String = "$Idx"
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
-                 smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
+                 smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
                  par: Z, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z,
                  skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
 
@@ -329,9 +415,10 @@ object Logika {
   }
 
   def checkScript(fileUriOpt: Option[String], input: String, config: Config,
-                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
+                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
                   hasLogika: B, plugins: ISZ[Plugin], line: Z,
                   skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
+    cache.startSession()
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
       case Some(p) => !ops.StringOps(p).endsWith(".scala") && !ops.StringOps(p).endsWith(".slang")
@@ -378,6 +465,7 @@ object Logika {
     }
 
     extension.Cancel.cancellable(checkScriptH _)
+    cache.endSession()
   }
 
   @pure def shouldCheck(fileSet: HashSSet[String], line: Z, posOpt: Option[Position]): B = {
@@ -397,7 +485,7 @@ object Logika {
   }
 
   def checkPrograms(sources: ISZ[(Option[String], String)], files: ISZ[String], config: Config, th: TypeHierarchy,
-                    smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter,
+                    smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
                     strictAliasing: B, sanityCheck: B, plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String],
                     skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
@@ -467,8 +555,9 @@ object Logika {
   }
 
   def checkTypedPrograms(verifyingStartTime: Z, fileSet: HashSSet[String], config: Config, th: TypeHierarchy,
-                         smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Smt2.Cache, reporter: Reporter, par: Z,
+                         smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter, par: Z,
                          plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
+    cache.startSession()
     var typeStmts = ISZ[(ISZ[String], AST.Stmt)]()
     for (info <- th.nameMap.values) {
       info match {
@@ -485,6 +574,7 @@ object Logika {
     }
     checkStmts(ISZ(), typeStmts, config, th, smt2f, cache, reporter, par, plugins, verifyingStartTime, F, line,
       skipMethods, skipTypes)
+    cache.endSession()
   }
 }
 
@@ -528,7 +618,7 @@ import Util._
     }
   }
 
-  def checkSeqIndexing(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, seq: State.Value, i: State.Value,
+  def checkSeqIndexing(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, seq: State.Value, i: State.Value,
                        posOpt: Option[Position], reporter: Reporter): State = {
     if (!rtCheck) {
       return s0
@@ -600,7 +690,7 @@ import Util._
     return State.Value.Range(org.sireum.Z(text).get, t, pos)
   }
 
-  def evalStringInterpolate(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State,
+  def evalStringInterpolate(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State,
                             lit: AST.Exp.StringInterpolate, reporter: Reporter): ISZ[(State, State.Value)] = {
     var r = ISZ[(State, State.Value)]()
     val isST = lit.prefix == "st"
@@ -639,7 +729,7 @@ import Util._
     }
   }
 
-  def evalConstantVar(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, info: Info.Var, reporter: Reporter): Option[(State, State.Value)] = {
+  def evalConstantVar(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, info: Info.Var, reporter: Reporter): Option[(State, State.Value)] = {
     if (!info.ast.isVal) {
       return None()
     }
@@ -653,7 +743,7 @@ import Util._
     }
   }
 
-  def evalConstantVarInstance(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, owner: ISZ[String], id: String,  reporter: Reporter): Option[(State, State.Value)] = {
+  def evalConstantVarInstance(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, owner: ISZ[String], id: String,  reporter: Reporter): Option[(State, State.Value)] = {
     th.typeMap.get(owner) match {
       case Some(info: TypeInfo.Adt) =>
         info.vars.get(id) match {
@@ -666,7 +756,7 @@ import Util._
   }
 
 
-  def evalThisIdH(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, id: String, t: AST.Typed, pos: Position, reporter: Reporter): (State, State.Value) = {
+  def evalThisIdH(smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, id: String, t: AST.Typed, pos: Position, reporter: Reporter): (State, State.Value) = {
     val mc = context.methodOpt.get
     val receiverType = mc.receiverTypeOpt.get.asInstanceOf[AST.Typed.Name]
     evalConstantVarInstance(smt2, cache, rtCheck, state, receiverType.ids, id, reporter) match {
@@ -678,7 +768,7 @@ import Util._
     }
   }
 
-  def evalExps(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, numOfExps: Z,
+  def evalExps(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, numOfExps: Z,
                fe: Z => AST.Exp@pure, reporter: Reporter): ISZ[(State, ISZ[State.Value])] = {
     var done = ISZ[(State, ISZ[State.Value])]()
     var currents = ISZ((state, ISZ[State.Value]()))
@@ -706,7 +796,7 @@ import Util._
     return currents ++ done
   }
 
-  def evalArgs(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, numOfArgs: Z,
+  def evalArgs(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, numOfArgs: Z,
                eargs: Either[ISZ[AST.Exp], ISZ[AST.NamedArg]], reporter: Reporter): ISZ[(State, ISZ[Option[State.Value]])] = {
     eargs match {
       case Either.Left(es) =>
@@ -730,7 +820,7 @@ import Util._
     }
   }
 
-  def evalExp(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, e: AST.Exp,
+  def evalExp(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, e: AST.Exp,
               reporter: Reporter): ISZ[(State, State.Value)] = {
     if (!state.ok) {
       return ISZ((state, State.errorValue))
@@ -3089,7 +3179,7 @@ import Util._
     }
   }
 
-  def evalAssumeH(reportQuery: B, smt2: Smt2, cache: Smt2.Cache, title: String, s0: State, sym: State.Value.Sym,
+  def evalAssumeH(reportQuery: B, smt2: Smt2, cache: Logika.Cache, title: String, s0: State, sym: State.Value.Sym,
                   posOpt: Option[Position], reporter: Reporter): State = {
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
     if (config.sat && s1.ok) {
@@ -3102,7 +3192,7 @@ import Util._
     }
   }
 
-  def evalAssume(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp, posOpt: Option[Position],
+  def evalAssume(smt2: Smt2, cache: Logika.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp, posOpt: Option[Position],
                  reporter: Reporter): (State, State.Value.Sym) = {
     val pos = cond.posOpt.get
     val (s1, v) = singleStateValue(pos, s0, evalExp(Split.Disabled, smt2, cache, rtCheck, s0, cond, reporter))
@@ -3113,7 +3203,7 @@ import Util._
     return (evalAssumeH(T, smt2, cache, title, s2, sym, posOpt, reporter), sym)
   }
 
-  def evalAssertH(reportQuery: B, smt2: Smt2, cache: Smt2.Cache, title: String, s0: State, sym: State.Value.Sym,
+  def evalAssertH(reportQuery: B, smt2: Smt2, cache: Logika.Cache, title: String, s0: State, sym: State.Value.Sym,
                   posOpt: Option[Position], reporter: Reporter): State = {
     if (s0.ok) {
       val conclusion = State.Claim.Prop(T, sym)
@@ -3131,7 +3221,7 @@ import Util._
     return s0(status = State.Status.Error)
   }
 
-  def evalAssert(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp,
+  def evalAssert(smt2: Smt2, cache: Logika.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp,
                  posOpt: Option[Position], reporter: Reporter): (State, State.Value.Sym) = {
     val pos = cond.posOpt.get
     val (s1, v) = singleStateValue(pos, s0, evalExp(Split.Disabled, smt2, cache, rtCheck, s0, cond, reporter))
@@ -3142,7 +3232,7 @@ import Util._
     return (evalAssertH(T, smt2, cache, title, s2, sym, posOpt, reporter), sym)
   }
 
-  def evalAssignExp(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B,
+  def evalAssignExp(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B,
                     s0: State, ae: AST.AssignExp, reporter: Reporter): ISZ[State] = {
     ae match {
       case ae: AST.Stmt.Expr =>
@@ -3175,7 +3265,7 @@ import Util._
     }
   }
 
-  def evalAssignExpValue(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, t: AST.Typed, rtCheck: B, s0: State,
+  def evalAssignExpValue(split: Split.Type, smt2: Smt2, cache: Logika.Cache, t: AST.Typed, rtCheck: B, s0: State,
                          ae: AST.AssignExp, reporter: Reporter): ISZ[(State, State.Value)] = {
     ae match {
       case ae: AST.Stmt.Expr => return evalExp(split, smt2, cache, rtCheck, s0, ae.exp, reporter)
@@ -3192,7 +3282,7 @@ import Util._
     return s2.addClaim(State.Claim.Eq(lhs, rhs))
   }
 
-  def evalAssignObjectVarH(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, ids: ISZ[String], rhs: State.Value.Sym,
+  def evalAssignObjectVarH(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, ids: ISZ[String], rhs: State.Value.Sym,
                            namePosOpt: Option[Position], reporter: Reporter): State = {
     val poss = StateTransformer(CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
     if (poss.isEmpty && !config.interp) {
@@ -3258,7 +3348,7 @@ import Util._
     return s3
   }
 
-  def assignRec(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, lhs: AST.Exp,
+  def assignRec(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, lhs: AST.Exp,
                 rhs: State.Value.Sym, reporter: Reporter): ISZ[State] = {
     @pure def isSeqSelect(exp: AST.Exp.Invoke): B = {
       exp.attr.resOpt.get match {
@@ -3355,7 +3445,7 @@ import Util._
 
   }
 
-  def evalPattern(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, v: State.Value, pattern: AST.Pattern, reporter: Reporter): (State, State.Value, Bindings) = {
+  def evalPattern(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, v: State.Value, pattern: AST.Pattern, reporter: Reporter): (State, State.Value, Bindings) = {
     val posOpt = pattern.posOpt
     val pos = posOpt.get
     pattern match {
@@ -3491,7 +3581,7 @@ import Util._
     }
   }
 
-  def addBindings(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, lcontext: ISZ[String],
+  def addBindings(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, lcontext: ISZ[String],
                   m: Bindings, reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     val ids = m.keys
     val s1 = rewriteLocals(s0, lcontext, ids)._1
@@ -3524,7 +3614,7 @@ import Util._
     return s1
   }
 
-  def evalBranch(isMatch: B, split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State,
+  def evalBranch(isMatch: B, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State,
                  lcontext: ISZ[String], branches: ISZ[Branch], i: Z, rOpt: Option[State.Value.Sym],
                  reporter: Reporter): (Z, Option[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])]) = {
     val shouldSplit: B = split match {
@@ -3564,7 +3654,7 @@ import Util._
     return (nextFresh, None())
   }
 
-  def evalBranches(isMatch: B, split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B,
+  def evalBranches(isMatch: B, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B,
                    rOpt: Option[State.Value.Sym], lcontext: ISZ[String], s0: State, branches: ISZ[Branch],
                    reporter: Reporter): (State, LeafClaims) = {
     @pure def allReturns: B = {
@@ -3720,7 +3810,7 @@ import Util._
     return r
   }
 
-  def evalMatch(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
+  def evalMatch(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
                 stmt: AST.Stmt.Match, reporter: Reporter): ISZ[State] = {
 
     def evalCasePattern(s1: State, lcontext: ISZ[String], c: AST.Case, v: State.Value): (State, State.Value.Sym, Bindings, HashMap[String, (Z, ISZ[Position])]) = {
@@ -3792,13 +3882,13 @@ import Util._
     }
   }
 
-  def evalBlock(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, s0: State,
+  def evalBlock(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, s0: State,
                 block: AST.Stmt.Block,
                 reporter: Reporter): ISZ[State] = {
     return evalBody(split, smt2, cache, rOpt, rtCheck, s0, block.body, block.attr.posOpt, reporter)
   }
 
-  def evalIf(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
+  def evalIf(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
              stmt: AST.Stmt.If, reporter: Reporter): ISZ[State] = {
     var branches = ISZ[Branch]()
     def evalConds(s0: State, ifStmt: AST.Stmt.If): State = {
@@ -3824,7 +3914,7 @@ import Util._
     return mergeBranches(shouldSplit, s5, leafClaims)
   }
 
-  def evalExprInvoke(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, stmt: AST.Stmt,
+  def evalExprInvoke(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, stmt: AST.Stmt,
                      e: AST.Exp.Invoke, reporter: Reporter): ISZ[(State, State.Value)] = {
     def printH(): ISZ[(State, State.Value)] = {
       val pos = e.posOpt.get
@@ -3893,7 +3983,7 @@ import Util._
   }
 
   def evalProofStep(smt2: Smt2,
-                    cache: Smt2.Cache,
+                    cache: Logika.Cache,
                     stateMap: (State, HashSMap[AST.ProofAst.StepId, StepProofContext]),
                     step: AST.ProofAst.Step,
                     reporter: Reporter): (State, HashSMap[AST.ProofAst.StepId, StepProofContext]) = {
@@ -3991,12 +4081,12 @@ import Util._
     }
   }
 
-  def evalRegularStepClaim(smt2: Smt2, cache: Smt2.Cache, s0: State, claim: AST.Exp, posOpt: Option[Position],
+  def evalRegularStepClaim(smt2: Smt2, cache: Logika.Cache, s0: State, claim: AST.Exp, posOpt: Option[Position],
                            reporter: Reporter): (B, Z, ISZ[State.Claim], State.Claim) = {
     return evalRegularStepClaimRtCheck(smt2, cache, T, s0, claim, posOpt, reporter)
   }
 
-  def evalRegularStepClaimRtCheck(smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, claim: AST.Exp,
+  def evalRegularStepClaimRtCheck(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, claim: AST.Exp,
                                   posOpt: Option[Position], reporter: Reporter): (B, Z, ISZ[State.Claim], State.Claim) = {
     val svs = evalExp(Logika.Split.Disabled, smt2, cache, rtCheck, s0, claim, reporter)
     for (sv <- svs) {
@@ -4034,7 +4124,7 @@ import Util._
     }
   }
 
-  def evalInv(posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Smt2.Cache, rtCheck: B,
+  def evalInv(posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Logika.Cache, rtCheck: B,
               s0: State, invStmt: AST.Stmt.Inv, substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     var s1 = s0
     var i = 0
@@ -4057,7 +4147,7 @@ import Util._
     return s1
   }
 
-  def evalStmt(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, stmt: AST.Stmt, reporter: Reporter): ISZ[State] = {
+  def evalStmt(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, stmt: AST.Stmt, reporter: Reporter): ISZ[State] = {
     if (!state.ok) {
       return ISZ(state)
     }
@@ -4582,7 +4672,7 @@ import Util._
     return (s0, State.Value.B(T, pos))
   }
 
-  def checkExp(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, title: String, titleSuffix: String,
+  def checkExp(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, title: String, titleSuffix: String,
                s0: State, exp: AST.Exp, reporter: Reporter): ISZ[State] = {
     var r = ISZ[State]()
     for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp, reporter)) {
@@ -4611,7 +4701,7 @@ import Util._
     return r
   }
 
-  def checkExps(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, title: String, titleSuffix: String,
+  def checkExps(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, title: String, titleSuffix: String,
                 s0: State, exps: ISZ[AST.Exp], reporter: Reporter): ISZ[State] = {
     var currents = ISZ(s0)
     var done = ISZ[State]()
@@ -4629,7 +4719,7 @@ import Util._
     return currents ++ done
   }
 
-  def assumeExp(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, exp: AST.Exp, reporter: Reporter): ISZ[State] = {
+  def assumeExp(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, exp: AST.Exp, reporter: Reporter): ISZ[State] = {
     var r = ISZ[State]()
     for (p <- evalExp(split, smt2, cache, rtCheck, s0, exp, reporter)) {
       val (s1, v) = p
@@ -4641,7 +4731,7 @@ import Util._
     return r
   }
 
-  def assumeExps(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, s0: State, exps: ISZ[AST.Exp],
+  def assumeExps(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, exps: ISZ[AST.Exp],
                  reporter: Reporter): ISZ[State] = {
     var currents = ISZ(s0)
     var done = ISZ[State]()
@@ -4690,7 +4780,7 @@ import Util._
         ops.ISZOps(sF.claims).drop(size + 1)), nextFresh)
   }
 
-  def evalStmts(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym],
+  def evalStmts(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym],
                 rtCheck: B, state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): ISZ[State] = {
     var currents = ISZ(state)
     var done = ISZ[State]()
@@ -4717,7 +4807,7 @@ import Util._
     }
   }
 
-  def evalBody(split: Split.Type, smt2: Smt2, cache: Smt2.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
+  def evalBody(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
                body: AST.Body, posOpt: Option[Position], reporter: Reporter): ISZ[State] = {
     val s0 = state
     var r = ISZ[State]()
