@@ -1745,7 +1745,7 @@ object Util {
     return Logika(th, config, ctx, plugins)
   }
 
-  def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, cache: Smt2.Cache, invs: ISZ[lang.symbol.Info.Inv],
+  def checkInv(isPre: B, state: State, logika: Logika, smt2: Smt2, cache: Logika.Cache, invs: ISZ[lang.symbol.Info.Inv],
                posOpt: Option[Position], substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     val methodName: String =
       if (logika.context.methodName.size == 1) logika.context.methodName(0)
@@ -1756,7 +1756,7 @@ object Util {
       substMap, reporter)
   }
 
-  def checkMethodPre(logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, state: State,
+  def checkMethodPre(logika: Logika, smt2: Smt2, cache: Logika.Cache, reporter: Reporter, state: State,
                      methodPosOpt: Option[Position], invs: ISZ[Info.Inv], requires: ISZ[AST.Exp]): State = {
     var s = state
     s = checkInv(T, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
@@ -1766,7 +1766,7 @@ object Util {
     return s
   }
 
-  def checkMethodPost(logika: Logika, smt2: Smt2, cache: Smt2.Cache, reporter: Reporter, states: ISZ[State],
+  def checkMethodPost(logika: Logika, smt2: Smt2, cache: Logika.Cache, reporter: Reporter, states: ISZ[State],
                       methodPosOpt: Option[Position], invs: ISZ[Info.Inv], ensures: ISZ[AST.Exp], logPc: B, logRawPc: B,
                       postPosOpt: Option[Position]): ISZ[State] = {
     var r = ISZ[State]()
@@ -1788,7 +1788,7 @@ object Util {
     return r
   }
 
-  def updateInVarMaps(l: Logika, isHelper: B, smt2: Smt2, cache: Smt2.Cache, state: State, reporter: Reporter): (Logika, State) = {
+  def updateInVarMaps(l: Logika, isHelper: B, smt2: Smt2, cache: Logika.Cache, state: State, reporter: Reporter): (Logika, State) = {
     var s0 = state
     val mctx = l.context.methodOpt.get
     var objectVarInMap = mctx.objectVarInMap
@@ -1856,7 +1856,7 @@ object Util {
                   caseIndex: Z,
                   config: Config,
                   smt2: Smt2,
-                  cache: Smt2.Cache,
+                  cache: Logika.Cache,
                   reporter: Reporter): Unit = {
     val mconfig: Config = if (caseIndex >= 0) config(checkInfeasiblePatternMatch = F) else config
     def checkCase(labelOpt: Option[AST.Exp.LitString], reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp],
@@ -2000,7 +2000,7 @@ object Util {
     return current
   }
 
-  def rewriteObjectVars(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State,
+  def rewriteObjectVars(logika: Logika, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State,
                         objectVars: HashSMap[AST.ResolvedInfo.Var, (AST.Typed, Position)], pos: Position,
                         reporter: Reporter): State = {
     if (objectVars.isEmpty) {
@@ -2073,7 +2073,7 @@ object Util {
     }
   }
 
-  def strictPureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, cache: Smt2.Cache,
+  def strictPureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, cache: Logika.Cache,
                        state: State, receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String],
                        id: String, isHelper: B, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
                        implicitContextOpt: Option[(String, Position)]): (State, State.ProofFun) = {
@@ -2150,7 +2150,7 @@ object Util {
     return r
   }
 
-  def evalExtractPureMethod(logika: Logika, smt2: Smt2, cache: Smt2.Cache, state: State, receiverTypeOpt: Option[AST.Typed],
+  def evalExtractPureMethod(logika: Logika, smt2: Smt2, cache: Logika.Cache, state: State, receiverTypeOpt: Option[AST.Typed],
                             receiverOpt: Option[State.Value.Sym], owner: ISZ[String], id: String, isHelper: B,
                             exp: AST.Exp, reporter: Reporter): (State, State.Value) = {
     val posOpt = exp.posOpt
@@ -2249,7 +2249,7 @@ object Util {
     return (res.owner, id)
   }
 
-  def addObjectInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, name: ISZ[String], state: State, pos: Position,
+  def addObjectInv(logika: Logika, smt2: Smt2, cache: Logika.Cache, name: ISZ[String], state: State, pos: Position,
                    reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     val l = logika(context = logika.context(methodOpt = Some(Context.Method(
       owner = name,
@@ -2278,7 +2278,7 @@ object Util {
     return (s1, ISZ(sym))
   }
 
-  def assumeObjectInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, name: ISZ[String], state: State, pos: Position,
+  def assumeObjectInv(logika: Logika, smt2: Smt2, cache: Logika.Cache, name: ISZ[String], state: State, pos: Position,
                       reporter: Reporter): State = {
     if (logika.config.interp) {
       return state
@@ -2287,7 +2287,7 @@ object Util {
     return s0.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
   }
 
-  def addValueInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
+  def addValueInv(logika: Logika, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
                   pos: Position, reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     if (logika.config.interp) {
       return (state, ISZ())
@@ -2370,7 +2370,7 @@ object Util {
     return (s6, ISZ(sym))
   }
 
-  def assumeValueInv(logika: Logika, smt2: Smt2, cache: Smt2.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
+  def assumeValueInv(logika: Logika, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
                      pos: Position, reporter: Reporter): State = {
     if (logika.config.interp) {
       return state
@@ -2401,7 +2401,7 @@ object Util {
     return State.Value.Range(n, t, pos)
   }
 
-  def checkInvs(logika: Logika, posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Smt2.Cache,
+  def checkInvs(logika: Logika, posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Logika.Cache,
                 rtCheck: B, s0: State, receiverTypeOpt: Option[AST.Typed], receiverOpt: Option[State.Value.Sym], invs: ISZ[Info.Inv],
                 substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     if (logika.config.interp) {
@@ -2449,7 +2449,7 @@ object Util {
     return s4
   }
 
-  def evalAssignReceiver(modifies: ISZ[AST.Exp.Ref], logika: Logika, logikaComp: Logika, smt2: Smt2, cache: Smt2.Cache,
+  def evalAssignReceiver(modifies: ISZ[AST.Exp.Ref], logika: Logika, logikaComp: Logika, smt2: Smt2, cache: Logika.Cache,
                          rtCheck: B, state: State, receiverOpt: Option[AST.Exp], receiverSymOpt: Option[State.Value.Sym],
                          typeSubstMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     def isLhs(exp: AST.Exp): B = {

@@ -207,7 +207,7 @@ object Smt2Impl {
     println(s"Wrote $f")
   }
 
-  def checkSat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result) = {
+  def checkSat(cache: Logika.Cache, query: String): (B, Smt2Query.Result) = {
     val r = checkQuery(cache, T, query)
     val b: B = r.kind match {
       case Smt2Query.Result.Kind.Unsat => F
@@ -219,12 +219,12 @@ object Smt2Impl {
     return (b, r)
   }
 
-  def checkUnsat(cache: Smt2.Cache, query: String): (B, Smt2Query.Result) = {
+  def checkUnsat(cache: Logika.Cache, query: String): (B, Smt2Query.Result) = {
     val r = checkQuery(cache, F, query)
     return (r.kind == Smt2Query.Result.Kind.Unsat, r)
   }
 
-  def checkQuery(cache: Smt2.Cache, isSat: B, query: String): Smt2Query.Result = {
+  def checkQuery(cache: Logika.Cache, isSat: B, query: String): Smt2Query.Result = {
     return Smt2Invoke.query(configs, cache, isSat, smt2Seq, query, if (isSat) Smt2.satTimeoutInMs else timeoutInMs)
   }
 
