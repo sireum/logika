@@ -2785,8 +2785,8 @@ import Util._
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
                 val isStrictPure = info.strictPureBodyOpt.nonEmpty
-                if ((config.interp && !isStrictPure || config.interpStrictPure && isStrictPure) &&
-                  !(config.interpContracts && info.contract.nonEmpty) && info.hasBody) {
+                if ((if (isStrictPure) config.interp && !config.flipStrictPure || !config.interp && config.flipStrictPure
+                else config.interp) && !(config.interpContracts && info.contract.nonEmpty) && info.hasBody) {
                   r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt, receiverOpt,
                     paramArgs)
                 } else if (isStrictPure && info.contract.isEmpty) {
@@ -3856,9 +3856,10 @@ import Util._
           branches = branches :+ Branch("match case pattern", sym, c.body, m, bidMap)
         }
         val stmtPos = stmt.posOpt.get
-        if (!config.interp && smt2.satResult(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
-          s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]", stmtPos,
-          s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)), reporter)._2.kind == Smt2Query.Result.Kind.Sat) {
+        if (!config.interp && smt2.satResult(context.methodName, cache, config.timeoutInMs, T, config.logVc,
+          config.logVcDirOpt, s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]",
+          stmtPos, s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)),
+          reporter)._2.kind == Smt2Query.Result.Kind.Sat) {
           error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
           r = r :+ s1(status = State.Status.Error)
         } else {

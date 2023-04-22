@@ -77,11 +77,11 @@ class LogikaRcTest extends SireumRcSpec {
       case "collection.sc" if isInGithubAction => c = filterSmt2Config(c, _.name.value == "cvc5")(timeoutInMs = c.timeoutInMs * 3)
       case "loop-unroll.sc"  => c = c(interp = T)
       case "opsem.sc" => c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))(timeoutInMs = if (isInGithubAction) c.timeoutInMs * 2 else c.timeoutInMs)
-      case "opsem-alt.sc"  => c = filterSmt2Config(c, _.name.value == "cvc5")
-      case "interprocedural-1.sc"  => c = c(interp = T, interpStrictPure = T); line = 10
-      case "interprocedural-2.sc"  => c = c(interp = T, interpStrictPure = T); line = 10
-      case "interprocedural-contract.sc"  => c = c(interp = T, interpContracts = T, interpStrictPure = T); line = 14
-      case "interprocedural-instance.sc"  => c = c(interp = T, interpStrictPure = T); line = 9
+      case "opsem-alt.sc"  => c = filterSmt2Config(c, (c: Smt2Config) => c.isSat | c.name.value == "cvc5")
+      case "interprocedural-1.sc"  => c = c(interp = T); line = 10
+      case "interprocedural-2.sc"  => c = c(interp = T); line = 10
+      case "interprocedural-contract.sc"  => c = c(interp = T, interpContracts = T); line = 14
+      case "interprocedural-instance.sc"  => c = c(interp = T); line = 9
       case _ =>
     }
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))

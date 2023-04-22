@@ -69,7 +69,7 @@ object Task {
         val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, smt2, cache, T, s0, claim, reporter)
         val (s2, sym) = logika.value2Sym(s1, v, pos)
         val s3 = s2.addClaim(State.Claim.Prop(T, sym))
-        if (smt2.satResult(context, cache, T, config.logVc, config.logVcDirOpt,
+        if (smt2.satResult(context, cache, Smt2.satTimeoutInMs, T, config.logVc, config.logVcDirOpt,
           s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos, s3.claims, reporter)._2.kind ==
           Smt2Query.Result.Kind.Unsat) {
           reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
