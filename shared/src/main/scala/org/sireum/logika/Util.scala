@@ -1733,12 +1733,12 @@ object Util {
     return sv2ST _
   }
 
-  def logikaMethod(th: TypeHierarchy, config: Config, owner: ISZ[String], id: String, receiverTypeOpt: Option[AST.Typed],
-                   params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed, posOpt: Option[Position],
-                   reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ref],
+  def logikaMethod(th: TypeHierarchy, config: Config, isHelper: B, owner: ISZ[String], id: String,
+                   receiverTypeOpt: Option[AST.Typed], params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed,
+                   posOpt: Option[Position], reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ref],
                    ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
                    implicitContext: Option[(String, Position)], compMethods: ISZ[ISZ[String]]): Logika = {
-    val mctx = Context.Method(owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
+    val mctx = Context.Method(isHelper, owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
       HashMap.empty, HashMap.empty, HashMap.empty, posOpt, HashMap.empty)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext,
       compMethods = compMethods)
@@ -1878,8 +1878,9 @@ object Util {
             case _ => halt("Infeasible")
           }
         }
-        val p = updateInVarMaps(logikaMethod(th, mconfig, res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes,
-          method.sig.returnType.typedOpt.get, methodPosOpt, reads, requires, modifies, ensures,
+        val p = updateInVarMaps(logikaMethod(th, mconfig, method.isHelper, res.owner, method.sig.id.value,
+          receiverTypeOpt, method.sig.paramIdTypes, method.sig.returnType.typedOpt.get, methodPosOpt, reads, requires,
+          modifies, ensures,
           if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None(), ISZ()), method.isHelper, smt2, cache,
           state, reporter)
         state = p._2
@@ -2085,7 +2086,7 @@ object Util {
       val pos = posOpt.get
       val (svs, maxFresh, ok): (ISZ[(State, State.Value.Sym)], Z, B) = {
         val context = pf.context :+ pf.id
-        val logika: Logika = logikaMethod(th, config, pf.context, pf.id,  pf.receiverTypeOpt,
+        val logika: Logika = logikaMethod(th, config, isHelper, pf.context, pf.id,  pf.receiverTypeOpt,
           ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins,
           implicitContextOpt, ISZ())
         var s0 = state(claims = ISZ())
@@ -2259,6 +2260,7 @@ object Util {
   def addObjectInv(logika: Logika, smt2: Smt2, cache: Logika.Cache, name: ISZ[String], state: State, pos: Position,
                    reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     val l = logika(context = logika.context(methodOpt = Some(Context.Method(
+      isHelper = F,
       owner = name,
       id = "<init>",
       receiverTypeOpt = None(),

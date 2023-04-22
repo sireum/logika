@@ -1927,8 +1927,8 @@ import Util._
       }
 
       def evalMethod(s1: State, minfo: Info.Method): Unit = {
-        val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
-          info.sig.returnType.typedOpt.get, receiverPosOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
+        val l = logikaMethod(th, config, minfo.ast.isHelper, res.owner, res.id, receiverOpt.map(t => t.tipe),
+          info.sig.paramIdTypes, info.sig.returnType.typedOpt.get, receiverPosOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
           plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
@@ -2054,9 +2054,9 @@ import Util._
       }
 
       val lComp: Logika = {
-        val l = logikaMethod(th, config, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
-          info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
-          plugins, Some(
+        val l = logikaMethod(th, config, info.isHelper, res.owner, res.id, receiverOpt.map(t => t.tipe),
+          info.sig.paramIdTypes, info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(),
+          contract.modifies, ISZ(), ISZ(), plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
           this.context.compMethods :+ (res.owner :+ res.id)
@@ -3314,7 +3314,7 @@ import Util._
     val objectName = ops.ISZOps(ids).dropRight(1)
     if (notInContext(objectName, T)) {
       return Util.checkInvs(this, namePosOpt, F, "Invariant after an object field assignment", smt2, cache, rtCheck, s8,
-        None(), None(), retrieveInvs(objectName, T), TypeChecker.emptySubstMap, reporter)
+        None(), None(), if (context.isHelper) ISZ() else retrieveInvs(objectName, T), TypeChecker.emptySubstMap, reporter)
     } else {
       return s8
     }
@@ -3430,7 +3430,7 @@ import Util._
               val sm = TypeChecker.buildTypeSubstMap(t.ids, lhs.posOpt, typeParams, t.args, reporter).get
               val (s4, oSym) = value2Sym(s3, o, receiverPos)
               val s5 = Util.checkInvs(this, lhs.posOpt, F, "Invariant after an instance field assignment", smt2, cache,
-                rtCheck, s4, Some(t), Some(oSym), retrieveInvs(t.ids, T), sm, reporter)
+                rtCheck, s4, Some(t), Some(oSym), if (context.isHelper) ISZ() else retrieveInvs(t.ids, T), sm, reporter)
               r = r ++ assignRec(split, smt2, cache, rtCheck, s5, receiver, newSym, reporter)
             } else {
               r = r ++ assignRec(split, smt2, cache, rtCheck, s3, receiver, newSym, reporter)
@@ -4407,7 +4407,7 @@ import Util._
         evalReturnH()
       } else {
         val mcontext = context.methodOpt.get
-        val invs = retrieveInvs(mcontext.owner, mcontext.isInObject)
+        val invs: ISZ[Info.Inv] = if (context.isHelper) ISZ() else retrieveInvs(mcontext.owner, mcontext.isInObject)
         Util.checkMethodPost(this, smt2, cache, reporter, evalReturnH(), mcontext.posOpt, invs,
           mcontext.ensures, config.logPc, config.logRawPc, returnStmt.posOpt)
       }
