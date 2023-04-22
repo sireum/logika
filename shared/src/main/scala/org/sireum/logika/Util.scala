@@ -2129,8 +2129,15 @@ object Util {
       val s1 = state(status = State.statusOf(ok), nextFresh = maxFresh)
       if (config.sat && s1.ok) {
         val title: String = s"the derived proof function of $id"
-        if (!smt2.sat(pf.context :+ pf.id, cache, T, config.logVc, config.logVcDirOpt, title, pos, ISZ(), reporter)) {
-          reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
+        smt2.satResult(pf.context :+ pf.id, cache, Smt2.satTimeoutInMs, T, config.logVc, config.logVcDirOpt, title, pos,
+          ISZ(), reporter) match {
+          case (T, _) =>
+          case (_, result) =>
+            if (result.kind == Smt2Query.Result.Kind.Error) {
+              reporter.error(posOpt, Logika.kind, s"Error occurred when checking the satisfiability of proof function derived from @strictpure method")
+            } else {
+              reporter.error(posOpt, Logika.kind, "Unsatisfiable proof function derived from @strictpure method")
+            }
         }
       }
       return (s1, pf)

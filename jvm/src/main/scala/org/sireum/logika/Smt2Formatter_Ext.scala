@@ -26,6 +26,7 @@ package org.sireum.logika
 
 import org.sireum._
 import java.lang.{String => JString, Float => JFloat, Double => JDouble, Integer => JInteger, Long => JLong}
+import java.util.concurrent.TimeUnit
 
 object Smt2Formatter_Ext {
 
@@ -96,24 +97,19 @@ object Smt2Formatter_Ext {
   }
 
   def formatTime(milis: Z): ST = {
-    val ms = JString.format("%03d", (milis % 1000).toInt)
-    var t = milis / 1000
-    if (t >= 60) {
-      val s = JString.format("%02d", (t % 60).toInt)
-      t = t / 60
-      if (t >= 60) {
-        val m = JString.format("%02d", (t % 60).toInt)
-        t = t / 60
-        if (t > 0) {
-          return st"$t:$m:$s.$ms"
-        } else {
-          return st"$m:$s.$ms"
-        }
-      } else {
-        return st"$s.${ms}s"
-      }
+    val l = milis.toLong
+    val hr = TimeUnit.MILLISECONDS.toHours(l)
+    val min = TimeUnit.MILLISECONDS.toMinutes(l - TimeUnit.HOURS.toMillis(hr))
+    val sec = TimeUnit.MILLISECONDS.toSeconds(l - TimeUnit.HOURS.toMillis(hr) - TimeUnit.MINUTES.toMillis(min))
+    val ms = TimeUnit.MILLISECONDS.toMillis(l - TimeUnit.HOURS.toMillis(hr) - TimeUnit.MINUTES.toMillis(min) - TimeUnit.SECONDS.toMillis(sec))
+    if (hr > 0) {
+      return st"${JString.format("%d:%02d:%02d.%03d", hr, min, sec, ms)}"
+    } else if (min > 0) {
+      return st"${JString.format("%d:%02d.%03d", min, sec, ms)}"
+    } else if (sec > 0) {
+      return st"${JString.format("%d.%03ds", sec, ms)}"
     } else {
-      return st"0.${ms}s"
+      return st"${JString.format("0.%03ds", ms)}"
     }
   }
 

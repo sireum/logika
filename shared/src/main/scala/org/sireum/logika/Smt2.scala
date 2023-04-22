@@ -32,6 +32,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.Reporter
 import Util._
+import org.sireum.logika.Smt2.satTimeoutInMs
 
 object Smt2 {
 
@@ -168,7 +169,7 @@ object Smt2 {
 
   val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts"
 
-  val defaultSatOpts: String = s"$cvc4DefaultSatOpts; $z3DefaultSatOpts; $cvc5DefaultSatOpts"
+  val defaultSatOpts: String = s"$z3DefaultSatOpts"
 
   val validTimeoutInMs: Z = 2000
 
@@ -216,9 +217,9 @@ object Smt2 {
       opts match {
         case ISZ(name, _*) =>
           solverArgs(name, timeoutInMs, rlimit) match {
-            case Some(prefix) =>
+            case Some(_) =>
               nameExePathMap.get(name) match {
-                case Some(exe) => r = r :+ Smt2Config(isSat, name, exe, prefix ++ ops.ISZOps(opts).drop(1))
+                case Some(exe) => r = r :+ Smt2Config(isSat, name, exe, rlimit, ops.ISZOps(opts).drop(1))
                 case _ =>
               }
             case _ => return Either.Right(s"Unsupported SMT2 solver name: $name")
@@ -623,7 +624,7 @@ object Smt2 {
 
   def typeHierarchy: TypeHierarchy
 
-  def checkSat(cache: Logika.Cache, query: String): (B, Smt2Query.Result)
+  def checkSat(cache: Logika.Cache, timeoutInMs: Z, query: String): (B, Smt2Query.Result)
 
   def checkUnsat(cache: Logika.Cache, query: String): (B, Smt2Query.Result)
 
@@ -652,9 +653,10 @@ object Smt2 {
     return if (typeHierarchy.isAdtType(t)) st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
   }
 
-  def satResult(context: ISZ[String], cache: Logika.Cache, reportQuery: B, log: B, logDirOpt: Option[String],
-                title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
-    val (r, smt2res) = checkSat(cache, satQuery(claims, None(), reporter).render)
+  def satResult(context: ISZ[String], cache: Logika.Cache, timeoutInMs: Z, reportQuery: B, log: B,
+                logDirOpt: Option[String], title: String, pos: message.Position, claims: ISZ[State.Claim],
+                reporter: Reporter): (B, Smt2Query.Result) = {
+    val (r, smt2res) = checkSat(cache, timeoutInMs, satQuery(claims, None(), reporter).render)
     val header =
       st"""; Satisfiability check for $title
           |${smt2res.info}
@@ -684,7 +686,7 @@ object Smt2 {
 
   def sat(context: ISZ[String], cache: Logika.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
           pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): B = {
-    return satResult(context, cache, reportQuery, log, logDirOpt, title, pos, claims, reporter)._1
+    return satResult(context, cache, satTimeoutInMs, reportQuery, log, logDirOpt, title, pos, claims, reporter)._1
   }
 
   def toVal(t: AST.Typed.Name, n: Z): ST = {
@@ -1856,7 +1858,7 @@ object Smt2 {
       }
       var body: ST =
         if (isImply) implyST(rest, v2ST _, HashMap.empty, declIds)
-        else andST(rest, v2ST _, HashMap.empty, declIds)
+        else andST(rest, v2ST _, HashMap.empty, declIds).getOrElse(Smt2.stTrue)
       if (lets.nonEmpty) {
         val newDeclIds = lids ++ declIds.entries
         body =
@@ -1902,7 +1904,7 @@ object Smt2 {
       }
       var r: ST =
         if (isImply) implySTH(simplifiedClaimSTs, c2ST(claims(claims.size - 1), sv2ST, lets, declIds))
-        else andSTH(simplifiedClaimSTs)
+        else andSTH(simplifiedClaimSTs).getOrElse(Smt2.stTrue)
       val uscdid = UsedSymsCurrentDeclIdCollector(HashSet.empty, ISZ())
       for (c <- claims) {
         uscdid.transformStateClaim(c)
@@ -2071,32 +2073,32 @@ object Smt2 {
       case c: State.Claim.If =>
         return Some(
           st"""(ite ${v2st(c.cond)}
-              |  ${andST(c.tClaims, v2st, lets, declIds)}
-              |  ${andST(c.fClaims, v2st, lets, declIds)}
+              |  ${andST(c.tClaims, v2st, lets, declIds).getOrElse(Smt2.stTrue)}
+              |  ${andST(c.fClaims, v2st, lets, declIds).getOrElse(Smt2.stTrue)}
               |)"""
         )
-      case c: State.Claim.And => return Some(andST(c.claims, v2st, lets, declIds))
-      case c: State.Claim.Or => return Some(orST(c.claims, v2st, lets, declIds))
+      case c: State.Claim.And => return andST(c.claims, v2st, lets, declIds)
+      case c: State.Claim.Or => return orST(c.claims, v2st, lets, declIds)
       case c: State.Claim.Imply => return Some(implyST(c.claims, v2st, lets, declIds))
       case _: State.Claim.Custom => return None()
     }
   }
 
-  def andSTH(sts: ISZ[ST]): ST = {
+  def andSTH(sts: ISZ[ST]): Option[ST] = {
     if (sts.size == 0) {
-      return Smt2.stTrue
+      return None()
     } else if (sts.size == 1) {
-      return sts(0)
+      return Some(sts(0))
     } else {
       val r =
         st"""(and
             |  ${(sts, "\n")})"""
-      return r
+      return Some(r)
     }
   }
 
   def andST(cs: ISZ[State.Claim], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
-            declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
+            declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): Option[ST] = {
     var sts = ISZ[ST]()
     for (c <- cs) {
       c2ST(c, v2st, lets, declIds) match {
@@ -2107,21 +2109,21 @@ object Smt2 {
     return andSTH(sts)
   }
 
-  def orSTH(sts: ISZ[ST]): ST = {
+  def orSTH(sts: ISZ[ST]): Option[ST] = {
     if (sts.size == 0) {
-      return Smt2.stTrue
+      return None()
     } else if (sts.size == 1) {
-      return sts(0)
+      return Some(sts(0))
     } else {
       val r =
         st"""(or
             |  ${(sts, "\n")})"""
-      return r
+      return Some(r)
     }
   }
 
   def orST(cs: ISZ[State.Claim], v2st: State.Value => ST, lets: HashMap[Z, ISZ[State.Claim.Let]],
-           declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): ST = {
+           declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): Option[ST] = {
     var sts = ISZ[ST]()
     for (c <- cs) {
       c2ST(c, v2st, lets, declIds) match {
