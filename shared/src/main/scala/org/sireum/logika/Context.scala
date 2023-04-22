@@ -34,7 +34,8 @@ object Context {
 
   @sig trait Value
 
-  @datatype class Method(val owner: ISZ[String],
+  @datatype class Method(val isHelper: B,
+                         val owner: ISZ[String],
                          val id: String,
                          val receiverTypeOpt: Option[AST.Typed],
                          val params: ISZ[(AST.Id, AST.Typed)],
@@ -149,6 +150,13 @@ object Context {
                         val implicitCheckTitlePosOpt: Option[(String, Position)],
                         val compMethods: ISZ[ISZ[String]],
                         val storage: HashMap[String, Context.Value]) {
+
+  @pure def isHelper: B = {
+    methodOpt match {
+      case Some(m) => return m.isHelper
+      case _ => return F
+    }
+  }
 
   @pure def owner: ISZ[String] = {
     methodOpt match {
