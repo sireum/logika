@@ -74,7 +74,7 @@ class LogikaRcTest extends SireumRcSpec {
     var c = config(simplifiedQuery = isSimplified)
     var line = 0
     p(p.size - 1) match {
-      case "collection.sc" if isInGithubAction => c = filterSmt2Config(c, _.name.value == "cvc5")(timeoutInMs = c.timeoutInMs * 3)
+      case "collection.sc" if isInGithubAction => c = filterSmt2Config(c, (c: Smt2Config) => c.isSat | c.name.value == "cvc5")(timeoutInMs = c.timeoutInMs * 3)
       case "loop-unroll.sc"  => c = c(interp = T)
       case "opsem.sc" => c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))(timeoutInMs = if (isInGithubAction) c.timeoutInMs * 2 else c.timeoutInMs)
       case "opsem-alt.sc"  => c = filterSmt2Config(c, (c: Smt2Config) => c.isSat | c.name.value == "cvc5")
