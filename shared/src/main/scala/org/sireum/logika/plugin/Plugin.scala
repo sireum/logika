@@ -141,9 +141,10 @@ object Plugin {
   @pure def handleDeclSmt2(smt2: Smt2, claim: State.Claim): ISZ[(String, ST)]
 
   @pure def handleSmt2(smt2: Smt2,
-                       claim: State.Claim, v2st: State.Value => ST,
+                       claim: State.Claim, v2st: (State.Value, Reporter) => ST,
                        lets: HashMap[Z, ISZ[State.Claim.Let]],
-                       declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): Option[ST]
+                       declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id],
+                       reporter: Reporter): Option[ST]
 
   @pure def canHandleSymRewrite(data: State.Claim.Data): B
 

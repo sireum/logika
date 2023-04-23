@@ -54,11 +54,17 @@ object Logika {
                          val bindingIdMap: HashMap[String, (Z, ISZ[Position])])
 
   @msig trait Cache {
-    def get(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result]
+    def clearTransition(): Unit
 
-    def set(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit
+    def getTransition(th: TypeHierarchy, stmt: AST.Stmt, state: State): Option[(ISZ[State], Smt2.StrictPureMethods)]
 
-    def keys: ISZ[String]
+    def setTransition(th: TypeHierarchy, stmt: AST.Stmt, state: State, nextStates: ISZ[State], spms: Smt2.StrictPureMethods): Unit
+
+    def getSmt2(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result]
+
+    def setSmt2(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit
+
+    def keys: ISZ[Cache.Key]
 
     def getValue(key: Cache.Key): Option[Cache.Value]
 
@@ -66,77 +72,20 @@ object Logika {
 
     def clearValue(key: Cache.Key): Unit
 
-    def startSession(): Unit
+    def taskKeys: ISZ[Cache.Key]
 
-    def endSession(): Unit
+    def getTaskValue(key: Cache.Key): Option[Cache.Value]
 
-    def sessionKeys: ISZ[String]
+    def setTaskValue(key: Cache.Key, value: Cache.Value): Unit
 
-    def getSessionValue(key: Cache.Key): Option[Cache.Value]
-
-    def setSessionValue(key: Cache.Key, value: Cache.Value): Unit
-
-    def clearSessionValue(key: Cache.Key): Unit
+    def clearTaskValue(key: Cache.Key): Unit
 
   }
 
   object Cache {
-    type Key = String
+    @sig trait Key
 
     @sig trait Value
-  }
-
-  object NoSmt2Cache {
-    @strictpure def create: NoSmt2Cache = NoSmt2Cache(HashSMap.empty, HashSMap.empty)
-  }
-
-  @record class NoSmt2Cache(var properties: HashSMap[Cache.Key, Cache.Value],
-                            var sessionProperties: HashSMap[Cache.Key, Cache.Value]) extends Cache {
-    def get(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result] = {
-      return None()
-    }
-
-    def set(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit = {}
-
-    def keys: ISZ[String] = {
-      return properties.keys
-    }
-
-    def getValue(key: Cache.Key): Option[Cache.Value] = {
-      return properties.get(key)
-    }
-
-    def setValue(key: Cache.Key, value: Cache.Value): Unit = {
-      properties = properties + key ~> value
-    }
-
-    def clearValue(key: Cache.Key): Unit = {
-      properties = properties -- ISZ(key)
-    }
-
-    def startSession(): Unit = {
-      sessionProperties = HashSMap.empty
-    }
-
-    def endSession(): Unit = {
-      sessionProperties = HashSMap.empty
-    }
-
-    def sessionKeys: ISZ[String] = {
-      return sessionProperties.keys
-    }
-
-    def getSessionValue(key: Cache.Key): Option[Cache.Value] = {
-      return sessionProperties.get(key)
-    }
-
-    def setSessionValue(key: Cache.Key, value: Cache.Value): Unit = {
-      sessionProperties = sessionProperties + key ~> value
-    }
-
-    def clearSessionValue(key: Cache.Key): Unit = {
-      sessionProperties = sessionProperties -- ISZ(key)
-    }
   }
 
   object Reporter {
@@ -418,7 +367,6 @@ object Logika {
                   smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
                   hasLogika: B, plugins: ISZ[Plugin], line: Z,
                   skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
-    cache.startSession()
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
       case Some(p) => !ops.StringOps(p).endsWith(".scala") && !ops.StringOps(p).endsWith(".slang")
@@ -454,6 +402,9 @@ object Logika {
 
           if (!reporter.hasError) {
             if (hasLogika) {
+              if (config.transitionCache) {
+                val dummy = th.fingerprint // init fingerprint
+              }
               checkStmts(p.body.stmts, ISZ(), config, th, smt2f, cache, reporter, config.parCores, plugins, verifyingStartTime, T,
                 line, skipMethods, skipTypes)
             }
@@ -465,7 +416,6 @@ object Logika {
     }
 
     extension.Cancel.cancellable(checkScriptH _)
-    cache.endSession()
   }
 
   @pure def shouldCheck(fileSet: HashSSet[String], line: Z, posOpt: Option[Position]): B = {
@@ -557,7 +507,9 @@ object Logika {
   def checkTypedPrograms(verifyingStartTime: Z, fileSet: HashSSet[String], config: Config, th: TypeHierarchy,
                          smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter, par: Z,
                          plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
-    cache.startSession()
+    if (config.transitionCache) {
+      val dummy = th.fingerprint // init fingerprint
+    }
     var typeStmts = ISZ[(ISZ[String], AST.Stmt)]()
     for (info <- th.nameMap.values) {
       info match {
@@ -574,7 +526,6 @@ object Logika {
     }
     checkStmts(ISZ(), typeStmts, config, th, smt2f, cache, reporter, par, plugins, verifyingStartTime, F, line,
       skipMethods, skipTypes)
-    cache.endSession()
   }
 }
 
@@ -650,18 +601,10 @@ import Util._
   def evalLit(smt2: Smt2, lit: AST.Lit, reporter: Reporter): State.Value = {
     lit match {
       case e: AST.Exp.LitB => return State.Value.B(e.value, e.posOpt.get)
-      case e: AST.Exp.LitC =>
-        smt2.addType(AST.Typed.c, reporter)
-        return State.Value.C(e.value, e.posOpt.get)
-      case e: AST.Exp.LitF32 =>
-        smt2.addType(AST.Typed.f32, reporter)
-        return State.Value.F32(e.value, e.posOpt.get)
-      case e: AST.Exp.LitF64 =>
-        smt2.addType(AST.Typed.f64, reporter)
-        return State.Value.F64(e.value, e.posOpt.get)
-      case e: AST.Exp.LitR =>
-        smt2.addType(AST.Typed.r, reporter)
-        return State.Value.R(e.value, e.posOpt.get)
+      case e: AST.Exp.LitC => return State.Value.C(e.value, e.posOpt.get)
+      case e: AST.Exp.LitF32 => return State.Value.F32(e.value, e.posOpt.get)
+      case e: AST.Exp.LitF64 => return State.Value.F64(e.value, e.posOpt.get)
+      case e: AST.Exp.LitR => return State.Value.R(e.value, e.posOpt.get)
       case e: AST.Exp.LitString => return State.Value.String(e.value, e.posOpt.get)
       case e: AST.Exp.LitZ => return State.Value.Z(e.value, e.posOpt.get)
       case e: AST.Exp.LitStepId => halt(s"Infeasible: $e")
@@ -710,19 +653,13 @@ import Util._
       case string"z" => return State.Value.Z(org.sireum.Z(lit.lits(0).value).get, lit.posOpt.get)
       case string"r" => return State.Value.R(org.sireum.R(lit.lits(0).value).get, lit.posOpt.get)
       case string"c" => return State.Value.C(conversions.String.toCis(lit.lits(0).value)(0), lit.posOpt.get)
-      case string"f32" =>
-        smt2.addType(AST.Typed.f32, reporter)
-        return State.Value.F32(org.sireum.F32(lit.lits(0).value).get, lit.posOpt.get)
-      case string"f64" =>
-        smt2.addType(AST.Typed.f64, reporter)
-        return State.Value.F64(org.sireum.F64(lit.lits(0).value).get, lit.posOpt.get)
+      case string"f32" => return State.Value.F32(org.sireum.F32(lit.lits(0).value).get, lit.posOpt.get)
+      case string"f64" => return State.Value.F64(org.sireum.F64(lit.lits(0).value).get, lit.posOpt.get)
       case _ =>
         val t = lit.typedOpt.get
         val ids = t.asInstanceOf[AST.Typed.Name].ids
         th.typeMap.get(ids).get match {
-          case ti: TypeInfo.SubZ =>
-            smt2.addType(t, reporter)
-            return text2SubZVal(ti, lit.lits(0).value, lit.posOpt.get)
+          case ti: TypeInfo.SubZ => return text2SubZVal(ti, lit.lits(0).value, lit.posOpt.get)
           case _ =>
         }
         halt(s"TODO: $lit")
@@ -1293,7 +1230,6 @@ import Util._
                 i = i + 1
               }
             }
-            smt2.addSeqLit(t, indices.size, reporter)
             val as: ISZ[State.Claim.Let.SeqLit.Arg] =
               for (p <- ops.ISZOps(indices).zip(args)) yield State.Claim.Let.SeqLit.Arg(p._1, p._2.get)
             r = r :+ ((s1.addClaim(State.Claim.Let.SeqLit(sym, as)), sym))
@@ -4539,7 +4475,6 @@ import Util._
     def evalStmtH(): ISZ[State] = {
       stmt match {
         case stmt: AST.Stmt.Expr =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           stmt.exp match {
             case e: AST.Exp.Invoke =>
               return for (p <- evalExprInvoke(split, smt2, cache, rtCheck, state, stmt, e, reporter)) yield p._1
@@ -4547,7 +4482,6 @@ import Util._
               return for (p <- evalExp(split, smt2, cache, rtCheck, state, e, reporter)) yield p._1
           }
         case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           stmt.attr.resOpt.get match {
             case res: AST.ResolvedInfo.LocalVar =>
               return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.attr.typedOpt.get,
@@ -4557,46 +4491,37 @@ import Util._
               return ISZ(state(status = State.Status.Error))
           }
         case stmt: AST.Stmt.VarPattern =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalVarPattern(stmt)
         case stmt: AST.Stmt.Assign =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalAssign(state, stmt)
         case stmt: AST.Stmt.If =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalIf(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.While =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           if (config.interp) {
             return evalWhileUnroll(split, state, stmt)
           } else {
             return evalWhile(state, stmt)
           }
         case stmt: AST.Stmt.For =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           if (stmt.modifies.isEmpty) {
             reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
             return ISZ(state(status = State.Status.Error))
           }
           return evalFor(state, stmt)
         case stmt: AST.Stmt.Return =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalReturn(state, stmt)
         case stmt: AST.Stmt.Block =>
           return evalBlock(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.SpecBlock =>
           return evalSpecBlock(split, state, stmt)
         case stmt: AST.Stmt.Match =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalMatch(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
         case stmt: AST.Stmt.Inv =>
           val s1 = evalInv(None(), F, "Invariant", smt2, cache, rtCheck, state, stmt, HashMap.empty, reporter)
           return ISZ(state(status = s1.status, nextFresh = s1.nextFresh))
         case stmt: AST.Stmt.DeduceSteps =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalDeduceSteps(state, stmt)
         case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty =>
-          logPc(config.logPc, config.logRawPc, state, reporter, stmt.posOpt)
           return evalDeduceSequent(state, stmt)
         case _: AST.Stmt.Object => return ISZ(state)
         case _: AST.Stmt.Import => return ISZ(state)
@@ -4792,20 +4717,38 @@ import Util._
       currents = ISZ()
       for (current <- cs) {
         if (current.ok) {
-          currents = currents ++ evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+          val stmt = stmts(i)
+          if (stmt.isInstruction) {
+            logPc(config.logPc, config.logRawPc, current, reporter, stmt.posOpt)
+          }
+          val nextStates: ISZ[State] = if (config.transitionCache) {
+            cache.getTransition(th, stmt, current) match {
+              case Some((ss, spms)) =>
+                smt2.strictPureMethodsUp(spms)
+                ss
+              case _ =>
+                val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+                if (ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
+                  cache.setTransition(th, stmt, current, ss, smt2.strictPureMethods)
+                }
+                ss
+            }
+          } else {
+            evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+          }
+          currents = currents ++ nextStates
         } else {
           done = done :+ current
         }
       }
     }
 
-    if (rOpt.nonEmpty) {
-      return (for (current <- currents;
-                   s <- evalAssignExp(split, smt2, cache, rOpt, rtCheck, current, stmts(stmts.size - 1).asAssignExp, reporter))
+    val r: ISZ[State] = if (rOpt.nonEmpty) (
+      for (current <- currents;
+           s <- evalAssignExp(split, smt2, cache, rOpt, rtCheck, current, stmts(stmts.size - 1).asAssignExp, reporter))
       yield s) ++ done
-    } else {
-      return currents ++ done
-    }
+    else currents ++ done
+    return r
   }
 
   def evalBody(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,

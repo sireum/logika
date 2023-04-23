@@ -1706,13 +1706,14 @@ object Util {
     }
   }
 
-  def value2ST(smt2: Smt2, lets: HashMap[Z, ISZ[State.Claim.Let]], declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): State.Value => ST = {
+  def value2ST(smt2: Smt2, lets: HashMap[Z, ISZ[State.Claim.Let]],
+               declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): (State.Value, Reporter) => ST = {
     if (lets.isEmpty) {
       return smt2.v2ST _
     }
     var cache = HashMap.empty[Z, ST]
 
-    def sv2ST(v: State.Value): ST = {
+    def sv2ST(v: State.Value, reporter: Reporter): ST = {
       v match {
         case v: State.Value.Sym =>
           cache.get(v.num) match {
@@ -1720,13 +1721,13 @@ object Util {
             case _ =>
               val r: ST = lets.get(v.num) match {
                 case Some(ls) if ls.size == 1 && !ls(0).isInstanceOf[State.Claim.Let.Random] =>
-                  smt2.l2RhsST(ls(0), sv2ST _, lets, declIds)
-                case _ => smt2.v2ST(v)
+                  smt2.l2RhsST(ls(0), sv2ST _, lets, declIds, reporter)
+                case _ => smt2.v2ST(v, reporter)
               }
               cache = cache + v.num ~> r
               return r
           }
-        case _ => return smt2.v2ST(v)
+        case _ => return smt2.v2ST(v, reporter)
       }
     }
 

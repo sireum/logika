@@ -83,7 +83,7 @@ object Smt2Invoke {
     val configs: ISZ[Smt2Config] = for (smt2Config <- smt2Configs if isSat == smt2Config.isSat) yield smt2Config
     val smt2Args: ISZ[String] = for (smt2Config <- configs if isSat == smt2Config.isSat; arg <- ISZ[String](
       smt2Config.name, timeoutInMs.string, smt2Config.rlimit.string) ++ smt2Config.opts) yield arg
-    cache.get(isSat, queryString, smt2Args) match {
+    cache.getSmt2(isSat, queryString, smt2Args) match {
       case Some(r) => return r
       case _ =>
     }
@@ -184,7 +184,7 @@ object Smt2Invoke {
           "", 0, F)
     }
     r = r(timeMillis = extension.Time.currentMillis - start)
-    cache.set(isSat, queryString, smt2Args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
+    cache.setSmt2(isSat, queryString, smt2Args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
     return r
   }
 
