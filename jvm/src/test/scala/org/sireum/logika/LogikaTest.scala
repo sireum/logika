@@ -87,7 +87,8 @@ object LogikaTest {
       interpContracts = F,
       elideEncoding = F,
       rawInscription = F,
-      flipStrictPure = F
+      flipStrictPure = F,
+      transitionCache = F
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
@@ -198,7 +199,7 @@ class LogikaTest extends TestSuite {
       th => Smt2Impl.create(config.smt2Configs, ISZ(), th, config.timeoutInMs, config.fpRoundingMode,
         config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, config.smt2Seq,
         config.rawInscription, config.elideEncoding, config.atLinesFresh, reporter),
-      Logika.NoSmt2Cache.create, reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
+      NoTransitionSmt2Cache.create, reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

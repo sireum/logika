@@ -58,7 +58,8 @@ import org.sireum._
                        val interpContracts: B,
                        val elideEncoding: B,
                        val rawInscription: B,
-                       val flipStrictPure: B)
+                       val flipStrictPure: B,
+                       val transitionCache: B)
 
 object Config {
   @enum object BranchPar {
