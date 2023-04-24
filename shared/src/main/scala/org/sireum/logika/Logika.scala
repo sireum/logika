@@ -4874,13 +4874,7 @@ import Util._
                 }
                 val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
                 if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
-                  val cached = cache.setTransition(th, config, transition, current, ss, smt2)
-                  reporter.coverage(T, cached, stmt.posOpt.get)
-                  if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                    for (e <- ensures) {
-                      reporter.coverage(T, cached, e.posOpt.get)
-                    }
-                  }
+                  cache.setTransition(th, stmt, current, ss, smt2.strictPureMethods)
                 }
                 ss
             }

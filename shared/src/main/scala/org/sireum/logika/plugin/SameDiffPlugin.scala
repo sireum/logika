@@ -27,7 +27,7 @@ package org.sireum.logika.plugin
 
 import org.sireum._
 import org.sireum.lang.{ast => AST}
-import org.sireum.logika.Logika.{Reporter, Split}
+import org.sireum.logika.Logika.Reporter
 import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.message.Position
 
@@ -63,7 +63,7 @@ object SameDiffPlugin {
   }
 
   def mineLabeledExps(exp: AST.Exp, reporter: Reporter): HashSMap[Z, AST.Exp.Labeled] = {
-    val lem = LabeledExpMiner(HashSMap.empty, reporter.empty)
+    val lem = LabeledExpMiner(HashSMap.empty, Reporter.create)
     lem.transformExp(exp)
     reporter.reports(lem.reporter.messages)
     return lem.map
@@ -83,7 +83,7 @@ import SameDiffPlugin._
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
-  val iszStepIdTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.stepId)))
+  val iszzTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.z)))
 
   val name: String = "SameDiffPlugin"
 
@@ -115,7 +115,7 @@ import SameDiffPlugin._
             return None()
           }
           just.args(1) match {
-            case arg: AST.Exp.Invoke if arg.typedOpt == iszStepIdTypedOpt =>
+            case arg: AST.Exp.Invoke if arg.typedOpt == iszzTypedOpt =>
               arg.attr.resOpt.get match {
                 case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
                   AST.Util.toStepIds(arg.args, Logika.kind, reporter) match {
@@ -178,29 +178,34 @@ import SameDiffPlugin._
 
     val aFromClaim = abstractLabeledExps(fromClaim, nums)
     val aStepClaim = abstractLabeledExps(step.claim, nums)
+    val naFromClaim = logika.th.normalizeExp(aFromClaim)
+    val naStepClaim = logika.th.normalizeExp(aStepClaim)
     val sortedNums = ops.ISZOps(nums.elements).sortWith((num1: Z, num2: Z) => num1 <= num2)
 
     val labeled: ST =
       if (sortedNums.size == 1) st"labeled expression #${sortedNums(0)}"
       else st"labeled expressions {${(sortedNums, ", ")}}"
 
-    if (aFromClaim != aStepClaim) {
+    if (naFromClaim != naStepClaim) {
       reporter.error(posOpt, Logika.kind,
         st"The stated claim and $fromStepId's' claim are not structurally equivalent when the $labeled are abstracted away".render)
     }
 
-    val logika2 = logika(plugins = SameDiffExpPlugin(posOpt, id, fromStepId, fromMap, step.id) +: logika.plugins)
-
-    val (stat, nextFresh, premises, conclusion): (B, Z, ISZ[State.Claim], State.Claim) = if (args.size == 1) {
+    if (args.size == 1) {
       if (id == "SameDiff_*") {
-        logika2.evalRegularStepClaim(smt2.emptyCache(logika.config), cache,
-          state(claims = logika.context.methodOpt.get.initClaims), step.claim, step.id.posOpt, reporter)
+        if (!checkEquivalences(posOpt, id, logika, smt2.emptyCache, cache, state(claims = ISZ()), fromStepId, step.id,
+          sortedNums, fromMap, stepMap, reporter)) {
+          return emptyResult
+        }
       } else {
-        logika2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+        if (!checkEquivalences(posOpt, id, logika, smt2, cache, state, fromStepId, step.id, sortedNums, fromMap,
+          stepMap, reporter)) {
+          return emptyResult
+        }
       }
     } else {
-      val psmt2 = smt2.emptyCache(logika.config)
-      var s1 = state(claims = logika.context.methodOpt.get.initClaims)
+      val psmt2 = smt2.emptyCache
+      var s1 = state(claims = ISZ())
       var ok = T
       for (i <- 1 until args.size if ok) {
         val stepNo = args(i)
@@ -220,8 +225,13 @@ import SameDiffPlugin._
       if (!ok) {
         return emptyResult
       }
-      logika2.evalRegularStepClaim(psmt2, cache, s1, step.claim, step.id.posOpt, reporter)
+      if (!checkEquivalences(posOpt, id, logika, psmt2, cache, s1, fromStepId, step.id, sortedNums, fromMap,
+        stepMap, reporter)) {
+        return emptyResult
+      }
     }
+    val (stat, nextFresh, premises, conclusion) = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim,
+      step.id.posOpt, reporter)
     if (stat) {
       val eqSTs: ISZ[ST] = for (num <- sortedNums) yield
         st"""+ Labeled expression #$num:
@@ -238,79 +248,55 @@ import SameDiffPlugin._
             |  $labeled are structurally equivalent, i.e.,
             |
             |  $aFromClaim
-            |  ≡
+            |  ≈
             |  $aStepClaim
             |
-            |* Each of the matching labeled expressions are proven to be equivalent
-            |  under their respective execution context (by SMT2 solving), i.e.,
+            |* Each of the matching labeled expressions are proven to be equivalent by using SMT2, i.e.,
             |
             |  ${(eqSTs, "\n\n")}
             |""".render)
     }
     return Plugin.Result(stat, nextFresh, premises :+ conclusion)
   }
-}
 
-@datatype class SameDiffExpPlugin(val posOpt: Option[Position],
-                                  val id: String,
-                                  val fromStepId: AST.ProofAst.StepId,
-                                  val fromMap: HashSMap[Z, AST.Exp.Labeled],
-                                  val stepId: AST.ProofAst.StepId) extends ExpPlugin {
-  @strictpure override def name: String = "SameDiffExpPlugin"
-
-  @strictpure override def canHandle(logika: Logika, exp: AST.Exp): B = exp.isInstanceOf[AST.Exp.Labeled]
-
-  override def handle(logika: Logika, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State,
-                      exp: AST.Exp, reporter: Reporter): ISZ[(State, State.Value)] = {
-    val lexp = exp.asInstanceOf[AST.Exp.Labeled]
-    val num = numOf(lexp)
-    val svs2 = logika.evalExp(split, smt2, cache, rtCheck, state, lexp.exp, reporter)
-    val fromExp: AST.Exp.Labeled = fromMap.get(num) match {
-      case Some(e) => e
-      case _ => return svs2
-    }
-
-    val logika2 = logika(plugins = ops.ISZOps(logika.plugins).drop(1))
-
-    var found = F
-    var ok = T
+  def checkEquivalences(posOpt: Option[Position], id: String, logika: Logika, smt2: Smt2, cache: Logika.Cache,
+                        state: State, fromStepId: AST.ProofAst.StepId, stepId: AST.ProofAst.StepId, nums: ISZ[Z],
+                        fromMap: HashSMap[Z, AST.Exp.Labeled], stepMap: HashSMap[Z, AST.Exp.Labeled],
+                        reporter: Reporter): B = {
     val pos = posOpt.get
-    for (sv2 <- svs2 if sv2._1.ok) {
-      val psmt2 = smt2
-      for (sv1 <- logika2.evalExp(split, psmt2, cache, rtCheck, sv2._1, fromExp.exp, reporter) if sv1._1.ok) {
-        val s3 = sv1._1
-        val v1 = sv1._2
-        val v2 = sv2._2
-        val (_, sym) = s3.freshSym(AST.Typed.b, pos)
-        val r = smt2.valid(logika.context.methodName, logika.config, cache, T, logika.config.logVc,
-          logika.config.logVcDirOpt, s"$id Justification for labeled expression #$num of proof steps $stepId and $fromStepId",
-          pos, s3.claims :+ State.Claim.Let.Binary(sym, v1, AST.Exp.BinaryOp.Equiv, v2, v1.tipe),
-          State.Claim.Prop(T, sym), reporter)
-        r.kind match {
-          case Smt2Query.Result.Kind.Unsat => found = T
-          case Smt2Query.Result.Kind.Sat =>
-            ok = F
-            reporter.error(posOpt, Logika.kind, s"Invalid equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
-          case Smt2Query.Result.Kind.Unknown =>
-            ok = F
-            reporter.error(posOpt, Logika.kind, s"Could not deduce the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
-          case Smt2Query.Result.Kind.Timeout =>
-            ok = F
-            reporter.error(posOpt, Logika.kind, s"Timed out when deducing the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
-          case Smt2Query.Result.Kind.Error =>
-            ok = F
-            reporter.error(posOpt, Logika.kind, s"Error occurred when deducing the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
+    var ok = F
+    for (num <- nums) {
+      val fromExp = fromMap.get(num).get
+      val stepExp = stepMap.get(num).get
+      for (sv1 <- logika.evalExp(Logika.Split.Disabled, smt2, cache, T, state, fromExp, reporter) if sv1._1.ok) {
+        for (sv2 <- logika.evalExp(Logika.Split.Disabled, smt2, cache, T, sv1._1, stepExp, reporter) if sv2._1.ok) {
+          val s3 = sv2._1
+          val v1 = sv1._2
+          val v2 = sv2._2
+          val (_, sym) = s3.freshSym(AST.Typed.b, pos)
+          val r = smt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt,
+            s"$id Justification for labeled expression #$num of proof steps $stepId and $fromStepId", pos,
+            s3.claims :+ State.Claim.Let.Binary(sym, v1, AST.Exp.BinaryOp.Equiv, v2, v1.tipe), State.Claim.Prop(T, sym),
+            reporter)
+          r.kind match {
+            case Smt2Query.Result.Kind.Unsat => ok = T
+            case Smt2Query.Result.Kind.Sat =>
+              reporter.error(posOpt, Logika.kind, s"Invalid equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
+              return F
+            case Smt2Query.Result.Kind.Unknown =>
+              reporter.error(posOpt, Logika.kind, s"Could not deduce the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
+              return F
+            case Smt2Query.Result.Kind.Timeout =>
+              reporter.error(posOpt, Logika.kind, s"Timed out when deducing the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
+              return F
+            case Smt2Query.Result.Kind.Error =>
+              println(r.query)
+              reporter.error(posOpt, Logika.kind, s"Error occurred when deducing the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
+              return F
+          }
         }
       }
     }
-    if (found && ok) {
-      return svs2
-    } else {
-      if (!found) {
-        reporter.error(posOpt, Logika.kind, s"Could not deduce the equivalence of any labeled expression proof steps $stepId and $fromStepId")
-      }
-      return for (sv2 <- svs2) yield (sv2._1(status = State.Status.Error), sv2._2)
-    }
+    return ok
   }
-
 }
