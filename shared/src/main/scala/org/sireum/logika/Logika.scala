@@ -163,7 +163,7 @@ object Logika {
   val libraryDesc: String = "Library"
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
-  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), Smt2Plugin(), ClaimOfPlugin(), LiftPlugin(), PropNatDedPlugin(),
+  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), SameDiffPlugin(), Smt2Plugin(), ClaimOfPlugin(), LiftPlugin(),
     PredNatDedPlugin(), InceptionPlugin(), SubstitutionPlugin(), AlgebraPlugin())
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
@@ -765,7 +765,7 @@ import Util._
     val ePlugins = jescmPlugins._2
     if (jescmPlugins._2.nonEmpty) {
       for (p <- ePlugins if p.canHandle(this, e)) {
-        return p.handle(this, smt2, cache, state, e, reporter)
+        return p.handle(this, split, smt2, cache, rtCheck, state, e, reporter)
       }
     }
 
@@ -4091,7 +4091,7 @@ import Util._
     val sPlugins = jescmPlugins._3
     if (sPlugins.nonEmpty) {
       for (p <- sPlugins if p.canHandle(this, stmt)) {
-        return p.handle(this, smt2, cache, state, stmt, reporter)
+        return p.handle(this, split, smt2, cache, rtCheck, state, stmt, reporter)
       }
     }
 
@@ -4728,7 +4728,7 @@ import Util._
                 ss
               case _ =>
                 val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
-                if (ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
+                if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
                   cache.setTransition(th, stmt, current, ss, smt2.strictPureMethods)
                 }
                 ss

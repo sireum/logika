@@ -70,8 +70,10 @@ object Plugin {
   @pure def canHandle(logika: Logika, exp: AST.Exp): B
 
   def handle(logika: Logika,
+             split: Logika.Split.Type,
              smt2: Smt2,
              cache: Logika.Cache,
+             rtCheck: B,
              state: State,
              exp: AST.Exp,
              reporter: Reporter): ISZ[(State, State.Value)]
@@ -83,8 +85,10 @@ object Plugin {
   @pure def canHandle(logika: Logika, stmt: AST.Stmt): B
 
   def handle(logika: Logika,
+             split: Logika.Split.Type,
              smt2: Smt2,
              cache: Logika.Cache,
+             rtCheck: B,
              state: State,
              stmt: AST.Stmt,
              reporter: Reporter): ISZ[State]

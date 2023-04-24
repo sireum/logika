@@ -1,7 +1,7 @@
 // #Sireum #Logika
 
 import org.sireum._
-import org.sireum.justification.Tauto
+import org.sireum.justification._
 
 def foo(x: Z): Z = {
   Contract(
@@ -38,29 +38,29 @@ def absOpt(zOpt: Option[Z]): Option[Z] = {
   0
 }
 
-def unfoldAuto(): Unit = {
+def unfoldTauto(): Unit = {
 
   Deduce(
 
     (sum(ISZ(1, 2, 3), 2) == {
-      val s0 = ISZ[Z](1, 2, 3)
-      val i0 = 2
-      if (s0.isInBound(i0)) {
-        s0(i0) + sum(s0, i0 + 1)
+      val s = ISZ[Z](1, 2, 3)
+      val i = 2
+      if (s.isInBound(i)) {
+        s(i) + sum(s, i + 1)
       } else {
         0
       }
     }) by Tauto,
 
     (sum(ISZ(1, 2, 3), 2) == {
-      val s0 = ISZ[Z](1, 2, 3)
-      val i0 = 2
-      if (s0.isInBound(i0)) {
-        s0(i0) + {
-          val s1 = s0
-          val i1 = i0 + 1
+      val s = ISZ[Z](1, 2, 3)
+      val i = 2
+      if (s.isInBound(i)) {
+        s(i) + {
+          val s1 = s
+          val i1 = i + 1
           if (s1.isInBound(i1)) {
-            s0(i1) + sum(s1, i1 + 1)
+            s(i1) + sum(s1, i1 + 1)
           } else {
             0
           }
@@ -71,11 +71,11 @@ def unfoldAuto(): Unit = {
     }) by Tauto,
 
     (sum(ISZ(1, 2, 3), 2) == {
-      val s0 = ISZ[Z](1, 2, 3)
-      s0(2) + {
-        val s1 = s0
+      val s = ISZ[Z](1, 2, 3)
+      s(2) + {
+        val s1 = s
         if (s1.isInBound(3)) {
-          s0(3) + sum(s1, 3)
+          s(3) + sum(s1, 3)
         } else {
           0
         }
@@ -83,11 +83,11 @@ def unfoldAuto(): Unit = {
     }) by Tauto,
 
     (sum(ISZ(1, 2, 3), 2) == {
-      val s0 = ISZ[Z](1, 2, 3)
+      val s = ISZ[Z](1, 2, 3)
       3 + {
-        val s1 = s0
+        val s1 = s
         if (s1.isInBound(3)) {
-          s0(3) + sum(s1, 3)
+          s(3) + sum(s1, 3)
         } else {
           0
         }
@@ -95,9 +95,9 @@ def unfoldAuto(): Unit = {
     }) by Tauto,
 
     (sum(ISZ(1, 2, 3), 2) == {
-      val s0 = ISZ[Z](1, 2, 3)
+      val s = ISZ[Z](1, 2, 3)
       3 + {
-        val s1 = s0
+        val s1 = s
         0
       }
     }) by Tauto,
@@ -113,27 +113,41 @@ def unfoldAuto(): Unit = {
 
 }
 
-def unfoldAuto2(s: ISZ[Z], i: Z): Unit = {
+def unfoldTautoSameDiff(s: ISZ[Z], i: Z): Unit = {
   Deduce(
 
-    (sum(s, i) == {
-      val s0 = s
-      val i0 = i
-      if (s0.isInBound(i0)) {
-        s0(i0) + sum(s0, i0 + 1)
+    1 #> (sum(s, i) == {
+      if (s.isInBound(i)) {
+        s(i) + (sum(s, i + 1): @l)
       } else {
         0
       }
     }) by Tauto,
 
-    (sum(s, i + 1) == {
-      val s0 = s
-      val i0 = i + 1
-      if (s0.isInBound(i0)) {
-        s0(i0) + sum(s0, i0 + 1)
+    2 #> (sum(s, i) == {
+      if (s.isInBound(i)) {
+        s(i) + ({
+          val i1 = i + 1
+          if (s.isInBound(i1)) {
+            s(i1) + sum(s, i + 2)
+          } else {
+            0
+          }
+        }: @l)
+      } else {
+        0
+      }
+    }) by SameDiff(1),
+
+    3 #> (sum(s, i + 1) == {
+      val s1 = s
+      val i1 = i + 1
+      if (s1.isInBound(i1)) {
+        s1(i1) + sum(s1, i1 + 1)
       } else {
         0
       }
     }) by Tauto
+
   )
 }
