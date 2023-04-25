@@ -1747,7 +1747,7 @@ object Util {
                    ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
                    implicitContext: Option[(String, Position)], compMethods: ISZ[ISZ[String]]): Logika = {
     val mctx = Context.Method(isHelper, owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
-      HashMap.empty, HashMap.empty, HashMap.empty, posOpt, HashMap.empty)
+      HashMap.empty, HashMap.empty, HashMap.empty, ISZ(), posOpt, HashMap.empty)
     val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext,
       compMethods = compMethods)
     return Logika(th, config, ctx, plugins)
@@ -1855,7 +1855,7 @@ object Util {
       }
     }
     return (l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
-      localInMap = localInMap)))), s0)
+      localInMap = localInMap, initClaims = s0.claims)))), s0)
   }
 
   def checkMethod(th: TypeHierarchy,
@@ -2281,6 +2281,7 @@ object Util {
       objectVarInMap = HashMap.empty,
       fieldVarInMap = HashMap.empty,
       localInMap = HashMap.empty,
+      initClaims = ISZ(),
       posOpt = None(),
       storage = logika.context.methodOpt.map((mctx: Context.Method) => mctx.storage).getOrElse(HashMap.empty)
     ))))

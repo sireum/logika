@@ -1893,29 +1893,31 @@ import Util._
           } else {
             var s3 = s2(status = State.Status.Normal)
             var assigns = ISZ[(AST.Exp, State.Value.Sym)]()
-            val ids = Util.collectLocals(s3, ctx)
-            receiverOpt match {
-              case Some(receiver) =>
-                val t = receiver.tipe
-                if (th.isMutable(t)) {
-                  val (s4, sym) = idIntro(pos, s3, ctx, "this", t, None())
-                  invokeReceiverOpt match {
-                    case Some(invokeReceiver) => assigns = assigns :+ ((invokeReceiver, sym))
-                    case _ => assigns = assigns :+ ((AST.Exp.This(AST.TypedAttr(posOpt, Some(t))), sym))
+            if (minfo.ast.purity == AST.Purity.Impure) {
+              val ids = Util.collectLocals(s3, ctx)
+              receiverOpt match {
+                case Some(receiver) =>
+                  val t = receiver.tipe
+                  if (th.isMutable(t)) {
+                    val (s4, sym) = idIntro(pos, s3, ctx, "this", t, None())
+                    invokeReceiverOpt match {
+                      case Some(invokeReceiver) => assigns = assigns :+ ((invokeReceiver, sym))
+                      case _ => assigns = assigns :+ ((AST.Exp.This(AST.TypedAttr(posOpt, Some(t))), sym))
+                    }
+                    s3 = s4
                   }
+                case _ =>
+              }
+              for (paramArg <- paramArgs) {
+                val (l, _, e, v) = paramArg
+                if (th.isMutable(v.tipe)) {
+                  val (s4, sym) = idIntro(pos, s3, ctx, l.id, v.tipe, None())
+                  assigns = assigns :+ ((e, sym))
                   s3 = s4
                 }
-              case _ =>
-            }
-            for (paramArg <- paramArgs) {
-              val (l, _, e, v) = paramArg
-              if (th.isMutable(v.tipe)) {
-                val (s4, sym) = idIntro(pos, s3, ctx, l.id, v.tipe, None())
-                assigns = assigns :+ ((e, sym))
-                s3 = s4
               }
+              s3 = rewriteLocals(s3, F, ctx, ids)._1
             }
-            s3 = rewriteLocals(s3, F, ctx, ids)._1
             s3 = restoreLocals(s3, callerLocalMap)
             var s4s = ISZ(s3)
             for (assign <- assigns) {
@@ -4198,10 +4200,9 @@ import Util._
       for (s0w <- checkExps(split, smt2, cache, F, "Loop invariant", " at the beginning of while-loop", s0,
         whileStmt.invariants, reporter)) {
         if (s0w.ok) {
-          val s1 = s0w
-          val s0R: State = {
+          val s1: State = {
             val modObjectVars = whileStmt.contract.modifiedObjectVars
-            var srw = rewriteObjectVars(this, smt2, cache, rtCheck, s0(nextFresh = s1.nextFresh),
+            var srw = rewriteObjectVars(this, smt2, cache, rtCheck, s0(nextFresh = s0w.nextFresh),
               whileStmt.contract.modifiedObjectVars, whileStmt.posOpt.get, reporter)
             for (p <- modObjectVars.entries) {
               val (res, (tipe, pos)) = p
@@ -4234,7 +4235,7 @@ import Util._
             }
             srw
           }
-          for (p <- evalExp(split, smt2, cache, rtCheck, s0R, whileStmt.cond, reporter)) {
+          for (p <- evalExp(split, smt2, cache, rtCheck, s1, whileStmt.cond, reporter)) {
             val (s2, v) = p
             if (s2.ok) {
               val pos = whileStmt.cond.posOpt.get
@@ -4247,9 +4248,8 @@ import Util._
                 for (s4 <- assumeExps(split, smt2, cache, rtCheck, s3(claims = thenClaims), whileStmt.invariants, reporter);
                      s5 <- evalStmts(split, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
                   if (s5.ok) {
-                    for (s6 <- checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop",
-                      s5, whileStmt.invariants, reporter)) {
-                    }
+                    checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop", s5,
+                      whileStmt.invariants, reporter)
                   }
                 }
               }
@@ -4728,7 +4728,7 @@ import Util._
                 ss
               case _ =>
                 val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
-                if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
+                if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status == State.Status.Normal)) {
                   cache.setTransition(th, stmt, current, ss, smt2.strictPureMethods)
                 }
                 ss
