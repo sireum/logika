@@ -1401,7 +1401,7 @@ import Util._
         atMap.get(key) match {
           case Some((poss, num)) =>
             val (s0, sym) = state.freshSym(t, pos)
-            return (s0.addClaim(State.Claim.Let.Id(sym, res.context, res.id, num, poss)), sym)
+            return (s0.addClaim(State.Claim.Let.Id(sym, T, res.context, res.id, num, poss)), sym)
           case _ =>
             reporter.error(exp.posOpt, kind, st"Could not find ${res.id} with the occurrence number $num".render)
             return (state(status = State.Status.Error), State.errorValue)
@@ -1553,7 +1553,7 @@ import Util._
             val (s10, v) = p
             val (s11, vSym) = value2Sym(s10, v, quant.fun.exp.asStmt.posOpt.get)
             val s12 = s11.addClaims(
-              if (quant.isForall) ISZ(State.Claim.Imply(ISZ(rangeProp, State.Claim.Prop(T, vSym))))
+              if (quant.isForall) ISZ(State.Claim.Imply(F, ISZ(rangeProp, State.Claim.Prop(T, vSym))))
               else ISZ(rangeProp, State.Claim.Prop(T, vSym))
             )
             if (s12.ok) {
@@ -1599,7 +1599,7 @@ import Util._
             val (s7, v) = p
             val (s8, vSym) = value2Sym(s7, v, quant.fun.exp.asStmt.posOpt.get)
             val s9 = s8.addClaims(
-              if (quant.isForall) ISZ(State.Claim.Imply(ISZ(inBoundProp, State.Claim.Prop(T, vSym))))
+              if (quant.isForall) ISZ(State.Claim.Imply(F, ISZ(inBoundProp, State.Claim.Prop(T, vSym))))
               else ISZ(inBoundProp, State.Claim.Prop(T, vSym))
             )
             if (s9.ok) {
@@ -1661,14 +1661,14 @@ import Util._
             val (s11, v) = p
             val (s12, vSym) = value2Sym(s11, v, quant.fun.exp.asStmt.posOpt.get)
             var prop: State.Claim =
-              if (quant.isForall) State.Claim.Imply(ISZ(State.Claim.Prop(T, eqSym), State.Claim.Prop(T, vSym)))
+              if (quant.isForall) State.Claim.Imply(F, ISZ(State.Claim.Prop(T, eqSym), State.Claim.Prop(T, vSym)))
               else State.Claim.And(ISZ(State.Claim.Prop(T, eqSym), State.Claim.Prop(T, vSym)))
             if (invSyms.nonEmpty) {
               prop = State.Claim.And(
                 (for (invSym <- invSyms) yield State.Claim.Prop(T, invSym).asInstanceOf[State.Claim]) :+ prop)
             }
             val s13 = s12.addClaims(
-              if (quant.isForall) ISZ(State.Claim.Imply(ISZ(inBoundProp, prop)))
+              if (quant.isForall) ISZ(State.Claim.Imply(F, ISZ(inBoundProp, prop)))
               else ISZ(inBoundProp, prop))
             if (s13.ok) {
               val s13ClaimsOps = ops.ISZOps(s13.claims)
@@ -1915,7 +1915,7 @@ import Util._
                 s3 = s4
               }
             }
-            s3 = rewriteLocals(s3, ctx, ids)._1
+            s3 = rewriteLocals(s3, F, ctx, ids)._1
             s3 = restoreLocals(s3, callerLocalMap)
             var s4s = ISZ(s3)
             for (assign <- assigns) {
@@ -1979,7 +1979,7 @@ import Util._
           oldVars = oldVars + id ~> sym
           s1 = s2
         }
-        s1 = rewriteLocals(s1, ctx, oldVars.keys ++ (if (receiverOpt.isEmpty) ISZ[String]() else ISZ[String]("this")))._1
+        s1 = rewriteLocals(s1, F, ctx, oldVars.keys ++ (if (receiverOpt.isEmpty) ISZ[String]() else ISZ[String]("this")))._1
       }
       for (q <- paramArgs) {
         val (l, _, arg, v) = q
@@ -2050,7 +2050,7 @@ import Util._
             ms1 = ls0
             oldIdMap = oldIdMap + (info.context :+ info.id) ~> sym
           }
-          ms1 = rewriteLocalVars(logikaComp, ms1, modLocals.keys, mposOpt, reporter)
+          ms1 = rewriteLocalVars(logikaComp, ms1, T, modLocals.keys, mposOpt, reporter)
           for (pair <- modLocals.entries) {
             val (info, (t, pos)) = pair
             val oldSym = oldIdMap.get(info.context :+ info.id).get
@@ -2100,7 +2100,7 @@ import Util._
           if (receiverOpt.nonEmpty) {
             rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this")
           }
-          ms1 = rewriteLocalVars(logikaComp, ms1, rwLocals, modPosOpt, reporter)
+          ms1 = rewriteLocalVars(logikaComp, ms1, F, rwLocals, modPosOpt, reporter)
           if (newVars.nonEmpty) {
             for (q <- paramArgs) {
               val p = q._1
@@ -2211,7 +2211,7 @@ import Util._
             val p = idIntro(posOpt.get, s1, lcontext, "this", currentReceiverType, None())
             s1 = p._1
             if (receiverModified && context.methodName == lcontext) {
-              s1 = rewriteLocal(this, s1, lcontext, "this", posOpt, reporter)
+              s1 = rewriteLocal(this, s1, F, lcontext, "this", posOpt, reporter)
             }
             Some(p._2)
           case _ => None()
@@ -2298,7 +2298,7 @@ import Util._
                   }
                 }
               }
-              val implies: ISZ[State.Claim] = for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
+              val implies: ISZ[State.Claim] = for (ccr <- okCcrs) yield State.Claim.Imply(T, ISZ(ccr.requiresClaim,
                 bigAnd(
                   map.get(ccr.requiresClaim).getOrElse(ISZ()) ++
                     (for (i <- root.claims.size until ccr.state.claims.size) yield ccr.state.claims(i)))
@@ -2312,7 +2312,7 @@ import Util._
                 val (s8, sym) = s1.freshSym(retType, pos)
                 s1 = s8
                 r = r :+ ((s1(nextFresh = nextFresh).addClaims(
-                  for (ccr <- okCcrs) yield State.Claim.Imply(ISZ(ccr.requiresClaim,
+                  for (ccr <- okCcrs) yield State.Claim.Imply(T, ISZ(ccr.requiresClaim,
                     State.Claim.Let.Def(sym, ccr.retVal)))), sym))
               }
             }
@@ -3213,7 +3213,7 @@ import Util._
 
   def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym,
                        idPosOpt: Option[Position], reporter: Reporter): State = {
-    val s1: State = if (decl) s0 else rewriteLocal(this, s0, lcontext, id, idPosOpt, reporter)
+    val s1: State = if (decl) s0 else rewriteLocal(this, s0, T, lcontext, id, idPosOpt, reporter)
     val (s2, lhs) = idIntro(idPosOpt.get, s1, lcontext, id, rhs.tipe, idPosOpt)
     return s2.addClaim(State.Claim.Eq(lhs, rhs))
   }
@@ -3520,7 +3520,7 @@ import Util._
   def addBindings(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, lcontext: ISZ[String],
                   m: Bindings, reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     val ids = m.keys
-    val s1 = rewriteLocals(s0, lcontext, ids)._1
+    val s1 = rewriteLocals(s0, F, lcontext, ids)._1
     var s2 = s1
     var bindings = ISZ[State.Value.Sym]()
     for (p <- m.entries) {
@@ -3542,7 +3542,7 @@ import Util._
       val (s2, x) = idIntro(pos, s1, lcontext, id, t, Some(pos))
       val (s3, reX) = s2.freshSym(t, pos)
       s1 = s3.addClaims(ISZ(
-        State.Claim.Let.Id(reX, lcontext, id, num, poss),
+        State.Claim.Let.Id(reX, F, lcontext, id, num, poss),
         State.Claim.Eq(reX, x),
         State.Claim.Eq(x, v)
       ))
@@ -3572,7 +3572,7 @@ import Util._
         val s2 = assumeBindings(s1, lcontext, m, bidMap)
         var claims = ISZ[(State.Status.Type, ISZ[State.Claim])]()
         for (s3 <- evalBody(split, smt2, cache, rOpt, rtCheck, s2, body, posOpt, reporter)) {
-          val s4 = rewriteLocals(s3, lcontext, m.keys)._1
+          val s4 = rewriteLocals(s3, F, lcontext, m.keys)._1
           if (nextFresh < s4.nextFresh) {
             nextFresh = s4.nextFresh
           }
@@ -3734,10 +3734,10 @@ import Util._
         var claims = ISZ[State.Claim]()
         for (sc <- scs) {
           for (i <- diffIndices) {
-            claims = claims :+ State.Claim.Imply(ISZ(sc._1, sc._2(i)))
+            claims = claims :+ State.Claim.Imply(T, ISZ(sc._1, sc._2(i)))
           }
           for (i <- s0.claims.size + 1 until sc._2.size) {
-            claims = claims :+ State.Claim.Imply(ISZ(sc._1, sc._2(i)))
+            claims = claims :+ State.Claim.Imply(T, ISZ(sc._1, sc._2(i)))
           }
         }
         r = r :+ s0(claims = commonClaimPrefix ++ claims)
@@ -3771,7 +3771,7 @@ import Util._
       val pos = c.pattern.posOpt.get
       val (s7, sym) = s6.freshSym(AST.Typed.b, pos)
       val s8 = s7.addClaim(State.Claim.Let.And(sym, conds))
-      val (s9, locals) = rewriteLocals(s8, lcontext, m.keys)
+      val (s9, locals) = rewriteLocals(s8, F, lcontext, m.keys)
       return (s9, sym, m, HashMap.empty[String, (Z, ISZ[Position])] ++ (for (p <- locals.entries) yield (p._1._2, (p._2._2, p._2._1))))
     }
 
@@ -4174,7 +4174,7 @@ import Util._
             enumGen.idOpt match {
               case Some(id) =>
                 for (d <- ds) {
-                  done = done :+ d.addClaim(State.Claim.Let.Id(idSym, ctx, id.value, num, ISZ(pos)))
+                  done = done :+ d.addClaim(State.Claim.Let.Id(idSym, F, ctx, id.value, num, ISZ(pos)))
                 }
                 for (l <- ls) {
                   loop = loop :+ l.addClaim(State.Claim.Let.CurrentId(F, idSym, ctx, id.value, Some(pos)))
@@ -4218,7 +4218,7 @@ import Util._
             } else {
               None()
             }
-            srw = rewriteLocalVars(this, srw, modLocalVars.keys, whileStmt.posOpt, reporter)
+            srw = rewriteLocalVars(this, srw, T, modLocalVars.keys, whileStmt.posOpt, reporter)
             for (p <- modLocalVars.entries) {
               val (res, (tipe, pos)) = p
               val (srw4, sym) = idIntro(pos, srw, res.context, res.id, tipe, Some(pos))
@@ -4300,7 +4300,7 @@ import Util._
             if (thenSat) {
               for (s5 <- evalStmts(sp, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
                 if (s5.ok) {
-                  val s6 = rewriteLocalVars(this, s5, whileStmt.body.undecls, whileStmt.posOpt, reporter)
+                  val s6 = rewriteLocalVars(this, s5, F, whileStmt.body.undecls, whileStmt.posOpt, reporter)
                   r = r ++ whileRec(s6, numLoops + 1)
                 } else {
                   r = r :+ s5
@@ -4757,7 +4757,7 @@ import Util._
     var r = ISZ[State]()
     for (s1 <- evalStmts(split, smt2, cache, rOpt, rtCheck, s0, body.stmts, reporter)) {
       if (s1.ok) {
-        r = r :+ rewriteLocalVars(this, s1, body.undecls, posOpt, reporter)
+        r = r :+ rewriteLocalVars(this, s1, F, body.undecls, posOpt, reporter)
       } else {
         r = r :+ s1
       }

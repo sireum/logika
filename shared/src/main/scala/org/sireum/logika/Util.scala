@@ -456,14 +456,14 @@ object Util {
     }
   }
 
-  @datatype class CurrentIdRewriter(val map: HashMap[(ISZ[String], String), (ISZ[Position], Z)])
+  @datatype class CurrentIdRewriter(val map: HashMap[(ISZ[String], String), (ISZ[Position], Z)], val inScope: B)
     extends StateTransformer.PrePost[B] {
 
     override def preStateClaimLetCurrentId(ctx: B,
                                            o: State.Claim.Let.CurrentId): StateTransformer.PreResult[B, State.Claim.Let] = {
       map.get((o.context, o.id)) match {
         case Some((poss, num)) =>
-          return StateTransformer.PreResult(ctx, T, Some(State.Claim.Let.Id(o.sym, o.context, o.id, num, poss)))
+          return StateTransformer.PreResult(ctx, T, Some(State.Claim.Let.Id(o.sym, inScope, o.context, o.id, num, poss)))
         case _ =>
           return StateTransformer.PreResult(ctx, T, None())
       }
@@ -631,7 +631,7 @@ object Util {
         AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
     }
 
-    @pure def bigImplyExp(exps: ISZ[AST.Exp]): AST.Exp = {
+    @pure def bigImplyExp(isCond: B, exps: ISZ[AST.Exp]): AST.Exp = {
       var es = ISZ[AST.Exp]()
       for (i <- 0 until exps.size - 1) {
         val exp = exps(i)
@@ -644,8 +644,9 @@ object Util {
       es = es :+ exps(exps.size - 1)
       assert(es.size >= 2)
       var r = es(es.size - 1)
-      val op = AST.Exp.BinaryOp.Imply
-      val res = AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
+      val op: String = if (isCond) AST.Exp.BinaryOp.CondImply else AST.Exp.BinaryOp.Imply
+      val res = AST.ResolvedInfo.BuiltIn(if (isCond) AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply else
+        AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
       var i = es.size - 2
       while (i >= 0) {
         if (r != trueLit) {
@@ -751,7 +752,7 @@ object Util {
 
       for (exp <- cs) {
         exp match {
-          case exp: AST.Exp.Binary if exp.attr.resOpt == implyResOpt =>
+          case exp: AST.Exp.Binary if exp.attr.resOpt == implyResOpt || exp.attr.resOpt == condImplyResOpt =>
             exp.left match {
               case left: AST.Exp.Unary if left.attr.resOpt == notResOpt =>
                 inpMap = {
@@ -829,9 +830,15 @@ object Util {
           if (let.context == context || let.context.isEmpty) {
             val key: ClaimsToExps.AtPossKey = (let.context, let.id, sym.tipe)
             val n: Z = computeAtNum(key, let.poss, let.num)
-            return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
-              Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
-              Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr))
+            if (let.inScope) {
+              return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
+                Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+                Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr))
+            } else {
+              return Some(AST.Exp.At(Some(typedToType(sym.tipe)),
+                AST.Exp.LitString(key._2, AST.Attr(symPosOpt)),
+                AST.Exp.LitZ(n, attr), linesFresh, attr))
+            }
           } else {
             val key: ClaimsToExps.AtPossKey = (ISZ[String](), st"${(let.context :+ let.id, ".")}".render, sym.tipe)
             val n = computeAtNum(key, let.poss, let.num)
@@ -979,7 +986,7 @@ object Util {
               es = es :+ e
             case _ => return None()
           }
-          return Some(bigImplyExp(es))
+          return Some(bigImplyExp(F, es))
         case let: State.Claim.Let.Ite =>
           (valueToExp(let.cond), valueToExp(let.left), valueToExp(let.right)) match {
             case (Some(cond), Some(left), Some(right)) =>
@@ -1573,7 +1580,7 @@ object Util {
             case Some(e) => es = es :+ e
             case _ => return None()
           }
-          return Some(bigImplyExp(es))
+          return Some(bigImplyExp(claim.isCond, es))
         case claim: State.Claim.Prop =>
           valueToExp(claim.value) match {
             case Some(e) =>
@@ -1656,7 +1663,7 @@ object Util {
   @record class LocalSaver(val depth: Z, val ctx: ISZ[String], var localMap: LocalSaveMap) extends MStateTransformer {
     override def preStateClaimLetCurrentId(o: State.Claim.Let.CurrentId): MStateTransformer.PreResult[State.Claim.Let] = {
       if (o.context == ctx) {
-        val id = State.Claim.Let.Id(o.sym, o.context, o.id, depth, ISZ())
+        val id = State.Claim.Let.Id(o.sym, F, o.context, o.id, depth, ISZ())
         localMap = localMap + id ~> o
         return MStateTransformer.PreResult(F, MSome(id))
       }
@@ -1947,7 +1954,7 @@ object Util {
     return StateTransformer(CurrentIdCollector(lcontext)).transformState(Set.empty, s0).ctx.elements
   }
 
-  def rewriteLocal(logika: Logika, s0: State, lcontext: ISZ[String], id: String, posOpt: Option[Position],
+  def rewriteLocal(logika: Logika, s0: State, inScope: B, lcontext: ISZ[String], id: String, posOpt: Option[Position],
                    reporter: Reporter): State = {
     val poss = collectLocalPoss(s0, lcontext, id)
     if (poss.isEmpty && !logika.config.interp) {
@@ -1956,12 +1963,12 @@ object Util {
     }
     val (s1, num) = s0.fresh
     val locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)] + (lcontext, id) ~> ((poss, num))
-    val r = StateTransformer(CurrentIdRewriter(locals)).transformState(F, s1)
+    val r = StateTransformer(CurrentIdRewriter(locals, inScope)).transformState(F, s1)
     val s2 = r.resultOpt.getOrElse(s1)
     return s2
   }
 
-  def rewriteLocals(s0: State, lcontext: ISZ[String], ids: ISZ[String]): (State, HashMap[(ISZ[String], String), (ISZ[Position], Z)]) = {
+  def rewriteLocals(s0: State, inScope: B, lcontext: ISZ[String], ids: ISZ[String]): (State, HashMap[(ISZ[String], String), (ISZ[Position], Z)]) = {
     var locals = HashMap.empty[(ISZ[String], String), (ISZ[Position], Z)]
     if (ids.isEmpty) {
       return (s0, locals)
@@ -1975,11 +1982,11 @@ object Util {
         s1 = s2
       }
     }
-    val r = StateTransformer(CurrentIdRewriter(locals)).transformState(F, s1)
+    val r = StateTransformer(CurrentIdRewriter(locals, inScope)).transformState(F, s1)
     return (r.resultOpt.getOrElse(s1), locals)
   }
 
-  def rewriteLocalVars(logika: Logika, state: State, localVars: ISZ[AST.ResolvedInfo.LocalVar],
+  def rewriteLocalVars(logika: Logika, state: State, inScope: B, localVars: ISZ[AST.ResolvedInfo.LocalVar],
                        posOpt: Option[Position], reporter: Reporter): State = {
     if (localVars.isEmpty) {
       return state
@@ -1997,7 +2004,7 @@ object Util {
       current = s1
       locals = locals + (l.context, l.id) ~> ((poss, num))
     }
-    val r = StateTransformer(CurrentIdRewriter(locals)).transformState(F, current)
+    val r = StateTransformer(CurrentIdRewriter(locals, inScope)).transformState(F, current)
     current = r.resultOpt.get
     return current
   }

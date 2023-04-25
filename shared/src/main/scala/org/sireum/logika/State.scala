@@ -478,7 +478,7 @@ object State {
       }
     }
 
-    @datatype class Imply(val claims: ISZ[Claim]) extends Composite {
+    @datatype class Imply(val isCond: B, val claims: ISZ[Claim]) extends Composite {
       @pure def toRawST: ST = {
         val r: ST =
           if (claims.size == 2)
@@ -690,7 +690,8 @@ object State {
         }
      }
 
-      @datatype class Id(val sym: Value.Sym, val context: ISZ[String], val id: String, val num: Z, val poss: ISZ[Position]) extends Let {
+      @datatype class Id(val sym: Value.Sym, val inScope: B, val context: ISZ[String], val id: String, val num: Z,
+                         val poss: ISZ[Position]) extends Let {
 
         @pure override def toRawST: ST = {
           return if (context.isEmpty) st"$id@${possLines(poss)}#$num == ${sym.toRawST}"
@@ -758,13 +759,13 @@ object State {
         @pure override def toRawST: ST = {
           val r =
             st"""${sym.toRawST} ≜ ${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toRawST, ", ")}
-                |  ${if (isAll) Claim.Imply(claims).toRawST else Claim.And(claims).toRawST}"""
+                |  ${if (isAll) Claim.Imply(F, claims).toRawST else Claim.And(claims).toRawST}"""
           return r
         }
 
         override def toST(numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Option[ST] = {
           return Some(
-            st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST(numMap, defs), ", ")}  ${if (isAll) Claim.Imply(claims).toST(numMap, defs).getOrElse(State.stTrue) else Claim.And(claims).toST(numMap, defs).getOrElse(State.stTrue)}"""
+            st"""${if (isAll) "∀" else "∃"} ${(for (x <- vars) yield x.toST(numMap, defs), ", ")}  ${if (isAll) Claim.Imply(F, claims).toST(numMap, defs).getOrElse(State.stTrue) else Claim.And(claims).toST(numMap, defs).getOrElse(State.stTrue)}"""
           )
         }
 
