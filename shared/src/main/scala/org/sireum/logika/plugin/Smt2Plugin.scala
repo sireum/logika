@@ -94,7 +94,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
       val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
       ((q._1, q._2, state.claims ++ q._3, q._4), q._3 :+ q._4)
     } else {
-      var s0 = state(claims = ISZ())
+      var s0 = state(claims = logika.context.methodOpt.get.initClaims)
       var ok = T
       for (arg <- argsOpt.get) {
         val stepNo = arg

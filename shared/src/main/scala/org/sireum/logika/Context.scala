@@ -47,6 +47,7 @@ object Context {
                          val objectVarInMap: HashMap[ISZ[String], State.Value.Sym],
                          val fieldVarInMap: HashMap[String, State.Value.Sym],
                          val localInMap: HashMap[String, State.Value.Sym],
+                         val initClaims: ISZ[State.Claim],
                          val posOpt: Option[Position],
                          val storage: HashMap[String, Value]) {
 

@@ -688,7 +688,11 @@ object Smt2 {
 
   def sat(context: ISZ[String], cache: Logika.Cache, reportQuery: B, log: B, logDirOpt: Option[String], title: String,
           pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): B = {
-    return satResult(context, cache, satTimeoutInMs, reportQuery, log, logDirOpt, title, pos, claims, reporter)._1
+    val (status, r) = satResult(context, cache, satTimeoutInMs, reportQuery, log, logDirOpt, title, pos, claims, reporter)
+    if (r.kind == Smt2Query.Result.Kind.Error) {
+      reporter.error(Some(pos), Logika.kind, s"Error occurred when doing ${ops.StringOps(title).firstToLower}")
+    }
+    return status
   }
 
   def toVal(t: AST.Typed.Name, n: Z): ST = {
@@ -1972,6 +1976,8 @@ object Smt2 {
               reporter: Reporter): ST = {
     c match {
       case c: State.Claim.Let.SeqStore =>
+        val seqT = c.seq.tipe.asInstanceOf[AST.Typed.Name]
+        addType(AST.Typed.Tuple(ISZ(seqT.args(0), seqT.args(1))), reporter)
         return st"(${typeOpId(c.seq.tipe, "up")} ${v2st(c.seq, reporter)} ${v2st(c.index, reporter)} ${v2st(c.element, reporter)})"
       case c: State.Claim.Let.FieldStore =>
         return st"(${typeOpId(c.adt.tipe, s"${c.id}_=")} ${v2st(c.adt, reporter)} ${v2st(c.value, reporter)})"

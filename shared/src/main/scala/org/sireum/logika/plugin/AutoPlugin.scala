@@ -158,9 +158,10 @@ import org.sireum.logika.Logika.Reporter
     if (args.isEmpty) {
       if (id == "Auto_*" || id == "Tauto") {
         val psmt2 = smt2.emptyCache
-        val (stat, nextFresh, premises, conclusion) =
-          logika.evalRegularStepClaim(psmt2, cache, state(claims = ISZ()), step.claim, step.id.posOpt, reporter)
-        val r = checkValid(psmt2, stat, nextFresh, premises, conclusion, premises :+ conclusion)
+        val s0 = state(claims = logika.context.methodOpt.get.initClaims)
+        val (stat, nextFresh, premises, conclusion) = logika.evalRegularStepClaim(psmt2, cache, s0, step.claim,
+          step.id.posOpt, reporter)
+        val r = checkValid(psmt2, stat, nextFresh, s0.claims ++ premises, conclusion, premises :+ conclusion)
         smt2.combineWith(psmt2)
         return r
       } else {
@@ -170,7 +171,7 @@ import org.sireum.logika.Logika.Reporter
       }
     } else {
       val psmt2 = smt2.emptyCache
-      var s1 = state(claims = ISZ())
+      var s1 = state(claims = logika.context.methodOpt.get.initClaims)
       var ok = T
       for (arg <- args if ok) {
         val stepNo = arg

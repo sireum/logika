@@ -193,13 +193,14 @@ import SameDiffPlugin._
 
     val (stat, nextFresh, premises, conclusion): (B, Z, ISZ[State.Claim], State.Claim) = if (args.size == 1) {
       if (id == "SameDiff_*") {
-        logika2.evalRegularStepClaim(smt2.emptyCache, cache, state(claims = ISZ()), step.claim, step.id.posOpt, reporter)
+        logika2.evalRegularStepClaim(smt2.emptyCache, cache, state(claims = logika.context.methodOpt.get.initClaims),
+          step.claim, step.id.posOpt, reporter)
       } else {
         logika2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
       }
     } else {
       val psmt2 = smt2.emptyCache
-      var s1 = state(claims = ISZ())
+      var s1 = state(claims = logika.context.methodOpt.get.initClaims)
       var ok = T
       for (i <- 1 until args.size if ok) {
         val stepNo = args(i)
