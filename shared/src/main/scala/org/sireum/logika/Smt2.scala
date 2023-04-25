@@ -499,7 +499,7 @@ object Smt2 {
       }
       val (s3, v3) = s1.freshSym(pf.returnType, pos)
       s1 = s3.addClaim(State.Claim.Let.ProofFunApply(v3, pf, args))
-      val claims = State.Claim.Imply(ISZ(
+      val claims = State.Claim.Imply(F, ISZ(
         State.Claim.And(ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)),
         State.Claim.Let.Def(v, v3)
       ))
