@@ -1787,10 +1787,9 @@ object Util {
         for (e <- ensures if s.ok) {
           var cached = F
           if (logika.config.transitionCache) {
-            cache.getTransition(logika.th, Logika.Cache.Transition.Exp(e), s) match {
-              case MSome((ISZ(nextState), csmt2)) =>
+            cache.getTransitionAndUpdateSmt2(logika.th, Logika.Cache.Transition.Exp(e), s, smt2) match {
+              case Some(ISZ(nextState)) =>
                 cached = T
-                smt2.updateFrom(csmt2)
                 s = nextState
               case _ =>
             }
@@ -2446,10 +2445,8 @@ object Util {
       return s0
     }
     if (logika.config.transitionCache) {
-      cache.getTransition(logika.th, Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0) match {
-        case MSome((ISZ(nextState), csmt2)) =>
-          smt2.updateFrom(csmt2)
-          return nextState
+      cache.getTransitionAndUpdateSmt2(logika.th, Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, smt2) match {
+        case Some(ISZ(nextState)) => return nextState
         case _ =>
       }
     }

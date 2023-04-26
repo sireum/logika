@@ -56,7 +56,7 @@ object Logika {
   @msig trait Cache {
     def clearTransition(): Unit
 
-    def getTransition(th: TypeHierarchy, transition: Cache.Transition, state: State): MOption[(ISZ[State], Smt2)]
+    def getTransitionAndUpdateSmt2(th: TypeHierarchy, transition: Cache.Transition, state: State, smt2: Smt2): Option[ISZ[State]]
 
     def setTransition(th: TypeHierarchy, transition: Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): Unit
 
@@ -3962,9 +3962,8 @@ import Util._
     step match {
       case step: AST.ProofAst.Step.Regular =>
         if (config.transitionCache) {
-          cache.getTransition(th, Cache.Transition.ProofStep(step, m.values), s0) match {
-            case MSome((ISZ(nextState), csmt2)) =>
-              smt2.updateFrom(csmt2)
+          cache.getTransitionAndUpdateSmt2(th, Cache.Transition.ProofStep(step, m.values), s0, smt2) match {
+            case Some(ISZ(nextState)) =>
               return (nextState, m + stepNo ~> StepProofContext.Regular(stepNo, step.claim,
                 ops.ISZOps(nextState.claims).slice(s0.claims.size, nextState.claims.size)))
             case _ =>
@@ -4424,10 +4423,9 @@ import Util._
         if (deduceStmt.justOpt.isEmpty && sequent.steps.isEmpty) {
           var cached = F
           if (config.transitionCache) {
-            cache.getTransition(th, Cache.Transition.Sequent(sequent), st0) match {
-              case MSome((ISZ(nextState), csmt2)) =>
+            cache.getTransitionAndUpdateSmt2(th, Cache.Transition.Sequent(sequent), st0, smt2) match {
+              case Some(ISZ(nextState)) =>
                 cached = T
-                smt2.updateFrom(csmt2)
                 st0 = nextState
               case _ =>
             }
@@ -4675,10 +4673,8 @@ import Util._
   def checkExps(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, title: String, titleSuffix: String,
                 s0: State, exps: ISZ[AST.Exp], reporter: Reporter): ISZ[State] = {
     if (config.transitionCache && s0.ok) {
-      cache.getTransition(th, Logika.Cache.Transition.Exps(exps), s0) match {
-        case MSome((nextStates, csmt2)) =>
-          smt2.updateFrom(csmt2)
-          return nextStates
+      cache.getTransitionAndUpdateSmt2(th, Logika.Cache.Transition.Exps(exps), s0, smt2) match {
+        case Some(nextStates) => return nextStates
         case _ =>
       }
     }
@@ -4780,10 +4776,8 @@ import Util._
           }
           val nextStates: ISZ[State] = if (config.transitionCache) {
             val transition = Cache.Transition.Stmt(stmt)
-            cache.getTransition(th, transition, current) match {
-              case MSome((ss, csmt2)) =>
-                smt2.updateFrom(csmt2)
-                ss
+            cache.getTransitionAndUpdateSmt2(th, transition, current, smt2) match {
+              case Some(ss) => ss
               case _ =>
                 val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
                 if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status == State.Status.Normal)) {
