@@ -49,6 +49,8 @@ import org.sireum.message.Position
     return r
   }
 
+  @strictpure override def string: String = toST.render
+
   @pure def addClaim(claim: State.Claim): State = {
     val thisL = this
     return thisL(claims = this.claims :+ claim)
