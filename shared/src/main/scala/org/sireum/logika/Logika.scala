@@ -98,6 +98,8 @@ object Logika {
       @datatype class Exp(exp: AST.Exp) extends Transition
 
       @datatype class Exps(exps: ISZ[AST.Exp]) extends Transition
+
+      @datatype class StmtExps(stmt: AST.Stmt, exps: ISZ[AST.Exp]) extends Transition
     }
 
     @sig trait Key
@@ -4775,12 +4777,14 @@ import Util._
             logPc(config.logPc, config.logRawPc, current, reporter, stmt.posOpt)
           }
           val nextStates: ISZ[State] = if (config.transitionCache) {
-            val transition = Cache.Transition.Stmt(stmt)
+            val transition: Cache.Transition =
+              if (stmt.hasReturnMemoized) Cache.Transition.Stmt(stmt)
+              else Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures)
             cache.getTransitionAndUpdateSmt2(th, transition, current, smt2) match {
               case Some(ss) => ss
               case _ =>
                 val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
-                if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status == State.Status.Normal)) {
+                if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
                   cache.setTransition(th, transition, current, ss, smt2)
                 }
                 ss
