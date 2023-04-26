@@ -471,11 +471,11 @@ object Util {
   }
 
   @datatype class CurrentNameRewriter(val map: HashMap[ISZ[String], (ISZ[Position], Z)])
-    extends StateTransformer.PrePost[HashMap[ISZ[String], State.Value.Sym]] {
-    override def preStateClaimLetCurrentName(ctx: HashMap[ISZ[String], State.Value.Sym],
-                                             o: State.Claim.Let.CurrentName): StateTransformer.PreResult[HashMap[ISZ[String], State.Value.Sym], State.Claim.Let] = {
+    extends StateTransformer.PrePost[B] {
+    override def preStateClaimLetCurrentName(ctx: B,
+                                             o: State.Claim.Let.CurrentName): StateTransformer.PreResult[B, State.Claim.Let] = {
       map.get(o.ids) match {
-        case Some((poss, num)) => return StateTransformer.PreResult(ctx + o.ids ~> o.sym,
+        case Some((poss, num)) => return StateTransformer.PreResult(ctx,
           T, Some(State.Claim.Let.Name(o.sym, o.ids, num, poss)))
         case _ => return StateTransformer.PreResult(ctx, T, None())
       }
@@ -2017,7 +2017,9 @@ object Util {
     }
     var current = state
     var vars = HashMap.empty[ISZ[String], (ISZ[Position], Z)]
-    for (l <- objectVars.keys) {
+    var varValueMap = HashMap.empty[ISZ[String], State.Value.Sym]
+    for (p <- objectVars.entries) {
+      val (l, (t, _)) = p
       val ids = l.owner :+ l.id
       val poss = StateTransformer(CurrentNamePossCollector(ids)).
         transformState(ISZ(), current).ctx
@@ -2026,10 +2028,12 @@ object Util {
         return state(status = State.Status.Error)
       }
       val (s1, num) = current.fresh
-      current = s1
+      val (s2, sym) = nameIntro(pos, s1, ids, t, None())
+      varValueMap = varValueMap + ids ~> sym
+      current = s2
       vars = vars + ids ~> ((poss, num))
     }
-    val rt = StateTransformer(CurrentNameRewriter(vars)).transformState(HashMap.empty, current)
+    val rt = StateTransformer(CurrentNameRewriter(vars)).transformState(F, current)
     current = rt.resultOpt.get
     for (p <- objectVars.entries) {
       val (x, (t, namePos)) = p
@@ -2041,7 +2045,7 @@ object Util {
         val (s4, size1) = current.freshSym(AST.Typed.z, pos)
         val (s5, size2) = s4.freshSym(AST.Typed.z, pos)
         val (s6, cond) = s5.freshSym(AST.Typed.b, pos)
-        val o1 = rt.ctx.get(name).get
+        val o1 = varValueMap.get(name).get
         current = s6.addClaims(ISZ(
           State.Claim.Let.FieldLookup(size1, o1, "size"),
           State.Claim.Let.FieldLookup(size2, sym, "size"),

@@ -3220,8 +3220,8 @@ import Util._
     return s2.addClaim(State.Claim.Eq(lhs, rhs))
   }
 
-  def evalAssignObjectVarH(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, ids: ISZ[String], rhs: State.Value.Sym,
-                           namePosOpt: Option[Position], reporter: Reporter): State = {
+  def evalAssignObjectVarH(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, ids: ISZ[String], t: AST.Typed,
+                           rhs: State.Value.Sym, namePosOpt: Option[Position], reporter: Reporter): State = {
     val poss = StateTransformer(CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
     if (poss.isEmpty && !config.interp) {
       reporter.error(namePosOpt, Logika.kind, st"Missing Modifies clause for ${(ids, ".")}.".render)
@@ -3229,32 +3229,32 @@ import Util._
     }
     val (s1, num) = s0.fresh
     val objectVars = HashMap.empty[ISZ[String], (ISZ[Position], Z)] + ids ~> ((poss, num))
-    val rt = StateTransformer(CurrentNameRewriter(objectVars)).transformState(HashMap.empty, s1)
-    val s2 = rt.resultOpt.getOrElse(s1)
+    val (s2, o1) = nameIntro(namePosOpt.get, s1, ids, t, None())
+    val rt = StateTransformer(CurrentNameRewriter(objectVars)).transformState(F, s2)
+    val s3 = rt.resultOpt.getOrElse(s1)
     val pos = namePosOpt.get
-    val (s3, lhs) = nameIntro(namePosOpt.get, s2, ids, rhs.tipe, namePosOpt)
-    val s4 = s3.addClaim(State.Claim.Eq(lhs, rhs))
+    val (s4, lhs) = nameIntro(namePosOpt.get, s3, ids, rhs.tipe, namePosOpt)
+    val s5 = s4.addClaim(State.Claim.Eq(lhs, rhs))
     val tipe = rhs.tipe
-    val s8: State = if (AST.Util.isSeq(tipe)) {
-      val (s5, size1) = s4.freshSym(AST.Typed.z, pos)
-      val (s6, size2) = s5.freshSym(AST.Typed.z, pos)
-      val (s7, cond) = s6.freshSym(AST.Typed.b, pos)
-      val o1 = rt.ctx.get(ids).get
-      s7.addClaims(ISZ(
+    val s9: State = if (AST.Util.isSeq(tipe)) {
+      val (s6, size1) = s5.freshSym(AST.Typed.z, pos)
+      val (s7, size2) = s6.freshSym(AST.Typed.z, pos)
+      val (s8, cond) = s7.freshSym(AST.Typed.b, pos)
+      s8.addClaims(ISZ(
         State.Claim.Let.FieldLookup(size1, o1, "size"),
         State.Claim.Let.FieldLookup(size2, rhs, "size"),
         State.Claim.Let.Binary(cond, size2, AST.Exp.BinaryOp.Eq, size1, AST.Typed.z),
         State.Claim.Prop(T, cond)
       ))
     } else {
-      s4
+      s5
     }
     val objectName = ops.ISZOps(ids).dropRight(1)
     if (notInContext(objectName, T)) {
-      return Util.checkInvs(this, namePosOpt, F, "Invariant after an object field assignment", smt2, cache, rtCheck, s8,
+      return Util.checkInvs(this, namePosOpt, F, "Invariant after an object field assignment", smt2, cache, rtCheck, s9,
         None(), None(), if (context.isHelper) ISZ() else retrieveInvs(objectName, T), TypeChecker.emptySubstMap, reporter)
     } else {
-      return s8
+      return s9
     }
   }
 
@@ -3315,7 +3315,8 @@ import Util._
             return ISZ(evalAssignLocalH(F, s0, res.context, res.id, rhs, lhs.posOpt, reporter))
           case res: AST.ResolvedInfo.Var =>
             if (res.isInObject) {
-              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s0, res.owner :+ res.id, rhs, lhs.posOpt, reporter))
+              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s0, res.owner :+ res.id, lhs.typedOpt.get, rhs,
+                lhs.posOpt, reporter))
             } else {
               return ISZ(evalAssignThisVarH(s0, lhs.id.value, rhs, lhs.posOpt.get, reporter))
             }
@@ -3346,7 +3347,8 @@ import Util._
       case lhs: AST.Exp.Select =>
         lhs.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Var if res.isInObject =>
-            return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s0, res.owner :+ res.id, rhs, lhs.posOpt, reporter))
+            return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s0, res.owner :+ res.id, lhs.typedOpt.get, rhs,
+              lhs.posOpt, reporter))
           case _ =>
         }
         val receiver = lhs.receiverOpt.get
