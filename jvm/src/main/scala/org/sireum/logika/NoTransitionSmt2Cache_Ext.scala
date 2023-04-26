@@ -95,7 +95,7 @@ final class NoTransitionSmt2CacheImpl(val persistentCache: java.util.concurrent.
 
   override def clearTransition(): Unit = {}
 
-  def getTransition(th: TypeHierarchy, transition: Cache.Transition, state: State): MOption[(ISZ[State], Smt2)] = MNone()
+  def getTransitionAndUpdateSmt2(th: TypeHierarchy, transition: Cache.Transition, state: State, smt2: Smt2): Option[ISZ[State]] = None()
 
   def setTransition(th: TypeHierarchy,transition: Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): Unit = {}
 
