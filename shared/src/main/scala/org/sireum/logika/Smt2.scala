@@ -257,6 +257,8 @@ object Smt2 {
 
 @msig trait Smt2 {
 
+  def minimize: Smt2
+
   @strictpure def fpRoundingMode: String
 
   @strictpure def f32ST: ST = if (useReal) {

@@ -1785,7 +1785,23 @@ object Util {
         var s = state
         s = checkInv(F, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
         for (e <- ensures if s.ok) {
-          s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
+          var cached = F
+          if (logika.config.transitionCache) {
+            cache.getTransition(logika.th, Logika.Cache.Transition.Exp(e), s) match {
+              case MSome((ISZ(nextState), csmt2)) =>
+                cached = T
+                smt2.updateFrom(csmt2)
+                s = nextState
+              case _ =>
+            }
+          }
+          if (!cached) {
+            val s0 = s
+            s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
+            if (logika.config.transitionCache && s.ok) {
+              cache.setTransition(logika.th, Logika.Cache.Transition.Exp(e), s0, ISZ(s), smt2)
+            }
+          }
         }
         if (postPosOpt.nonEmpty && s.ok) {
           logika.logPc(logPc, logRawPc, s(status = State.Status.Error), reporter, postPosOpt)
@@ -2424,10 +2440,18 @@ object Util {
   }
 
   def checkInvs(logika: Logika, posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Logika.Cache,
-                rtCheck: B, s0: State, receiverTypeOpt: Option[AST.Typed], receiverOpt: Option[State.Value.Sym], invs: ISZ[Info.Inv],
-                substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
+                rtCheck: B, s0: State, receiverTypeOpt: Option[AST.Typed], receiverOpt: Option[State.Value.Sym],
+                invs: ISZ[Info.Inv], substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
     if (logika.config.interp) {
       return s0
+    }
+    if (logika.config.transitionCache) {
+      cache.getTransition(logika.th, Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0) match {
+        case MSome((ISZ(nextState), csmt2)) =>
+          smt2.updateFrom(csmt2)
+          return nextState
+        case _ =>
+      }
     }
     val pos = posOpt.get
     def spInv(): Option[State] = {
@@ -2467,6 +2491,9 @@ object Util {
     var s4 = s0
     for (inv <- invs if s4.ok) {
       s4 = logika.evalInv(posOpt, isAssume, title, smt2, cache, rtCheck, s4, inv.ast, substMap, reporter)
+    }
+    if (logika.config.transitionCache && s4.ok) {
+      cache.setTransition(logika.th, Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, ISZ(s4), smt2)
     }
     return s4
   }
