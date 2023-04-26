@@ -72,7 +72,11 @@ object Smt2Impl {
                        var filenameCount: HashMap[String, Z],
                        var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
 
-  @pure def emptyCache: Smt2 = {
+  def minimize: Smt2 = {
+    return this(plugins = ISZ(), typeHierarchy = TypeHierarchy.empty, configs = ISZ())
+  }
+
+  def emptyCache: Smt2 = {
     val r = Smt2Impl(
       plugins = plugins,
       typeHierarchy = typeHierarchy,
