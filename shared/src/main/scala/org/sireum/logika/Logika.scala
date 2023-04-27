@@ -4607,7 +4607,9 @@ import Util._
         return ss.size == 1 || ops.ISZOps(ss).forall((s: State) => s.status == State.Status.Error || nextFresh == s.nextFresh)
       }
       assert(check())
-      reporter.coverage(stmt.posOpt.get)
+      if (stmt.isInstruction) {
+        reporter.coverage(stmt.posOpt.get)
+      }
       return ss
     }
 
@@ -4794,7 +4796,9 @@ import Util._
               Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures) else Cache.Transition.Stmt(stmt)
             cache.getTransitionAndUpdateSmt2(th, transition, current, smt2) match {
               case Some(ss) =>
-                reporter.coverage(stmt.posOpt.get)
+                if (stmt.isInstruction) {
+                  reporter.coverage(stmt.posOpt.get)
+                }
                 ss
               case _ =>
                 val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
