@@ -4777,9 +4777,8 @@ import Util._
             logPc(config.logPc, config.logRawPc, current, reporter, stmt.posOpt)
           }
           val nextStates: ISZ[State] = if (config.transitionCache) {
-            val transition: Cache.Transition =
-              if (stmt.hasReturnMemoized) Cache.Transition.Stmt(stmt)
-              else Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures)
+            val transition: Cache.Transition = if (stmt.hasReturnMemoized && context.methodOpt.nonEmpty)
+              Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures) else Cache.Transition.Stmt(stmt)
             cache.getTransitionAndUpdateSmt2(th, transition, current, smt2) match {
               case Some(ss) => ss
               case _ =>
