@@ -1790,6 +1790,7 @@ object Util {
             cache.getTransitionAndUpdateSmt2(logika.th, Logika.Cache.Transition.Exp(e), s, smt2) match {
               case Some(ISZ(nextState)) =>
                 cached = T
+                reporter.coverage(e.posOpt.get)
                 s = nextState
               case _ =>
             }
@@ -2446,7 +2447,11 @@ object Util {
     }
     if (logika.config.transitionCache) {
       cache.getTransitionAndUpdateSmt2(logika.th, Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, smt2) match {
-        case Some(ISZ(nextState)) => return nextState
+        case Some(ISZ(nextState)) =>
+          for (inv <- invs) {
+            reporter.coverage(inv.posOpt.get)
+          }
+          return nextState
         case _ =>
       }
     }

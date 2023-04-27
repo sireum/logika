@@ -126,6 +126,8 @@ object Logika {
 
     def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit
 
+    def coverage(pos: Position): Unit
+
     def empty: Reporter
 
     def combine(other: Reporter): Reporter
@@ -147,6 +149,9 @@ object Logika {
     }
 
     override def illFormed(): Unit = {
+    }
+
+    override def coverage(pos: Position): Unit = {
     }
 
     override def empty: Reporter = {
@@ -3121,6 +3126,7 @@ import Util._
         return r
       }
       assert(check())
+      reporter.coverage(e.posOpt.get)
       return svs
     }
 
@@ -3966,6 +3972,7 @@ import Util._
         if (config.transitionCache) {
           cache.getTransitionAndUpdateSmt2(th, Cache.Transition.ProofStep(step, m.values), s0, smt2) match {
             case Some(ISZ(nextState)) =>
+              reporter.coverage(step.claim.posOpt.get)
               return (nextState, m + stepNo ~> StepProofContext.Regular(stepNo, step.claim,
                 ops.ISZOps(nextState.claims).slice(s0.claims.size, nextState.claims.size)))
             case _ =>
@@ -4428,6 +4435,7 @@ import Util._
             cache.getTransitionAndUpdateSmt2(th, Cache.Transition.Sequent(sequent), st0, smt2) match {
               case Some(ISZ(nextState)) =>
                 cached = T
+                reporter.coverage(sequent.attr.posOpt.get)
                 st0 = nextState
               case _ =>
             }
@@ -4599,6 +4607,7 @@ import Util._
         return ss.size == 1 || ops.ISZOps(ss).forall((s: State) => s.status == State.Status.Error || nextFresh == s.nextFresh)
       }
       assert(check())
+      reporter.coverage(stmt.posOpt.get)
       return ss
     }
 
@@ -4676,7 +4685,11 @@ import Util._
                 s0: State, exps: ISZ[AST.Exp], reporter: Reporter): ISZ[State] = {
     if (config.transitionCache && s0.ok) {
       cache.getTransitionAndUpdateSmt2(th, Logika.Cache.Transition.Exps(exps), s0, smt2) match {
-        case Some(nextStates) => return nextStates
+        case Some(nextStates) =>
+          for (exp <- exps) {
+            reporter.coverage(exp.posOpt.get)
+          }
+          return nextStates
         case _ =>
       }
     }
@@ -4780,7 +4793,9 @@ import Util._
             val transition: Cache.Transition = if (stmt.hasReturnMemoized && context.methodOpt.nonEmpty)
               Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures) else Cache.Transition.Stmt(stmt)
             cache.getTransitionAndUpdateSmt2(th, transition, current, smt2) match {
-              case Some(ss) => ss
+              case Some(ss) =>
+                reporter.coverage(stmt.posOpt.get)
+                ss
               case _ =>
                 val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
                 if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
