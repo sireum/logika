@@ -126,7 +126,7 @@ object Logika {
 
     def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit
 
-    def coverage(pos: Position): Unit
+    def coverage(cached: B, pos: Position): Unit
 
     def empty: Reporter
 
@@ -151,7 +151,7 @@ object Logika {
     override def illFormed(): Unit = {
     }
 
-    override def coverage(pos: Position): Unit = {
+    override def coverage(cached: B, pos: Position): Unit = {
     }
 
     override def empty: Reporter = {
@@ -3126,7 +3126,7 @@ import Util._
         return r
       }
       assert(check())
-      reporter.coverage(e.posOpt.get)
+      reporter.coverage(F, e.posOpt.get)
       return svs
     }
 
@@ -3972,7 +3972,7 @@ import Util._
         if (config.transitionCache) {
           cache.getTransitionAndUpdateSmt2(th, Cache.Transition.ProofStep(step, m.values), s0, smt2) match {
             case Some(ISZ(nextState)) =>
-              reporter.coverage(step.claim.posOpt.get)
+              reporter.coverage(T, step.claim.posOpt.get)
               return (nextState, m + stepNo ~> StepProofContext.Regular(stepNo, step.claim,
                 ops.ISZOps(nextState.claims).slice(s0.claims.size, nextState.claims.size)))
             case _ =>
@@ -4435,7 +4435,7 @@ import Util._
             cache.getTransitionAndUpdateSmt2(th, Cache.Transition.Sequent(sequent), st0, smt2) match {
               case Some(ISZ(nextState)) =>
                 cached = T
-                reporter.coverage(sequent.attr.posOpt.get)
+                reporter.coverage(T, sequent.attr.posOpt.get)
                 st0 = nextState
               case _ =>
             }
@@ -4608,7 +4608,7 @@ import Util._
       }
       assert(check())
       if (stmt.isInstruction) {
-        reporter.coverage(stmt.posOpt.get)
+        reporter.coverage(F, stmt.posOpt.get)
       }
       return ss
     }
@@ -4689,7 +4689,7 @@ import Util._
       cache.getTransitionAndUpdateSmt2(th, Logika.Cache.Transition.Exps(exps), s0, smt2) match {
         case Some(nextStates) =>
           for (exp <- exps) {
-            reporter.coverage(exp.posOpt.get)
+            reporter.coverage(T, exp.posOpt.get)
           }
           return nextStates
         case _ =>
@@ -4797,7 +4797,7 @@ import Util._
             cache.getTransitionAndUpdateSmt2(th, transition, current, smt2) match {
               case Some(ss) =>
                 if (stmt.isInstruction) {
-                  reporter.coverage(stmt.posOpt.get)
+                  reporter.coverage(T, stmt.posOpt.get)
                 }
                 ss
               case _ =>
