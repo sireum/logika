@@ -95,9 +95,11 @@ final class NoTransitionSmt2CacheImpl(val persistentCache: java.util.concurrent.
 
   override def clearTransition(): Unit = {}
 
-  def getTransitionAndUpdateSmt2(th: TypeHierarchy, transition: Cache.Transition, state: State, smt2: Smt2): Option[ISZ[State]] = None()
+  def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State,
+                                 smt2: Smt2): Option[ISZ[State]] = None()
 
-  def setTransition(th: TypeHierarchy,transition: Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): Unit = {}
+  def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State,
+                    nextStates: ISZ[State], smt2: Smt2): Unit = {}
 
   def getSmt2(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result] = None()
 
