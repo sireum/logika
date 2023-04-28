@@ -132,7 +132,7 @@ object Task {
             for (state <- ss if state.ok) {
               if (stmts.nonEmpty) {
                 val lastPos = stmts(stmts.size - 1).posOpt.get
-                logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.Error), reporter, Some(lastPos))
+                logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.End), reporter, Some(lastPos))
               }
             }
             if (done) {
@@ -144,7 +144,7 @@ object Task {
       for (state <- logika.evalStmts(Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.ok) {
         if (stmts.nonEmpty) {
           val lastPos = stmts(stmts.size - 1).posOpt.get
-          logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.Error), reporter, Some(lastPos))
+          logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.End), reporter, Some(lastPos))
         }
       }
       return reporter.messages

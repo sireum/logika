@@ -56,9 +56,9 @@ object Logika {
   @msig trait Cache {
     def clearTransition(): Unit
 
-    def getTransitionAndUpdateSmt2(th: TypeHierarchy, transition: Cache.Transition, state: State, smt2: Smt2): Option[ISZ[State]]
+    def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State, smt2: Smt2): Option[ISZ[State]]
 
-    def setTransition(th: TypeHierarchy, transition: Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): Unit
+    def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): Unit
 
     def getSmt2(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result]
 
@@ -427,7 +427,7 @@ object Logika {
           if (!reporter.hasError) {
             if (hasLogika) {
               if (config.transitionCache) {
-                val dummy = th.fingerprint // init fingerprint
+                val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
               }
               checkStmts(p.body.stmts, ISZ(), config, th, smt2f, cache, reporter, config.parCores, plugins, verifyingStartTime, T,
                 line, skipMethods, skipTypes)
@@ -532,7 +532,7 @@ object Logika {
                          smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter, par: Z,
                          plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     if (config.transitionCache) {
-      val dummy = th.fingerprint // init fingerprint
+      val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
     }
     var typeStmts = ISZ[(ISZ[String], AST.Stmt)]()
     for (info <- th.nameMap.values) {
@@ -3970,7 +3970,7 @@ import Util._
     step match {
       case step: AST.ProofAst.Step.Regular =>
         if (config.transitionCache) {
-          cache.getTransitionAndUpdateSmt2(th, Cache.Transition.ProofStep(step, m.values), s0, smt2) match {
+          cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.ProofStep(step, m.values), s0, smt2) match {
             case Some(ISZ(nextState)) =>
               reporter.coverage(T, step.claim.posOpt.get)
               return (nextState, m + stepNo ~> StepProofContext.Regular(stepNo, step.claim,
@@ -3982,7 +3982,7 @@ import Util._
           val Plugin.Result(ok, nextFresh, claims) = plugin.handle(this, smt2, cache, m, s0, step, reporter)
           val nextState = s0(status = State.statusOf(ok), nextFresh = nextFresh).addClaims(claims)
           if (config.transitionCache && ok) {
-            cache.setTransition(th, Cache.Transition.ProofStep(step, m.values), s0, ISZ(nextState), smt2)
+            cache.setTransition(th, config, Cache.Transition.ProofStep(step, m.values), s0, ISZ(nextState), smt2)
           }
           return (nextState, m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims))
         }
@@ -4432,7 +4432,7 @@ import Util._
         if (deduceStmt.justOpt.isEmpty && sequent.steps.isEmpty) {
           var cached = F
           if (config.transitionCache) {
-            cache.getTransitionAndUpdateSmt2(th, Cache.Transition.Sequent(sequent), st0, smt2) match {
+            cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.Sequent(sequent), st0, smt2) match {
               case Some(ISZ(nextState)) =>
                 cached = T
                 reporter.coverage(T, sequent.attr.posOpt.get)
@@ -4451,7 +4451,7 @@ import Util._
               st0 = evalAssert(smt2, cache, rtCheck, "Conclusion", st0, sequent.conclusion, sequent.conclusion.posOpt, reporter)._1
             }
             if (config.transitionCache && st0.ok) {
-              cache.setTransition(th, Cache.Transition.Sequent(sequent), st00, ISZ(st0), smt2)
+              cache.setTransition(th, config, Cache.Transition.Sequent(sequent), st00, ISZ(st0), smt2)
             }
           }
         } else {
@@ -4686,7 +4686,7 @@ import Util._
   def checkExps(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, title: String, titleSuffix: String,
                 s0: State, exps: ISZ[AST.Exp], reporter: Reporter): ISZ[State] = {
     if (config.transitionCache && s0.ok) {
-      cache.getTransitionAndUpdateSmt2(th, Logika.Cache.Transition.Exps(exps), s0, smt2) match {
+      cache.getTransitionAndUpdateSmt2(th, config, Logika.Cache.Transition.Exps(exps), s0, smt2) match {
         case Some(nextStates) =>
           for (exp <- exps) {
             reporter.coverage(T, exp.posOpt.get)
@@ -4710,7 +4710,7 @@ import Util._
     }
     val r = currents ++ done
     if (config.transitionCache && !reporter.hasError) {
-      cache.setTransition(th, Logika.Cache.Transition.Exps(exps), s0, r, smt2)
+      cache.setTransition(th, config, Logika.Cache.Transition.Exps(exps), s0, r, smt2)
     }
     return r
   }
@@ -4788,22 +4788,22 @@ import Util._
       for (current <- cs) {
         if (current.ok) {
           val stmt = stmts(i)
-          if (stmt.isInstruction) {
-            logPc(config.logPc, config.logRawPc, current, reporter, stmt.posOpt)
-          }
           val nextStates: ISZ[State] = if (config.transitionCache) {
             val transition: Cache.Transition = if (stmt.hasReturnMemoized && context.methodOpt.nonEmpty)
               Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures) else Cache.Transition.Stmt(stmt)
-            cache.getTransitionAndUpdateSmt2(th, transition, current, smt2) match {
+            cache.getTransitionAndUpdateSmt2(th, config, transition, current, smt2) match {
               case Some(ss) =>
                 if (stmt.isInstruction) {
                   reporter.coverage(T, stmt.posOpt.get)
                 }
                 ss
               case _ =>
+                if (stmt.isInstruction) {
+                  logPc(config.logPc, config.logRawPc, current, reporter, stmt.posOpt)
+                }
                 val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
                 if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
-                  cache.setTransition(th, transition, current, ss, smt2)
+                  cache.setTransition(th, config, transition, current, ss, smt2)
                 }
                 ss
             }

@@ -1787,7 +1787,7 @@ object Util {
         for (e <- ensures if s.ok) {
           var cached = F
           if (logika.config.transitionCache) {
-            cache.getTransitionAndUpdateSmt2(logika.th, Logika.Cache.Transition.Exp(e), s, smt2) match {
+            cache.getTransitionAndUpdateSmt2(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s, smt2) match {
               case Some(ISZ(nextState)) =>
                 cached = T
                 reporter.coverage(T, e.posOpt.get)
@@ -1799,12 +1799,12 @@ object Util {
             val s0 = s
             s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
             if (logika.config.transitionCache && s.ok) {
-              cache.setTransition(logika.th, Logika.Cache.Transition.Exp(e), s0, ISZ(s), smt2)
+              cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s0, ISZ(s), smt2)
             }
           }
         }
         if (postPosOpt.nonEmpty && s.ok) {
-          logika.logPc(logPc, logRawPc, s(status = State.Status.Error), reporter, postPosOpt)
+          logika.logPc(logPc, logRawPc, s(status = State.Status.End), reporter, postPosOpt)
         }
         r = r :+ s
       }
@@ -2446,7 +2446,8 @@ object Util {
       return s0
     }
     if (logika.config.transitionCache) {
-      cache.getTransitionAndUpdateSmt2(logika.th, Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, smt2) match {
+      cache.getTransitionAndUpdateSmt2(logika.th, logika.config,
+        Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, smt2) match {
         case Some(ISZ(nextState)) =>
           for (inv <- invs) {
             reporter.coverage(T, inv.posOpt.get)
@@ -2495,7 +2496,8 @@ object Util {
       s4 = logika.evalInv(posOpt, isAssume, title, smt2, cache, rtCheck, s4, inv.ast, substMap, reporter)
     }
     if (logika.config.transitionCache && s4.ok) {
-      cache.setTransition(logika.th, Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, ISZ(s4), smt2)
+      cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0,
+        ISZ(s4), smt2)
     }
     return s4
   }
