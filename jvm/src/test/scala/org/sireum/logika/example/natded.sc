@@ -15,12 +15,12 @@ import org.sireum.justification.natded.pred._
       3 #> SubProof(
         4 #> Assume(p),
         5 #> (p & r)           by andI(p, r)         and (4, 2),
-        6 #> (p & r | q & r)   by orI1(p & r, q & r) and 5,
+        6 #> (p & r | q & r)   by orI1(p & r, q & r) and 5
       ),
       7 #> SubProof(
         8 #> Assume(q),
         9 #> (q & r)           by andI(q, r)         and (8, 2),
-        10 #> (p & r | q & r)  by orI2(p & r, q & r) and 9,
+        10 #> (p & r | q & r)  by orI2(p & r, q & r) and 9
       ),
       11 #> (p & r | q & r)    by OrE(1, 3, 7),
     )
@@ -106,14 +106,14 @@ import org.sireum.justification.natded.pred._
       3 #> SubProof(
         4 #> Assume(p),
         5 #> (p & r)                by andI(p, r)         and (4, 2),
-        6 #> (p & r | q & r)        by orI1(p & r, q & r) and 5,
+        6 #> (p & r | q & r)        by orI1(p & r, q & r) and 5
       ),
       7 #> SubProof(
         8 #> Assume(q),
         9 #> (q & r)                by andI(q, r)         and (8, 2),
-        10 #> (p & r | q & r)       by orI2(p & r, q & r) and 9,
+        10 #> (p & r | q & r)       by orI2(p & r, q & r) and 9
       ),
-      11 #> (p & r | q & r)         by OrE(1, 3, 7),
+      11 #> (p & r | q & r)         by OrE(1, 3, 7)
     )
     //@formatter:on
   )
@@ -157,7 +157,7 @@ import org.sireum.justification.natded.pred._
       1 #> q                   by Premise,
       2 #> SubProof(
         3 #> Assume(p),
-        4 #> q                 by Premise,
+        4 #> q                 by Premise
       ),
       5 #> (p ->: q)           by ImplyI(2),
     )
@@ -172,7 +172,7 @@ import org.sireum.justification.natded.pred._
     Proof(
       1 #> SubProof(
         2 #> Assume(p),
-        3 #> q             by Premise,
+        3 #> q             by Premise
       ),
       4 #> (p ->: q)       by ImplyI(1),
     )
@@ -191,15 +191,15 @@ import org.sireum.justification.natded.pred._
         4 #> Assume(p | q),
         5 #> SubProof(
           6 #> Assume(p),
-          7 #> r                 by implyE(p, r) and (1, 6),
+          7 #> r                 by implyE(p, r) and (1, 6)
         ),
         8 #> SubProof(
           9 #> Assume(q),
-         10 #> r                 by implyE(q, r) and (2, 9),
+         10 #> r                 by implyE(q, r) and (2, 9)
         ),
-        11 #> r                  by OrE(4, 5, 8),
+        11 #> r                  by OrE(4, 5, 8)
       ),
-      12 #> ((p | q) ->: r)      by ImplyI(3),
+      12 #> ((p | q) ->: r)      by ImplyI(3)
     )
     //@formatter:on
   )
@@ -215,10 +215,10 @@ import org.sireum.justification.natded.pred._
       3 #> SubProof(
         4 #> Assume(p),
         5 #> F            by negE(p) and (4, 2),
-        6 #> q            by BottomE(5),
+        6 #> q            by BottomE(5)
       ),
       7 #> SubProof(
-        8 #> Assume(q),
+        8 #> Assume(q)
       ),
       9 #> q              by OrE(1, 3, 7),
     )
@@ -235,7 +235,7 @@ import org.sireum.justification.natded.pred._
       2 #> SubProof(
         3 #> Assume(p),
         4 #> F             by negE(p) and (3, 1),
-        5 #> q             by BottomE(4),
+        5 #> q             by BottomE(4)
       ),
       6 #> (p ->: q)       by ImplyI(2),
     )
@@ -254,7 +254,7 @@ import org.sireum.justification.natded.pred._
         4 #> p                by andE1(p, q)   and 3,
         5 #> q                by andE2(p, q)   and 3,
         6 #> (!q)             by implyE(p, !q) and (1, 4),
-        7 #> F                by negE(q)       and (5, 6),
+        7 #> F                by negE(q)       and (5, 6)
       ),
       8 #> (!(p & q))         by NegI(2),
     )
@@ -272,7 +272,7 @@ import org.sireum.justification.natded.pred._
       3 #> SubProof(
         4 #> Assume(q),
         5 #> (!p)         by implyE(q, !p) and (2, 4),
-        6 #> F            by negE(p)       and (1, 5),
+        6 #> F            by negE(p)       and (1, 5)
       ),
       7 #> (!q)           by NegI(3),
     )
@@ -288,7 +288,7 @@ import org.sireum.justification.natded.pred._
       1 #> p               by Premise,
       2 #> SubProof(
         3 #> Assume(!p),
-        4 #> F             by negE(p) and (1, 3),
+        4 #> F             by negE(p) and (1, 3)
       ),
       5 #> (!(!p))         by NegI(2),
     )
@@ -304,7 +304,7 @@ import org.sireum.justification.natded.pred._
       1 #> (!(!p))         by Premise,
       2 #> SubProof(
         3 #> Assume(!p),
-        4 #> F             by negE(!p) and (3, 1),
+        4 #> F             by negE(!p) and (3, 1)
       ),
       5 #> p               by PbC(2),
     )
@@ -321,16 +321,16 @@ import org.sireum.justification.natded.pred._
       2 #> SubProof(
         3 #> Assume(!p),
         4 #> (!p | !q)     by orI1(!p, !q)  and 3,
-        5 #> F             by negE(!p | !q) and (4, 1),
+        5 #> F             by negE(!p | !q) and (4, 1)
       ),
       6 #> p               by PbC(2),
       7 #> SubProof(
         8 #> Assume(!q),
         9 #> (!p | !q)     by orI2(!p, !q)  and 8,
-       10 #> F             by negE(!p | !q) and (9, 1),
+       10 #> F             by negE(!p | !q) and (9, 1)
       ),
       11 #> q              by PbC(7),
-      12 #> (p & q)        by andI(p, q)    and (6, 11),
+      12 #> (p & q)        by andI(p, q)    and (6, 11)
     )
     //@formatter:on
   )
@@ -346,11 +346,11 @@ import org.sireum.justification.natded.pred._
         3 #> SubProof(
           4 #> Assume(p),
           5 #> (p | !p)           by orI1(p, !p)  and 4,
-          6 #> F                  by negE(p | !p) and (5, 2),
+          6 #> F                  by negE(p | !p) and (5, 2)
         ),
         7 #> (!p)                 by NegI(3),
         8 #> (p | !p)             by orI2(p, !p)  and 7,
-        9 #> F                    by negE(p | !p) and (8, 2),
+        9 #> F                    by negE(p | !p) and (8, 2)
       ),
       10 #> (p | !p)              by PbC(1),
     )
@@ -390,7 +390,7 @@ import org.sireum.justification.natded.pred._
       3 #> Let { (a: T) => SubProof(
         4 #> gt(inc(a), a)                              by allE((x: T) => gt(inc(x), x), a)   and 1,
         5 #> gt(a, dec(a))                              by allE((x: T) => gt(x, dec(x)), a)   and 2,
-        6 #> (gt(inc(a), a) & gt(a, dec(a)))            by andI(gt(inc(a), a), gt(a, dec(a))) and (4, 5),
+        6 #> (gt(inc(a), a) & gt(a, dec(a)))            by andI(gt(inc(a), a), gt(a, dec(a))) and (4, 5)
       )},
       7 #> ∀{(x: T) => gt(inc(x), x) & gt(x, dec(x))}   by AllI(3),
     )
@@ -415,9 +415,9 @@ import org.sireum.justification.natded.pred._
           6 #> (human(a) ->: mortal(a))          by allE((x: T) => human(x) ->: mortal(x), a) and 1,
           7 #> mortal(a)                         by implyE(human(a), mortal(a))               and (6, 5),
           8 #> (mortal(a) ->: soul(a))           by allE((y: T) => mortal(y) ->: soul(y), a)  and 2,
-          9 #> soul(a)                           by implyE(mortal(a), soul(a))                and (8, 7),
+          9 #> soul(a)                           by implyE(mortal(a), soul(a))                and (8, 7)
         ),
-        10 #> (human(a) ->: soul(a))             by ImplyI(4),
+        10 #> (human(a) ->: soul(a))             by ImplyI(4)
       )},
       11 #> ∀{(x: T) => human(x) ->: soul(x)}    by AllI(3),
     )
@@ -436,11 +436,11 @@ import org.sireum.justification.natded.pred._
         4 #> Let { (a: T) => SubProof(
           5 #> healthy(a)                                         by allE((y: T) => healthy(y), a)              and 3,
           6 #> (healthy(a) ->: happy(a))                          by allE((x: T) => healthy(x) ->: happy(x), a) and 1,
-          7 #> happy(a)                                           by implyE(healthy(a), happy(a))               and (6, 5),
+          7 #> happy(a)                                           by implyE(healthy(a), happy(a))               and (6, 5)
         )},
-        8 #> ∀{(x: T) => happy(x)}                                by AllI(4),
+        8 #> ∀{(x: T) => happy(x)}                                by AllI(4)
       ),
-      9 #> (∀{(y: T) => healthy(y)} ->: ∀{(x: T) => happy(x)})    by ImplyI(2),
+      9 #> (∀{(y: T) => healthy(y)} ->: ∀{(x: T) => happy(x)})    by ImplyI(2)
     )
     //@formatter:on
   )
@@ -454,7 +454,7 @@ import org.sireum.justification.natded.pred._
       1 #> human(Socrates)                        by Premise,
       2 #> mortal(Socrates)                       by Premise,
       3 #> (human(Socrates) & mortal(Socrates))   by andI(human(Socrates), mortal(Socrates))           and (1, 2),
-      4 #> ∃{(x: T) => human(x) & mortal(x)}      by existsI((y: T) => human(y) & mortal(y), Socrates) and 3,
+      4 #> ∃{(x: T) => human(x) & mortal(x)}      by existsI((y: T) => human(y) & mortal(y), Socrates) and 3
     )
     //@formatter:on
   )
@@ -469,7 +469,7 @@ import org.sireum.justification.natded.pred._
       2 #> holds(square(1, 4), e)                             by Premise,
       3 #> ∃{(x: C) => holds(x, e)}                           by existsI((z: C) => holds(z, e), square(1, 4))              and 2,
       4 #> (vowel(e) & ∃{(x: C) => holds(x, e)})              by andI(vowel(e), ∃{(x: C) => holds(x, e)})                  and (1, 3),
-      5 #> ∃{(y: C) => vowel(y) & ∃{(x: C) => holds(x, y)}}   by existsI((y: C) => vowel(y) & ∃{(x: C) => holds(x, y)}, e) and 4,
+      5 #> ∃{(y: C) => vowel(y) & ∃{(x: C) => holds(x, y)}}   by existsI((y: C) => vowel(y) & ∃{(x: C) => holds(x, y)}, e) and 4
     )
     //@formatter:on
   )
@@ -505,7 +505,7 @@ import org.sireum.justification.natded.pred._
         4 #> Assume(human(a)),
         5 #> (human(a) ->: mortal(a))             by allE((x: T) => human(x) ->: mortal(x), a) and 1,
         6 #> mortal(a)                            by implyE(human(a), mortal(a))               and (5, 4),
-        7 #> ∃{(z: T) => mortal(z)}               by existsI((z: T) => mortal(z), a)           and 6,
+        7 #> ∃{(z: T) => mortal(z)}               by existsI((z: T) => mortal(z), a)           and 6
       )},
       8 #> ∃{(z: T) => mortal(z)}                 by ExistsE[T](2, 3),
     )
@@ -528,7 +528,7 @@ import org.sireum.justification.natded.pred._
       3 #> Let { (a: Z) => SubProof(
         4 #> Assume(covered(a) & ∃{(c: C) => vowel(c) & holds(a, c)}),
         5 #> covered(a)                                                    by andE1(covered(a), ∃{(c: C) => vowel(c) & holds(a, c)}) and 4,
-        6 #> ∃{(x: Z) => covered(x)}                                       by existsI((x: Z) => covered(x), a)                       and 5,
+        6 #> ∃{(x: Z) => covered(x)}                                       by existsI((x: Z) => covered(x), a)                       and 5
       )},
       7 #> ∃{(x: Z) => covered(x)}                                         by ExistsE[Z](1, 3),
       8 #> (!gameOver)                                                     by implyE(∃{(x: Z) => covered(x)}, !gameOver)             and (2, 7),
