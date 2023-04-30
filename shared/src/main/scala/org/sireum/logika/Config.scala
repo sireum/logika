@@ -59,7 +59,8 @@ import org.sireum._
                        val elideEncoding: B,
                        val rawInscription: B,
                        val flipStrictPure: B,
-                       val transitionCache: B) {
+                       val transitionCache: B,
+                       val patternExhaustive: B) {
 
   @memoize def fingerprint: U64 = {
     val digest = ops.StringOps(string).sha3(T, T)

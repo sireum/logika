@@ -60,9 +60,9 @@ object Logika {
 
     def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): Unit
 
-    def getSmt2(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result]
+    def getSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim]): Option[Smt2Query.Result]
 
-    def setSmt2(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit
+    def setSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim], result: Smt2Query.Result): Unit
 
     def keys: ISZ[Cache.Key]
 
@@ -608,7 +608,7 @@ import Util._
         case _ => (None(), posOpt, None())
       }
     if (s2.ok) {
-      val r = smt2.valid(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+      val r = smt2.valid(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
         st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
         pos, s2.claims, claim, reporter)
       r.kind match {
@@ -781,6 +781,75 @@ import Util._
     }
   }
 
+  def rewriteAt(atMap: Util.ClaimsToExps.AtMap, state: State, exp: AST.Exp, reporter: Reporter): (State, AST.Exp) = {
+    val rw = AtSymRewriter(this, atMap, state, reporter.empty)
+    val r = rw.transformExp(exp).getOrElse(exp)
+    reporter.reports(rw.reporter.messages)
+    return (rw.state, r)
+  }
+
+  def evalAtH(state: State, atMap: ClaimsToExps.AtMap, exp: AST.Exp.At, reporter: Reporter): (State, State.Value) = {
+    val t = exp.typedOpt.get
+    val pos = exp.posOpt.get
+
+    def rand(num: Z): (State, State.Value) = {
+      val key: ClaimsToExps.AtKey = (ISZ(), ".random", t, exp.num.value)
+      atMap.get(key) match {
+        case Some((poss, _)) =>
+          val (s0, sym) = state.freshSym(t, pos)
+          return (s0.addClaim(State.Claim.Let.Random(sym, F, poss(0))), sym)
+        case _ =>
+          reporter.error(exp.posOpt, kind, st"Could not find .random of $t with the occurrence number $num".render)
+          return (state(status = State.Status.Error), State.errorValue)
+      }
+    }
+
+    def local(res: AST.ResolvedInfo.LocalVar, num: Z): (State, State.Value) = {
+      val key: ClaimsToExps.AtKey = (ISZ(), st"${(res.context :+ res.id, ".")}".render, t, exp.num.value)
+      atMap.get(key) match {
+        case Some((poss, num)) =>
+          val (s0, sym) = state.freshSym(t, pos)
+          return (s0.addClaim(State.Claim.Let.Id(sym, T, res.context, res.id, num, poss)), sym)
+        case _ =>
+          reporter.error(exp.posOpt, kind, st"Could not find ${res.id} with the occurrence number $num".render)
+          return (state(status = State.Status.Error), State.errorValue)
+      }
+    }
+
+    def global(res: AST.ResolvedInfo.Var, num: Z): (State, State.Value) = {
+      val key: ClaimsToExps.AtKey = (res.owner :+ res.id, "", t, exp.num.value)
+      atMap.get(key) match {
+        case Some((poss, num)) =>
+          val (s0, sym) = state.freshSym(t, pos)
+          return (s0.addClaim(State.Claim.Let.Name(sym, key._1, num, poss)), sym)
+        case _ =>
+          reporter.error(exp.posOpt, kind, st"Could not find ${(res.owner :+ res.id, ".")} with the occurrence number $num".render)
+          return (state(status = State.Status.Error), State.errorValue)
+      }
+    }
+
+    exp.exp match {
+      case e: AST.Exp.Ref =>
+        e.resOpt.get match {
+          case res: AST.ResolvedInfo.LocalVar => return local(res, exp.num.value)
+          case res: AST.ResolvedInfo.Var if res.isInObject => return global(res, exp.num.value)
+          case res => halt(s"Infeasible: $res")
+        }
+      case _: AST.Exp.This => return local(AST.ResolvedInfo.LocalVar(context.methodName,
+        AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), exp.num.value)
+      case e: AST.Exp.LitString =>
+        if (e.value == ".random") {
+          return rand(exp.num.value)
+        }
+        val ids = ops.StringOps(e.value).split((c: C) => c == '.').map((s: String) => ops.StringOps(s).trim)
+        val lcontext = ops.ISZOps(ids).dropRight(1)
+        return local(AST.ResolvedInfo.LocalVar(lcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
+          ids(ids.size - 1)), exp.num.value)
+      case e => halt(s"Infeasible: $e")
+    }
+  }
+
+
   def evalExp(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, e: AST.Exp,
               reporter: Reporter): ISZ[(State, State.Value)] = {
     if (!state.ok) {
@@ -943,7 +1012,7 @@ import Util._
             case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
             case _ => (None(), Some(pos), None())
           }
-        val r = smt2.valid(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+        val r = smt2.valid(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
           st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
         r.kind match {
@@ -1406,61 +1475,8 @@ import Util._
     }
 
     def evalAt(exp: AST.Exp.At): (State, State.Value) = {
-      val t = exp.typedOpt.get
       val pos = exp.posOpt.get
-      val (_, atMap) = Util.claimsToExps(jescmPlugins._4, pos, context.methodName, state.claims, th, F)
-      def rand(num: Z): (State, State.Value) = {
-        val key: ClaimsToExps.AtKey = (ISZ(), ".random", t, exp.num.value)
-        atMap.get(key) match {
-          case Some((poss, _)) =>
-            val (s0, sym) = state.freshSym(t, pos)
-            return (s0.addClaim(State.Claim.Let.Random(sym, F, poss(0))), sym)
-          case _ =>
-            reporter.error(exp.posOpt, kind, st"Could not find .random of $t with the occurrence number $num".render)
-            return (state(status = State.Status.Error), State.errorValue)
-        }
-      }
-      def local(res: AST.ResolvedInfo.LocalVar, num: Z): (State, State.Value) = {
-        val key: ClaimsToExps.AtKey = (res.context, res.id, t, exp.num.value)
-        atMap.get(key) match {
-          case Some((poss, num)) =>
-            val (s0, sym) = state.freshSym(t, pos)
-            return (s0.addClaim(State.Claim.Let.Id(sym, T, res.context, res.id, num, poss)), sym)
-          case _ =>
-            reporter.error(exp.posOpt, kind, st"Could not find ${res.id} with the occurrence number $num".render)
-            return (state(status = State.Status.Error), State.errorValue)
-        }
-      }
-      def global(res: AST.ResolvedInfo.Var, num: Z): (State, State.Value) = {
-        val key: ClaimsToExps.AtKey = (res.owner :+ res.id, "", t, exp.num.value)
-        atMap.get(key) match {
-          case Some((poss, num)) =>
-            val (s0, sym) = state.freshSym(t, pos)
-            return (s0.addClaim(State.Claim.Let.Name(sym, key._1, num, poss)), sym)
-          case _ =>
-            reporter.error(exp.posOpt, kind, st"Could not find ${(res.owner :+ res.id, ".")} with the occurrence number $num".render)
-            return (state(status = State.Status.Error), State.errorValue)
-        }
-      }
-      exp.exp match {
-        case e: AST.Exp.Ref =>
-          e.resOpt.get match {
-            case res: AST.ResolvedInfo.LocalVar => return local(res, exp.num.value)
-            case res: AST.ResolvedInfo.Var if res.isInObject => return global(res, exp.num.value)
-            case res => halt(s"Infeasible: $res")
-          }
-        case _: AST.Exp.This => return local(AST.ResolvedInfo.LocalVar(context.methodName,
-          AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), exp.num.value)
-        case e: AST.Exp.LitString =>
-          if (e.value == ".random") {
-            return rand(exp.num.value)
-          }
-          val ids = ops.StringOps(e.value).split((c: C) => c == '.').map((s: String) => ops.StringOps(s).trim)
-          val lcontext = ops.ISZOps(ids).dropRight(1)
-          return local(AST.ResolvedInfo.LocalVar(lcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
-            ids(ids.size - 1)), exp.num.value)
-        case e => halt(s"Infeasible: $e")
-      }
+      return evalAtH(state, Util.claimsToExps(jescmPlugins._4, pos, context.methodName, state.claims, th, F)._2, exp, reporter)
     }
 
     def evalInput(input: AST.Exp.Input): (State, State.Value) = {
@@ -1812,7 +1828,7 @@ import Util._
       for (sub <- subs) {
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val s2 = s1.addClaims(ISZ(State.Claim.Let.TypeTest(sym, T, receiver, sub), State.Claim.Prop(T, sym)))
-        if (smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+        if (smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
           st"Virtual invocation satisfiability on ${(sub.ids, ".")}".render, pos, s2.claims, reporter)) {
           val adt = th.typeMap.get(sub.ids).get.asInstanceOf[TypeInfo.Adt]
           if (adt.specVars.contains(info.res.id) || adt.specMethods.contains(info.res.id)) {
@@ -2818,9 +2834,9 @@ import Util._
           val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
-          val thenBranch = disableSat || smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+          val thenBranch = disableSat || smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
             s"$construct-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
-          val elseBranch = disableSat || smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+          val elseBranch = disableSat || smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
             s"$construct-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
@@ -3147,7 +3163,7 @@ import Util._
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
     if (config.sat && s1.ok) {
       val pos = posOpt.get
-      val sat = smt2.sat(context.methodName, cache, reportQuery, config.logVc, config.logVcDirOpt,
+      val sat = smt2.sat(context.methodName, config, cache, reportQuery, config.logVc, config.logVcDirOpt,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
       return s1(status = State.statusOf(sat))
     } else {
@@ -3171,7 +3187,7 @@ import Util._
     if (s0.ok) {
       val conclusion = State.Claim.Prop(T, sym)
       val pos = posOpt.get
-      val r = smt2.valid(context.methodName, cache, reportQuery, config.logVc, config.logVcDirOpt,
+      val r = smt2.valid(context.methodName, config, cache, reportQuery, config.logVc, config.logVcDirOpt,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s0.claims, conclusion, reporter)
       r.kind match {
         case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
@@ -3596,7 +3612,7 @@ import Util._
     val posOpt: Option[Position] = Some(pos)
     val s1 = s0.addClaim(cond)
     if (s1.ok) {
-      if (smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+      if (smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)) {
         val s2 = assumeBindings(s1, lcontext, m, bidMap)
         var claims = ISZ[(State.Status.Type, ISZ[State.Claim])]()
@@ -3821,10 +3837,11 @@ import Util._
           branches = branches :+ Branch("match case pattern", sym, c.body, m, bidMap)
         }
         val stmtPos = stmt.posOpt.get
-        if (!config.interp && smt2.satResult(context.methodName, cache, config.timeoutInMs, T, config.logVc,
-          config.logVcDirOpt, s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]",
-          stmtPos, s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)),
-          reporter)._2.kind == Smt2Query.Result.Kind.Sat) {
+        if (!config.interp && config.patternExhaustive &&
+          smt2.satResult(context.methodName, config, cache, config.timeoutInMs, T, config.logVc, config.logVcDirOpt,
+            s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]",
+            stmtPos, s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)), reporter).
+            _2.kind == Smt2Query.Result.Kind.Sat) {
           error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
           r = r :+ s1(status = State.Status.Error)
         } else {
@@ -4279,7 +4296,7 @@ import Util._
               val (s3, cond) = value2Sym(s2, v, pos)
               val prop = State.Claim.Prop(T, cond)
               val thenClaims = s3.claims :+ prop
-              val thenSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+              val thenSat = smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
                 s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
               if (thenSat) {
                 for (s4 <- assumeExps(split, smt2, cache, rtCheck, s3(claims = thenClaims), whileStmt.invariants, reporter);
@@ -4292,7 +4309,7 @@ import Util._
               }
               val negProp = State.Claim.Prop(F, cond)
               val elseClaims = s3.claims :+ negProp
-              val elseSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+              val elseSat = smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
                 s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
               val s4 = s3(status = State.statusOf(elseSat), claims = elseClaims)
               if (elseSat) {
@@ -4332,7 +4349,7 @@ import Util._
             val s3 = s2w
             val prop = State.Claim.Prop(T, cond)
             val s4 = s3.addClaim(prop)
-            val thenSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+            val thenSat = smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
               s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s4.claims, reporter)
             if (thenSat) {
               for (s5 <- evalStmts(sp, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
@@ -4346,7 +4363,7 @@ import Util._
             }
             val negProp = State.Claim.Prop(F, cond)
             val s7 = s3.addClaim(negProp)
-            val elseSat = smt2.sat(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+            val elseSat = smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
               s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s7.claims, reporter)
             r = r :+ s7(status = State.statusOf(elseSat))
           } else {
@@ -4664,7 +4681,7 @@ import Util._
       val prop = State.Claim.Prop(T, sym)
       var ok = F
       if (s2.ok) {
-        val rvalid = smt2.valid(context.methodName, cache, T, config.logVc, config.logVcDirOpt,
+        val rvalid = smt2.valid(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
           s"$title$titleSuffix at [${pos.beginLine}, ${pos.beginColumn}]", pos, s2.claims, prop, reporter)
         rvalid.kind match {
           case Smt2Query.Result.Kind.Unsat => ok = T
@@ -4789,12 +4806,18 @@ import Util._
         if (current.ok) {
           val stmt = stmts(i)
           val nextStates: ISZ[State] = if (config.transitionCache) {
-            val transition: Cache.Transition = if (stmt.hasReturnMemoized && context.methodOpt.nonEmpty)
+            val ensures: ISZ[AST.Exp] = if (context.methodOpt.nonEmpty) context.methodOpt.get.ensures else ISZ()
+            val transition: Cache.Transition = if (stmt.hasReturnMemoized && ensures.nonEmpty)
               Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures) else Cache.Transition.Stmt(stmt)
             cache.getTransitionAndUpdateSmt2(th, config, transition, current, smt2) match {
               case Some(ss) =>
                 if (stmt.isInstruction) {
                   reporter.coverage(T, stmt.posOpt.get)
+                }
+                if (stmt.isInstanceOf[AST.Stmt.Return]) {
+                  for (e <- ensures) {
+                    reporter.coverage(T, e.posOpt.get)
+                  }
                 }
                 ss
               case _ =>

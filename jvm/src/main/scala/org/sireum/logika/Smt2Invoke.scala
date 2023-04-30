@@ -62,7 +62,6 @@ object Smt2Invoke {
   }
 
   @pure def queryDefault(sireumHome: Os.Path,
-                         cache: Logika.Cache,
                          isSat: B,
                          smt2Seq: B,
                          queryString: String,
@@ -71,11 +70,10 @@ object Smt2Invoke {
     val smt2Configs: ISZ[Smt2Config] =
       if (isSat) Smt2.parseConfigs(nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, timeoutInMs, rlimit).left
       else Smt2.parseConfigs(nameExePathMap(sireumHome), F, Smt2.defaultValidOpts, timeoutInMs, rlimit).left
-    return query(smt2Configs, cache, isSat, smt2Seq, queryString, timeoutInMs)
+    return query(smt2Configs, isSat, smt2Seq, queryString, timeoutInMs)
   }
 
   @pure def query(smt2Configs: ISZ[Smt2Config],
-                  cache: Logika.Cache,
                   isSat: B,
                   smt2Seq: B,
                   queryString: String,
@@ -83,10 +81,6 @@ object Smt2Invoke {
     val configs: ISZ[Smt2Config] = for (smt2Config <- smt2Configs if isSat == smt2Config.isSat) yield smt2Config
     val smt2Args: ISZ[String] = for (smt2Config <- configs if isSat == smt2Config.isSat; arg <- ISZ[String](
       smt2Config.name, timeoutInMs.string, smt2Config.rlimit.string) ++ smt2Config.opts) yield arg
-    cache.getSmt2(isSat, queryString, smt2Args) match {
-      case Some(r) => return r
-      case _ =>
-    }
     val start = extension.Time.currentMillis
     val fs: ISZ[() => Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] @pure] = for (config <- configs) yield () => {
       val args = Smt2.solverArgs(config.name, timeoutInMs, config.rlimit).get ++ config.opts
@@ -184,7 +178,6 @@ object Smt2Invoke {
           "", 0, F)
     }
     r = r(timeMillis = extension.Time.currentMillis - start)
-    cache.setSmt2(isSat, queryString, smt2Args, r(cached = T, info = ops.StringOps(r.info).replaceAllLiterally("Result:", "Result (cached):")))
     return r
   }
 

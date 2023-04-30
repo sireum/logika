@@ -101,9 +101,9 @@ final class NoTransitionSmt2CacheImpl(val persistentCache: java.util.concurrent.
   def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State,
                     nextStates: ISZ[State], smt2: Smt2): Unit = {}
 
-  def getSmt2(isSat: B, query: String, args: ISZ[String]): Option[Smt2Query.Result] = None()
+  def getSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim]): Option[Smt2Query.Result] = None()
 
-  def setSmt2(isSat: B, query: String, args: ISZ[String], result: Smt2Query.Result): Unit = {}
+  def setSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim], result: Smt2Query.Result): Unit = {}
 
   def clearTaskCache(): Unit = {}
 

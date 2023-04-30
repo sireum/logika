@@ -74,35 +74,43 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
         return err()
     }
 
-    val lsmt2: Smt2 = smt2.withConfig(F, options,
-      if (timeout <= 0) 0 else timeout, if (resourceLimit <= 0) 0 else resourceLimit, reporter) match {
-      case MEither.Left(s) => s
-      case MEither.Right(msg) =>
-        reporter.error(just.invoke.posOpt, Logika.kind, msg)
-        return err()
-    }
-
     val id = just.invokeIdent.id.value
 
     if (argsOpt.isEmpty && id == "Smt2_*") {
       return Plugin.Result(F, state.nextFresh, ISZ())
     }
 
+    val rlimit: Z = if (resourceLimit <= 0) 0 else resourceLimit
+    val logikaSmt2 = logika(config = logika.config(timeoutInMs = if (timeout <= 0) 0 else timeout,
+      smt2Configs = for (c <- logika.config.smt2Configs) yield c(rlimit = rlimit)))
     val posOpt = just.invokeIdent.posOpt
 
     val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) = if (argsOpt.isEmpty) {
-      val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-      ((q._1, q._2, state.claims ++ q._3, q._4), q._3 :+ q._4)
+      if (id == "Smt2_*") {
+        val atMap = org.sireum.logika.Util.claimsToExps(logikaSmt2.jescmPlugins._4, posOpt.get, logikaSmt2.context.methodName,
+          state.claims, logikaSmt2.th, F)._2
+        val s0 = state(claims = logikaSmt2.context.methodOpt.get.initClaims)
+        val (s1, exp) = logikaSmt2.rewriteAt(atMap, s0, step.claim, reporter)
+        val (stat, nextFresh, premises, conclusion) = logikaSmt2.evalRegularStepClaim(smt2, cache, s1, exp,
+          step.id.posOpt, reporter)
+        ((stat, nextFresh, s1.claims ++ premises, conclusion), premises :+ conclusion)
+      } else {
+        val (stat, nextFresh, premises, conclusion) = logikaSmt2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+        ((stat, nextFresh, state.claims ++ premises, conclusion), premises :+ conclusion)
+      }
     } else {
-      var s0 = state(claims = logika.context.methodOpt.get.initClaims)
+      var s0 = state(claims = logikaSmt2.context.methodOpt.get.initClaims)
+      val atMap = org.sireum.logika.Util.claimsToExps(logikaSmt2.jescmPlugins._4, posOpt.get, logikaSmt2.context.methodName,
+        state.claims, logikaSmt2.th, F)._2
       var ok = T
       for (arg <- argsOpt.get) {
         val stepNo = arg
         spcMap.get(stepNo) match {
           case Some(spc: StepProofContext.Regular) =>
-            val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, lsmt2, cache, T, s0, spc.exp, reporter)
-            val (s2, sym) = logika.value2Sym(s1, v, spc.exp.posOpt.get)
-            s0 = s2.addClaim(State.Claim.Prop(T, sym))
+            val (s1, exp) = logikaSmt2.rewriteAt(atMap, s0, spc.exp, reporter)
+            val ISZ((s2, v)) = logikaSmt2.evalExp(Logika.Split.Disabled, smt2, cache, T, s1, exp, reporter)
+            val (s3, sym) = logikaSmt2.value2Sym(s2, v, spc.exp.posOpt.get)
+            s0 = s3.addClaim(State.Claim.Prop(T, sym))
           case Some(_) =>
             reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for $id")
             ok = F
@@ -114,13 +122,15 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
       if (!ok) {
         return Plugin.Result(F, s0.nextFresh, ISZ())
       }
-      val q = logika.evalRegularStepClaim(lsmt2, cache, s0, step.claim, step.id.posOpt, reporter)
+      val (s1, exp) = logikaSmt2.rewriteAt(atMap, s0, step.claim, reporter)
+      val q = logikaSmt2.evalRegularStepClaim(smt2, cache, s1, exp, step.id.posOpt, reporter)
       ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
     }
 
     val status: B = if (stat) {
-      val r = lsmt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt,
-        s"${just.invokeIdent.id.value} Justification", posOpt.get, premises, conclusion, reporter)
+      val r = smt2.valid(logikaSmt2.context.methodName, logikaSmt2.config, cache, T, logikaSmt2.config.logVc,
+        logikaSmt2.config.logVcDirOpt, s"${just.invokeIdent.id.value} Justification", posOpt.get, premises, conclusion,
+        reporter)
       def error(msg: String): B = {
         reporter.error(posOpt, Logika.kind, msg)
         return F
@@ -136,7 +146,6 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
     } else {
       F
     }
-    smt2.updateFrom(lsmt2)
     return Plugin.Result(status, nextFresh, claims)
   }
 

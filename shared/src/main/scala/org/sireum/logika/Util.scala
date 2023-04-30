@@ -206,7 +206,7 @@ object Util {
                   case _ =>
                 }
               }
-              val subst = Substitutor(substMap, arg.context, fParamMap, Reporter.create)
+              val subst = Substitutor(substMap, arg.context, fParamMap, reporter.empty)
               val expOpt = subst.transformExp(argExp.exp)
               reporter.reports(subst.reporter.messages)
               if (expOpt.isEmpty) {
@@ -828,7 +828,7 @@ object Util {
           }
           val attr = AST.Attr(symPosOpt)
           if (let.context == context || let.context.isEmpty) {
-            val key: ClaimsToExps.AtPossKey = (let.context, let.id, sym.tipe)
+            val key: ClaimsToExps.AtPossKey = (ISZ[String](), st"${(let.context :+ let.id, ".")}".render, sym.tipe)
             val n: Z = computeAtNum(key, let.poss, let.num)
             if (let.inScope) {
               return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
@@ -1680,6 +1680,17 @@ object Util {
     }
   }
 
+  @record class AtSymRewriter(val logika: Logika,
+                              val atMap: ClaimsToExps.AtMap,
+                              var state: State,
+                              val reporter: Reporter) extends AST.MTransformer {
+    override def postExpAt(o: AST.Exp.At): MOption[AST.Exp] = {
+      val (s1, sym) = logika.evalAtH(state, atMap, o, reporter)
+      state = s1
+      return MSome(AST.Exp.Sym(sym.asInstanceOf[State.Value.Sym].num, AST.TypedAttr(o.posOpt, o.typedOpt)))
+    }
+  }
+
   type LocalSaveMap = HashMap[State.Claim.Let.Id, State.Claim.Let.CurrentId]
 
   val builtInTypeNames: HashSet[ISZ[String]] = HashSet ++ ISZ(
@@ -1714,13 +1725,13 @@ object Util {
   }
 
   def value2ST(smt2: Smt2, lets: HashMap[Z, ISZ[State.Claim.Let]],
-               declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): (State.Value, Reporter) => ST = {
+               declIds: HashSMap[(ISZ[String], String, Z), State.Claim.Let.Id]): (Config, State.Value, Reporter) => ST = {
     if (lets.isEmpty) {
       return smt2.v2ST _
     }
     var cache = HashMap.empty[Z, ST]
 
-    def sv2ST(v: State.Value, reporter: Reporter): ST = {
+    def sv2ST(config: Config, v: State.Value, reporter: Reporter): ST = {
       v match {
         case v: State.Value.Sym =>
           cache.get(v.num) match {
@@ -1728,13 +1739,13 @@ object Util {
             case _ =>
               val r: ST = lets.get(v.num) match {
                 case Some(ls) if ls.size == 1 && !ls(0).isInstanceOf[State.Claim.Let.Random] =>
-                  smt2.l2RhsST(ls(0), sv2ST _, lets, declIds, reporter)
-                case _ => smt2.v2ST(v, reporter)
+                  smt2.l2RhsST(config, ls(0), sv2ST _, lets, declIds, reporter)
+                case _ => smt2.v2ST(config, v, reporter)
               }
               cache = cache + v.num ~> r
               return r
           }
-        case _ => return smt2.v2ST(v, reporter)
+        case _ => return smt2.v2ST(config, v, reporter)
       }
     }
 
@@ -1924,7 +1935,7 @@ object Util {
     }
 
     for (p <- method.sig.params) {
-      smt2.addType(p.tipe.typedOpt.get, reporter)
+      smt2.addType(config, p.tipe.typedOpt.get, reporter)
     }
     if (method.mcontract.isEmpty) {
       checkCase(None(), ISZ(), ISZ(), ISZ(), ISZ())
@@ -2120,7 +2131,7 @@ object Util {
         var s0 = state(claims = ISZ())
         val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
         val s2: State = if (isHelper) s1 else assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
-        smt2.addStrictPureMethodDecl(pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size), reporter)
+        smt2.addStrictPureMethodDecl(config, pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size), reporter)
         s0 = s0(nextFresh = s2.nextFresh, status = s2.status)
         for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes) if pair._1.value != "this") {
           val (pid, pt) = pair
@@ -2152,14 +2163,14 @@ object Util {
       }
 
       if (ok && svs.nonEmpty) {
-        smt2.addStrictPureMethod(pos, pf, svs, 0, reporter)
+        smt2.addStrictPureMethod(config, pos, pf, svs, 0, reporter)
       }
 
       val s1 = state(status = State.statusOf(ok), nextFresh = maxFresh)
       if (config.sat && s1.ok) {
         val title: String = s"the derived proof function of $id"
-        smt2.satResult(pf.context :+ pf.id, cache, Smt2.satTimeoutInMs, T, config.logVc, config.logVcDirOpt, title, pos,
-          ISZ(), reporter) match {
+        smt2.satResult(pf.context :+ pf.id, config, cache, Smt2.satTimeoutInMs, T, config.logVc, config.logVcDirOpt,
+          title, pos, ISZ(), reporter) match {
           case (T, _) =>
           case (_, result) =>
             if (result.kind == Smt2Query.Result.Kind.Error) {
@@ -2363,7 +2374,7 @@ object Util {
       return (s1, ss)
     }
     val t = receiver.tipe
-    smt2.addType(t, reporter)
+    smt2.addType(logika.config, t, reporter)
     val (ti, targs): (TypeInfo, ISZ[AST.Typed]) = t match {
       case t: AST.Typed.Name =>
         if (builtInTypeNames.contains(t.ids)) {
@@ -2654,4 +2665,5 @@ object Util {
   @pure def restoreLocals(s0: State, localMap: LocalSaveMap): State = {
     return StateTransformer(PrePostLocalRestorer(localMap)).transformState(F, s0).resultOpt.getOrElse(s0)
   }
+
 }

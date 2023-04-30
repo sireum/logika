@@ -63,7 +63,7 @@ object SameDiffPlugin {
   }
 
   def mineLabeledExps(exp: AST.Exp, reporter: Reporter): HashSMap[Z, AST.Exp.Labeled] = {
-    val lem = LabeledExpMiner(HashSMap.empty, Reporter.create)
+    val lem = LabeledExpMiner(HashSMap.empty, reporter.empty)
     lem.transformExp(exp)
     reporter.reports(lem.reporter.messages)
     return lem.map
@@ -193,13 +193,13 @@ import SameDiffPlugin._
 
     val (stat, nextFresh, premises, conclusion): (B, Z, ISZ[State.Claim], State.Claim) = if (args.size == 1) {
       if (id == "SameDiff_*") {
-        logika2.evalRegularStepClaim(smt2.emptyCache, cache, state(claims = logika.context.methodOpt.get.initClaims),
-          step.claim, step.id.posOpt, reporter)
+        logika2.evalRegularStepClaim(smt2.emptyCache(logika.config), cache,
+          state(claims = logika.context.methodOpt.get.initClaims), step.claim, step.id.posOpt, reporter)
       } else {
         logika2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
       }
     } else {
-      val psmt2 = smt2.emptyCache
+      val psmt2 = smt2.emptyCache(logika.config)
       var s1 = state(claims = logika.context.methodOpt.get.initClaims)
       var ok = T
       for (i <- 1 until args.size if ok) {
@@ -282,10 +282,10 @@ import SameDiffPlugin._
         val v1 = sv1._2
         val v2 = sv2._2
         val (_, sym) = s3.freshSym(AST.Typed.b, pos)
-        val r = smt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt,
-          s"$id Justification for labeled expression #$num of proof steps $stepId and $fromStepId", pos,
-          s3.claims :+ State.Claim.Let.Binary(sym, v1, AST.Exp.BinaryOp.Equiv, v2, v1.tipe), State.Claim.Prop(T, sym),
-          reporter)
+        val r = smt2.valid(logika.context.methodName, logika.config, cache, T, logika.config.logVc,
+          logika.config.logVcDirOpt, s"$id Justification for labeled expression #$num of proof steps $stepId and $fromStepId",
+          pos, s3.claims :+ State.Claim.Let.Binary(sym, v1, AST.Exp.BinaryOp.Equiv, v2, v1.tipe),
+          State.Claim.Prop(T, sym), reporter)
         r.kind match {
           case Smt2Query.Result.Kind.Unsat => found = T
           case Smt2Query.Result.Kind.Sat =>
