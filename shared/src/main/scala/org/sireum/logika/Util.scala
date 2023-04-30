@@ -1780,7 +1780,23 @@ object Util {
     var s = state
     s = checkInv(T, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
     for (r <- requires if s.ok) {
-      s = logika.evalAssume(smt2, cache, T, "Precondition", s, r, r.posOpt, reporter)._1
+      var cached = F
+      if (logika.config.transitionCache) {
+        cache.getTransitionAndUpdateSmt2(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s, smt2) match {
+          case Some(ISZ(nextState)) =>
+            cached = T
+            reporter.coverage(T, r.posOpt.get)
+            s = nextState
+          case _ =>
+        }
+      }
+      if (!cached) {
+        val s0 = s
+        s = logika.evalAssume(smt2, cache, T, "Precondition", s, r, r.posOpt, reporter)._1
+        if (logika.config.transitionCache && s.ok) {
+          cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s0, ISZ(s), smt2)
+        }
+      }
     }
     return s
   }
