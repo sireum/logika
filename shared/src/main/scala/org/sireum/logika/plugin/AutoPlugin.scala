@@ -99,8 +99,8 @@ import org.sireum.logika.Logika.Reporter
                    claims: ISZ[State.Claim]): Plugin.Result = {
       var status = stat
       if (status) {
-        val r = psmt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt,
-          s"$id Justification", pos, premises, conclusion, reporter)
+        val r = psmt2.valid(logika.context.methodName, logika.config, cache, T, logika.config.logVc,
+          logika.config.logVcDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
 
         def error(msg: String): B = {
           reporter.error(posOpt, Logika.kind, msg)
@@ -157,9 +157,12 @@ import org.sireum.logika.Logika.Reporter
 
     if (args.isEmpty) {
       if (id == "Auto_*" || id == "Tauto") {
-        val psmt2 = smt2.emptyCache
+        val psmt2 = smt2.emptyCache(logika.config)
+        val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
+          state.claims, logika.th, F)._2
         val s0 = state(claims = logika.context.methodOpt.get.initClaims)
-        val (stat, nextFresh, premises, conclusion) = logika.evalRegularStepClaim(psmt2, cache, s0, step.claim,
+        val (s1, exp) = logika.rewriteAt(atMap, s0, step.claim, reporter)
+        val (stat, nextFresh, premises, conclusion) = logika.evalRegularStepClaim(psmt2, cache, s1, exp,
           step.id.posOpt, reporter)
         val r = checkValid(psmt2, stat, nextFresh, s0.claims ++ premises, conclusion, premises :+ conclusion)
         smt2.combineWith(psmt2)
@@ -170,16 +173,19 @@ import org.sireum.logika.Logika.Reporter
         return checkValid(smt2, stat, nextFresh, state.claims ++ premises, conclusion, premises :+ conclusion)
       }
     } else {
-      val psmt2 = smt2.emptyCache
+      val psmt2 = smt2.emptyCache(logika.config)
+      val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
+        state.claims, logika.th, F)._2
       var s1 = state(claims = logika.context.methodOpt.get.initClaims)
       var ok = T
       for (arg <- args if ok) {
         val stepNo = arg
         spcMap.get(stepNo) match {
           case Some(spc: StepProofContext.Regular) =>
-            val ISZ((s2, v)) = logika.evalExp(Logika.Split.Disabled, psmt2, cache, T, s1, spc.exp, reporter)
-            val (s3, sym) = logika.value2Sym(s2, v, spc.exp.posOpt.get)
-            s1 = s3.addClaim(State.Claim.Prop(T, sym))
+            val (s2, exp) = logika.rewriteAt(atMap, s1, spc.exp, reporter)
+            val ISZ((s3, v)) = logika.evalExp(Logika.Split.Disabled, psmt2, cache, T, s2, exp, reporter)
+            val (s4, sym) = logika.value2Sym(s3, v, spc.exp.posOpt.get)
+            s1 = s4.addClaim(State.Claim.Prop(T, sym))
           case Some(_) =>
             reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for $id")
             ok = F
@@ -191,8 +197,9 @@ import org.sireum.logika.Logika.Reporter
       if (!ok) {
         return Plugin.Result(F, state.nextFresh, ISZ())
       }
+      val (s5, exp) = logika.rewriteAt(atMap, s1, step.claim, reporter)
       val (stat, nextFresh, premises, conclusion) =
-        logika.evalRegularStepClaim(psmt2, cache, s1, step.claim, step.id.posOpt, reporter)
+        logika.evalRegularStepClaim(psmt2, cache, s5, exp, step.id.posOpt, reporter)
       val r = checkValid(psmt2, stat, nextFresh, s1.claims ++ premises, conclusion, premises :+ conclusion)
       smt2.combineWith(psmt2)
       return r

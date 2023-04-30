@@ -72,7 +72,7 @@ import org.sireum.logika.Logika.Reporter
                 args: ISZ[AST.Exp], requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp], posOpt: Option[Position]): Plugin.Result = {
       val id = st"${(name, ".")}".render
       val ips = org.sireum.logika.Util.Substitutor(sm, context,
-        HashSMap.empty[String, AST.Exp] ++ ops.ISZOps(paramNames).zip(args), Reporter.create)
+        HashSMap.empty[String, AST.Exp] ++ ops.ISZOps(paramNames).zip(args), reporter.empty)
       val ipsSubst: ST = st"[${(for (pair <- ips.paramMap.entries) yield st"${pair._2.prettyST} / ${pair._1}", ", ")}]"
       var evidence = ISZ[ST]()
       if (just.witnesses.isEmpty) {

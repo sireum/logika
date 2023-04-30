@@ -33,14 +33,11 @@ import org.sireum.lang.tipe.TypeHierarchy
 
 object Smt2Impl {
 
-  def create(configs: ISZ[Smt2Config], plugins: ISZ[plugin.ClaimPlugin], typeHierarchy: TypeHierarchy, timeoutInMs: Z,
-             fpRoundingMode: String, charBitWidth: Z, intBitWidth: Z, useReal: B, simplifiedQuery: B, smt2Seq: B,
-             rawInscription: B, elideEncoding: B, includeFreshLines: B, reporter: Logika.Reporter): Smt2 = {
-    val r = Smt2Impl(plugins, typeHierarchy, timeoutInMs, charBitWidth, intBitWidth, useReal, simplifiedQuery, smt2Seq,
-      fpRoundingMode, rawInscription, elideEncoding, includeFreshLines, configs, HashSet.empty[AST.Typed] + AST.Typed.b,
+  def create(config: Config, plugins: ISZ[plugin.ClaimPlugin], typeHierarchy: TypeHierarchy, reporter: Logika.Reporter): Smt2 = {
+    val r = Smt2Impl(plugins, typeHierarchy, HashSet.empty[AST.Typed] + AST.Typed.b,
       Poset.empty, HashSMap.empty, HashSMap.empty, HashSMap.empty, HashSMap.empty, HashSMap.empty, HashSMap.empty,
       HashMap.empty, HashSMap.empty, HashMap.empty, HashSSet.empty)
-    r.addType(AST.Typed.z, reporter)
+    r.addType(config, AST.Typed.z, reporter)
     return r
   }
 
@@ -48,17 +45,6 @@ object Smt2Impl {
 
 @record class Smt2Impl(val plugins: ISZ[plugin.ClaimPlugin],
                        var typeHierarchy: TypeHierarchy,
-                       val timeoutInMs: Z,
-                       val charBitWidth: Z,
-                       val intBitWidth: Z,
-                       val useReal: B,
-                       val simplifiedQuery: B,
-                       val smt2Seq: B,
-                       val fpRoundingMode: String,
-                       val rawInscription: B,
-                       val elideEncoding: B,
-                       val includeFreshLines: B,
-                       val configs: ISZ[Smt2Config],
                        var types: HashSet[AST.Typed],
                        var poset: Poset[AST.Typed.Name],
                        var sorts: HashSMap[AST.Typed, ISZ[ST]],
@@ -73,24 +59,13 @@ object Smt2Impl {
                        var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
 
   def minimize: Smt2 = {
-    return this(plugins = ISZ(), typeHierarchy = TypeHierarchy.empty, configs = ISZ())
+    return this(plugins = ISZ(), typeHierarchy = TypeHierarchy.empty)
   }
 
-  def emptyCache: Smt2 = {
+  def emptyCache(config: Config): Smt2 = {
     val r = Smt2Impl(
       plugins = plugins,
       typeHierarchy = typeHierarchy,
-      timeoutInMs = timeoutInMs,
-      charBitWidth = charBitWidth,
-      intBitWidth = intBitWidth,
-      useReal = useReal,
-      simplifiedQuery = simplifiedQuery,
-      smt2Seq = smt2Seq,
-      fpRoundingMode = fpRoundingMode,
-      rawInscription = rawInscription,
-      elideEncoding = elideEncoding,
-      includeFreshLines = includeFreshLines,
-      configs = configs,
       types = HashSet.empty[AST.Typed] + AST.Typed.b,
       poset = Poset.empty,
       sorts = HashSMap.empty,
@@ -104,7 +79,7 @@ object Smt2Impl {
       filenameCount = filenameCount,
       seqLits = HashSSet.empty
     )
-    r.addType(AST.Typed.z, Logika.Reporter.create)
+    r.addType(config, AST.Typed.z, Logika.Reporter.create)
     return r
   }
 
@@ -211,37 +186,28 @@ object Smt2Impl {
     println(s"Wrote $f")
   }
 
-  def checkSat(cache: Logika.Cache, timeOutInMs: Z, query: String): (B, Smt2Query.Result) = {
-    val r = checkQuery(cache, T, timeOutInMs, query)
-    val b: B = r.kind match {
-      case Smt2Query.Result.Kind.Unsat => F
-      case Smt2Query.Result.Kind.Sat => T
-      case Smt2Query.Result.Kind.Error => F
-      case Smt2Query.Result.Kind.Timeout => T
-      case Smt2Query.Result.Kind.Unknown => T
-    }
-    return (b, r)
+  def checkSat(config: Config, timeOutInMs: Z, query: String): Smt2Query.Result = {
+    return checkQuery(config, T, timeOutInMs, query)
   }
 
-  def checkUnsat(cache: Logika.Cache, query: String): (B, Smt2Query.Result) = {
-    val r = checkQuery(cache, F, timeoutInMs, query)
-    return (r.kind == Smt2Query.Result.Kind.Unsat, r)
+  def checkUnsat(config: Config, timeOutInMs: Z, query: String): Smt2Query.Result = {
+    return checkQuery(config, F, timeOutInMs, query)
   }
 
-  def checkQuery(cache: Logika.Cache, isSat: B, timeoutInMs: Z, query: String): Smt2Query.Result = {
-    return Smt2Invoke.query(configs, cache, isSat, smt2Seq, query, timeoutInMs)
+  def checkQuery(config: Config, isSat: B, timeoutInMs: Z, query: String): Smt2Query.Result = {
+    return Smt2Invoke.query(config.smt2Configs, isSat, config.smt2Seq, query, timeoutInMs)
   }
 
   def formatVal(width: Z, n: Z): ST = {
     return Smt2Formatter.formatVal(width, n)
   }
 
-  def formatF32(value: F32): ST = {
-    return Smt2Formatter.formatF32(useReal, value)
+  def formatF32(config: Config, value: F32): ST = {
+    return Smt2Formatter.formatF32(config.useReal, value)
   }
 
-  def formatF64(value: F64): ST = {
-    return Smt2Formatter.formatF64(useReal, value)
+  def formatF64(config: Config, value: F64): ST = {
+    return Smt2Formatter.formatF64(config.useReal, value)
   }
 
   def formatR(value: R): ST = {
@@ -250,16 +216,6 @@ object Smt2Impl {
 
   def formatTime(value: Z): ST = {
     return Smt2Formatter.formatTime(value)
-  }
-
-  def withConfig(isSat: B, options: String, timeout: Z, resourceLimit: Z, reporter: Logika.Reporter): MEither[Smt2, String] = {
-    Smt2.parseConfigs(Smt2Invoke.nameExePathMap(Os.path(Os.env("SIREUM_HOME").get)), isSat, options, timeout,
-      resourceLimit) match {
-      case Either.Left(smt2Configs) =>
-        val thisL = this
-        return MEither.Left(thisL(configs = smt2Configs))
-      case Either.Right(msg) => return MEither.Right(msg)
-    }
   }
 
 }

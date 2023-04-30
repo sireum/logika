@@ -97,7 +97,7 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
     val smOpt = TypeChecker.unifyFun(Logika.kind, logika.th, posOpt, TypeChecker.TypeRelation.Subtype, res.tpeOpt.get,
       mi.methodType.tpe, reporter)
     val ips = org.sireum.logika.Util.Substitutor(smOpt.get, mi.name,
-      HashSMap.empty[String, AST.Exp] ++ ops.ISZOps(res.paramNames).zip(args), Reporter.create)
+      HashSMap.empty[String, AST.Exp] ++ ops.ISZOps(res.paramNames).zip(args), reporter.empty)
 
     var provenClaims = HashMap.empty[AST.Exp, (AST.ProofAst.StepId, AST.Exp)]
     for (spc <- spcMap.values) {

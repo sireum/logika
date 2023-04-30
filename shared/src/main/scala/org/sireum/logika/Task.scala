@@ -46,7 +46,7 @@ object Task {
     override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       for (tp <- fact.typeParams) {
-        smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
+        smt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
       var s0 = State.create
       var context = logika.context.methodName
@@ -67,15 +67,19 @@ object Task {
       for (claim <- claims if s0.ok) {
         val pos = claim.posOpt.get
         val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, smt2, cache, T, s0, claim, reporter)
-        val (s2, sym) = logika.value2Sym(s1, v, pos)
-        val s3 = s2.addClaim(State.Claim.Prop(T, sym))
-        if (smt2.satResult(context, cache, Smt2.satTimeoutInMs, T, config.logVc, config.logVcDirOpt,
-          s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos, s3.claims, reporter)._2.kind ==
-          Smt2Query.Result.Kind.Unsat) {
-          reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
-          s0 = s3(status = State.Status.Error)
+        if (s1.ok) {
+          val (s2, sym) = logika.value2Sym(s1, v, pos)
+          val s3 = s2.addClaim(State.Claim.Prop(T, sym))
+          val r = smt2.satResult(context, config, cache, Smt2.satTimeoutInMs, T, config.logVc, config.logVcDirOpt,
+            s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos, s3.claims, reporter)
+          if (r._2.kind ==Smt2Query.Result.Kind.Unsat) {
+            reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
+            s0 = s3(status = State.Status.Error)
+          } else {
+            s0 = s3
+          }
         } else {
-          s0 = s3
+          s0 = s1
         }
         i = i + 1
       }
@@ -90,7 +94,7 @@ object Task {
     override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty, plugins)
       for (tp <- theorem.typeParams) {
-        smt2.addType(AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
+        smt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
       var p = (State.create, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
       for (step <- theorem.proof.steps if p._1.ok) {

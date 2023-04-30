@@ -88,7 +88,8 @@ object LogikaTest {
       elideEncoding = F,
       rawInscription = F,
       flipStrictPure = F,
-      transitionCache = F
+      transitionCache = F,
+      patternExhaustive = T
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
@@ -195,10 +196,7 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Smt2Invoke.haltOnError = T
-    Logika.checkScript(None(), input, config,
-      th => Smt2Impl.create(config.smt2Configs, ISZ(), th, config.timeoutInMs, config.fpRoundingMode,
-        config.charBitWidth, config.intBitWidth, config.useReal, config.simplifiedQuery, config.smt2Seq,
-        config.rawInscription, config.elideEncoding, config.atLinesFresh, reporter),
+    Logika.checkScript(None(), input, config, th => Smt2Impl.create(config, ISZ(), th, reporter),
       NoTransitionSmt2Cache.create, reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {
