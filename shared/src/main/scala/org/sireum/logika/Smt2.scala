@@ -871,10 +871,27 @@ object Smt2 {
         if (etAdt || etS) {
           addTypeDecl(t,
             st"""(assert (forall ((x $tId) (i $itId) (v $etId))
-                |  (=> ${thidTypeOpt("x")}
-                |      ($isInBoundId x i)
-                |      (= ($atId x i) v)
-                |      ${etThidSubtypeOpt("v")})))""")
+                |  (=>
+                |    ${thidTypeOpt("x")}
+                |    ($isInBoundId x i)
+                |    (= ($atId x i) v)
+                |    ${etThidSubtypeOpt("v")})))
+                |(assert (forall ((x $tId) (y $tId) (i $itId) (j $itId))
+                |  (=>
+                |    ${thidTypeOpt("x")}
+                |    ${thidTypeOpt("y")}
+                |    (= ($sizeId x) ($sizeId y))
+                |    (not ($isInBoundId x i))
+                |    (not ($isInBoundId y j))
+                |    (= ($atId x i) ($atId y j)))))""")
+        } else {
+          addTypeDecl(t,
+            st"""(assert (forall ((x $tId) (y $tId) (i $itId) (j $itId))
+                |  (=>
+                |    (= ($sizeId x) ($sizeId y))
+                |    (not ($isInBoundId x i))
+                |    (not ($isInBoundId y j))
+                |    (= ($atId x i) ($atId y j)))))""")
         }
       }
 
@@ -1362,6 +1379,7 @@ object Smt2 {
           addSort(t,
             st"""(declare-fun $eqId ($tid $tid) B)
                 |${Smt2.eqProp(eqId, tid)}
+                |(assert (forall ((x $tid) (y $tid)) (=> (= x y) ($eqId x y))))
                 |(define-fun $neId ((x $tid) (y $tid)) B (not ($eqId x y)))"""
           )
         }
