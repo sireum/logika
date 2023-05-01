@@ -729,6 +729,18 @@ object Smt2 {
     def addTypeH(tipe: AST.Typed): Unit = {
       def addS(t: AST.Typed.Name): Unit = {
         val it = t.args(0)
+        val itInt: B = if (it == AST.Typed.z) {
+          T
+        } else {
+          it match {
+            case it: AST.Typed.Name =>
+              typeHierarchy.typeMap.get(it.ids) match {
+                case Some(info: TypeInfo.SubZ) => !info.ast.isBitVector
+                case _ => F
+              }
+            case _ => F
+          }
+        }
         addTypeH(it)
         val et = t.args(1)
         addTypeH(et)
@@ -820,15 +832,27 @@ object Smt2 {
               |    (forall ((i $itId)) (=> ($isInBoundId x i)
               |                        (= ($atId z i) ($atId x i))))
               |    (= ($atId z ($lastIndexId z)) y)))""")
-        addTypeDecl(t,
-          st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
-              |  (and
-              |    ${thidTypeOpt("z")}
-              |    (= ($sizeId z) ($zAddId ($sizeId x) ($sizeId y)))
-              |    (forall ((i $itId)) (=> ($isInBoundId x i)
-              |                            (= ($atId z i) ($atId x i))))
-              |    (forall ((i $itId)) (=> ($isInBoundId y i)
-              |                            (= ($atId z ($itAddId ($itAddId ($lastIndexId x) ($itSubId i ($firstIndexId y))) $itOne)) ($atId y i))))))""")
+        if (itInt) {
+          addTypeDecl(t,
+            st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
+                |  (and
+                |    ${thidTypeOpt("z")}
+                |    (= ($sizeId z) ($zAddId ($sizeId x) ($sizeId y)))
+                |    (forall ((i $itId)) (=> ($isInBoundId x i)
+                |                            (= ($atId z i) ($atId x i))))
+                |    (forall ((i $itId)) (=> ($isInBoundId y i)
+                |                            (= ($atId z (+ ($sizeId x) i)) ($atId y i))))))""")
+        } else {
+          addTypeDecl(t,
+            st"""(define-fun $appendsId ((x $tId) (y $tId) (z $tId)) B
+                |  (and
+                |    ${thidTypeOpt("z")}
+                |    (= ($sizeId z) ($zAddId ($sizeId x) ($sizeId y)))
+                |    (forall ((i $itId)) (=> ($isInBoundId x i)
+                |                            (= ($atId z i) ($atId x i))))
+                |    (forall ((i $itId)) (=> ($isInBoundId y i)
+                |                            (= ($atId z ($itAddId ($itAddId ($lastIndexId x) ($itSubId i ($firstIndexId y))) $itOne)) ($atId y i))))))""")
+        }
         addTypeDecl(t,
           st"""(define-fun $prependId ((x $etId) (y $tId) (z $tId)) B
               |  (and
