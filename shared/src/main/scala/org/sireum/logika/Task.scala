@@ -134,7 +134,7 @@ object Task {
           case p: plugin.StmtsPlugin =>
             val (done, ss) = p.handle(th, plugins, stmts, config, csmt2, cache, reporter)
             for (state <- ss if state.ok) {
-              if (stmts.nonEmpty) {
+              if (stmts.nonEmpty && stmts(stmts.size - 1).isInstruction) {
                 val lastPos = stmts(stmts.size - 1).posOpt.get
                 logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.End), reporter, Some(lastPos))
               }
@@ -146,7 +146,7 @@ object Task {
         }
       }
       for (state <- logika.evalStmts(Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.ok) {
-        if (stmts.nonEmpty) {
+        if (stmts.nonEmpty && stmts(stmts.size - 1).isInstruction) {
           val lastPos = stmts(stmts.size - 1).posOpt.get
           logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.End), reporter, Some(lastPos))
         }
