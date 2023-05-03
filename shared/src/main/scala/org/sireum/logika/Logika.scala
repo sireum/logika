@@ -430,8 +430,9 @@ object Logika {
 
           if (!reporter.hasError) {
             if (hasLogika) {
-              if (config.transitionCache) {
+              if (config.transitionCache || config.caching) {
                 val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
+                val dummy2 = config.fingerprint
               }
               checkStmts(p.body.stmts, ISZ(), config, th, smt2f, cache, reporter, config.parCores, plugins, verifyingStartTime, T,
                 line, skipMethods, skipTypes)
@@ -535,8 +536,9 @@ object Logika {
   def checkTypedPrograms(verifyingStartTime: Z, fileSet: HashSSet[String], config: Config, th: TypeHierarchy,
                          smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter, par: Z,
                          plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
-    if (config.transitionCache) {
+    if (config.transitionCache || config.caching) {
       val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
+      val dummy2 = config.fingerprint
     }
     var typeStmts = ISZ[(ISZ[String], AST.Stmt)]()
     for (info <- th.nameMap.values) {

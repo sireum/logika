@@ -640,13 +640,17 @@ object Smt2 {
                 logDirOpt: Option[String], title: String, pos: message.Position, claims: ISZ[State.Claim],
                 reporter: Reporter): (B, Smt2Query.Result) = {
     var cached = F
-    val smt2res: Smt2Query.Result = {
+    var smt2res = Smt2Query.Result.empty
+    if (config.caching && F) {
       cache.getSmt2(T, typeHierarchy, config, timeoutInMs, claims) match {
         case Some(res) =>
           cached = T
-          res
-        case _ => checkSat(config, timeoutInMs, satQuery(config, claims, None(), reporter).render)
+          smt2res = res
+        case _ =>
       }
+    }
+    if (!cached) {
+      smt2res = checkSat(config, timeoutInMs, satQuery(config, claims, None(), reporter).render)
     }
     val r: B = smt2res.kind match {
       case Smt2Query.Result.Kind.Unsat => F
@@ -685,9 +689,11 @@ object Smt2 {
         writeFile(logDir, filename, res.query)
       case _ =>
     }
-    cache.setSmt2(T, typeHierarchy, config, timeoutInMs, claims,
-      res(info = ops.StringOps(res.info).replaceAllLiterally("Result:", "Result (Cached):"),
-        query = ops.StringOps(smt2res.query).replaceAllLiterally("Result:", "Result (Cached):")))
+    if (config.caching && F) {
+      cache.setSmt2(T, typeHierarchy, config, timeoutInMs, claims,
+        res(info = ops.StringOps(res.info).replaceAllLiterally("Result:", "Result (Cached):"),
+          query = ops.StringOps(smt2res.query).replaceAllLiterally("Result:", "Result (Cached):")))
+    }
     return (r, smt2res)
   }
 
@@ -1666,7 +1672,7 @@ object Smt2 {
   def valid(context: ISZ[String], config: Config, cache: Logika.Cache, reportQuery: B, log: B,
             logDirOpt: Option[String], title: String, pos: message.Position, premises: ISZ[State.Claim],
             conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
-    val smt2res: Smt2Query.Result = {
+    if (config.caching && F) {
       val claims = premises :+ conclusion
       cache.getSmt2(F, typeHierarchy, config, config.timeoutInMs, claims) match {
         case Some(res) =>
@@ -1676,10 +1682,9 @@ object Smt2 {
           }
           return res
         case _ =>
-          val res = checkUnsat(config, config.timeoutInMs, satQuery(config, premises, Some(conclusion), reporter).render)
-          res
       }
     }
+    val smt2res = checkUnsat(config, config.timeoutInMs, satQuery(config, premises, Some(conclusion), reporter).render)
     val header =
       st"""; Validity Check for $title
           |${smt2res.info}
@@ -1707,9 +1712,11 @@ object Smt2 {
         writeFile(logDir, filename, res.query)
       case _ =>
     }
-    cache.setSmt2(F, typeHierarchy, config, config.timeoutInMs, claims,
-      res(info = ops.StringOps(res.info).replaceAllLiterally("Result:", "Result (Cached):"),
-        query = ops.StringOps(res.query).replaceAllLiterally("Result:", "Result (Cached):")))
+    if (config.caching && F) {
+      cache.setSmt2(F, typeHierarchy, config, config.timeoutInMs, claims,
+        res(info = ops.StringOps(res.info).replaceAllLiterally("Result:", "Result (Cached):"),
+          query = ops.StringOps(res.query).replaceAllLiterally("Result:", "Result (Cached):")))
+    }
     return res
   }
 
