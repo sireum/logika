@@ -60,6 +60,10 @@ object Logika {
 
     def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): Unit
 
+    def getAssignExpTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, smt2: Smt2): Option[ISZ[(State, State.Value)]]
+
+    def setAssignExpTransition(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, nextStatesValues: ISZ[(State, State.Value)], smt2: Smt2): Unit
+
     def getSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim]): Option[Smt2Query.Result]
 
     def setSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim], result: Smt2Query.Result): Unit
@@ -3126,6 +3130,20 @@ import Util._
     }
 
     def checkSplits(): ISZ[(State, State.Value)] = {
+      val cachedExp: B = e match {
+        case _: AST.Exp.If => T
+        case _: AST.Exp.StrictPureBlock => T
+        case _ => F
+      }
+      if (config.transitionCache && cachedExp && state.ok) {
+        cache.getAssignExpTransitionAndUpdateSmt2(th, config,
+          AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)), state, smt2) match {
+          case Some(svs) =>
+            reporter.coverage(T, e.posOpt.get)
+            return svs
+          case _ =>
+        }
+      }
       val svs = expH(state)
       def check(): B = {
         if (!(svs.size > 0)) {
@@ -3142,6 +3160,10 @@ import Util._
         return r
       }
       assert(check())
+      if (config.transitionCache && cachedExp && ops.ISZOps(svs).
+        forall((p: (State, State.Value)) => p._1.status != State.Status.Error)) {
+        cache.setAssignExpTransition(th, config, AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)), state, svs, smt2)
+      }
       reporter.coverage(F, e.posOpt.get)
       return svs
     }
@@ -3246,12 +3268,24 @@ import Util._
 
   def evalAssignExpValue(split: Split.Type, smt2: Smt2, cache: Logika.Cache, t: AST.Typed, rtCheck: B, s0: State,
                          ae: AST.AssignExp, reporter: Reporter): ISZ[(State, State.Value)] = {
-    ae match {
-      case ae: AST.Stmt.Expr => return evalExp(split, smt2, cache, rtCheck, s0, ae.exp, reporter)
+    if (config.transitionCache && s0.ok) {
+      cache.getAssignExpTransitionAndUpdateSmt2(th, config, ae, s0, smt2) match {
+        case Some(svs) =>
+          reporter.coverage(T, ae.asStmt.posOpt.get)
+          return svs
+        case _ =>
+      }
+    }
+    val r: ISZ[(State, State.Value)] = ae match {
+      case ae: AST.Stmt.Expr => evalExp(split, smt2, cache, rtCheck, s0, ae.exp, reporter)
       case _ =>
         val (s1, sym) = s0.freshSym(t, ae.asStmt.posOpt.get)
-        return for (s2 <- evalAssignExp(split, smt2, cache, Some(sym), rtCheck, s1, ae, reporter)) yield (s2, sym)
+        for (s2 <- evalAssignExp(split, smt2, cache, Some(sym), rtCheck, s1, ae, reporter)) yield (s2, sym)
     }
+    if (config.transitionCache && ops.ISZOps(r).forall((p: (State, State.Value)) => p._1.status != State.Status.Error)) {
+      cache.setAssignExpTransition(th, config, ae, s0, r, smt2)
+    }
+    return r
   }
 
   def evalAssignLocalH(decl: B, s0: State, lcontext: ISZ[String], id: String, rhs: State.Value.Sym,
