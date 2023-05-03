@@ -641,7 +641,7 @@ object Smt2 {
                 reporter: Reporter): (B, Smt2Query.Result) = {
     var cached = F
     var smt2res = Smt2Query.Result.empty
-    if (config.caching && F) {
+    if (config.caching) {
       cache.getSmt2(T, typeHierarchy, config, timeoutInMs, claims) match {
         case Some(res) =>
           cached = T
@@ -689,10 +689,8 @@ object Smt2 {
         writeFile(logDir, filename, res.query)
       case _ =>
     }
-    if (config.caching && F) {
-      cache.setSmt2(T, typeHierarchy, config, timeoutInMs, claims,
-        res(info = ops.StringOps(res.info).replaceAllLiterally("Result:", "Result (Cached):"),
-          query = ops.StringOps(smt2res.query).replaceAllLiterally("Result:", "Result (Cached):")))
+    if (config.caching) {
+      cache.setSmt2(T, typeHierarchy, config, timeoutInMs, claims, res)
     }
     return (r, smt2res)
   }
@@ -1672,7 +1670,7 @@ object Smt2 {
   def valid(context: ISZ[String], config: Config, cache: Logika.Cache, reportQuery: B, log: B,
             logDirOpt: Option[String], title: String, pos: message.Position, premises: ISZ[State.Claim],
             conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
-    if (config.caching && F) {
+    if (config.caching) {
       val claims = premises :+ conclusion
       cache.getSmt2(F, typeHierarchy, config, config.timeoutInMs, claims) match {
         case Some(res) =>
@@ -1712,10 +1710,8 @@ object Smt2 {
         writeFile(logDir, filename, res.query)
       case _ =>
     }
-    if (config.caching && F) {
-      cache.setSmt2(F, typeHierarchy, config, config.timeoutInMs, claims,
-        res(info = ops.StringOps(res.info).replaceAllLiterally("Result:", "Result (Cached):"),
-          query = ops.StringOps(res.query).replaceAllLiterally("Result:", "Result (Cached):")))
+    if (config.caching) {
+      cache.setSmt2(F, typeHierarchy, config, config.timeoutInMs, claims, res)
     }
     return res
   }
