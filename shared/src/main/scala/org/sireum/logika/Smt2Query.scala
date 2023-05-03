@@ -38,6 +38,8 @@ object Smt2Query {
       "Timeout"
       "Error"
     }
+
+    val empty: Result = Result(Kind.Error, "", "", "", "", 0, F)
   }
 
   @datatype class Result(val kind: Result.Kind.Type,
