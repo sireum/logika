@@ -79,7 +79,7 @@ object Smt2Impl {
       filenameCount = filenameCount,
       seqLits = HashSSet.empty
     )
-    r.addType(config, AST.Typed.z, Logika.Reporter.create)
+    r.addType(config, AST.Typed.z, message.Reporter.create)
     return r
   }
 
