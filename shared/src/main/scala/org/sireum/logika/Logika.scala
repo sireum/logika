@@ -117,16 +117,18 @@ object Logika {
         "Verified"
       }
     }
-    def create: Reporter = {
-      return ReporterImpl(ISZ())
-    }
   }
 
   @msig trait Reporter extends message.Reporter {
+    def numOfVCs: Z
+    def numOfSats: Z
+    def vcMillis: Z
+    def satMillis: Z
+
     def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
               th: TypeHierarchy, s: State, atLinesFresh: B): Unit
 
-    def query(pos: Position, title: String, time: Z, forceReport: B, detailElided:B, r: Smt2Query.Result): Unit
+    def query(pos: Position, title: String, isSat: B, time: Z, forceReport: B, detailElided:B, r: Smt2Query.Result): Unit
 
     def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit
 
@@ -137,53 +139,6 @@ object Logika {
     def combine(other: Reporter): Reporter
 
     def illFormed(): Unit
-  }
-
-  @record class ReporterImpl(var _messages: ISZ[Message]) extends Reporter {
-    var _ignore: B = F
-
-    override def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
-                       th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
-    }
-
-    override def query(pos: Position, title: String, time: Z, forceReport: B, detailElided: B, r: Smt2Query.Result): Unit = {
-    }
-
-    override def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit = {
-    }
-
-    override def illFormed(): Unit = {
-    }
-
-    override def coverage(cached: B, pos: Position): Unit = {
-    }
-
-    override def empty: Reporter = {
-      return ReporterImpl(ISZ())
-    }
-
-    override def messages: ISZ[Message] = {
-      return _messages
-    }
-
-    override def ignore: B = {
-      return _ignore
-    }
-
-    override def setIgnore(newIgnore: B): Unit = {
-      _ignore = newIgnore
-    }
-
-    override def setMessages(newMessages: ISZ[Message]): Unit = {
-      _messages = newMessages
-    }
-
-    override def timing(desc: String, timeInMs: Z): Unit = {}
-
-    override def combine(other: Reporter): Reporter = {
-      _messages = _messages ++ other.messages
-      return this
-    }
   }
 
   val kind: String = "Logika"

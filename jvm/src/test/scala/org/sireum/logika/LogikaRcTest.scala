@@ -70,7 +70,7 @@ class LogikaRcTest extends SireumRcSpec {
     Smt2Invoke.haltOnError = T
     val isSimplified = path.last.endsWith(simplifiedSuffix)
     val p = if (isSimplified) path.dropRight(1) :+ path.last.replace(simplifiedSuffix, "") else path
-    val reporter = Logika.Reporter.create
+    val reporter = org.sireum.logika.ReporterImpl.create
     var c = config(simplifiedQuery = isSimplified)
     var line = 0
     p(p.size - 1) match {
