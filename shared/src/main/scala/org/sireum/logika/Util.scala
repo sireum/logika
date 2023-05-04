@@ -105,7 +105,7 @@ object Util {
 
   }
 
-  @record class UnsupportedFeatureDetector(val posOpt: Option[Position], val id: String, val reporter: Reporter) extends AST.MTransformer {
+  @record class UnsupportedFeatureDetector(val posOpt: Option[Position], val id: String, val reporter: message.Reporter) extends AST.MTransformer {
     override def preExpQuantEach(o: AST.Exp.QuantEach): AST.MTransformer.PreResult[AST.Exp.Quant] = {
       transformExp(o.seq)
       for (p <- o.fun.params) {
@@ -1424,13 +1424,13 @@ object Util {
               val t = let.adt.tipe.asInstanceOf[AST.Typed.Name]
                 th.typeMap.get(t.ids).get match {
                   case _: TypeInfo.Adt =>
-                    val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), Reporter.create)
+                    val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), message.Reporter.create)
                     val index = ops.ISZOps(resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames).indexOf(let.id)
                     val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
                       e, index)), AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
                     return Some(r)
                   case _: TypeInfo.Sig =>
-                    val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), Reporter.create)
+                    val (_, resOpt, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), message.Reporter.create)
                     val index = ops.ISZOps(resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames).indexOf(let.id)
                     val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
                       e, index)), AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
@@ -1941,8 +1941,14 @@ object Util {
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
       val stmts = method.bodyOpt.get.stmts
       val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
-        val spBody = stmts(0).asInstanceOf[AST.Stmt.Var].initOpt.get
-        logika.evalAssignExp(Split.Default, smt2, cache, None(), T, state, spBody, reporter)
+        val stmt = stmts(0).asInstanceOf[AST.Stmt.Var]
+        val spBody = stmt.initOpt.get
+        val pos = spBody.asStmt.posOpt.get
+        val t = stmt.attr.typedOpt.get
+        val (s0, v) = logika.singleStateValue(pos, state,
+          logika.evalAssignExpValue(Split.Default, smt2, cache, t, T, state, spBody, reporter))
+        val (s1, sym) = resIntro(pos, s0, logika.context.methodName, t, Some(pos))
+        ISZ(s1.addClaim(State.Claim.Let.Def(sym, v)))
       } else {
         logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
       }
@@ -2284,7 +2290,7 @@ object Util {
   }
 
   def detectUnsupportedFeatures(stmt: AST.Stmt.Method): ISZ[message.Message] = {
-    val ufd = UnsupportedFeatureDetector(stmt.sig.id.attr.posOpt, stmt.sig.id.value, Reporter.create)
+    val ufd = UnsupportedFeatureDetector(stmt.sig.id.attr.posOpt, stmt.sig.id.value, message.Reporter.create)
     for (p <- stmt.sig.params) {
       p.tipe match {
         case t: AST.Type.Fun if t.isByName =>
