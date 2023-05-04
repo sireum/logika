@@ -30,11 +30,12 @@ import org.sireum.message._
 import org.sireum.lang.tipe.TypeHierarchy
 
 object ReporterImpl {
-  def create: Logika.Reporter = new ReporterImpl(F, ISZ(), 0, 0, 0, 0)
+  def create: ReporterImpl = new ReporterImpl(F, ISZ(), F, 0, 0, 0, 0)
 }
 
 final class ReporterImpl(var _ignore: B,
                          var _messages: ISZ[Message],
+                         var collectStats: B,
                          var numOfVCs: Z,
                          var numOfSats: Z,
                          var vcMillis: Z,
@@ -56,14 +57,15 @@ final class ReporterImpl(var _ignore: B,
     this
   }
 
-  override def $clone: ReporterImpl = new ReporterImpl(_ignore, _messages, numOfVCs, numOfSats, vcMillis, satMillis)
+  override def $clone: ReporterImpl = new ReporterImpl(_ignore, _messages, collectStats, numOfVCs, numOfSats,
+    vcMillis, satMillis)
 
   override def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
                      th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
   }
 
   override def query(pos: Position, title: String, isSat: B, time: Z, forceReport: B, detailElided: B,
-                     r: Smt2Query.Result): Unit = synchronized {
+                     r: Smt2Query.Result): Unit = if (collectStats) synchronized {
     if (isSat) {
       numOfSats = numOfSats + 1
       satMillis = satMillis + time
@@ -83,7 +85,7 @@ final class ReporterImpl(var _ignore: B,
   }
 
   override def empty: Logika.Reporter = {
-    return new ReporterImpl(F, ISZ(), 0, 0, 0, 0)
+    return new ReporterImpl(F, ISZ(), collectStats, 0, 0, 0, 0)
   }
 
   override def messages: ISZ[Message] = {
@@ -104,12 +106,14 @@ final class ReporterImpl(var _ignore: B,
 
   override def timing(desc: String, timeInMs: Z): Unit = {}
 
-  override def combine(other: Logika.Reporter): Logika.Reporter = synchronized {
+  override def combine(other: Logika.Reporter): Logika.Reporter = {
     _messages = _messages ++ other.messages
-    numOfVCs = numOfVCs + other.numOfVCs
-    numOfSats = numOfSats + other.numOfSats
-    vcMillis = vcMillis + other.vcMillis
-    satMillis = satMillis + other.satMillis
+    if (collectStats) synchronized {
+      numOfVCs = numOfVCs + other.numOfVCs
+      numOfSats = numOfSats + other.numOfSats
+      vcMillis = vcMillis + other.vcMillis
+      satMillis = satMillis + other.satMillis
+    }
     return this
   }
 
