@@ -756,9 +756,13 @@ import Util._
     def rand(num: Z): (State, State.Value) = {
       val key: ClaimsToExps.AtKey = (ISZ(), ".random", t, exp.num.value)
       atMap.get(key) match {
-        case Some((poss, _)) =>
-          val (s0, sym) = state.freshSym(t, pos)
-          return (s0.addClaim(State.Claim.Let.Random(sym, F, poss(0))), sym)
+        case Some((poss, _, sym)) =>
+          if (poss.size > 1) {
+            val (s0, sym) = state.freshSym(t, pos)
+            return (s0.addClaim(State.Claim.Let.Random(sym, F, poss(0))), sym)
+          } else {
+            return (state, sym)
+          }
         case _ =>
           reporter.error(exp.posOpt, kind, st"Could not find .random of $t with the occurrence number $num".render)
           return (state(status = State.Status.Error), State.errorValue)
@@ -768,9 +772,13 @@ import Util._
     def local(res: AST.ResolvedInfo.LocalVar, num: Z): (State, State.Value) = {
       val key: ClaimsToExps.AtKey = (ISZ(), st"${(res.context :+ res.id, ".")}".render, t, exp.num.value)
       atMap.get(key) match {
-        case Some((poss, num)) =>
-          val (s0, sym) = state.freshSym(t, pos)
-          return (s0.addClaim(State.Claim.Let.Id(sym, T, res.context, res.id, num, poss)), sym)
+        case Some((poss, num, sym)) =>
+          if (poss.size > 1) {
+            val (s0, sym) = state.freshSym(t, pos)
+            return (s0.addClaim(State.Claim.Let.Id(sym, T, res.context, res.id, num, poss)), sym)
+          } else {
+            return (state, sym)
+          }
         case _ =>
           reporter.error(exp.posOpt, kind, st"Could not find ${res.id} with the occurrence number $num".render)
           return (state(status = State.Status.Error), State.errorValue)
@@ -780,9 +788,13 @@ import Util._
     def global(res: AST.ResolvedInfo.Var, num: Z): (State, State.Value) = {
       val key: ClaimsToExps.AtKey = (res.owner :+ res.id, "", t, exp.num.value)
       atMap.get(key) match {
-        case Some((poss, num)) =>
-          val (s0, sym) = state.freshSym(t, pos)
-          return (s0.addClaim(State.Claim.Let.Name(sym, key._1, num, poss)), sym)
+        case Some((poss, num, sym)) =>
+          if (poss.size > 1) {
+            val (s0, sym) = state.freshSym(t, pos)
+            return (s0.addClaim(State.Claim.Let.Name(sym, key._1, num, poss)), sym)
+          } else {
+            return (state, sym)
+          }
         case _ =>
           reporter.error(exp.posOpt, kind, st"Could not find ${(res.owner :+ res.id, ".")} with the occurrence number $num".render)
           return (state(status = State.Status.Error), State.errorValue)
