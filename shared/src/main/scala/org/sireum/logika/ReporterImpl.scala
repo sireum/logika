@@ -81,7 +81,7 @@ final class ReporterImpl(var _ignore: B,
   override def illFormed(): Unit = {
   }
 
-  override def coverage(cached: B, pos: Position): Unit = {
+  override def coverage(setCache: B, cached: U64, pos: Position): Unit = {
   }
 
   override def empty: Logika.Reporter = {
