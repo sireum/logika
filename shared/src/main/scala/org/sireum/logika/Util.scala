@@ -1780,21 +1780,22 @@ object Util {
     var s = state
     s = checkInv(T, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
     for (r <- requires if s.ok) {
-      var cached = F
+      var cacheHit = F
       if (logika.config.transitionCache) {
         cache.getTransitionAndUpdateSmt2(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s, smt2) match {
-          case Some(ISZ(nextState)) =>
-            cached = T
-            reporter.coverage(T, r.posOpt.get)
+          case Some((ISZ(nextState), cached)) =>
+            cacheHit = T
+            reporter.coverage(F, cached, r.posOpt.get)
             s = nextState
           case _ =>
         }
       }
-      if (!cached) {
+      if (!cacheHit) {
         val s0 = s
         s = logika.evalAssume(smt2, cache, T, "Precondition", s, r, r.posOpt, reporter)._1
         if (logika.config.transitionCache && s.ok) {
-          cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s0, ISZ(s), smt2)
+          val cached = cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s0, ISZ(s), smt2)
+          reporter.coverage(T, cached, r.posOpt.get)
         }
       }
     }
@@ -1812,21 +1813,22 @@ object Util {
         var s = state
         s = checkInv(F, s, logika, smt2, cache, invs, methodPosOpt, TypeChecker.emptySubstMap, reporter)
         for (e <- ensures if s.ok) {
-          var cached = F
+          var cacheHit = F
           if (logika.config.transitionCache) {
             cache.getTransitionAndUpdateSmt2(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s, smt2) match {
-              case Some(ISZ(nextState)) =>
-                cached = T
-                reporter.coverage(T, e.posOpt.get)
+              case Some((ISZ(nextState), cached)) =>
+                cacheHit = T
+                reporter.coverage(F, cached, e.posOpt.get)
                 s = nextState
               case _ =>
             }
           }
-          if (!cached) {
+          if (!cacheHit) {
             val s0 = s
             s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
             if (logika.config.transitionCache && s.ok) {
-              cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s0, ISZ(s), smt2)
+              val cached = cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s0, ISZ(s), smt2)
+              reporter.coverage(T, cached, e.posOpt.get)
             }
           }
         }
@@ -2481,9 +2483,9 @@ object Util {
     if (logika.config.transitionCache) {
       cache.getTransitionAndUpdateSmt2(logika.th, logika.config,
         Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, smt2) match {
-        case Some(ISZ(nextState)) =>
+        case Some((ISZ(nextState), cached)) =>
           for (inv <- invs) {
-            reporter.coverage(T, inv.posOpt.get)
+            reporter.coverage(F, cached, inv.posOpt.get)
           }
           return nextState
         case _ =>
@@ -2529,8 +2531,11 @@ object Util {
       s4 = logika.evalInv(posOpt, isAssume, title, smt2, cache, rtCheck, s4, inv.ast, substMap, reporter)
     }
     if (logika.config.transitionCache && s4.ok) {
-      cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0,
-        ISZ(s4), smt2)
+      val cached = cache.setTransition(logika.th, logika.config,
+        Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, ISZ(s4), smt2)
+      for (inv <- invs) {
+        reporter.coverage(T, cached, inv.posOpt.get)
+      }
     }
     return s4
   }

@@ -63,15 +63,7 @@ import org.sireum._
                        val patternExhaustive: B) {
 
   @memoize def fingerprint: U64 = {
-    val digest = ops.StringOps(string).sha3(T, T)
-    return (conversions.U8.toU64(digest(0)) & U64.fromZ(0xFF)) << U64.fromZ(56) |
-      (conversions.U8.toU64(digest(1)) & U64.fromZ(0xFF)) << U64.fromZ(48) |
-      (conversions.U8.toU64(digest(2)) & U64.fromZ(0xFF)) << U64.fromZ(40) |
-      (conversions.U8.toU64(digest(3)) & U64.fromZ(0xFF)) << U64.fromZ(32) |
-      (conversions.U8.toU64(digest(4)) & U64.fromZ(0xFF)) << U64.fromZ(24) |
-      (conversions.U8.toU64(digest(5)) & U64.fromZ(0xFF)) << U64.fromZ(16) |
-      (conversions.U8.toU64(digest(6)) & U64.fromZ(0xFF)) << U64.fromZ(8) |
-      (conversions.U8.toU64(digest(7)) & U64.fromZ(0xFF))
+    return ops.StringOps(string).sha3U64(T, T)
   }
 }
 

@@ -30,25 +30,34 @@ import org.sireum.lang.{ast => AST}
 
 @datatype trait StepProofContext {
   @pure def stepNo: AST.ProofAst.StepId
+  @strictpure def prettyST: ST
 }
 
 object StepProofContext {
 
   @datatype class Regular(val stepNo: AST.ProofAst.StepId,
                           val exp: AST.Exp,
-                          val claims: ISZ[State.Claim]) extends StepProofContext
+                          val claims: ISZ[State.Claim]) extends StepProofContext {
+    @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${exp.prettyST}, ${(for (claim <- claims) yield claim.toRawST, ", ")})"
+  }
 
   @datatype class SubProof(val stepNo: AST.ProofAst.StepId,
                            val assumption: AST.Exp,
-                           val claims: ISZ[AST.Exp]) extends StepProofContext
+                           val claims: ISZ[AST.Exp]) extends StepProofContext {
+    @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${assumption.prettyST}, ${(for (claim <- claims) yield claim.prettyST, ", ")})"
+  }
 
   @datatype class FreshSubProof(val stepNo: AST.ProofAst.StepId,
                                 val params: ISZ[AST.ProofAst.Step.Let.Param],
-                                val claims: ISZ[AST.Exp]) extends StepProofContext
+                                val claims: ISZ[AST.Exp]) extends StepProofContext {
+    @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${(for (param <- params) yield param.prettyST, ", ")}, ${(for (claim <- claims) yield claim.prettyST, ", ")})"
+  }
 
   @datatype class FreshAssumeSubProof(val stepNo: AST.ProofAst.StepId,
                                       val params: ISZ[AST.ProofAst.Step.Let.Param],
                                       val assumption: AST.Exp,
-                                      val claims: ISZ[AST.Exp]) extends StepProofContext
+                                      val claims: ISZ[AST.Exp]) extends StepProofContext {
+    @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${(for (param <- params) yield param.prettyST, ", ")}, ${assumption.prettyST}, ${(for (claim <- claims) yield claim.prettyST, ", ")})"
+  }
 
 }
