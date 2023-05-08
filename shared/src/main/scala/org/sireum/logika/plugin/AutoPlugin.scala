@@ -37,7 +37,7 @@ import org.sireum.logika.Logika.Reporter
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
-  val iszzTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.z)))
+  val iszStepIdTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.stepId)))
 
   val name: String = "AutoPlugin"
 
@@ -70,7 +70,7 @@ import org.sireum.logika.Logika.Reporter
         val invokeId = just.invokeIdent.id.value
         val ao: Option[ISZ[AST.ProofAst.StepId]] = if (just.args.size == 1) {
           just.args(0) match {
-            case arg: AST.Exp.Invoke if arg.typedOpt == iszzTypedOpt =>
+            case arg: AST.Exp.Invoke if arg.typedOpt == iszStepIdTypedOpt =>
               arg.attr.resOpt.get match {
                 case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
                   AST.Util.toStepIds(arg.args, Logika.kind, reporter)
