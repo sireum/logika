@@ -83,7 +83,7 @@ import SameDiffPlugin._
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
-  val iszzTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.z)))
+  val iszStepIdTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.stepId)))
 
   val name: String = "SameDiffPlugin"
 
@@ -115,7 +115,7 @@ import SameDiffPlugin._
             return None()
           }
           just.args(1) match {
-            case arg: AST.Exp.Invoke if arg.typedOpt == iszzTypedOpt =>
+            case arg: AST.Exp.Invoke if arg.typedOpt == iszStepIdTypedOpt =>
               arg.attr.resOpt.get match {
                 case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
                   AST.Util.toStepIds(arg.args, Logika.kind, reporter) match {

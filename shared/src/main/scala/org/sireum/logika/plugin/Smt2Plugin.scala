@@ -38,7 +38,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 
   val name: String = "Smt2"
 
-  val iszzTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.z)))
+  val iszStepIdTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.stepId)))
 
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
@@ -62,7 +62,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val (options, timeout, resourceLimit, argsOpt): (String, Z, Z, Option[ISZ[AST.ProofAst.StepId]]) = just.args match {
       case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ) => (s.value, t.value, r.value, None())
-      case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ, invoke: AST.Exp.Invoke) if invoke.typedOpt == iszzTypedOpt =>
+      case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ, invoke: AST.Exp.Invoke) if invoke.typedOpt == iszStepIdTypedOpt =>
         invoke.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
             (s.value, t.value, r.value, AST.Util.toStepIds(invoke.args, Logika.kind, reporter))
