@@ -608,7 +608,6 @@ import Util._
       case e: AST.Exp.LitR => return State.Value.R(e.value, e.posOpt.get)
       case e: AST.Exp.LitString => return State.Value.String(e.value, e.posOpt.get)
       case e: AST.Exp.LitZ => return State.Value.Z(e.value, e.posOpt.get)
-      case e: AST.Exp.LitStepId => halt(s"Infeasible: $e")
     }
   }
 
@@ -3010,7 +3009,6 @@ import Util._
 
     def expH(s0: State): ISZ[(State, State.Value)] = {
       e match {
-        case _: AST.Exp.LitStepId => return ISZ((s0(status = State.Status.Error), State.errorValue))
         case lit: AST.Lit => return ISZ((s0, evalLit(smt2, lit, reporter)))
         case lit: AST.Exp.StringInterpolate =>
           lit.prefix match {
