@@ -29,11 +29,11 @@ copy()
   )
   Deduce(
     //@formatter:off
-    sn"All humans are mortals"
+    "All humans are mortals"
       #> ∀{(x: T) => human(x) ->: mortal(x)}        by Auto,
     1 #> human(Socrates)                            by Auto,
-    2 #> (human(Socrates) ->: mortal(Socrates))     by allE((x: T) => human(x) ->: mortal(x), Socrates) and sn"All humans are mortals",
-    3 #> mortal(Socrates)                           by implyE(human(Socrates), mortal(Socrates))        and (2, 1),
+    2 #> (human(Socrates) ->: mortal(Socrates))     by allE((x: T) => human(x) ->: mortal(x), Socrates) and "All humans are mortals",
+    3 #> mortal(Socrates)                           by implyE(human(Socrates), mortal(Socrates))        and (2, 1)
     //@formatter:on
   )
 }

@@ -77,7 +77,7 @@ import org.sireum.logika.Logika.Reporter
                 case _ =>
                   AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
               }
-            case arg: AST.Exp.LitStepId => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
+            case arg: AST.Exp.LitString => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
             case arg: AST.Exp.LitZ => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
             case arg => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
           }
