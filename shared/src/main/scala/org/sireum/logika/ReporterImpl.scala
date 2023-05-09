@@ -29,19 +29,26 @@ import org.sireum._
 import org.sireum.message._
 import org.sireum.lang.tipe.TypeHierarchy
 
+import java.util.concurrent.atomic.AtomicLong
+
 object ReporterImpl {
-  def create: ReporterImpl = new ReporterImpl(F, ISZ(), F, 0, 0, 0, 0)
+  def create: ReporterImpl = new ReporterImpl(F, ISZ(), F, new AtomicLong(0), new AtomicLong(0), new AtomicLong(0), new AtomicLong(0))
 }
 
 final class ReporterImpl(var _ignore: B,
                          var _messages: ISZ[Message],
                          var collectStats: B,
-                         var numOfVCs: Z,
-                         var numOfSats: Z,
-                         var vcMillis: Z,
-                         var satMillis: Z) extends Logika.Reporter {
+                         val _numOfVCs: AtomicLong,
+                         val _numOfSats: AtomicLong,
+                         val _vcMillis: AtomicLong,
+                         val _satMillis: AtomicLong) extends Logika.Reporter {
   var clonable: Boolean = T
   var owned: Boolean = F
+
+  override def numOfVCs: Z = _numOfVCs.get
+  override def numOfSats: Z = _numOfSats.get
+  override def vcMillis: Z = _vcMillis.get
+  override def satMillis: Z = _satMillis.get
 
   override def $clonable: Boolean = clonable
 
@@ -57,21 +64,21 @@ final class ReporterImpl(var _ignore: B,
     this
   }
 
-  override def $clone: ReporterImpl = new ReporterImpl(_ignore, _messages, collectStats, numOfVCs, numOfSats,
-    vcMillis, satMillis)
+  override def $clone: ReporterImpl = new ReporterImpl(_ignore, _messages, collectStats, _numOfVCs, _numOfSats,
+    _vcMillis, _satMillis)
 
   override def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
                      th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
   }
 
   override def query(pos: Position, title: String, isSat: B, time: Z, forceReport: B, detailElided: B,
-                     r: Smt2Query.Result): Unit = if (collectStats) synchronized {
+                     r: Smt2Query.Result): Unit = if (collectStats) {
     if (isSat) {
-      numOfSats = numOfSats + 1
-      satMillis = satMillis + time
+      _numOfSats.incrementAndGet
+      _satMillis.addAndGet(time.toLong)
     } else {
-      numOfVCs = numOfVCs + 1
-      vcMillis = vcMillis + time
+      _numOfVCs.incrementAndGet
+      _vcMillis.addAndGet(time.toLong)
     }
   }
 
@@ -85,7 +92,7 @@ final class ReporterImpl(var _ignore: B,
   }
 
   override def empty: Logika.Reporter = {
-    return new ReporterImpl(F, ISZ(), collectStats, 0, 0, 0, 0)
+    return new ReporterImpl(F, ISZ(), collectStats, _numOfVCs, _numOfSats, _vcMillis, _satMillis)
   }
 
   override def messages: ISZ[Message] = {
@@ -108,11 +115,11 @@ final class ReporterImpl(var _ignore: B,
 
   override def combine(other: Logika.Reporter): Logika.Reporter = {
     _messages = _messages ++ other.messages
-    if (collectStats) synchronized {
-      numOfVCs = numOfVCs + other.numOfVCs
-      numOfSats = numOfSats + other.numOfSats
-      vcMillis = vcMillis + other.vcMillis
-      satMillis = satMillis + other.satMillis
+    if (collectStats) {
+      _numOfVCs.addAndGet(other.numOfVCs.toLong)
+      _numOfSats.addAndGet(other.numOfSats.toLong)
+      _vcMillis.addAndGet(other.vcMillis.toLong)
+      _satMillis.addAndGet(other.satMillis.toLong)
     }
     return this
   }
