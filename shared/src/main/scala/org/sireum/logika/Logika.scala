@@ -342,20 +342,16 @@ object Logika {
 
     val smt2 = smt2f(th)
 
-    def combine(r1: Reporter, r2: Reporter): Reporter = {
-      val r = r1.combine(r2)
-      return r
-    }
-
-    def compute(task: Task): Reporter = {
+    def compute(task: Task): B = {
       val r = reporter.empty
       val csmt2 = smt2
       task.compute(csmt2, cache, r)
-      return r
+      reporter.combine(r)
+      return T
     }
 
     extension.Cancel.cancellable { () =>
-      combine(reporter, ops.ISZOps(tasks).mParMapFoldLeftCores[Reporter, Reporter](compute _, combine _, reporter.empty, par))
+      ops.ISZOps(tasks).mParMapCores[B](compute _, par)
     }
     if (verifyingStartTime != 0) {
       reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
@@ -3669,11 +3665,12 @@ import Util._
       (allReturns && config.branchPar == Config.BranchPar.OnlyAllReturns))) {
       val inputs: ISZ[Z] = branches.indices
 
-      def computeBranch(i: Z): (Option[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])], Z, Smt2, ISZ[Message]) = {
+      def computeBranch(i: Z): (Option[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])], Z, Smt2) = {
         val rep = reporter.empty
         val lsmt2 = smt2
         val (nextFresh, lcsOpt) = evalBranch(isMatch, split, lsmt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
-        return (lcsOpt, nextFresh, lsmt2, rep.messages)
+        reporter.combine(rep)
+        return (lcsOpt, nextFresh, lsmt2)
       }
 
       if (!(branches.size == 2 && (branches(1).body.stmts.isEmpty || branches(0).body.stmts.isEmpty))) {
@@ -3681,7 +3678,6 @@ import Util._
         val outputs = ops.MSZOps(inputs.toMS).mParMapCores(computeBranch _, config.branchParCores)
         for (i <- 0 until outputs.size) {
           smt2.combineWith(outputs(i)._3)
-          reporter.reports(outputs(i)._4)
         }
         for (i <- 0 until outputs.size if first < 0) {
           if (outputs(i)._1.nonEmpty) {

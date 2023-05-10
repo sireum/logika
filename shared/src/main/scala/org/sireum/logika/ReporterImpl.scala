@@ -32,7 +32,8 @@ import org.sireum.lang.tipe.TypeHierarchy
 import java.util.concurrent.atomic.AtomicLong
 
 object ReporterImpl {
-  def create: ReporterImpl = new ReporterImpl(F, ISZ(), F, new AtomicLong(0), new AtomicLong(0), new AtomicLong(0), new AtomicLong(0))
+  def create: ReporterImpl = new ReporterImpl(F, ISZ(), F, new AtomicLong(0), new AtomicLong(0), new AtomicLong(0),
+    new AtomicLong(0))
 }
 
 final class ReporterImpl(var _ignore: B,
@@ -72,15 +73,16 @@ final class ReporterImpl(var _ignore: B,
   }
 
   override def query(pos: Position, title: String, isSat: B, time: Z, forceReport: B, detailElided: B,
-                     r: Smt2Query.Result): Unit = if (collectStats) {
-    if (isSat) {
-      _numOfSats.incrementAndGet
-      _satMillis.addAndGet(time.toLong)
-    } else {
-      _numOfVCs.incrementAndGet
-      _vcMillis.addAndGet(time.toLong)
+                     r: Smt2Query.Result): Unit =
+    if (collectStats) {
+      if (isSat) {
+        _numOfSats.incrementAndGet
+        _satMillis.addAndGet(time.toLong)
+      } else {
+        _numOfVCs.incrementAndGet
+        _vcMillis.addAndGet(time.toLong)
+      }
     }
-  }
 
   override def inform(pos: Position, kind: Logika.Reporter.Info.Kind.Type, message: String): Unit = {
   }
@@ -113,14 +115,8 @@ final class ReporterImpl(var _ignore: B,
 
   override def timing(desc: String, timeInMs: Z): Unit = {}
 
-  override def combine(other: Logika.Reporter): Logika.Reporter = {
+  override def combine(other: Logika.Reporter): Logika.Reporter = synchronized {
     _messages = _messages ++ other.messages
-    if (collectStats) {
-      _numOfVCs.addAndGet(other.numOfVCs.toLong)
-      _numOfSats.addAndGet(other.numOfSats.toLong)
-      _vcMillis.addAndGet(other.vcMillis.toLong)
-      _satMillis.addAndGet(other.satMillis.toLong)
-    }
     return this
   }
 
