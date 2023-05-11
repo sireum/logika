@@ -482,7 +482,7 @@ object Smt2 {
       s1 = s3.addClaim(State.Claim.Let.ProofFunApply(v3, pf, args))
       val claims = State.Claim.Imply(F, ISZ(
         State.Claim.And(ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)),
-        State.Claim.Let.Def(v, v3)
+        State.Claim.Eq(v, v3)
       ))
       ecs = ecs :+ embeddedClaims(config, T, T, ISZ(claims), ISZ(), None(), HashSMap.empty, reporter)
     }
@@ -1369,6 +1369,7 @@ object Smt2 {
           val element = enumId(owner, elementId)
           elements = elements :+ element
           addSort(t, st"(declare-const $element $tid)")
+          addSort(t, st"(assert (= $element ${typeHierarchyId(AST.Typed.Name(t.ids :+ elementId, ISZ()))}))")
           addSort(t, st"(assert (= ($ordinalOp $element) $ordinal))")
           addSort(t, st"""(assert (= ($nameOp $element) "$elementId"))""")
           ordinal = ordinal + 1
@@ -2023,16 +2024,14 @@ object Smt2 {
       }
       val usedSyms = uscdid.syms
       val syms = lsyms.elements ++ (for (ds <- lets.values if ds.size > 1 && usedSyms.contains(ds(0).sym)) yield ds(0).sym)
-      var decls: ISZ[ST] =
-        (for (id <- lids.values) yield st"(${localId(id)} ${typeId(id.sym.tipe)})") ++
-          (for (sym <- syms) yield st"(${v2ST(config, sym, reporter)} ${typeId(sym.tipe)})")
-      for (cid <- uscdid.currentDeclIds) {
-        decls = decls :+ st"(${currentLocalId(cid)} ${typeId(cid.sym.tipe)})"
-      }
-      if (decls.nonEmpty) {
+      if (lids.nonEmpty || syms.nonEmpty || uscdid.currentDeclIds.nonEmpty) {
+        val (decls, body) = addTypeConstraintsH(isImply,
+          (for (id <- lids.values) yield (localId(id), id.sym.tipe, T)) ++
+            (for (sym <- syms) yield (v2ST(config, sym, reporter), sym.tipe, F)) ++
+            (for (cid <- uscdid.currentDeclIds) yield (currentLocalId(cid), cid.sym.tipe, T)), r)
         r =
           st"""(${if (isImply) "forall" else "exists"} (${(decls, " ")})
-              |  $r)"""
+              |  $body)"""
       }
       return r
     }
@@ -2102,7 +2101,11 @@ object Smt2 {
       case c: State.Claim.Let.Def =>
         return v2st(config, c.value, reporter)
       case c: State.Claim.Let.TypeTest =>
-        return st"(${if (c.isEq) "=" else "sub-type"} (type-of ${v2st(config, c.value, reporter)}) ${typeHierarchyId(c.tipe)})"
+        val typeOf: ST = c.tipe match {
+          case t: AST.Typed.Name if t.ids == AST.Typed.isName || t.ids == AST.Typed.msName => sTypeOfName(c.tipe)
+          case _ => st"type-of"
+        }
+        return st"(${if (c.isEq) "=" else "sub-type"} ($typeOf ${v2st(config, c.value, reporter)}) ${typeHierarchyId(c.tipe)})"
       case c: State.Claim.Let.Quant =>
         val (qvars, body) = addTypeConstraints(c.isAll, for (qvar <- c.vars) yield (qvar2ST(qvar), qvar.tipe),
           embeddedClaims(config, c.isAll, T, c.claims, ISZ(), Some(lets), declIds, reporter))
