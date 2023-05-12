@@ -175,6 +175,7 @@ object Logika {
   val emptyBindings: Bindings = Map.empty[String, (State.Value.Sym, AST.Typed, Position)]
   val trueClaim: State.Claim = State.Claim.And(ISZ())
   val idxSuffix: String = "$Idx"
+  val zeroU64: U64 = U64.fromZ(0)
 
   def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
@@ -2060,7 +2061,8 @@ import Util._
 
       val (receiverModified, modLocals) = contract.modifiedLocalVars(lComp.context.receiverLocalTypeOpt, typeSubstMap)
 
-      val pfOpt: Option[State.ProofFun] = if (info.sig.isPure && !info.hasBody && info.contract.isEmpty) {
+      val pfOpt: Option[State.ProofFun] = if (config.pureFun ||
+        (info.sig.isPure && !info.hasBody && info.contract.isEmpty)) {
         val typedAttr = AST.TypedAttr(posOpt, None())
         val (s8, pf) = Util.pureMethod(th, config, plugins, smt2, cache, s1, lComp.context.receiverTypeOpt,
           info.sig.funType.subst(typeSubstMap), lComp.context.methodOpt.get.owner, info.sig.id.value, info.isHelper,
@@ -3163,13 +3165,16 @@ import Util._
         return r
       }
       assert(check())
-      if (config.transitionCache && cachedExp && ops.ISZOps(svs).
-        forall((p: (State, State.Value)) => p._1.status != State.Status.Error)) {
-        val cached = cache.setAssignExpTransition(th, config, AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)),
-          state, svs, smt2)
-        reporter.coverage(T, cached, e.posOpt.get)
+      if (cachedExp) {
+        if (config.transitionCache && ops.ISZOps(svs).
+          forall((p: (State, State.Value)) => p._1.status != State.Status.Error)) {
+          val cached = cache.setAssignExpTransition(th, config, AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)),
+            state, svs, smt2)
+          reporter.coverage(T, cached, e.posOpt.get)
+        } else {
+          reporter.coverage(F, zeroU64, e.posOpt.get)
+        }
       }
-      reporter.coverage(F, U64.fromZ(0), e.posOpt.get)
       return svs
     }
 
@@ -3291,6 +3296,8 @@ import Util._
     if (config.transitionCache && ops.ISZOps(r).forall((p: (State, State.Value)) => p._1.status != State.Status.Error)) {
       val cached = cache.setAssignExpTransition(th, config, ae, s0, r, smt2)
       reporter.coverage(T, cached, pos)
+    } else {
+      reporter.coverage(F, zeroU64, pos)
     }
     return r
   }
@@ -4043,6 +4050,8 @@ import Util._
           if (config.transitionCache && ok) {
             val cached = cache.setTransition(th, config, Cache.Transition.ProofStep(step, m.values), s0, ISZ(nextState), smt2)
             reporter.coverage(T, cached, pos)
+          } else {
+            reporter.coverage(F, zeroU64, pos)
           }
           return (nextState, m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims))
         }
@@ -4514,6 +4523,8 @@ import Util._
             if (config.transitionCache && st0.ok) {
               val cached = cache.setTransition(th, config, Cache.Transition.Sequent(sequent), st00, ISZ(st0), smt2)
               reporter.coverage(T, cached, pos)
+            } else {
+              reporter.coverage(F, zeroU64, pos)
             }
           }
         } else {
@@ -4670,7 +4681,7 @@ import Util._
       }
       assert(check())
       if (stmt.isInstruction) {
-        reporter.coverage(F, U64.fromZ(0), stmt.posOpt.get)
+        reporter.coverage(F, zeroU64, stmt.posOpt.get)
       }
       return ss
     }
@@ -4776,6 +4787,10 @@ import Util._
       for (exp <- exps) {
         reporter.coverage(T, cached, exp.posOpt.get)
       }
+    } else {
+      for (exp <- exps) {
+        reporter.coverage(F, zeroU64, exp.posOpt.get)
+      }
     }
     return r
   }
@@ -4879,6 +4894,13 @@ import Util._
                   if (stmt.isInstanceOf[AST.Stmt.Return]) {
                     for (e <- ensures) {
                       reporter.coverage(T, cached, e.posOpt.get)
+                    }
+                  }
+                } else {
+                  reporter.coverage(F, zeroU64, stmt.posOpt.get)
+                  if (stmt.isInstanceOf[AST.Stmt.Return]) {
+                    for (e <- ensures) {
+                      reporter.coverage(F, zeroU64, e.posOpt.get)
                     }
                   }
                 }

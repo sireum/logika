@@ -1796,6 +1796,8 @@ object Util {
         if (logika.config.transitionCache && s.ok) {
           val cached = cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s0, ISZ(s), smt2)
           reporter.coverage(T, cached, r.posOpt.get)
+        } else {
+          reporter.coverage(F, Logika.zeroU64, r.posOpt.get)
         }
       }
     }
@@ -1829,6 +1831,8 @@ object Util {
             if (logika.config.transitionCache && s.ok) {
               val cached = cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s0, ISZ(s), smt2)
               reporter.coverage(T, cached, e.posOpt.get)
+            } else {
+              reporter.coverage(F, Logika.zeroU64, e.posOpt.get)
             }
           }
         }
@@ -2535,6 +2539,10 @@ object Util {
         Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, ISZ(s4), smt2)
       for (inv <- invs) {
         reporter.coverage(T, cached, inv.posOpt.get)
+      }
+    } else {
+      for (inv <- invs) {
+        reporter.coverage(F, Logika.zeroU64, inv.posOpt.get)
       }
     }
     return s4

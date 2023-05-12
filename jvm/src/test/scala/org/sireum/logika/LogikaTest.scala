@@ -89,7 +89,8 @@ object LogikaTest {
       rawInscription = F,
       flipStrictPure = F,
       transitionCache = F,
-      patternExhaustive = T
+      patternExhaustive = T,
+      pureFun = F
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
