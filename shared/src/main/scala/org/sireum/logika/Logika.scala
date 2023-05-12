@@ -3145,6 +3145,7 @@ import Util._
           state, svs, smt2)
         reporter.coverage(T, cached, e.posOpt.get)
       }
+      reporter.coverage(F, U64.fromZ(0), e.posOpt.get)
       return svs
     }
 
