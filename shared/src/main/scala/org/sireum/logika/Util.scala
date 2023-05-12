@@ -2137,10 +2137,10 @@ object Util {
     }
   }
 
-  def strictPureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, cache: Logika.Cache,
-                       state: State, receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String],
-                       id: String, isHelper: B, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
-                       implicitContextOpt: Option[(String, Position)]): (State, State.ProofFun) = {
+  def pureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, cache: Logika.Cache,
+                 state: State, receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String],
+                 id: String, isHelper: B, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
+                 implicitContextOpt: Option[(String, Position)]): (State, State.ProofFun) = {
     val pf = State.ProofFun(receiverTypeOpt, owner, id, for (id <- paramIds) yield id.value, funType.args, Util.normType(funType.ret))
     if (smt2.strictPureMethods.contains(pf)) {
       return (state, pf)
@@ -2155,7 +2155,7 @@ object Util {
         var s0 = state(claims = ISZ())
         val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
         val s2: State = if (isHelper) s1 else assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
-        smt2.addStrictPureMethodDecl(config, pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size), reporter)
+        smt2.addProofFunDecl(config, pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size), reporter)
         s0 = s0(nextFresh = s2.nextFresh, status = s2.status)
         for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes) if pair._1.value != "this") {
           val (pid, pt) = pair
@@ -2187,11 +2187,11 @@ object Util {
       }
 
       if (ok && svs.nonEmpty) {
-        smt2.addStrictPureMethod(config, pos, pf, svs, 0, reporter)
+        smt2.addProofFun(config, pos, pf, svs, 0, reporter)
       }
 
       val s1 = state(status = State.statusOf(ok), nextFresh = maxFresh)
-      if (config.sat && s1.ok) {
+      if (svs.nonEmpty && config.sat && s1.ok) {
         val title: String = s"the derived proof function of $id"
         smt2.satResult(pf.context :+ pf.id, config, cache, Smt2.satTimeoutInMs, T, config.logVc, config.logVcDirOpt,
           title, pos, ISZ(), reporter) match {
@@ -2272,7 +2272,7 @@ object Util {
           args = args :+ arg
         case _ =>
       }
-      val (s2, pf) = strictPureMethod(logika.th, logika.config, logika.plugins, smt2, cache, s0, receiverTypeOpt,
+      val (s2, pf) = pureMethod(logika.th, logika.config, logika.plugins, smt2, cache, s0, receiverTypeOpt,
         AST.Typed.Fun(T, F, paramTypes, t), owner, id, isHelper, paramIds,
         AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter, logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)

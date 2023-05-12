@@ -2197,7 +2197,20 @@ import Util._
             State.errorValue, State.Claim.Prop(T, rsym), rep.messages)
         }
         val (cs4, result) = modVarsResult(cs2, posOpt)
-        val cs5 = evalEnsures(cs4, label, rep)
+        var cs5 = evalEnsures(cs4, label, rep)
+        if (info.sig.isPure) {
+          val typedAttr = AST.TypedAttr(posOpt, None())
+          val (cs6, pf) = Util.pureMethod(th, config, plugins, smt2, cache, cs5, lComp.context.receiverTypeOpt,
+            info.sig.funType.subst(typeSubstMap), lComp.context.methodOpt.get.owner, info.sig.id.value, info.isHelper,
+            for (p <- info.sig.params) yield p.id, AST.Stmt.Expr(AST.Exp.Result(None(), typedAttr), typedAttr),
+            reporter, lComp.context.implicitCheckTitlePosOpt)
+          val (cs7, sym) = cs6.freshSym(pf.returnType, pos)
+          var args: ISZ[State.Value] = if (pf.receiverTypeOpt.nonEmpty) ISZ[State.Value](receiverOpt.get) else ISZ()
+          for (pa <- paramArgs) {
+            args = args :+ pa._4
+          }
+          cs5 = cs7.addClaims(ISZ(State.Claim.Let.ProofFunApply(sym, pf, args), State.Claim.Eq(result, sym)))
+        }
         if (!cs5.ok) {
           val (cs6, rsym) = cs5.freshSym(AST.Typed.b, pos)
           return Context.ContractCaseResult(T, cs6.addClaim(State.Claim.Let.And(rsym, requireSyms)),
@@ -2380,7 +2393,7 @@ import Util._
           case _ => halt("Infeasible")
         }
       }
-      val (s2, pf) = strictPureMethod(th, config, plugins, smt2, cache, s1, receiverTypeOpt, funType, mres.owner,
+      val (s2, pf) = pureMethod(th, config, plugins, smt2, cache, s1, receiverTypeOpt, funType, mres.owner,
         mres.id, info.isHelper, for (p <- info.sig.params) yield p.id, body, reporter, context.implicitCheckTitlePosOpt)
       val (s3, re) = s2.freshSym(retType, pos)
       var args: ISZ[State.Value] = for (q <- paramArgs) yield q._4
