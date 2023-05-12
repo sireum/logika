@@ -417,8 +417,8 @@ object Smt2 {
     return if (context.isEmpty) st"|${pf.id}$pTypes|" else st"|${(context, ".")}$targs${pf.id}$pTypes|"
   }
 
-  def addStrictPureMethodDecl(config: Config, pf: State.ProofFun, sym: State.Value.Sym, invClaims: ISZ[State.Claim],
-                              reporter: Reporter): Unit = {
+  def addProofFunDecl(config: Config, pf: State.ProofFun, sym: State.Value.Sym, invClaims: ISZ[State.Claim],
+                      reporter: Reporter): Unit = {
     pf.receiverTypeOpt match {
       case Some(rt) => addType(config, rt, reporter)
       case _ =>
@@ -453,8 +453,8 @@ object Smt2 {
     strictPureMethodsUp(strictPureMethods + pf ~> ((decl, declClaim)))
   }
 
-  def addStrictPureMethod(config: Config, pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value.Sym)],
-                          statePrefix: Z, reporter: Reporter): Unit = {
+  def addProofFun(config: Config, pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value.Sym)],
+                  statePrefix: Z, reporter: Reporter): Unit = {
     val context = pf.context :+ pf.id
     val thisId = currentLocalIdString(context, "this")
     var paramIdTypes: ISZ[(String, ST, AST.Typed)] = ISZ[(String, ST, AST.Typed)]()
