@@ -482,7 +482,7 @@ object Smt2 {
       s1 = s3.addClaim(State.Claim.Let.ProofFunApply(v3, pf, args))
       val claims = State.Claim.Imply(F, ISZ(
         State.Claim.And(ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)),
-        State.Claim.Eq(v, v3)
+        State.Claim.Let.Def(v, v3)
       ))
       ecs = ecs :+ embeddedClaims(config, T, T, ISZ(claims), ISZ(), None(), HashSMap.empty, reporter)
     }
@@ -2015,9 +2015,15 @@ object Smt2 {
           case _ =>
         }
       }
-      var r: ST =
-        if (isImply) implySTH(simplifiedClaimSTs, c2ST(config, claims(claims.size - 1), sv2ST, lets, declIds, reporter))
-        else andSTH(simplifiedClaimSTs).getOrElse(Smt2.stTrue)
+      var r: ST = if (isImply) {
+        val lastClaim: State.Claim = claims(claims.size - 1) match {
+          case claim: State.Claim.Let.Def => State.Claim.Eq(claim.sym, claim.value)
+          case claim => claim
+        }
+        implySTH(simplifiedClaimSTs, c2ST(config, lastClaim, sv2ST, lets, declIds, reporter))
+      } else {
+        andSTH(simplifiedClaimSTs).getOrElse(Smt2.stTrue)
+      }
       val uscdid = UsedSymsCurrentDeclIdCollector(HashSet.empty, ISZ())
       for (c <- claims) {
         uscdid.transformStateClaim(c)
