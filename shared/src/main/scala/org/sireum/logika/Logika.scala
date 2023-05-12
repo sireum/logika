@@ -2060,6 +2060,18 @@ import Util._
 
       val (receiverModified, modLocals) = contract.modifiedLocalVars(lComp.context.receiverLocalTypeOpt, typeSubstMap)
 
+      val pfOpt: Option[State.ProofFun] = if (info.sig.isPure && !info.hasBody && info.contract.isEmpty) {
+        val typedAttr = AST.TypedAttr(posOpt, None())
+        val (s8, pf) = Util.pureMethod(th, config, plugins, smt2, cache, s1, lComp.context.receiverTypeOpt,
+          info.sig.funType.subst(typeSubstMap), lComp.context.methodOpt.get.owner, info.sig.id.value, info.isHelper,
+          for (p <- info.sig.params) yield p.id, AST.Stmt.Expr(AST.Exp.Result(None(), typedAttr), typedAttr),
+          reporter, lComp.context.implicitCheckTitlePosOpt)
+        s1 = s8
+        Some(pf)
+      } else {
+        None()
+      }
+
       def evalContractCase(logikaComp: Logika, callerReceiverOpt: Option[State.Value.Sym], assume: B, cs0: State,
                            labelOpt: Option[AST.Exp.LitString], requires: ISZ[AST.Exp],
                            ensures: ISZ[AST.Exp]): Context.ContractCaseResult = {
@@ -2198,19 +2210,18 @@ import Util._
         }
         val (cs4, result) = modVarsResult(cs2, posOpt)
         var cs5 = evalEnsures(cs4, label, rep)
-        if (info.sig.isPure) {
-          val typedAttr = AST.TypedAttr(posOpt, None())
-          val (cs6, pf) = Util.pureMethod(th, config, plugins, smt2, cache, cs5, lComp.context.receiverTypeOpt,
-            info.sig.funType.subst(typeSubstMap), lComp.context.methodOpt.get.owner, info.sig.id.value, info.isHelper,
-            for (p <- info.sig.params) yield p.id, AST.Stmt.Expr(AST.Exp.Result(None(), typedAttr), typedAttr),
-            reporter, lComp.context.implicitCheckTitlePosOpt)
-          val (cs7, sym) = cs6.freshSym(pf.returnType, pos)
-          var args: ISZ[State.Value] = if (pf.receiverTypeOpt.nonEmpty) ISZ[State.Value](receiverOpt.get) else ISZ()
-          for (pa <- paramArgs) {
-            args = args :+ pa._4
-          }
-          cs5 = cs7.addClaims(ISZ(State.Claim.Let.ProofFunApply(sym, pf, args), State.Claim.Eq(result, sym)))
+
+        pfOpt match {
+          case Some(pf) =>
+            val (cs6, sym) = cs5.freshSym(pf.returnType, pos)
+            var args: ISZ[State.Value] = if (pf.receiverTypeOpt.nonEmpty) ISZ[State.Value](receiverOpt.get) else ISZ()
+            for (pa <- paramArgs) {
+              args = args :+ pa._4
+            }
+            cs5 = cs6.addClaims(ISZ(State.Claim.Let.ProofFunApply(sym, pf, args), State.Claim.Eq(result, sym)))
+          case _ =>
         }
+
         if (!cs5.ok) {
           val (cs6, rsym) = cs5.freshSym(AST.Typed.b, pos)
           return Context.ContractCaseResult(T, cs6.addClaim(State.Claim.Let.And(rsym, requireSyms)),
