@@ -30,10 +30,11 @@ import org.sireum._
 import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.symbol.Resolver.{NameMap, QName, TypeMap}
 import org.sireum.lang.{ast => AST}
-import org.sireum.message.{Message, Position}
+import org.sireum.message.Position
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.plugin._
 import org.sireum.lang.tipe.TypeOutliner.ExpTypedSubst
+import org.sireum.logika.options.OptionsUtil
 
 object Logika {
 
@@ -177,10 +178,11 @@ object Logika {
   val idxSuffix: String = "$Idx"
   val zeroU64: U64 = U64.fromZ(0)
 
-  def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], config: Config, th: TypeHierarchy,
-                 smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
+  def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], defaultConfig: Config,
+                 th: TypeHierarchy, smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
                  par: Z, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z,
-                 skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
+                 skipMethods: ISZ[String], skipTypes: ISZ[String],
+                 sourceConfigMap: HashMap[Option[String], Config]): Unit = {
 
     var noMethodIds = HashSet.empty[String]
     var noMethodNames = HashSet.empty[String]
@@ -209,7 +211,20 @@ object Logika {
     var taskMap = HashSMap.empty[(Z, Z), ISZ[Task]]
     def rec(ownerPosOpt: Option[(Z, Z)], owner: ISZ[String], stmts: ISZ[AST.Stmt]): Unit = {
       var ownerTasks = ISZ[Task]()
+      var config = defaultConfig
+      var configInit = F
       for (stmt <- stmts) {
+        if (!configInit) {
+          configInit = T
+          stmt.posOpt match {
+            case Some(pos) =>
+              sourceConfigMap.get(pos.uriOpt) match {
+                case Some(c) => config = c
+                case _ =>
+              }
+            case _ =>
+          }
+        }
         stmt match {
           case stmt: AST.Stmt.Fact if config.sat =>
             if (ownerPosOpt.nonEmpty) {
@@ -334,6 +349,17 @@ object Logika {
       }
       r = for (ts <- taskMap.values; t <- ts) yield t
       if (includeInit) {
+        var config = defaultConfig
+        if (initStmts.nonEmpty) {
+          initStmts(0).posOpt match {
+            case Some(pos) =>
+              sourceConfigMap.get(pos.uriOpt) match {
+                case Some(c) => config = c
+                case _ =>
+              }
+            case _ =>
+          }
+        }
         r = Task.Stmts(th, config, initStmts, plugins) +: r
       }
       return r
@@ -359,8 +385,8 @@ object Logika {
     }
   }
 
-  def checkScript(fileUriOpt: Option[String], input: String, config: Config,
-                  smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
+  def checkScript(fileUriOpt: Option[String], input: String, config: Config, nameExePathMap: HashMap[String, String],
+                  maxCores: Z, smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
                   hasLogika: B, plugins: ISZ[Plugin], line: Z,
                   skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
@@ -402,8 +428,15 @@ object Logika {
                 val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
                 val dummy2 = config.fingerprint
               }
-              checkStmts(p.body.stmts, ISZ(), config, th, smt2f, cache, reporter, config.parCores, plugins, verifyingStartTime, T,
-                line, skipMethods, skipTypes)
+              val sourceConfigMap =
+                HashMap.empty[Option[String], Config] + fileUriOpt ~> OptionsUtil.mineConfig(config,
+                  maxCores, "file", nameExePathMap, input, reporter)
+              if (!reporter.hasError) {
+                checkStmts(p.body.stmts, ISZ(), config, th, smt2f, cache, reporter, config.parCores, plugins,
+                  verifyingStartTime, T, line, skipMethods, skipTypes, sourceConfigMap)
+              } else {
+                reporter.illFormed()
+              }
             }
           } else {
             reporter.illFormed()
@@ -431,7 +464,8 @@ object Logika {
     return F
   }
 
-  def checkPrograms(sources: ISZ[(Option[String], String)], files: ISZ[String], config: Config, th: TypeHierarchy,
+  def checkPrograms(sources: ISZ[(Option[String], String)], files: ISZ[String], config: Config,
+                    nameExePathMap: HashMap[String, String], maxCores: Z, th: TypeHierarchy,
                     smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
                     strictAliasing: B, sanityCheck: B, plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String],
                     skipTypes: ISZ[String]): Unit = {
@@ -497,13 +531,15 @@ object Logika {
     val verifyingStartTime = extension.Time.currentMillis
     reporter.timing(typeCheckingDesc, verifyingStartTime - typeCheckingStartTime)
 
-    checkTypedPrograms(verifyingStartTime, fileSet, config, th4, smt2f, cache, reporter, config.parCores, plugins, line,
-      skipMethods, skipTypes)
+    checkTypedPrograms(verifyingStartTime, fileSet, config, nameExePathMap, maxCores, th4, smt2f, cache, reporter,
+      config.parCores, plugins, line, skipMethods, skipTypes, sources)
   }
 
-  def checkTypedPrograms(verifyingStartTime: Z, fileSet: HashSSet[String], config: Config, th: TypeHierarchy,
+  def checkTypedPrograms(verifyingStartTime: Z, fileSet: HashSSet[String], config: Config,
+                         nameExePathMap: HashMap[String, String], maxCores: Z, th: TypeHierarchy,
                          smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter, par: Z,
-                         plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
+                         plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String], skipTypes: ISZ[String],
+                         sources: ISZ[(Option[String], String)]): Unit = {
     if (config.transitionCache || config.caching) {
       val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
       val dummy2 = config.fingerprint
@@ -522,8 +558,12 @@ object Logika {
         case _ =>
       }
     }
-    checkStmts(ISZ(), typeStmts, config, th, smt2f, cache, reporter, par, plugins, verifyingStartTime, F, line,
-      skipMethods, skipTypes)
+    val sourceConfigMap = HashMap.empty[Option[String], Config] ++ (
+      for (p <- sources) yield (p._1, OptionsUtil.mineConfig(config, maxCores, "file", nameExePathMap, p._2, reporter)))
+    if (!reporter.hasError) {
+      checkStmts(ISZ(), typeStmts, config, th, smt2f, cache, reporter, par, plugins, verifyingStartTime, F, line,
+        skipMethods, skipTypes, sourceConfigMap)
+    }
   }
 }
 
@@ -3164,7 +3204,10 @@ import Util._
         val r = svs.size == 1 || ops.ISZOps(svs).forall((p: (State, State.Value)) => !p._1.ok || nextFresh == p._1.nextFresh)
         return r
       }
-      assert(check())
+      assert(check(),
+        st"""${e.posOpt.get}:
+            |Split exp evaluation does not maintain nextFresh invariant for: ${e.prettyST}
+            |${(for (sv <- svs) yield st"* ${sv._2.toRawST}: ${sv._1.toST}", "\n")}""".render)
       if (cachedExp) {
         if (config.transitionCache && ops.ISZOps(svs).
           forall((p: (State, State.Value)) => p._1.status != State.Status.Error)) {
@@ -4215,7 +4258,8 @@ import Util._
           r = r :+ s1
         }
       }
-      return r
+      val nextFresh = Util.maxStatesNextFresh(r)
+      return for (s <- r) yield s(nextFresh = nextFresh)
     }
 
     def evalAssign(s0: State, assignStmt: AST.Stmt.Assign): ISZ[State] = {
@@ -4679,7 +4723,10 @@ import Util._
         }
         return ss.size == 1 || ops.ISZOps(ss).forall((s: State) => s.status == State.Status.Error || nextFresh == s.nextFresh)
       }
-      assert(check())
+      assert(check(),
+        st"""${stmt.posOpt.get}:
+            |Split statement evaluation does not maintain nextFresh invariant for: ${stmt.prettyST}
+            |${(for (s <- ss) yield st"* ${s.toST}", "\n")}""".render)
       if (stmt.isInstruction) {
         reporter.coverage(F, zeroU64, stmt.posOpt.get)
       }

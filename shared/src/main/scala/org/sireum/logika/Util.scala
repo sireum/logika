@@ -2212,6 +2212,19 @@ object Util {
     }
   }
 
+  @pure def maxStatesNextFresh(ss: ISZ[State]): Z = {
+    var r = ss(0).nextFresh
+    if (ss.size > 1) {
+      for (i <- 1 until ss.size) {
+        val nf = ss(i).nextFresh
+        if (r < nf) {
+          r = nf
+        }
+      }
+    }
+    return r
+  }
+
   @pure def maxStateValuesNextFresh(svs: ISZ[(State, State.Value)]): Z = {
     var r = svs(0)._1.nextFresh
     if (svs.size > 1) {
