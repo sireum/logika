@@ -47,13 +47,13 @@ object cli {
         tpe = Type.Flag(F), description = "Do not use built-in runtime (use runtime in sourcepath)"),
       Opt(name = "sourcepath", longKey = "sourcepath", shortKey = Some('s'),
         tpe = Type.Path(T, None()),
-        description = "Sourcepath of Slang .scala files"),
+        description = "Sourcepath of Slang .scala files")
     ),
     groups = ISZ(
       OptGroup(name = "Additional Verifications", opts = ISZ(
         Opt(name = "infoFlow", longKey = "info-flow", shortKey = None(),
           tpe = Type.Flag(F),
-          description = "Enable information flow verification"),
+          description = "Enable information flow verification")
       )),
       OptGroup(name = "Approximation", opts = ISZ(
         Opt(name = "charBitWidth", longKey = "c-bitwidth", shortKey = None(),
@@ -100,7 +100,7 @@ object cli {
           description = "Skip checking methods with the specified fully-qualified names or identifiers"),
         Opt(name = "skipTypes", longKey = "skip-types", shortKey = None(),
           tpe = Type.Str(Some(','), None()),
-          description = "Skip checking traits, classes, and objects with the specified fully-qualified names or identifiers"),
+          description = "Skip checking traits, classes, and objects with the specified fully-qualified names or identifiers")
       )),
       OptGroup(name = "Logging", opts = ISZ(
         Opt(name = "logPc", longKey = "log-pc", shortKey = None(),
@@ -120,7 +120,7 @@ object cli {
           description = "Write all verification conditions in a directory"),
         Opt(name = "stats", longKey = "stats", shortKey = None(),
           tpe = Type.Flag(F),
-          description = "Collect verification statistics"),
+          description = "Collect verification statistics")
       )),
       OptGroup(name = "Optimizations", opts = ISZ(
         parOpt,
@@ -129,7 +129,7 @@ object cli {
           description = "Branch parallelization mode"),
         Opt(name = "branchPar", longKey = "par-branch", shortKey = None(),
           tpe = Type.NumFlag(100, Some(1), Some(100)),
-          description = "Enable parallelization (with CPU cores percentage to use)"),
+          description = "Enable parallelization (with CPU cores percentage to use)")
       )),
       OptGroup(name = "Path Splitting", opts = ISZ(
         Opt(name = "dontSplitFunQuant", longKey = "dont-split-pfq", shortKey = None(),
@@ -146,7 +146,7 @@ object cli {
           description = "Split on if-conditional expressions and statements"),
         Opt(name = "splitMatch", longKey = "split-match", shortKey = None(),
           tpe = Type.Flag(F),
-          description = "Split on match expressions and statements"),
+          description = "Split on match expressions and statements")
       )),
       OptGroup(name = "SMT2", opts = ISZ(
         Opt(name = "elideEncoding", longKey = "elide-encoding", shortKey = None(),
@@ -178,8 +178,8 @@ object cli {
         Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
           tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
           description = "Timeout (seconds) for SMT2 solver"
-        ),
-      )),
+        )
+      ))
     )
   )
 

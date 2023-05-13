@@ -197,8 +197,9 @@ class LogikaTest extends TestSuite {
 
   def testWorksheet(input: String, reporter: Logika.Reporter, msgOpt: Option[String]): B = {
     Smt2Invoke.haltOnError = T
-    Logika.checkScript(None(), input, config, th => Smt2Impl.create(config, ISZ(), th, reporter),
-      NoTransitionSmt2Cache.create, reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
+    val nameExePathMap = Smt2Invoke.nameExePathMap(sireumHome)
+    Logika.checkScript(None(), input, config, nameExePathMap, Os.numOfProcessors, th => Smt2Impl.create(config, ISZ(),
+      th, reporter), NoTransitionSmt2Cache.create, reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>
