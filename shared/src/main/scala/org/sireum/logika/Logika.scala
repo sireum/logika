@@ -4876,10 +4876,10 @@ import Util._
               case Some((ss, cached)) =>
                 if (stmt.isInstruction) {
                   reporter.coverage(F, cached, stmt.posOpt.get)
-                }
-                if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                  for (e <- ensures) {
-                    reporter.coverage(F, cached, e.posOpt.get)
+                  if (stmt.isInstanceOf[AST.Stmt.Return]) {
+                    for (e <- ensures) {
+                      reporter.coverage(F, cached, e.posOpt.get)
+                    }
                   }
                 }
                 ss
@@ -4893,17 +4893,21 @@ import Util._
                   cache.setTransition(th, stmt, current, ss, smt2.strictPureMethods)
 =======
                   val cached = cache.setTransition(th, config, transition, current, ss, smt2)
-                  reporter.coverage(T, cached, stmt.posOpt.get)
-                  if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                    for (e <- ensures) {
-                      reporter.coverage(T, cached, e.posOpt.get)
+                  if (stmt.isInstruction) {
+                    reporter.coverage(T, cached, stmt.posOpt.get)
+                    if (stmt.isInstanceOf[AST.Stmt.Return]) {
+                      for (e <- ensures) {
+                        reporter.coverage(T, cached, e.posOpt.get)
+                      }
                     }
                   }
                 } else {
-                  reporter.coverage(F, zeroU64, stmt.posOpt.get)
-                  if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                    for (e <- ensures) {
-                      reporter.coverage(F, zeroU64, e.posOpt.get)
+                  if (stmt.isInstruction) {
+                    reporter.coverage(F, zeroU64, stmt.posOpt.get)
+                    if (stmt.isInstanceOf[AST.Stmt.Return]) {
+                      for (e <- ensures) {
+                        reporter.coverage(F, zeroU64, e.posOpt.get)
+                      }
                     }
                   }
 >>>>>>> 9464af3 (Added a Logika option to always add proof functions from pure methods.)
