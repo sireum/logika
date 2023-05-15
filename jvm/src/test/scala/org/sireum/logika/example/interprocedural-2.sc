@@ -8,6 +8,7 @@ var x: Z = 0
 }
 
 def bar(): Unit = {
+  setOptions("Logika", """--sat --par --par-branch --interprocedural""")
   val oldX = x
   incX(3)
   assert(oldX + 3 == x)

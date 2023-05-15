@@ -3,15 +3,15 @@ import org.sireum._
 
 var x: Z = 0
 
-@pure def addX(n: Z): Z = {
+@helper @pure def addX(n: Z): Z = {
   Contract(
     Ensures(Res == x + n)
   )
-  assert(F)
-  return 0
+  halt("TODO")
 }
 
 def foo(): Unit = {
+  setOptions("Logika", """--sat --par --par-branch --interprocedural --interprocedural-contracts""")
   val oldX = x
   val m = addX(1)
   x = 0

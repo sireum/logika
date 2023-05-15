@@ -7,6 +7,7 @@ import org.sireum._
   }
 
   def foo(): Unit = {
+    setOptions("Logika", """--sat --par --par-branch --interprocedural""")
     val oldX = x
     incX(1)
     assert(oldX + 1 == x)

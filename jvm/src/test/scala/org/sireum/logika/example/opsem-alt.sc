@@ -1,4 +1,5 @@
 // #Sireum #Logika
+//@Logika: --sat --par --par-branch --solver-valid cvc5,--full-saturate-quant
 
 import org.sireum._
 import org.sireum.justification.ClaimOf
