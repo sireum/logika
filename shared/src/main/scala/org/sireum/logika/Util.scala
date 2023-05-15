@@ -2740,8 +2740,12 @@ object Util {
             case AST.Stmt.Expr(e: AST.Exp.Invoke) if e.attr.resOpt == TypeChecker.setOptionsResOpt &&
               e.args(0).asInstanceOf[AST.Exp.LitString].value == OptionsUtil.logika =>
               logika.logPc(current, reporter, stmt.posOpt)
-              OptionsUtil.toConfig(initConfig, l.context.maxCores, LibUtil.setOptions, l.context.nameExePathMap,
-                e.args(1).asInstanceOf[AST.Exp.LitString].value) match {
+              val value: String = e.args(1) match {
+                case arg: AST.Exp.LitString => arg.value
+                case AST.Exp.Select(Some(arg: AST.Exp.LitString), _, _) => arg.value.stripMargin
+                case _ => halt(s"Infeasible: ${e.args(1)}")
+              }
+              OptionsUtil.toConfig(initConfig, l.context.maxCores, LibUtil.setOptions, l.context.nameExePathMap, value) match {
                 case Either.Left(c) =>
                   logika = logika(config = c)
                   reporter.coverage(F, U64.fromZ(0), stmt.posOpt.get)
