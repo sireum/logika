@@ -51,7 +51,7 @@ object OptionsUtil {
 
   def toConfig(defaultConfig: Config, maxCores: Z, title: String, nameExePathMap: HashMap[String, String],
                options: String): Either[Config, ISZ[String]] = {
-    val opts: ISZ[String] = for (option <- ops.StringOps(options).split((c: C) => c == ' ')) yield
+    val opts: ISZ[String] = for (option <- ops.StringOps(options).split((c: C) => c.isWhitespace)) yield
       ops.StringOps(option).replaceAllChars('␣', ' ')
     val cli = OptionsCli(':', message.Reporter.create)
 
