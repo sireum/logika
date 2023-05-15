@@ -178,11 +178,11 @@ object Logika {
   val idxSuffix: String = "$Idx"
   val zeroU64: U64 = U64.fromZ(0)
 
-  def checkStmts(initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], defaultConfig: Config,
-                 th: TypeHierarchy, smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
-                 par: Z, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z,
-                 skipMethods: ISZ[String], skipTypes: ISZ[String],
-                 sourceConfigMap: HashMap[Option[String], Config]): Unit = {
+  def checkStmts(nameExePathMap: HashMap[String, String], maxCores: Z, initStmts: ISZ[AST.Stmt],
+                 typeStmts: ISZ[(ISZ[String], AST.Stmt)], defaultConfig: Config, th: TypeHierarchy,
+                 smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter, par: Z,
+                 plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z, skipMethods: ISZ[String],
+                 skipTypes: ISZ[String], sourceConfigMap: HashMap[Option[String], Config]): Unit = {
 
     var noMethodIds = HashSet.empty[String]
     var noMethodNames = HashSet.empty[String]
@@ -372,7 +372,7 @@ object Logika {
     def compute(task: Task): B = {
       val r = reporter.empty
       val csmt2 = smt2
-      task.compute(csmt2, cache, r)
+      task.compute(nameExePathMap, maxCores, csmt2, cache, r)
       reporter.combine(r)
       return T
     }
@@ -430,10 +430,10 @@ object Logika {
               }
               val sourceConfigMap =
                 HashMap.empty[Option[String], Config] + fileUriOpt ~> OptionsUtil.mineConfig(config,
-                  maxCores, "file", nameExePathMap, input, reporter)
+                  maxCores, "file", nameExePathMap, input, None(), reporter)
               if (!reporter.hasError) {
-                checkStmts(p.body.stmts, ISZ(), config, th, smt2f, cache, reporter, config.parCores, plugins,
-                  verifyingStartTime, T, line, skipMethods, skipTypes, sourceConfigMap)
+                checkStmts(nameExePathMap, maxCores, p.body.stmts, ISZ(), config, th, smt2f, cache, reporter,
+                  config.parCores, plugins, verifyingStartTime, T, line, skipMethods, skipTypes, sourceConfigMap)
               } else {
                 reporter.illFormed()
               }
@@ -558,11 +558,11 @@ object Logika {
         case _ =>
       }
     }
-    val sourceConfigMap = HashMap.empty[Option[String], Config] ++ (
-      for (p <- sources) yield (p._1, OptionsUtil.mineConfig(config, maxCores, "file", nameExePathMap, p._2, reporter)))
+    val sourceConfigMap = HashMap.empty[Option[String], Config] ++ (for (p <- sources) yield
+      (p._1, OptionsUtil.mineConfig(config, maxCores, "file", nameExePathMap, p._2, None(), reporter)))
     if (!reporter.hasError) {
-      checkStmts(ISZ(), typeStmts, config, th, smt2f, cache, reporter, par, plugins, verifyingStartTime, F, line,
-        skipMethods, skipTypes, sourceConfigMap)
+      checkStmts(nameExePathMap, maxCores, ISZ(), typeStmts, config, th, smt2f, cache, reporter, par, plugins,
+        verifyingStartTime, F, line, skipMethods, skipTypes, sourceConfigMap)
     }
   }
 }
@@ -622,7 +622,7 @@ import Util._
         case _ => (None(), posOpt, None())
       }
     if (s2.ok) {
-      val r = smt2.valid(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+      val r = smt2.valid(context.methodName, config, cache, T,
         st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
         pos, s2.claims, claim, reporter)
       r.kind match {
@@ -1037,7 +1037,7 @@ import Util._
             case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
             case _ => (None(), Some(pos), None())
           }
-        val r = smt2.valid(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+        val r = smt2.valid(context.methodName, config, cache, T,
           st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
         r.kind match {
@@ -1853,7 +1853,7 @@ import Util._
       for (sub <- subs) {
         val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
         val s2 = s1.addClaims(ISZ(State.Claim.Let.TypeTest(sym, T, receiver, sub), State.Claim.Prop(T, sym)))
-        if (smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+        if (smt2.sat(context.methodName, config, cache, T,
           st"Virtual invocation satisfiability on ${(sub.ids, ".")}".render, pos, s2.claims, reporter)) {
           val adt = th.typeMap.get(sub.ids).get.asInstanceOf[TypeInfo.Adt]
           if (adt.specVars.contains(info.res.id) || adt.specMethods.contains(info.res.id)) {
@@ -1928,9 +1928,9 @@ import Util._
       }
 
       def evalMethod(s1: State, minfo: Info.Method): Unit = {
-        val l = logikaMethod(th, config, minfo.ast.isHelper, res.owner, res.id, receiverOpt.map(t => t.tipe),
-          info.sig.paramIdTypes, info.sig.returnType.typedOpt.get, receiverPosOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(),
-          plugins, Some(
+        val l = logikaMethod(context.nameExePathMap, context.maxCores, th, config, minfo.ast.isHelper, res.owner,
+          res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes, info.sig.returnType.typedOpt.get, receiverPosOpt,
+          ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
           this.context.compMethods :+ (res.owner :+ res.id)
@@ -1941,11 +1941,11 @@ import Util._
           case _ =>
             if (retType == AST.Typed.unit) {
               val unit = State.Value.Unit(pos)
-              for (s2 <- l.evalStmts(split, smt2, cache, None(), rtCheck, s1, minfo.ast.bodyOpt.get.stmts, reporter)) {
+              for (s2 <- evalStmts(l, split, smt2, cache, None(), rtCheck, s1, minfo.ast.bodyOpt.get.stmts, reporter)) {
                 s2vs = s2vs :+ ((s2, unit))
               }
             } else {
-              for (s2 <- l.evalStmts(split, smt2, cache, None(), rtCheck, s1, minfo.ast.bodyOpt.get.stmts, reporter)) {
+              for (s2 <- evalStmts(l, split, smt2, cache, None(), rtCheck, s1, minfo.ast.bodyOpt.get.stmts, reporter)) {
                 val (s3, sym) = idIntro(pos, s2, ctx, "Res", retType, None())
                 s2vs = s2vs :+ ((s3, sym))
               }
@@ -2057,9 +2057,9 @@ import Util._
       }
 
       val lComp: Logika = {
-        val l = logikaMethod(th, config, info.isHelper, res.owner, res.id, receiverOpt.map(t => t.tipe),
-          info.sig.paramIdTypes, info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(),
-          contract.modifies, ISZ(), ISZ(), plugins, Some(
+        val l = logikaMethod(context.nameExePathMap, context.maxCores, th, config, info.isHelper, res.owner, res.id,
+          receiverOpt.map(t => t.tipe), info.sig.paramIdTypes, info.sig.returnType.typedOpt.get, receiverPosOpt,
+          contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(), plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
           this.context.compMethods :+ (res.owner :+ res.id)
@@ -2104,10 +2104,10 @@ import Util._
       val pfOpt: Option[State.ProofFun] = if (config.pureFun ||
         (info.sig.isPure && !info.hasBody && info.contract.isEmpty)) {
         val typedAttr = AST.TypedAttr(posOpt, None())
-        val (s8, pf) = Util.pureMethod(th, config, plugins, smt2, cache, s1, lComp.context.receiverTypeOpt,
-          info.sig.funType.subst(typeSubstMap), lComp.context.methodOpt.get.owner, info.sig.id.value, info.isHelper,
-          for (p <- info.sig.params) yield p.id, AST.Stmt.Expr(AST.Exp.Result(None(), typedAttr), typedAttr),
-          reporter, lComp.context.implicitCheckTitlePosOpt)
+        val (s8, pf) = Util.pureMethod(context.nameExePathMap, context.maxCores, th, config, plugins, smt2, cache, s1,
+          lComp.context.receiverTypeOpt, info.sig.funType.subst(typeSubstMap), lComp.context.methodOpt.get.owner,
+          info.sig.id.value, info.isHelper, for (p <- info.sig.params) yield p.id,
+          AST.Stmt.Expr(AST.Exp.Result(None(), typedAttr), typedAttr), reporter, lComp.context.implicitCheckTitlePosOpt)
         s1 = s8
         Some(pf)
       } else {
@@ -2446,8 +2446,9 @@ import Util._
           case _ => halt("Infeasible")
         }
       }
-      val (s2, pf) = pureMethod(th, config, plugins, smt2, cache, s1, receiverTypeOpt, funType, mres.owner,
-        mres.id, info.isHelper, for (p <- info.sig.params) yield p.id, body, reporter, context.implicitCheckTitlePosOpt)
+      val (s2, pf) = pureMethod(context.nameExePathMap, context.maxCores, th, config, plugins, smt2, cache, s1,
+        receiverTypeOpt, funType, mres.owner, mres.id, info.isHelper, for (p <- info.sig.params) yield p.id, body,
+        reporter, context.implicitCheckTitlePosOpt)
       val (s3, re) = s2.freshSym(retType, pos)
       var args: ISZ[State.Value] = for (q <- paramArgs) yield q._4
       receiverOpt match {
@@ -2884,9 +2885,9 @@ import Util._
           val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
-          val thenBranch = disableSat || smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+          val thenBranch = disableSat || smt2.sat(context.methodName, config, cache, T,
             s"$construct-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
-          val elseBranch = disableSat || smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+          val elseBranch = disableSat || smt2.sat(context.methodName, config, cache, T,
             s"$construct-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
@@ -3238,7 +3239,7 @@ import Util._
     val s1 = s0(claims = s0.claims :+ State.Claim.Prop(T, sym))
     if (config.sat && s1.ok) {
       val pos = posOpt.get
-      val sat = smt2.sat(context.methodName, config, cache, reportQuery, config.logVc, config.logVcDirOpt,
+      val sat = smt2.sat(context.methodName, config, cache, reportQuery,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)
       return s1(status = State.statusOf(sat))
     } else {
@@ -3262,7 +3263,7 @@ import Util._
     if (s0.ok) {
       val conclusion = State.Claim.Prop(T, sym)
       val pos = posOpt.get
-      val r = smt2.valid(context.methodName, config, cache, reportQuery, config.logVc, config.logVcDirOpt,
+      val r = smt2.valid(context.methodName, config, cache, reportQuery,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s0.claims, conclusion, reporter)
       r.kind match {
         case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
@@ -3703,7 +3704,7 @@ import Util._
     val posOpt: Option[Position] = Some(pos)
     val s1 = s0.addClaim(cond)
     if (s1.ok) {
-      if (smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+      if (smt2.sat(context.methodName, config, cache, T,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)) {
         val s2 = assumeBindings(s1, lcontext, m, bidMap)
         var claims = ISZ[(State.Status.Type, ISZ[State.Claim])]()
@@ -3929,7 +3930,7 @@ import Util._
         }
         val stmtPos = stmt.posOpt.get
         if (!config.interp && config.patternExhaustive &&
-          smt2.satResult(context.methodName, config, cache, config.timeoutInMs, T, config.logVc, config.logVcDirOpt,
+          smt2.satResult(context.methodName, config, cache, config.timeoutInMs, T,
             s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]",
             stmtPos, s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)), reporter).
             _2.kind == Smt2Query.Result.Kind.Sat) {
@@ -4392,11 +4393,11 @@ import Util._
               val (s3, cond) = value2Sym(s2, v, pos)
               val prop = State.Claim.Prop(T, cond)
               val thenClaims = s3.claims :+ prop
-              val thenSat = smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+              val thenSat = smt2.sat(context.methodName, config, cache, T,
                 s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
               if (thenSat) {
                 for (s4 <- assumeExps(split, smt2, cache, rtCheck, s3(claims = thenClaims), whileStmt.invariants, reporter);
-                     s5 <- evalStmts(split, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
+                     s5 <- evalStmts(this, split, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
                   if (s5.ok) {
                     checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop", s5,
                       whileStmt.invariants, reporter)
@@ -4405,7 +4406,7 @@ import Util._
               }
               val negProp = State.Claim.Prop(F, cond)
               val elseClaims = s3.claims :+ negProp
-              val elseSat = smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+              val elseSat = smt2.sat(context.methodName, config, cache, T,
                 s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
               val s4 = s3(status = State.statusOf(elseSat), claims = elseClaims)
               if (elseSat) {
@@ -4445,10 +4446,10 @@ import Util._
             val s3 = s2w
             val prop = State.Claim.Prop(T, cond)
             val s4 = s3.addClaim(prop)
-            val thenSat = smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+            val thenSat = smt2.sat(context.methodName, config, cache, T,
               s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s4.claims, reporter)
             if (thenSat) {
-              for (s5 <- evalStmts(sp, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
+              for (s5 <- evalStmts(this, sp, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
                 if (s5.ok) {
                   val s6 = rewriteLocalVars(this, s5, F, whileStmt.body.undecls, whileStmt.posOpt, reporter)
                   r = r ++ whileRec(s6, numLoops + 1)
@@ -4459,7 +4460,7 @@ import Util._
             }
             val negProp = State.Claim.Prop(F, cond)
             val s7 = s3.addClaim(negProp)
-            val elseSat = smt2.sat(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+            val elseSat = smt2.sat(context.methodName, config, cache, T,
               s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s7.claims, reporter)
             r = r :+ s7(status = State.statusOf(elseSat))
           } else {
@@ -4736,27 +4737,8 @@ import Util._
     return extension.Cancel.cancellable(checkSplits _)
   }
 
-  def logPc(enabled: B, raw: B, state: State, reporter: Reporter, posOpt: Option[Position]): Unit = {
+  def logPc(state: State, reporter: Reporter, posOpt: Option[Position]): Unit = {
     reporter.state(jescmPlugins._4, posOpt, context.methodName, th, state, config.atLinesFresh)
-    if (enabled || raw) {
-      val sts: ISZ[ST] =
-        if (raw) {
-          State.Claim.claimsRawSTs(state.claims)
-        } else {
-          val (es, _) = Util.claimsToExps(jescmPlugins._4, posOpt.get, context.methodName, state.claims, th, config.atLinesFresh)
-          for (e <- es) yield e.prettyST
-        }
-      if (sts.isEmpty) {
-        reporter.info(posOpt, Logika.kind, "Path conditions = {}")
-      } else {
-        reporter.info(posOpt, Logika.kind,
-          st"""Path conditions = {
-              |  ${(sts, ",\n")}
-              |}""".
-            render
-        )
-      }
-    }
   }
 
   def evalTypeTestH(s0: State, v: State.Value, t: AST.Typed, pos: Position): (State, State.Value) = {
@@ -4784,7 +4766,7 @@ import Util._
       val prop = State.Claim.Prop(T, sym)
       var ok = F
       if (s2.ok) {
-        val rvalid = smt2.valid(context.methodName, config, cache, T, config.logVc, config.logVcDirOpt,
+        val rvalid = smt2.valid(context.methodName, config, cache, T,
           s"$title$titleSuffix at [${pos.beginLine}, ${pos.beginColumn}]", pos, s2.claims, prop, reporter)
         rvalid.kind match {
           case Smt2Query.Result.Kind.Unsat => ok = T
@@ -4903,90 +4885,11 @@ import Util._
         ops.ISZOps(sF.claims).drop(size + 1)), nextFresh)
   }
 
-  def evalStmts(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym],
-                rtCheck: B, state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): ISZ[State] = {
-    var currents = ISZ(state)
-    var done = ISZ[State]()
-
-    val size: Z = if (rOpt.nonEmpty) stmts.size - 1 else stmts.size
-    for (i <- 0 until size) {
-      val cs = currents
-      currents = ISZ()
-      for (current <- cs) {
-        if (current.ok) {
-          val stmt = stmts(i)
-          val nextStates: ISZ[State] = if (config.transitionCache) {
-            val ensures: ISZ[AST.Exp] = if (context.methodOpt.nonEmpty) context.methodOpt.get.ensures else ISZ()
-            val transition: Cache.Transition = if (stmt.hasReturnMemoized && ensures.nonEmpty)
-              Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures) else Cache.Transition.Stmt(stmt)
-            cache.getTransitionAndUpdateSmt2(th, config, transition, current, smt2) match {
-              case Some((ss, cached)) =>
-                if (stmt.isInstruction) {
-                  reporter.coverage(F, cached, stmt.posOpt.get)
-                  if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                    for (e <- ensures) {
-                      reporter.coverage(F, cached, e.posOpt.get)
-                    }
-                  }
-                }
-                ss
-              case _ =>
-                if (stmt.isInstruction) {
-                  logPc(config.logPc, config.logRawPc, current, reporter, stmt.posOpt)
-                }
-                val ss = evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
-                if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
-<<<<<<< HEAD
-                  cache.setTransition(th, stmt, current, ss, smt2.strictPureMethods)
-=======
-                  val cached = cache.setTransition(th, config, transition, current, ss, smt2)
-                  if (stmt.isInstruction) {
-                    reporter.coverage(T, cached, stmt.posOpt.get)
-                    if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                      for (e <- ensures) {
-                        reporter.coverage(T, cached, e.posOpt.get)
-                      }
-                    }
-                  }
-                } else {
-                  if (stmt.isInstruction) {
-                    reporter.coverage(F, zeroU64, stmt.posOpt.get)
-                    if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                      for (e <- ensures) {
-                        reporter.coverage(F, zeroU64, e.posOpt.get)
-                      }
-                    }
-                  }
->>>>>>> 9464af3 (Added a Logika option to always add proof functions from pure methods.)
-                }
-                ss
-            }
-          } else {
-            if (stmt.isInstruction) {
-              logPc(config.logPc, config.logRawPc, current, reporter, stmt.posOpt)
-            }
-            evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
-          }
-          currents = currents ++ nextStates
-        } else {
-          done = done :+ current
-        }
-      }
-    }
-
-    val r: ISZ[State] = if (rOpt.nonEmpty) (
-      for (current <- currents;
-           s <- evalAssignExp(split, smt2, cache, rOpt, rtCheck, current, stmts(stmts.size - 1).asAssignExp, reporter))
-      yield s) ++ done
-    else currents ++ done
-    return r
-  }
-
   def evalBody(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
                body: AST.Body, posOpt: Option[Position], reporter: Reporter): ISZ[State] = {
     val s0 = state
     var r = ISZ[State]()
-    for (s1 <- evalStmts(split, smt2, cache, rOpt, rtCheck, s0, body.stmts, reporter)) {
+    for (s1 <- evalStmts(this, split, smt2, cache, rOpt, rtCheck, s0, body.stmts, reporter)) {
       if (s1.ok) {
         r = r :+ rewriteLocalVars(this, s1, F, body.undecls, posOpt, reporter)
       } else {

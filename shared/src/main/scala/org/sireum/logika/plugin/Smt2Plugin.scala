@@ -81,8 +81,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
     }
 
     val rlimit: Z = if (resourceLimit <= 0) 0 else resourceLimit
-    val logikaSmt2 = logika(config = logika.config(timeoutInMs = if (timeout <= 0) 0 else timeout,
-      smt2Configs = for (c <- logika.config.smt2Configs) yield c(rlimit = rlimit)))
+    val logikaSmt2 = logika(config = logika.config(timeoutInMs = if (timeout <= 0) 0 else timeout, rlimit = rlimit))
     val posOpt = just.invokeIdent.posOpt
 
     val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) = if (argsOpt.isEmpty) {
@@ -128,8 +127,8 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
     }
 
     val status: B = if (stat) {
-      val r = smt2.valid(logikaSmt2.context.methodName, logikaSmt2.config, cache, T, logikaSmt2.config.logVc,
-        logikaSmt2.config.logVcDirOpt, s"${just.invokeIdent.id.value} Justification", posOpt.get, premises, conclusion,
+      val r = smt2.valid(logikaSmt2.context.methodName, logikaSmt2.config, cache, T,
+        s"${just.invokeIdent.id.value} Justification", posOpt.get, premises, conclusion,
         reporter)
       def error(msg: String): B = {
         reporter.error(posOpt, Logika.kind, msg)

@@ -264,36 +264,31 @@ import SameDiffPlugin._
                         fromMap: HashSMap[Z, AST.Exp.Labeled], stepMap: HashSMap[Z, AST.Exp.Labeled],
                         reporter: Reporter): B = {
     val pos = posOpt.get
-    var ok = F
-    for (num <- nums) {
-      val fromExp = fromMap.get(num).get
-      val stepExp = stepMap.get(num).get
-      for (sv1 <- logika.evalExp(Logika.Split.Disabled, smt2, cache, T, state, fromExp, reporter) if sv1._1.ok) {
-        for (sv2 <- logika.evalExp(Logika.Split.Disabled, smt2, cache, T, sv1._1, stepExp, reporter) if sv2._1.ok) {
-          val s3 = sv2._1
-          val v1 = sv1._2
-          val v2 = sv2._2
-          val (_, sym) = s3.freshSym(AST.Typed.b, pos)
-          val r = smt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt,
-            s"$id Justification for labeled expression #$num of proof steps $stepId and $fromStepId", pos,
-            s3.claims :+ State.Claim.Let.Binary(sym, v1, AST.Exp.BinaryOp.Equiv, v2, v1.tipe), State.Claim.Prop(T, sym),
-            reporter)
-          r.kind match {
-            case Smt2Query.Result.Kind.Unsat => ok = T
-            case Smt2Query.Result.Kind.Sat =>
-              reporter.error(posOpt, Logika.kind, s"Invalid equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
-              return F
-            case Smt2Query.Result.Kind.Unknown =>
-              reporter.error(posOpt, Logika.kind, s"Could not deduce the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
-              return F
-            case Smt2Query.Result.Kind.Timeout =>
-              reporter.error(posOpt, Logika.kind, s"Timed out when deducing the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
-              return F
-            case Smt2Query.Result.Kind.Error =>
-              println(r.query)
-              reporter.error(posOpt, Logika.kind, s"Error occurred when deducing the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
-              return F
-          }
+    for (sv2 <- svs2 if sv2._1.ok) {
+      val psmt2 = smt2
+      for (sv1 <- logika2.evalExp(split, psmt2, cache, rtCheck, sv2._1, fromExp.exp, reporter) if sv1._1.ok) {
+        val s3 = sv1._1
+        val v1 = sv1._2
+        val v2 = sv2._2
+        val (_, sym) = s3.freshSym(AST.Typed.b, pos)
+        val r = smt2.valid(logika.context.methodName, logika.config, cache, T,
+          s"$id Justification for labeled expression #$num of proof steps $stepId and $fromStepId",
+          pos, s3.claims :+ State.Claim.Let.Binary(sym, v1, AST.Exp.BinaryOp.Equiv, v2, v1.tipe),
+          State.Claim.Prop(T, sym), reporter)
+        r.kind match {
+          case Smt2Query.Result.Kind.Unsat => found = T
+          case Smt2Query.Result.Kind.Sat =>
+            ok = F
+            reporter.error(posOpt, Logika.kind, s"Invalid equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
+          case Smt2Query.Result.Kind.Unknown =>
+            ok = F
+            reporter.error(posOpt, Logika.kind, s"Could not deduce the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
+          case Smt2Query.Result.Kind.Timeout =>
+            ok = F
+            reporter.error(posOpt, Logika.kind, s"Timed out when deducing the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
+          case Smt2Query.Result.Kind.Error =>
+            ok = F
+            reporter.error(posOpt, Logika.kind, s"Error occurred when deducing the equivalence of labeled expression #$num of proof steps $stepId and $fromStepId")
         }
       }
     }

@@ -55,6 +55,8 @@ object OptionsCli {
   @datatype class LogikaOption(
     val help: String,
     val args: ISZ[String],
+    val smt2Caching: B,
+    val transitionCaching: B,
     val infoFlow: B,
     val charBitWidth: Z,
     val fpRounding: LogikaFPRoundingMode.Type,
@@ -149,6 +151,8 @@ import OptionsCli._
           |Usage: <option>*
           |
           |Available Options:
+          |    --smt2-caching       Disable SMT2 query caching
+          |    --transition-caching Disable transition caching
           |-h, --help               Display this information
           |
           |Additional Verifications Options:
@@ -238,6 +242,8 @@ import OptionsCli._
           |-t, --timeout            Timeout (seconds) for SMT2 solver (expects an integer;
           |                           min is 1; default is 2)""".render
 
+    var smt2Caching: B = true
+    var transitionCaching: B = true
     var infoFlow: B = false
     var charBitWidth: Z = 32
     var fpRounding: LogikaFPRoundingMode.Type = LogikaFPRoundingMode.NearestTiesToEven
@@ -284,7 +290,19 @@ import OptionsCli._
         if (args(j) == "-h" || args(j) == "--help") {
           println(help)
           return Some(HelpOption())
-        } else if (arg == "--info-flow") {
+        } else if (arg == "--smt2-caching") {
+           val o: Option[B] = { j = j - 1; Some(!smt2Caching) }
+           o match {
+             case Some(v) => smt2Caching = v
+             case _ => return None()
+           }
+         } else if (arg == "--transition-caching") {
+           val o: Option[B] = { j = j - 1; Some(!transitionCaching) }
+           o match {
+             case Some(v) => transitionCaching = v
+             case _ => return None()
+           }
+         } else if (arg == "--info-flow") {
            val o: Option[B] = { j = j - 1; Some(!infoFlow) }
            o match {
              case Some(v) => infoFlow = v
@@ -527,7 +545,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, flipStrictPure, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, timeout))
+    return Some(LogikaOption(help, parseArguments(args, j), smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, flipStrictPure, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, timeout))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

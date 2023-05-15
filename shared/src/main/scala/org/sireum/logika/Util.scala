@@ -32,6 +32,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.{Reporter, Split}
+import org.sireum.logika.options.OptionsUtil
 
 object Util {
 
@@ -1752,15 +1753,16 @@ object Util {
     return sv2ST _
   }
 
-  def logikaMethod(th: TypeHierarchy, config: Config, isHelper: B, owner: ISZ[String], id: String,
-                   receiverTypeOpt: Option[AST.Typed], params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed,
-                   posOpt: Option[Position], reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp], modifies: ISZ[AST.Exp.Ref],
-                   ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString], plugins: ISZ[plugin.Plugin],
-                   implicitContext: Option[(String, Position)], compMethods: ISZ[ISZ[String]]): Logika = {
+  def logikaMethod(nameExePathMap: HashMap[String, String], maxCores: Z, th: TypeHierarchy, config: Config, isHelper: B,
+                   owner: ISZ[String], id: String, receiverTypeOpt: Option[AST.Typed], params: ISZ[(AST.Id, AST.Typed)],
+                   retType: AST.Typed, posOpt: Option[Position], reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp],
+                   modifies: ISZ[AST.Exp.Ref], ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString],
+                   plugins: ISZ[plugin.Plugin], implicitContext: Option[(String, Position)],
+                   compMethods: ISZ[ISZ[String]]): Logika = {
     val mctx = Context.Method(isHelper, owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
       HashMap.empty, HashMap.empty, HashMap.empty, ISZ(), posOpt, HashMap.empty)
-    val ctx = Context.empty(methodOpt = Some(mctx), caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext,
-      compMethods = compMethods)
+    val ctx = Context.empty(nameExePathMap, maxCores)(methodOpt = Some(mctx),
+      caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext, compMethods = compMethods)
     return Logika(th, config, ctx, plugins)
   }
 
@@ -1837,7 +1839,7 @@ object Util {
           }
         }
         if (postPosOpt.nonEmpty && s.ok) {
-          logika.logPc(logPc, logRawPc, s(status = State.Status.End), reporter, postPosOpt)
+          logika.logPc(s(status = State.Status.End), reporter, postPosOpt)
         }
         r = r :+ s
       }
@@ -1907,7 +1909,9 @@ object Util {
       localInMap = localInMap, initClaims = s0.claims)))), s0)
   }
 
-  def checkMethod(th: TypeHierarchy,
+  def checkMethod(nameExePathMap: HashMap[String, String],
+                  maxCores: Z,
+                  th: TypeHierarchy,
                   plugins: ISZ[plugin.Plugin],
                   method: AST.Stmt.Method,
                   caseIndex: Z,
@@ -1935,18 +1939,17 @@ object Util {
             case _ => halt("Infeasible")
           }
         }
-        val p = updateInVarMaps(logikaMethod(th, mconfig, method.isHelper, res.owner, method.sig.id.value,
-          receiverTypeOpt, method.sig.paramIdTypes, method.sig.returnType.typedOpt.get, methodPosOpt, reads, requires,
-          modifies, ensures,
-          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None(), ISZ()), method.isHelper, smt2, cache,
-          state, reporter)
+        val p = updateInVarMaps(logikaMethod(nameExePathMap, maxCores, th, mconfig, method.isHelper, res.owner,
+          method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes, method.sig.returnType.typedOpt.get,
+          methodPosOpt, reads, requires, modifies, ensures, if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins,
+          None(), ISZ()), method.isHelper, smt2, cache, state, reporter)
         state = p._2
         p._1
       }
       val invs: ISZ[Info.Inv] = if (method.isHelper) ISZ[Info.Inv]() else logika.retrieveInvs(res.owner, res.isInObject)
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
       val stmts = method.bodyOpt.get.stmts
-      val ss: ISZ[State] = if (method.purity == AST.Purity.StrictPure) {
+      val (l, ss): (Logika, ISZ[State]) = if (method.purity == AST.Purity.StrictPure) {
         val stmt = stmts(0).asInstanceOf[AST.Stmt.Var]
         val spBody = stmt.initOpt.get
         val pos = spBody.asStmt.posOpt.get
@@ -1954,11 +1957,11 @@ object Util {
         val (s0, v) = logika.singleStateValue(pos, state,
           logika.evalAssignExpValue(Split.Default, smt2, cache, t, T, state, spBody, reporter))
         val (s1, sym) = resIntro(pos, s0, logika.context.methodName, t, Some(pos))
-        ISZ(s1.addClaim(State.Claim.Let.Def(sym, v)))
+        (logika, ISZ(s1.addClaim(State.Claim.Let.Def(sym, v))))
       } else {
-        logika.evalStmts(Split.Default, smt2, cache, None(), T, state, stmts, reporter)
+        evalStmtsLogika(logika, Split.Default, smt2, cache, None(), T, state, stmts, reporter)
       }
-      checkMethodPost(logika, smt2, cache, reporter, ss, methodPosOpt, invs, ensures, mconfig.logPc, mconfig.logRawPc,
+      checkMethodPost(l, smt2, cache, reporter, ss, methodPosOpt, invs, ensures, mconfig.logPc, mconfig.logRawPc,
         if (stmts.nonEmpty) stmts(stmts.size - 1).posOpt else None())
     }
 
@@ -2141,9 +2144,10 @@ object Util {
     }
   }
 
-  def pureMethod(th: TypeHierarchy, config: Config, plugins: ISZ[plugin.Plugin], smt2: Smt2, cache: Logika.Cache,
-                 state: State, receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String],
-                 id: String, isHelper: B, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
+  def pureMethod(nameExePathMap: HashMap[String, String], maxCores: Z, th: TypeHierarchy, config: Config,
+                 plugins: ISZ[plugin.Plugin], smt2: Smt2, cache: Logika.Cache, state: State,
+                 receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String], id: String,
+                 isHelper: B, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
                  implicitContextOpt: Option[(String, Position)]): (State, State.ProofFun) = {
     val pf = State.ProofFun(receiverTypeOpt, owner, id, for (id <- paramIds) yield id.value, funType.args, Util.normType(funType.ret))
     if (smt2.strictPureMethods.contains(pf)) {
@@ -2153,9 +2157,9 @@ object Util {
       val pos = posOpt.get
       val (svs, maxFresh, ok): (ISZ[(State, State.Value.Sym)], Z, B) = {
         val context = pf.context :+ pf.id
-        val logika: Logika = logikaMethod(th, config, isHelper, pf.context, pf.id,  pf.receiverTypeOpt,
-          ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins,
-          implicitContextOpt, ISZ())
+        val logika: Logika = logikaMethod(nameExePathMap, maxCores, th, config, isHelper, pf.context, pf.id,
+          pf.receiverTypeOpt, ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(),
+          ISZ(), ISZ(), plugins, implicitContextOpt, ISZ())
         var s0 = state(claims = ISZ())
         val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
         val s2: State = if (isHelper) s1 else assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
@@ -2197,8 +2201,7 @@ object Util {
       val s1 = state(status = State.statusOf(ok), nextFresh = maxFresh)
       if (svs.nonEmpty && config.sat && s1.ok) {
         val title: String = s"the derived proof function of $id"
-        smt2.satResult(pf.context :+ pf.id, config, cache, Smt2.satTimeoutInMs, T, config.logVc, config.logVcDirOpt,
-          title, pos, ISZ(), reporter) match {
+        smt2.satResult(pf.context :+ pf.id, config, cache, Smt2.satTimeoutInMs, T, title, pos, ISZ(), reporter) match {
           case (T, _) =>
           case (_, result) =>
             if (result.kind == Smt2Query.Result.Kind.Error) {
@@ -2289,9 +2292,9 @@ object Util {
           args = args :+ arg
         case _ =>
       }
-      val (s2, pf) = pureMethod(logika.th, logika.config, logika.plugins, smt2, cache, s0, receiverTypeOpt,
-        AST.Typed.Fun(T, F, paramTypes, t), owner, id, isHelper, paramIds,
-        AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter, logika.context.implicitCheckTitlePosOpt)
+      val (s2, pf) = pureMethod(logika.context.nameExePathMap, logika.context.maxCores, logika.th, logika.config,
+        logika.plugins, smt2, cache, s0, receiverTypeOpt, AST.Typed.Fun(T, F, paramTypes, t), owner, id, isHelper,
+        paramIds, AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter, logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)
       val s4 = s3.addClaim(State.Claim.Let.ProofFunApply(sym, pf, args))
       val s4ClaimsOps = ops.ISZOps(s4.claims)
@@ -2714,4 +2717,104 @@ object Util {
     return StateTransformer(PrePostLocalRestorer(localMap)).transformState(F, s0).resultOpt.getOrElse(s0)
   }
 
+  def evalStmts(l: Logika, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym],
+                rtCheck: B, state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): ISZ[State] = {
+    return evalStmtsLogika(l, split, smt2, cache, rOpt, rtCheck, state, stmts, reporter)._2
+  }
+  def evalStmtsLogika(l: Logika, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym],
+                      rtCheck: B, state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): (Logika, ISZ[State]) = {
+    var logika = l
+    val initConfig = logika.config
+    val context = logika.context
+    var currents = ISZ(state)
+    var done = ISZ[State]()
+
+    val size: Z = if (rOpt.nonEmpty) stmts.size - 1 else stmts.size
+    for (i <- 0 until size) {
+      val cs = currents
+      currents = ISZ()
+      for (current <- cs) {
+        if (current.ok) {
+          val stmt = stmts(i)
+          stmt match {
+            case AST.Stmt.Expr(e: AST.Exp.Invoke) if e.attr.resOpt == TypeChecker.setOptionsResOpt &&
+              e.args(0).asInstanceOf[AST.Exp.LitString].value == OptionsUtil.logika =>
+              logika.logPc(current, reporter, stmt.posOpt)
+              OptionsUtil.toConfig(initConfig, l.context.maxCores, LibUtil.setOptions, l.context.nameExePathMap,
+                e.args(1).asInstanceOf[AST.Exp.LitString].value) match {
+                case Either.Left(c) =>
+                  logika = logika(config = c)
+                  reporter.coverage(F, U64.fromZ(0), stmt.posOpt.get)
+                  currents = currents :+ current
+                case Either.Right(msgs) =>
+                  for (msg <- msgs) {
+                    reporter.error(e.args(1).posOpt, Logika.kind, msg)
+                  }
+                  currents = currents :+ current(status = State.Status.Error)
+              }
+            case _ =>
+              val nextStates: ISZ[State] = if (logika.config.transitionCache) {
+                val ensures: ISZ[AST.Exp] = if (context.methodOpt.nonEmpty) context.methodOpt.get.ensures else ISZ()
+                val transition: Logika.Cache.Transition = if (stmt.hasReturnMemoized && ensures.nonEmpty)
+                  Logika.Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures)
+                else Logika.Cache.Transition.Stmt(stmt)
+                cache.getTransitionAndUpdateSmt2(logika.th, logika.config, transition, current, smt2) match {
+                  case Some((ss, cached)) =>
+                    if (stmt.isInstruction) {
+                      reporter.coverage(F, cached, stmt.posOpt.get)
+                      if (stmt.isInstanceOf[AST.Stmt.Return]) {
+                        for (e <- ensures) {
+                          reporter.coverage(F, cached, e.posOpt.get)
+                        }
+                      }
+                    }
+                    ss
+                  case _ =>
+                    if (stmt.isInstruction) {
+                      logika.logPc(current, reporter, stmt.posOpt)
+                    }
+                    val ss = logika.evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+                    if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
+                      val cached = cache.setTransition(logika.th, logika.config, transition, current, ss, smt2)
+                      if (stmt.isInstruction) {
+                        reporter.coverage(T, cached, stmt.posOpt.get)
+                        if (stmt.isInstanceOf[AST.Stmt.Return]) {
+                          for (e <- ensures) {
+                            reporter.coverage(T, cached, e.posOpt.get)
+                          }
+                        }
+                      }
+                    } else {
+                      if (stmt.isInstruction) {
+                        reporter.coverage(F, Logika.zeroU64, stmt.posOpt.get)
+                        if (stmt.isInstanceOf[AST.Stmt.Return]) {
+                          for (e <- ensures) {
+                            reporter.coverage(F, Logika.zeroU64, e.posOpt.get)
+                          }
+                        }
+                      }
+                    }
+                    ss
+                }
+              } else {
+                if (stmt.isInstruction) {
+                  logika.logPc(current, reporter, stmt.posOpt)
+                }
+                logika.evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+              }
+              currents = currents ++ nextStates
+          }
+        } else {
+          done = done :+ current
+        }
+      }
+    }
+
+    val r: ISZ[State] = if (rOpt.nonEmpty) (
+      for (current <- currents;
+           s <- logika.evalAssignExp(split, smt2, cache, rOpt, rtCheck, current, stmts(stmts.size - 1).asAssignExp, reporter))
+      yield s) ++ done
+    else currents ++ done
+    return (logika, r)
+  }
 }

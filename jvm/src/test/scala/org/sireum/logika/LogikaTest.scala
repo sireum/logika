@@ -54,8 +54,8 @@ object LogikaTest {
   val config: Config =
     Config(
       smt2Configs =
-        Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, s"${Smt2.cvc4DefaultValidOpts}; ${Smt2.z3DefaultValidOpts}; ${Smt2.cvc5DefaultValidOpts}; ${Smt2.altErgoOpenDefaultValidOpts}; ${Smt2.altErgoDefaultValidOpts}", timeoutInMs, rlimit).left ++
-          Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, 500, rlimit).left,
+        Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, s"${Smt2.cvc4DefaultValidOpts}; ${Smt2.z3DefaultValidOpts}; ${Smt2.cvc5DefaultValidOpts}; ${Smt2.altErgoOpenDefaultValidOpts}; ${Smt2.altErgoDefaultValidOpts}").left ++
+          Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), T, Smt2.defaultSatOpts).left,
       parCores = Runtime.getRuntime.availableProcessors,
       sat = T,
       rlimit = rlimit,
@@ -184,13 +184,13 @@ class LogikaTest extends TestSuite {
   }
 
   def passingWorksheet(worksheet: String): Unit = {
-    val reporter = logika.ReporterImpl.create
+    val reporter = logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc)
     val r = testWorksheet(worksheet, reporter, None())
     assert(r)
   }
 
   def failingWorksheet(worksheet: String, msg: String): Unit = {
-    val reporter = logika.ReporterImpl.create
+    val reporter = logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc)
     val r = testWorksheet(worksheet, reporter, Some(msg))
     assert(!r)
   }
@@ -203,7 +203,7 @@ class LogikaTest extends TestSuite {
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>
-          val r = logika.ReporterImpl.create
+          val r = logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc)
           r.reports(ops.ISZOps(reporter.messages).filter((m: message.Message) => m.isInfo))
           r.printMessages()
           return reporter.messages.elements.exists(_.text.value.contains(msg))

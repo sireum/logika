@@ -195,7 +195,7 @@ object Smt2Impl {
   }
 
   def checkQuery(config: Config, isSat: B, timeoutInMs: Z, query: String): Smt2Query.Result = {
-    return Smt2Invoke.query(config.smt2Configs, isSat, config.smt2Seq, query, timeoutInMs)
+    return Smt2Invoke.query(config.smt2Configs, isSat, config.smt2Seq, query, timeoutInMs, config.rlimit)
   }
 
   def formatVal(width: Z, n: Z): ST = {
