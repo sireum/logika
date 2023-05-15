@@ -1,8 +1,7 @@
 // #Sireum #Logika
+//@Logika: --timeout 6 --sat --par --par-branch --solver-valid cvc4,--full-saturate-quant;z3;cvc5,--full-saturate-quant --solver-sat z3
 import org.sireum._
 import org.sireum.justification.{Auto, Smt2}
-
-// some may require larger timeout, e.g., 5000 ms
 
 def map1(): Unit = {
   val n = Z.random

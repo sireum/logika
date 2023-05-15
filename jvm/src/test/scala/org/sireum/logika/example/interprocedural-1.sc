@@ -1,4 +1,5 @@
 // #Sireum #Logika
+//@Logika: --sat --par --par-branch --interprocedural
 import org.sireum._
 
 var x: Z = 0

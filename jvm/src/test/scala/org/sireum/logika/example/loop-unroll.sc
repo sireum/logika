@@ -1,7 +1,6 @@
 // #Sireum #Logika
+//@Logika: --sat --par --par-branch --interprocedural --interprocedural-contracts
 import org.sireum._
-
-// requires interprocedural verification for loop unrolling
 
 val m = Z.random
 val n = 3
