@@ -282,8 +282,8 @@ import SameDiffPlugin._
         val v1 = sv1._2
         val v2 = sv2._2
         val (_, sym) = s3.freshSym(AST.Typed.b, pos)
-        val r = smt2.valid(logika.context.methodName, logika.config, cache, T, logika.config.logVc,
-          logika.config.logVcDirOpt, s"$id Justification for labeled expression #$num of proof steps $stepId and $fromStepId",
+        val r = smt2.valid(logika.context.methodName, logika.config, cache, T,
+          s"$id Justification for labeled expression #$num of proof steps $stepId and $fromStepId",
           pos, s3.claims :+ State.Claim.Let.Binary(sym, v1, AST.Exp.BinaryOp.Equiv, v2, v1.tipe),
           State.Claim.Prop(T, sym), reporter)
         r.kind match {

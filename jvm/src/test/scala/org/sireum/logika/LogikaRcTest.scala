@@ -70,20 +70,9 @@ class LogikaRcTest extends SireumRcSpec {
     Smt2Invoke.haltOnError = T
     val isSimplified = path.last.endsWith(simplifiedSuffix)
     val p = if (isSimplified) path.dropRight(1) :+ path.last.replace(simplifiedSuffix, "") else path
-    val reporter = org.sireum.logika.ReporterImpl.create
+    val reporter = org.sireum.logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc)
     var c = config(simplifiedQuery = isSimplified)
-    var line = 0
-    p(p.size - 1) match {
-      case "collection.sc" if isInGithubAction => c = filterSmt2Config(c, (c: Smt2Config) => c.isSat | c.name.value == "cvc5")(timeoutInMs = c.timeoutInMs * 3)
-      case "loop-unroll.sc"  => c = c(interp = T)
-      case "opsem.sc" => c = filterSmt2Config(c, !_.name.value.startsWith("alt-ergo"))(timeoutInMs = if (isInGithubAction) c.timeoutInMs * 2 else c.timeoutInMs)
-      case "opsem-alt.sc"  => c = filterSmt2Config(c, (c: Smt2Config) => c.isSat | c.name.value == "cvc5")
-      case "interprocedural-1.sc"  => c = c(interp = T); line = 10
-      case "interprocedural-2.sc"  => c = c(interp = T); line = 10
-      case "interprocedural-contract.sc"  => c = c(interp = T, interpContracts = T); line = 14
-      case "interprocedural-instance.sc"  => c = c(interp = T); line = 9
-      case _ =>
-    }
+    val line = 0
     //c = c(logVcDirOpt = Some((Os.home / "Temp" / path.last.replace("(", "").replace(")", "").replace(' ', '.')).string))
     val f = Os.path(p.mkString(Os.fileSep.value))
     val nameExePathMap = Smt2Invoke.nameExePathMap(sireumHome)

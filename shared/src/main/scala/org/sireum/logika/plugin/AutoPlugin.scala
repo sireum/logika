@@ -99,8 +99,8 @@ import org.sireum.logika.Logika.Reporter
                    claims: ISZ[State.Claim]): Plugin.Result = {
       var status = stat
       if (status) {
-        val r = psmt2.valid(logika.context.methodName, logika.config, cache, T, logika.config.logVc,
-          logika.config.logVcDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
+        val r = psmt2.valid(logika.context.methodName, logika.config, cache, T, s"$id Justification", pos, premises,
+          conclusion, reporter)
 
         def error(msg: String): B = {
           reporter.error(posOpt, Logika.kind, msg)

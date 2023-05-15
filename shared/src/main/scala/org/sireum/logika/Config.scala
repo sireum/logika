@@ -76,6 +76,6 @@ object Config {
   }
 }
 
-@datatype class Smt2Config(val isSat: B, val name: String, val exe: String, val rlimit: Z, val opts: ISZ[String])
+@datatype class Smt2Config(val isSat: B, val name: String, val exe: String, val opts: ISZ[String])
 
 @datatype class LoopId(val ids: ISZ[String])

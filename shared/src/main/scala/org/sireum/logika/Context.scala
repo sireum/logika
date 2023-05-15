@@ -142,10 +142,13 @@ object Context {
     @strictpure def isOK: B = state.ok
   }
 
-  @strictpure def empty: Context = Context(ISZ(), None(), ISZ(), None(), ISZ(), HashMap.empty)
+  @strictpure def empty(nameExePathMap: HashMap[String, String], maxCores: Z): Context =
+    Context(nameExePathMap, maxCores, ISZ(), None(), ISZ(), None(), ISZ(), HashMap.empty)
 }
 
-@datatype class Context(val typeParams: ISZ[AST.TypeParam],
+@datatype class Context(val nameExePathMap: HashMap[String, String],
+                        val maxCores: Z,
+                        val typeParams: ISZ[AST.TypeParam],
                         val methodOpt: Option[Context.Method],
                         val caseLabels: ISZ[AST.Exp.LitString],
                         val implicitCheckTitlePosOpt: Option[(String, Position)],

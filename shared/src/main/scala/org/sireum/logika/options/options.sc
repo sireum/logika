@@ -33,7 +33,14 @@ val options = Tool(
   header = "Logika Verifier Options",
   usage = "<option>*",
   usageDescOpt = None(),
-  opts = ISZ(),
+  opts = ISZ(
+    Opt(name = "smt2Caching", longKey = "smt2-caching", shortKey = None(),
+      tpe = Type.Flag(T),
+      description = "Disable SMT2 query caching"),
+    Opt(name = "transitionCaching", longKey = "transition-caching", shortKey = None(),
+      tpe = Type.Flag(T),
+      description = "Disable transition caching")
+  ),
   groups = logika.cli.logikaVerifier.groups
 )
 

@@ -32,11 +32,14 @@ import org.sireum.lang.tipe.TypeHierarchy
 import java.util.concurrent.atomic.AtomicLong
 
 object ReporterImpl {
-  def create: ReporterImpl = new ReporterImpl(F, ISZ(), F, new AtomicLong(0), new AtomicLong(0), new AtomicLong(0),
-    new AtomicLong(0))
+  def create(logPc: B, logPcRaw: B, logVc: B): ReporterImpl = new ReporterImpl(logPc, logPcRaw, logVc, F, ISZ(), F,
+    new AtomicLong(0), new AtomicLong(0), new AtomicLong(0), new AtomicLong(0))
 }
 
-final class ReporterImpl(var _ignore: B,
+final class ReporterImpl(val logPc: B,
+                         val logPcRaw: B,
+                         val logVc: B,
+                         var _ignore: B,
                          var _messages: ISZ[Message],
                          var collectStats: B,
                          val _numOfVCs: AtomicLong,
@@ -65,15 +68,34 @@ final class ReporterImpl(var _ignore: B,
     this
   }
 
-  override def $clone: ReporterImpl = new ReporterImpl(_ignore, _messages, collectStats, _numOfVCs, _numOfSats,
-    _vcMillis, _satMillis)
+  override def $clone: ReporterImpl = new ReporterImpl(logPc, logPcRaw, logVc, _ignore, _messages, collectStats,
+    _numOfVCs, _numOfSats, _vcMillis, _satMillis)
 
   override def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
                      th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
+    if (logPc || logPcRaw) {
+      val sts: ISZ[ST] =
+        if (logPcRaw) {
+          State.Claim.claimsRawSTs(s.claims)
+        } else {
+          val (es, _) = Util.claimsToExps(plugins,posOpt.get, context, s.claims, th, atLinesFresh)
+          for (e <- es) yield e.prettyST
+        }
+      if (sts.isEmpty) {
+        info(posOpt, Logika.kind, "Path conditions = {}")
+      } else {
+        info(posOpt, Logika.kind,
+          st"""Path conditions = {
+              |  ${(sts, ",\n")}
+              |}""".
+            render
+        )
+      }
+    }
   }
 
   override def query(pos: Position, title: String, isSat: B, time: Z, forceReport: B, detailElided: B,
-                     r: Smt2Query.Result): Unit =
+                     r: Smt2Query.Result): Unit = {
     if (collectStats) {
       if (isSat) {
         _numOfSats.incrementAndGet
@@ -83,6 +105,10 @@ final class ReporterImpl(var _ignore: B,
         _vcMillis.addAndGet(time.toLong)
       }
     }
+    if (logVc) {
+      info(Some(pos), Logika.kind, r.query)
+    }
+  }
 
   override def inform(pos: Position, kind: Logika.Reporter.Info.Kind.Type, message: String): Unit = {
   }
@@ -94,7 +120,7 @@ final class ReporterImpl(var _ignore: B,
   }
 
   override def empty: Logika.Reporter = {
-    return new ReporterImpl(F, ISZ(), collectStats, _numOfVCs, _numOfSats, _vcMillis, _satMillis)
+    return new ReporterImpl(logPc, logPcRaw, logVc, F, ISZ(), collectStats, _numOfVCs, _numOfSats, _vcMillis, _satMillis)
   }
 
   override def messages: ISZ[Message] = {

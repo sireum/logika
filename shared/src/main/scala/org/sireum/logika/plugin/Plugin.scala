@@ -98,7 +98,9 @@ object Plugin {
 
   @pure def canHandle(th: TypeHierarchy, stmt: AST.Stmt.Method): B
 
-  def handle(th: TypeHierarchy,
+  def handle(nameExePathMap: HashMap[String, String],
+             maxCores: Z,
+             th: TypeHierarchy,
              plugins: ISZ[Plugin],
              stmt: AST.Stmt.Method,
              caseIndex: Z,

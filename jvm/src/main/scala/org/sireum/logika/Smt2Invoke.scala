@@ -68,22 +68,21 @@ object Smt2Invoke {
                          timeoutInMs: Z,
                          rlimit: Z): Smt2Query.Result = {
     val smt2Configs: ISZ[Smt2Config] =
-      if (isSat) Smt2.parseConfigs(nameExePathMap(sireumHome), T, Smt2.defaultSatOpts, timeoutInMs, rlimit).left
-      else Smt2.parseConfigs(nameExePathMap(sireumHome), F, Smt2.defaultValidOpts, timeoutInMs, rlimit).left
-    return query(smt2Configs, isSat, smt2Seq, queryString, timeoutInMs)
+      if (isSat) Smt2.parseConfigs(nameExePathMap(sireumHome), T, Smt2.defaultSatOpts).left
+      else Smt2.parseConfigs(nameExePathMap(sireumHome), F, Smt2.defaultValidOpts).left
+    return query(smt2Configs, isSat, smt2Seq, queryString, timeoutInMs, rlimit)
   }
 
   @pure def query(smt2Configs: ISZ[Smt2Config],
                   isSat: B,
                   smt2Seq: B,
                   queryString: String,
-                  timeoutInMs: Z): Smt2Query.Result = {
+                  timeoutInMs: Z,
+                  rlimit: Z): Smt2Query.Result = {
     val configs: ISZ[Smt2Config] = for (smt2Config <- smt2Configs if isSat == smt2Config.isSat) yield smt2Config
-    val smt2Args: ISZ[String] = for (smt2Config <- configs if isSat == smt2Config.isSat; arg <- ISZ[String](
-      smt2Config.name, timeoutInMs.string, smt2Config.rlimit.string) ++ smt2Config.opts) yield arg
     val start = extension.Time.currentMillis
     val fs: ISZ[() => Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] @pure] = for (config <- configs) yield () => {
-      val args = Smt2.solverArgs(config.name, timeoutInMs, config.rlimit).get ++ config.opts
+      val args = Smt2.solverArgs(config.name, timeoutInMs, rlimit).get ++ config.opts
       var proc = Os.proc(config.exe +: args).input(queryString)
       proc = proc.timeout(timeoutInMs * Os.numOfProcessors * 2)
       val pr = proc.run()

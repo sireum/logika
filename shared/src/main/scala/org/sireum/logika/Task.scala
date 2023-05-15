@@ -34,7 +34,8 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 
 @datatype trait Task {
-  def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message]
+  def compute(nameExePathMap: HashMap[String, String], maxCores: Z, smt2: Smt2, cache: Logika.Cache,
+              reporter: Reporter): ISZ[Message]
 }
 
 object Task {
@@ -43,8 +44,9 @@ object Task {
                        val config: Config,
                        val fact: AST.Stmt.Fact,
                        val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
-      val logika = Logika(th, config, Context.empty, plugins)
+    override def compute(nameExePathMap: HashMap[String, String], maxCores: Z, smt2: Smt2, cache: Logika.Cache,
+                         reporter: Reporter): ISZ[Message] = {
+      val logika = Logika(th, config, Context.empty(nameExePathMap, maxCores), plugins)
       for (tp <- fact.typeParams) {
         smt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
@@ -70,7 +72,7 @@ object Task {
         if (s1.ok) {
           val (s2, sym) = logika.value2Sym(s1, v, pos)
           val s3 = s2.addClaim(State.Claim.Prop(T, sym))
-          val r = smt2.satResult(context, config, cache, Smt2.satTimeoutInMs, T, config.logVc, config.logVcDirOpt,
+          val r = smt2.satResult(context, config, cache, Smt2.satTimeoutInMs, T,
             s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos, s3.claims, reporter)
           if (r._2.kind ==Smt2Query.Result.Kind.Unsat) {
             reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
@@ -91,8 +93,9 @@ object Task {
                        val config: Config,
                        val theorem: AST.Stmt.Theorem,
                        val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
-      val logika = Logika(th, config, Context.empty, plugins)
+    override def compute(nameExePathMap: HashMap[String, String], maxCores: Z, smt2: Smt2, cache: Logika.Cache,
+                         reporter: Reporter): ISZ[Message] = {
+      val logika = Logika(th, config, Context.empty(nameExePathMap, maxCores), plugins)
       for (tp <- theorem.typeParams) {
         smt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
@@ -126,8 +129,9 @@ object Task {
                         val config: Config,
                         val stmts: ISZ[AST.Stmt],
                         val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
-      val logika = Logika(th, config, Context.empty, plugins)
+    override def compute(nameExePathMap: HashMap[String, String], maxCores: Z, smt2: Smt2, cache: Logika.Cache,
+                         reporter: Reporter): ISZ[Message] = {
+      val logika = Logika(th, config, Context.empty(nameExePathMap, maxCores), plugins)
       val csmt2 = smt2
       for (p <- plugins) {
         p match {
@@ -136,7 +140,7 @@ object Task {
             for (state <- ss if state.ok) {
               if (stmts.nonEmpty && stmts(stmts.size - 1).isInstruction) {
                 val lastPos = stmts(stmts.size - 1).posOpt.get
-                logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.End), reporter, Some(lastPos))
+                logika.logPc(state(status = State.Status.End), reporter, Some(lastPos))
               }
             }
             if (done) {
@@ -145,10 +149,10 @@ object Task {
           case _ =>
         }
       }
-      for (state <- logika.evalStmts(Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.ok) {
+      for (state <- Util.evalStmts(logika, Logika.Split.Default, csmt2, cache, None(), T, State.create, stmts, reporter) if state.ok) {
         if (stmts.nonEmpty && stmts(stmts.size - 1).isInstruction) {
           val lastPos = stmts(stmts.size - 1).posOpt.get
-          logika.logPc(config.logPc, config.logRawPc, state(status = State.Status.End), reporter, Some(lastPos))
+          logika.logPc(state(status = State.Status.End), reporter, Some(lastPos))
         }
       }
       return reporter.messages
@@ -161,7 +165,8 @@ object Task {
                          val method: AST.Stmt.Method,
                          val caseIndex: Z,
                          val plugins: ISZ[Plugin]) extends Task {
-    override def compute(smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
+    override def compute(nameExePathMap: HashMap[String, String], maxCores: Z, smt2: Smt2, cache: Logika.Cache,
+                         reporter: Reporter): ISZ[Message] = {
       val ms = Util.detectUnsupportedFeatures(method)
       if (ms.nonEmpty) {
         reporter.reports(ms)
@@ -171,13 +176,13 @@ object Task {
       for (p <- plugins) {
         p match {
           case p: plugin.MethodPlugin if p.canHandle(th, method) =>
-            if (p.handle(th, plugins, method, caseIndex, config, csmt2, cache, reporter)) {
+            if (p.handle(nameExePathMap, maxCores, th, plugins, method, caseIndex, config, csmt2, cache, reporter)) {
               return reporter.messages
             }
           case _ =>
         }
       }
-      Util.checkMethod(th, plugins, method, caseIndex, config, csmt2, cache, reporter)
+      Util.checkMethod(nameExePathMap, maxCores, th, plugins, method, caseIndex, config, csmt2, cache, reporter)
       return reporter.messages
     }
   }

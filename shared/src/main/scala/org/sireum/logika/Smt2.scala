@@ -209,19 +209,17 @@ object Smt2 {
 
   def parseConfigs(nameExePathMap: HashMap[String, String],
                    isSat: B,
-                   options: String,
-                   timeoutInMs: Z,
-                   rlimit: Z): Either[ISZ[Smt2Config], String] = {
+                   options: String): Either[ISZ[Smt2Config], String] = {
     var r = ISZ[Smt2Config]()
     for (option <- ops.StringOps(options).split((c: C) => c == ';')) {
       val opts: ISZ[String] =
         for (e <- ops.StringOps(ops.StringOps(option).trim).split((c: C) => c == ',')) yield ops.StringOps(e).trim
       opts match {
         case ISZ(name, _*) =>
-          solverArgs(name, timeoutInMs, rlimit) match {
+          solverArgs(name, validTimeoutInMs, rlimit) match {
             case Some(_) =>
               nameExePathMap.get(name) match {
-                case Some(exe) => r = r :+ Smt2Config(isSat, name, exe, rlimit, ops.ISZOps(opts).drop(1))
+                case Some(exe) => r = r :+ Smt2Config(isSat, name, exe, ops.ISZOps(opts).drop(1))
                 case _ =>
               }
             case _ => return Either.Right(s"Unsupported SMT2 solver name: $name")
@@ -636,9 +634,8 @@ object Smt2 {
     return if (typeHierarchy.isAdtType(t)) st"|ADT.${Smt2.quotedEscape(op)}|" else typeOpId(t, op)
   }
 
-  def satResult(context: ISZ[String], config: Config, cache: Logika.Cache, timeoutInMs: Z, reportQuery: B, log: B,
-                logDirOpt: Option[String], title: String, pos: message.Position, claims: ISZ[State.Claim],
-                reporter: Reporter): (B, Smt2Query.Result) = {
+  def satResult(context: ISZ[String], config: Config, cache: Logika.Cache, timeoutInMs: Z, reportQuery: B,
+                title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
     var cached = F
     var smt2res = Smt2Query.Result.empty
     if (config.caching) {
@@ -675,13 +672,10 @@ object Smt2 {
           |${if (config.rawInscription) toClaimST(F, claims, pos) else toExpST(config, F, context, claims, pos)}
           |$queryOpt""".render
     )
-    if (reportQuery) {
+    if (reportQuery || config.logVc) {
       reporter.query(pos, title, T, smt2res.timeMillis, F, config.elideEncoding, res)
     }
-    if (log) {
-      reporter.info(None(), Logika.kind, res.query)
-    }
-    logDirOpt match {
+    config.logVcDirOpt match {
       case Some(logDir) =>
         val filename: String =
           if (ops.StringOps(title).contains("[")) s"sat-$title"
@@ -695,10 +689,9 @@ object Smt2 {
     return (r, smt2res)
   }
 
-  def sat(context: ISZ[String], config: Config, cache: Logika.Cache, reportQuery: B, log: B, logDirOpt: Option[String],
+  def sat(context: ISZ[String], config: Config, cache: Logika.Cache, reportQuery: B,
           title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): B = {
-    val (status, r) = satResult(context, config, cache, satTimeoutInMs, reportQuery, log, logDirOpt, title, pos, claims,
-      reporter)
+    val (status, r) = satResult(context, config, cache, satTimeoutInMs, reportQuery, title, pos, claims, reporter)
     if (r.kind == Smt2Query.Result.Kind.Error) {
       reporter.error(Some(pos), Logika.kind, s"Error occurred when doing ${ops.StringOps(title).firstToLower}")
     }
@@ -1668,9 +1661,8 @@ object Smt2 {
     }
   }
 
-  def valid(context: ISZ[String], config: Config, cache: Logika.Cache, reportQuery: B, log: B,
-            logDirOpt: Option[String], title: String, pos: message.Position, premises: ISZ[State.Claim],
-            conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
+  def valid(context: ISZ[String], config: Config, cache: Logika.Cache, reportQuery: B, title: String,
+            pos: message.Position, premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
     if (config.caching) {
       val claims = premises :+ conclusion
       cache.getSmt2(F, typeHierarchy, config, config.timeoutInMs, claims) match {
@@ -1697,13 +1689,10 @@ object Smt2 {
           |$queryOpt""".render
     )
     val forceReport = smt2res.kind != Smt2Query.Result.Kind.Unsat
-    if (reportQuery || forceReport) {
+    if (reportQuery || forceReport || config.logVc) {
       reporter.query(pos, title, F, res.timeMillis, forceReport, config.elideEncoding, res)
     }
-    if (log) {
-      reporter.info(None(), Logika.kind, res.query)
-    }
-    logDirOpt match {
+    config.logVcDirOpt match {
       case Some(logDir) =>
         val filename: String =
           if (ops.StringOps(title).contains("[")) s"vc-$title"
