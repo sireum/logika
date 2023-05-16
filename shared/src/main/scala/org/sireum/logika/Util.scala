@@ -2821,4 +2821,15 @@ object Util {
     else currents ++ done
     return (logika, r)
   }
+
+  def extractAssignExpOpt(mi: lang.symbol.Info.Method): Option[AST.AssignExp] = {
+    if (mi.ast.purity == AST.Purity.StrictPure && mi.ast.bodyOpt.nonEmpty) {
+      mi.ast.bodyOpt.get.stmts match {
+        case ISZ(stmt: AST.Stmt.Var, _: AST.Stmt.Return) => return stmt.initOpt
+        case stmts => halt(s"Infeasible: $stmts")
+      }
+    } else {
+      return None()
+    }
+  }
 }

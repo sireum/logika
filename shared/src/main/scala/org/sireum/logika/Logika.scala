@@ -163,8 +163,9 @@ object Logika {
   val libraryDesc: String = "Library"
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
-  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), SameDiffPlugin(), Smt2Plugin(), ClaimOfPlugin(), LiftPlugin(),
-    PredNatDedPlugin(), PropNatDedPlugin(), InceptionPlugin(), SubstitutionPlugin(), AlgebraPlugin())
+  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), FoldUnfoldPlugin(), SameDiffPlugin(), Smt2Plugin(),
+    ClaimOfPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin(), SubstitutionPlugin(),
+    AlgebraPlugin())
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
     (F, AST.Typed.isName, "firstIndex"), (F, AST.Typed.msName, "firstIndex"),
@@ -1759,17 +1760,6 @@ import Util._
     }
 
     def methodInfo(isInObject: B, owner: QName, id: String): Context.InvokeMethodInfo = {
-      def extractAssignExpOpt(mi: lang.symbol.Info.Method): Option[AST.AssignExp] = {
-        if (mi.ast.purity == AST.Purity.StrictPure && mi.ast.bodyOpt.nonEmpty) {
-          mi.ast.bodyOpt.get.stmts match {
-            case ISZ(stmt: AST.Stmt.Var, _: AST.Stmt.Return) => return stmt.initOpt
-            case stmts => halt(s"Infeasible: $stmts")
-          }
-        } else {
-          return None()
-        }
-      }
-
       def extractResolvedInfo(attr: AST.ResolvedAttr): AST.ResolvedInfo.Method = {
         return attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
       }
