@@ -31,52 +31,6 @@ import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.message.Position
 
-object SameDiffPlugin {
-  @record class LabeledExpMiner(var map: HashSMap[Z, AST.Exp.Labeled], val reporter: Reporter) extends AST.MTransformer {
-    override def postExpLabeled(o: AST.Exp.Labeled): MOption[AST.Exp] = {
-      val num = numOf(o)
-      map.get(num) match {
-        case Some(e) =>
-          val pos = e.posOpt.get
-          reporter.error(o.posOpt, Logika.kind, s"The same label has been declared at [${pos.beginLine}, ${pos.beginColumn}]")
-        case _ =>
-          map = map + num ~> o
-      }
-      return MNone()
-    }
-  }
-
-  @datatype class LabeledExpAbstractor(nums: HashSet[Z]) extends AST.Transformer.PrePost[B] {
-    override def preExpLabeled(ctx: B, o: AST.Exp.Labeled): AST.Transformer.PreResult[B, AST.Exp] = {
-      val num = numOf(o)
-      if (nums.contains(num)) {
-        return AST.Transformer.PreResult(ctx, T, Some(AST.Exp.Sym(num, AST.TypedAttr(o.posOpt, o.typedOpt))))
-      } else {
-        return AST.Transformer.PreResult(ctx, T, None())
-      }
-    }
-  }
-
-  @strictpure def numOf(exp: AST.Exp.Labeled): Z = exp.numOpt match {
-    case Some(num) => num.value
-    case _ => 0
-  }
-
-  def mineLabeledExps(exp: AST.Exp, reporter: Reporter): HashSMap[Z, AST.Exp.Labeled] = {
-    val lem = LabeledExpMiner(HashSMap.empty, reporter.empty)
-    lem.transformExp(exp)
-    reporter.reports(lem.reporter.messages)
-    return lem.map
-  }
-
-  def abstractLabeledExps(exp: AST.Exp, nums: HashSet[Z]): AST.Exp = {
-    val lea = AST.Transformer(LabeledExpAbstractor(nums))
-    return lea.transformExp(F, exp).resultOpt.getOrElse(exp)
-  }
-}
-
-import SameDiffPlugin._
-
 @datatype class SameDiffPlugin extends JustificationPlugin {
 
   val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("SameDiff", "SameDiff_*")
@@ -156,8 +110,8 @@ import SameDiffPlugin._
         return emptyResult
     }
 
-    val fromMap = mineLabeledExps(fromClaim, reporter)
-    val stepMap = mineLabeledExps(step.claim, reporter)
+    val fromMap = AST.Util.mineLabeledExps(Logika.kind, fromClaim, reporter)
+    val stepMap = AST.Util.mineLabeledExps(Logika.kind, step.claim, reporter)
 
     if (reporter.hasError) {
       return emptyResult
@@ -176,8 +130,8 @@ import SameDiffPlugin._
       return emptyResult
     }
 
-    val aFromClaim = abstractLabeledExps(fromClaim, nums)
-    val aStepClaim = abstractLabeledExps(step.claim, nums)
+    val aFromClaim = AST.Util.abstractLabeledExps(fromClaim, nums)
+    val aStepClaim = AST.Util.abstractLabeledExps(step.claim, nums)
     val sortedNums = ops.ISZOps(nums.elements).sortWith((num1: Z, num2: Z) => num1 <= num2)
 
     val labeled: ST =
@@ -263,7 +217,7 @@ import SameDiffPlugin._
   override def handle(logika: Logika, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State,
                       exp: AST.Exp, reporter: Reporter): ISZ[(State, State.Value)] = {
     val lexp = exp.asInstanceOf[AST.Exp.Labeled]
-    val num = numOf(lexp)
+    val num = AST.Util.labeledNumOf(lexp)
     val svs2 = logika.evalExp(split, smt2, cache, rtCheck, state, lexp.exp, reporter)
     val fromExp: AST.Exp.Labeled = fromMap.get(num) match {
       case Some(e) => e
