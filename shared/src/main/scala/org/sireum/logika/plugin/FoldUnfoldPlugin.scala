@@ -180,8 +180,8 @@ import FoldUnfoldPlugin._
             if (mi.ast.purity != AST.Purity.StrictPure) {
               return errSp()
             }
-            val msm = TypeChecker.unifyFun(Logika.kind, logika.th, unfoldFrom.posOpt, typeRel, mi.ast.sig.funType,
-              res.tpeOpt.get, message.Reporter.create).get
+            val msm = TypeChecker.unifyFun(Logika.kind, logika.th, unfoldFrom.posOpt, typeRel, res.tpeOpt.get,
+              mi.ast.sig.funType, message.Reporter.create).get
             Util.extractAssignExpOpt(mi) match {
               case Some(ae) => (mi, AST.Util.substAssignExp(ae, msm))
               case _ => return errSp()
@@ -253,7 +253,9 @@ import FoldUnfoldPlugin._
       val unfoldFromSpBlock = AST.Exp.StrictPureBlock(AST.Stmt.Block(AST.Body(vals :+ newBody, locals),
         AST.Attr(unfoldFrom.posOpt)), AST.TypedAttr(unfoldFrom.posOpt, unfoldFrom.typedOpt))
 
-      if (logika.th.normalizeExp(unfoldTo) != logika.th.normalizeExp(unfoldFromSpBlock)) {
+      val unfoldToNorm = logika.th.normalizeExp(unfoldTo)
+      val unfoldFromSpBlockNorm = logika.th.normalizeExp(unfoldFromSpBlock)
+      if (unfoldToNorm != unfoldFromSpBlockNorm) {
         reporter.error(posOpt, Logika.kind,
           st"The labeled expression #$num in the stated claim and in $fromStepId's' claim are not equivalent after ${if (isUnfold) "unfolding" else "folding"}".render)
         return emptyResult()
