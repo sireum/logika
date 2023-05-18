@@ -46,6 +46,51 @@ object Plugin {
 
   @strictpure def claimPlugins(plugins: ISZ[Plugin]): ISZ[ClaimPlugin] =
     for (p <- plugins if p.isInstanceOf[ClaimPlugin]) yield p.asInstanceOf[ClaimPlugin]
+
+  @datatype class CommonLabeledResult(val sortedNums: ISZ[Z],
+                                      val fromMap: HashSMap[Z, AST.Exp.Labeled],
+                                      val toMap: HashSMap[Z, AST.Exp.Labeled],
+                                      val labeled: ST,
+                                      val aFromClaim: AST.Exp,
+                                      val aToClaim: AST.Exp)
+
+  def commonLabeled(th: TypeHierarchy, posOpt: Option[message.Position], fromStepId: AST.ProofAst.StepId,
+                    fromClaim: AST.Exp, toClaim: AST.Exp, reporter: Reporter): Option[CommonLabeledResult] = {
+    val fromMap = AST.Util.mineLabeledExps(Logika.kind, fromClaim, reporter)
+    val toMap = AST.Util.mineLabeledExps(Logika.kind, toClaim, reporter)
+
+    if (reporter.hasError) {
+      return None()
+    }
+
+    var nums = HashSet.empty[Z]
+    for (num <- fromMap.keys) {
+      if (toMap.contains(num)) {
+        nums = nums + num
+      }
+    }
+
+    if (nums.isEmpty) {
+      reporter.error(posOpt, Logika.kind,
+        s"Could not find a common expression label between the stated claim and proof step $fromStepId")
+      return None()
+    }
+
+    val aFromClaim = AST.Util.abstractLabeledExps(fromClaim, nums)
+    val aToClaim = AST.Util.abstractLabeledExps(toClaim, nums)
+    val sortedNums = ops.ISZOps(nums.elements).sortWith((num1: Z, num2: Z) => num1 <= num2)
+
+    val labeled: ST =
+      if (sortedNums.size == 1) st"labeled expression #${sortedNums(0)}"
+      else st"labeled expressions {${(sortedNums, ", ")}}"
+
+    if (th.normalizeExp(aFromClaim) != th.normalizeExp(aToClaim)) {
+      reporter.error(posOpt, Logika.kind,
+        st"The stated claim and $fromStepId's' claim are not equivalent when the $labeled are abstracted away".render)
+      return None()
+    }
+    return Some(CommonLabeledResult(sortedNums, fromMap, toMap, labeled, aFromClaim, aToClaim))
+  }
 }
 
 @sig trait Plugin {
