@@ -54,7 +54,6 @@ import org.sireum.logika.Logika.Reporter
     }
     just match {
       case just: AST.ProofAst.Step.Justification.Apply => return canHandleRes(just.invokeIdent.attr.resOpt.get)
-      case just: AST.ProofAst.Step.Justification.ApplyNamed => return canHandleRes(just.invokeIdent.attr.resOpt.get)
       case _ => return F
     }
   }
@@ -260,15 +259,9 @@ import org.sireum.logika.Logika.Reporter
           case res: AST.ResolvedInfo.Theorem => return handleFactTheorem(res.name, just.invoke.ident.posOpt, just.args)
           case _ => halt("Infeasible")
         }
-      case just: AST.ProofAst.Step.Justification.ApplyNamed =>
-        just.invoke.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Method => return handleMethod(res, just.invoke.ident.posOpt, just.args)
-          case res: AST.ResolvedInfo.Fact => return handleFactTheorem(res.name, just.invoke.ident.posOpt, just.args)
-          case res: AST.ResolvedInfo.Theorem => return handleFactTheorem(res.name, just.invoke.ident.posOpt, just.args)
-          case _ => halt("Infeasible")
-        }
       case _: AST.ProofAst.Step.Justification.ApplyEta =>
         halt("TODO") // TODO
+      case _: AST.ProofAst.Step.Justification.ApplyNamed => halt("Infeasible")
     }
   }
 }
