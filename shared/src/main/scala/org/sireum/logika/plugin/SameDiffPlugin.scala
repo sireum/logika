@@ -110,38 +110,12 @@ import org.sireum.message.Position
         return emptyResult
     }
 
-    val fromMap = AST.Util.mineLabeledExps(Logika.kind, fromClaim, reporter)
-    val stepMap = AST.Util.mineLabeledExps(Logika.kind, step.claim, reporter)
-
-    if (reporter.hasError) {
+    val tOpt = Plugin.commonLabeled(logika.th, posOpt, fromStepId, fromClaim, step.claim, reporter)
+    if (tOpt.isEmpty) {
       return emptyResult
     }
 
-    var nums = HashSet.empty[Z]
-    for (num <- fromMap.keys) {
-      if (stepMap.contains(num)) {
-        nums = nums + num
-      }
-    }
-
-    if (nums.isEmpty) {
-      reporter.error(posOpt, Logika.kind,
-        s"Could not find a common expression label between the stated claim and proof step $fromStepId")
-      return emptyResult
-    }
-
-    val aFromClaim = AST.Util.abstractLabeledExps(fromClaim, nums)
-    val aStepClaim = AST.Util.abstractLabeledExps(step.claim, nums)
-    val sortedNums = ops.ISZOps(nums.elements).sortWith((num1: Z, num2: Z) => num1 <= num2)
-
-    val labeled: ST =
-      if (sortedNums.size == 1) st"labeled expression #${sortedNums(0)}"
-      else st"labeled expressions {${(sortedNums, ", ")}}"
-
-    if (naFromClaim != naStepClaim) {
-      reporter.error(posOpt, Logika.kind,
-        st"The stated claim and $fromStepId's' claim are not structurally equivalent when the $labeled are abstracted away".render)
-    }
+    val Plugin.CommonLabeledResult(sortedNums, fromMap, toMap, labeled, aFromClaim, aToClaim) = tOpt.get
 
     if (args.size == 1) {
       if (id == "SameDiff_*") {
@@ -190,7 +164,7 @@ import org.sireum.message.Position
             |
             |  ${fromMap.get(num).get}
             |  ≡
-            |  ${stepMap.get(num).get}"""
+            |  ${toMap.get(num).get}"""
       val desc = st"$id (of ${(justificationName, ".")})"
       reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
         st"""Accepted by using the $desc
@@ -200,8 +174,8 @@ import org.sireum.message.Position
             |  $labeled are structurally equivalent, i.e.,
             |
             |  $aFromClaim
-            |  ≈
-            |  $aStepClaim
+            |  ≡
+            |  $aToClaim
             |
             |* Each of the matching labeled expressions are proven to be equivalent by using SMT2, i.e.,
             |
