@@ -50,6 +50,9 @@ object Plugin {
 
 @sig trait Plugin {
   @pure def name: String
+  @pure def setOptions(tool: String, options: String): Option[Plugin] = {
+    return None()
+  }
 }
 
 @sig trait JustificationPlugin extends Plugin {
@@ -100,6 +103,7 @@ object Plugin {
 
   def handle(nameExePathMap: HashMap[String, String],
              maxCores: Z,
+             fileOptions: LibUtil.FileOptionMap,
              th: TypeHierarchy,
              plugins: ISZ[Plugin],
              stmt: AST.Stmt.Method,
