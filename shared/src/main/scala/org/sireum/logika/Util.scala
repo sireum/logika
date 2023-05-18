@@ -1753,15 +1753,16 @@ object Util {
     return sv2ST _
   }
 
-  def logikaMethod(nameExePathMap: HashMap[String, String], maxCores: Z, th: TypeHierarchy, config: Config, isHelper: B,
-                   owner: ISZ[String], id: String, receiverTypeOpt: Option[AST.Typed], params: ISZ[(AST.Id, AST.Typed)],
-                   retType: AST.Typed, posOpt: Option[Position], reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp],
+  def logikaMethod(nameExePathMap: HashMap[String, String], maxCores: Z, fileOptions: LibUtil.FileOptionMap,
+                   th: TypeHierarchy, config: Config, isHelper: B, owner: ISZ[String], id: String,
+                   receiverTypeOpt: Option[AST.Typed], params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed,
+                   posOpt: Option[Position], reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp],
                    modifies: ISZ[AST.Exp.Ref], ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString],
                    plugins: ISZ[plugin.Plugin], implicitContext: Option[(String, Position)],
                    compMethods: ISZ[ISZ[String]]): Logika = {
     val mctx = Context.Method(isHelper, owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
       HashMap.empty, HashMap.empty, HashMap.empty, ISZ(), posOpt, HashMap.empty)
-    val ctx = Context.empty(nameExePathMap, maxCores)(methodOpt = Some(mctx),
+    val ctx = Context.empty(nameExePathMap, maxCores, fileOptions)(methodOpt = Some(mctx),
       caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext, compMethods = compMethods)
     return Logika(th, config, ctx, plugins)
   }
@@ -1911,6 +1912,7 @@ object Util {
 
   def checkMethod(nameExePathMap: HashMap[String, String],
                   maxCores: Z,
+                  fileOptions: LibUtil.FileOptionMap,
                   th: TypeHierarchy,
                   plugins: ISZ[plugin.Plugin],
                   method: AST.Stmt.Method,
@@ -1939,8 +1941,8 @@ object Util {
             case _ => halt("Infeasible")
           }
         }
-        val p = updateInVarMaps(logikaMethod(nameExePathMap, maxCores, th, mconfig, method.isHelper, res.owner,
-          method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes, method.sig.returnType.typedOpt.get,
+        val p = updateInVarMaps(logikaMethod(nameExePathMap, maxCores, fileOptions, th, mconfig, method.isHelper,
+          res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes, method.sig.returnType.typedOpt.get,
           methodPosOpt, reads, requires, modifies, ensures, if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins,
           None(), ISZ()), method.isHelper, smt2, cache, state, reporter)
         state = p._2
@@ -2144,7 +2146,8 @@ object Util {
     }
   }
 
-  def pureMethod(nameExePathMap: HashMap[String, String], maxCores: Z, th: TypeHierarchy, config: Config,
+  def pureMethod(nameExePathMap: HashMap[String, String], maxCores: Z,
+                 fileOptions: LibUtil.FileOptionMap, th: TypeHierarchy, config: Config,
                  plugins: ISZ[plugin.Plugin], smt2: Smt2, cache: Logika.Cache, state: State,
                  receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String], id: String,
                  isHelper: B, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
@@ -2157,7 +2160,7 @@ object Util {
       val pos = posOpt.get
       val (svs, maxFresh, ok): (ISZ[(State, State.Value.Sym)], Z, B) = {
         val context = pf.context :+ pf.id
-        val logika: Logika = logikaMethod(nameExePathMap, maxCores, th, config, isHelper, pf.context, pf.id,
+        val logika: Logika = logikaMethod(nameExePathMap, maxCores, fileOptions, th, config, isHelper, pf.context, pf.id,
           pf.receiverTypeOpt, ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(),
           ISZ(), ISZ(), plugins, implicitContextOpt, ISZ())
         var s0 = state(claims = ISZ())
@@ -2292,9 +2295,10 @@ object Util {
           args = args :+ arg
         case _ =>
       }
-      val (s2, pf) = pureMethod(logika.context.nameExePathMap, logika.context.maxCores, logika.th, logika.config,
-        logika.plugins, smt2, cache, s0, receiverTypeOpt, AST.Typed.Fun(T, F, paramTypes, t), owner, id, isHelper,
-        paramIds, AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter, logika.context.implicitCheckTitlePosOpt)
+      val (s2, pf) = pureMethod(logika.context.nameExePathMap, logika.context.maxCores, logika.context.fileOptions,
+        logika.th, logika.config, logika.plugins, smt2, cache, s0, receiverTypeOpt, AST.Typed.Fun(T, F, paramTypes, t),
+        owner, id, isHelper, paramIds, AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter,
+        logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)
       val s4 = s3.addClaim(State.Claim.Let.ProofFunApply(sym, pf, args))
       val s4ClaimsOps = ops.ISZOps(s4.claims)
@@ -2737,24 +2741,41 @@ object Util {
         if (current.ok) {
           val stmt = stmts(i)
           stmt match {
-            case AST.Stmt.Expr(e: AST.Exp.Invoke) if e.attr.resOpt == TypeChecker.setOptionsResOpt &&
-              e.args(0).asInstanceOf[AST.Exp.LitString].value == OptionsUtil.logika =>
+            case AST.Stmt.Expr(e: AST.Exp.Invoke) if e.attr.resOpt == TypeChecker.setOptionsResOpt =>
               logika.logPc(current, reporter, stmt.posOpt)
+              val tool = e.args(0).asInstanceOf[AST.Exp.LitString].value
               val value: String = e.args(1) match {
                 case arg: AST.Exp.LitString => arg.value
                 case AST.Exp.Select(Some(arg: AST.Exp.LitString), _, _) => arg.value.stripMargin
                 case _ => halt(s"Infeasible: ${e.args(1)}")
               }
-              OptionsUtil.toConfig(initConfig, l.context.maxCores, LibUtil.setOptions, l.context.nameExePathMap, value) match {
-                case Either.Left(c) =>
-                  logika = logika(config = c)
-                  reporter.coverage(F, U64.fromZ(0), stmt.posOpt.get)
-                  currents = currents :+ current
-                case Either.Right(msgs) =>
-                  for (msg <- msgs) {
-                    reporter.error(e.args(1).posOpt, Logika.kind, msg)
+              if (tool == OptionsUtil.logika) {
+                OptionsUtil.toConfig(initConfig, l.context.maxCores, LibUtil.setOptions, l.context.nameExePathMap, value) match {
+                  case Either.Left(c) =>
+                    logika = logika(config = c)
+                    reporter.coverage(F, U64.fromZ(0), stmt.posOpt.get)
+                    currents = currents :+ current
+                  case Either.Right(msgs) =>
+                    for (msg <- msgs) {
+                      reporter.error(e.args(1).posOpt, Logika.kind, msg)
+                    }
+                    currents = currents :+ current(status = State.Status.Error)
+                }
+              } else {
+                var changed = F
+                var newPlugins = ISZ[plugin.Plugin]()
+                for (p <- logika.plugins) {
+                  p.setOptions(tool, value) match {
+                    case Some(newP) =>
+                      changed = T
+                      newPlugins = newPlugins :+ newP
+                    case _ => newPlugins = newPlugins :+ p
                   }
-                  currents = currents :+ current(status = State.Status.Error)
+                }
+                if (changed) {
+                  logika = logika(plugins = newPlugins)
+                }
+                currents = currents :+ current
               }
             case _ =>
               val nextStates: ISZ[State] = if (logika.config.transitionCache) {

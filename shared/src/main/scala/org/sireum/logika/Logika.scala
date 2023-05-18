@@ -179,11 +179,29 @@ object Logika {
   val idxSuffix: String = "$Idx"
   val zeroU64: U64 = U64.fromZ(0)
 
-  def checkStmts(nameExePathMap: HashMap[String, String], maxCores: Z, initStmts: ISZ[AST.Stmt],
-                 typeStmts: ISZ[(ISZ[String], AST.Stmt)], defaultConfig: Config, th: TypeHierarchy,
-                 smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter, par: Z,
-                 plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z, skipMethods: ISZ[String],
-                 skipTypes: ISZ[String], sourceConfigMap: HashMap[Option[String], Config]): Unit = {
+  def checkStmts(nameExePathMap: HashMap[String, String], maxCores: Z, fileOptions: LibUtil.FileOptionMap,
+                 initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], defaultConfig: Config,
+                 th: TypeHierarchy, smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
+                 par: Z, plugins: ISZ[Plugin], verifyingStartTime: Z, includeInit: B, line: Z, skipMethods: ISZ[String],
+                 skipTypes: ISZ[String]): Unit = {
+    var sourceConfigMap = HashMap.empty[Option[String], Config]
+    for (p <- fileOptions.entries) {
+      val (fileUriOpt, m) = p
+      m.get(OptionsUtil.logika) match {
+        case Some(options) =>
+          OptionsUtil.toConfig(defaultConfig, maxCores, "file", nameExePathMap, options) match {
+            case Either.Left(c) => sourceConfigMap = sourceConfigMap + fileUriOpt ~> c
+            case Either.Right(msgs) =>
+              for (msg <- msgs) {
+                reporter.error(None(), Logika.kind, msg)
+              }
+          }
+        case _ =>
+      }
+    }
+    if (reporter.hasError) {
+      return
+    }
 
     var noMethodIds = HashSet.empty[String]
     var noMethodNames = HashSet.empty[String]
@@ -373,7 +391,7 @@ object Logika {
     def compute(task: Task): B = {
       val r = reporter.empty
       val csmt2 = smt2
-      task.compute(nameExePathMap, maxCores, csmt2, cache, r)
+      task.compute(nameExePathMap, maxCores, fileOptions, csmt2, cache, r)
       reporter.combine(r)
       return T
     }
@@ -429,13 +447,12 @@ object Logika {
                 val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
                 val dummy2 = config.fingerprint
               }
-              val sourceConfigMap =
-                HashMap.empty[Option[String], Config] + fileUriOpt ~> OptionsUtil.mineConfig(config,
-                  maxCores, "file", nameExePathMap, input, None(), reporter)
-              if (!reporter.hasError) {
-                checkStmts(nameExePathMap, maxCores, p.body.stmts, ISZ(), config, th, smt2f, cache, reporter,
-                  config.parCores, plugins, verifyingStartTime, T, line, skipMethods, skipTypes, sourceConfigMap)
-              } else {
+
+              var fileOptions: LibUtil.FileOptionMap = HashMap.empty
+              fileOptions = fileOptions + fileUriOpt ~> LibUtil.mineOptions(input)
+              checkStmts(nameExePathMap, maxCores, fileOptions, p.body.stmts, ISZ(), config, th, smt2f, cache, reporter,
+                config.parCores, plugins, verifyingStartTime, T, line, skipMethods, skipTypes)
+              if (reporter.hasError) {
                 reporter.illFormed()
               }
             }
@@ -559,12 +576,11 @@ object Logika {
         case _ =>
       }
     }
-    val sourceConfigMap = HashMap.empty[Option[String], Config] ++ (for (p <- sources) yield
-      (p._1, OptionsUtil.mineConfig(config, maxCores, "file", nameExePathMap, p._2, None(), reporter)))
-    if (!reporter.hasError) {
-      checkStmts(nameExePathMap, maxCores, ISZ(), typeStmts, config, th, smt2f, cache, reporter, par, plugins,
-        verifyingStartTime, F, line, skipMethods, skipTypes, sourceConfigMap)
-    }
+
+    var fileOptions: LibUtil.FileOptionMap = HashMap.empty
+    fileOptions = fileOptions ++ (for (p <- sources) yield (p._1, LibUtil.mineOptions(p._2)))
+    checkStmts(nameExePathMap, maxCores, fileOptions, ISZ(), typeStmts, config, th, smt2f, cache, reporter, par, plugins,
+      verifyingStartTime, F, line, skipMethods, skipTypes)
   }
 }
 
@@ -1918,9 +1934,9 @@ import Util._
       }
 
       def evalMethod(s1: State, minfo: Info.Method): Unit = {
-        val l = logikaMethod(context.nameExePathMap, context.maxCores, th, config, minfo.ast.isHelper, res.owner,
-          res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes, info.sig.returnType.typedOpt.get, receiverPosOpt,
-          ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins, Some(
+        val l = logikaMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config,
+          minfo.ast.isHelper, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
+          info.sig.returnType.typedOpt.get, receiverPosOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
           this.context.compMethods :+ (res.owner :+ res.id)
@@ -2047,9 +2063,9 @@ import Util._
       }
 
       val lComp: Logika = {
-        val l = logikaMethod(context.nameExePathMap, context.maxCores, th, config, info.isHelper, res.owner, res.id,
-          receiverOpt.map(t => t.tipe), info.sig.paramIdTypes, info.sig.returnType.typedOpt.get, receiverPosOpt,
-          contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(), plugins, Some(
+        val l = logikaMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config, info.isHelper,
+          res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes, info.sig.returnType.typedOpt.get,
+          receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(), plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
           this.context.compMethods :+ (res.owner :+ res.id)
@@ -2094,9 +2110,9 @@ import Util._
       val pfOpt: Option[State.ProofFun] = if (config.pureFun ||
         (info.sig.isPure && !info.hasBody && info.contract.isEmpty)) {
         val typedAttr = AST.TypedAttr(posOpt, None())
-        val (s8, pf) = Util.pureMethod(context.nameExePathMap, context.maxCores, th, config, plugins, smt2, cache, s1,
-          lComp.context.receiverTypeOpt, info.sig.funType.subst(typeSubstMap), lComp.context.methodOpt.get.owner,
-          info.sig.id.value, info.isHelper, for (p <- info.sig.params) yield p.id,
+        val (s8, pf) = Util.pureMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config,
+          plugins, smt2, cache, s1, lComp.context.receiverTypeOpt, info.sig.funType.subst(typeSubstMap),
+          lComp.context.methodOpt.get.owner, info.sig.id.value, info.isHelper, for (p <- info.sig.params) yield p.id,
           AST.Stmt.Expr(AST.Exp.Result(None(), typedAttr), typedAttr), reporter, lComp.context.implicitCheckTitlePosOpt)
         s1 = s8
         Some(pf)
@@ -2436,9 +2452,9 @@ import Util._
           case _ => halt("Infeasible")
         }
       }
-      val (s2, pf) = pureMethod(context.nameExePathMap, context.maxCores, th, config, plugins, smt2, cache, s1,
-        receiverTypeOpt, funType, mres.owner, mres.id, info.isHelper, for (p <- info.sig.params) yield p.id, body,
-        reporter, context.implicitCheckTitlePosOpt)
+      val (s2, pf) = pureMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config, plugins,
+        smt2, cache, s1, receiverTypeOpt, funType, mres.owner, mres.id, info.isHelper,
+        for (p <- info.sig.params) yield p.id, body, reporter, context.implicitCheckTitlePosOpt)
       val (s3, re) = s2.freshSym(retType, pos)
       var args: ISZ[State.Value] = for (q <- paramArgs) yield q._4
       receiverOpt match {
