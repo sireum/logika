@@ -236,29 +236,31 @@ import FoldUnfoldPlugin._
       }
     }
 
-    val eqSTs: ISZ[ST] = for (num <- sortedNums) yield
-      st"""+ Labeled expression #$num:
-          |
-          |  ${unfoldFromMap.get(num).get}
-          |  ≡
-          |  ${unfoldToMap.get(num).get}"""
-    val desc = st"$justId (of ${(justificationName, ".")})"
-    reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
-      st"""Accepted by using the $desc
-          |proof tactic implemented in the $name, because:
-          |
-          |* The claims of proof steps $fromStepId and ${step.id} abstracted over matching
-          |  $labeled are structurally equivalent, i.e.,
-          |
-          |  $aFromClaim
-          |  ≡
-          |  $aToClaim
-          |
-          |* Each of the matching labeled expressions are proven to be equivalent
-          |  under their respective execution context (by SMT2 solving), i.e.,
-          |
-          |  ${(eqSTs, "\n\n")}
-          |""".render)
+    if (logika.config.detailedInfo) {
+      val eqSTs: ISZ[ST] = for (num <- sortedNums) yield
+        st"""+ Labeled expression #$num:
+            |
+            |  ${unfoldFromMap.get(num).get}
+            |  ≡
+            |  ${unfoldToMap.get(num).get}"""
+      val desc = st"$justId (of ${(justificationName, ".")})"
+      reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
+        st"""Accepted by using the $desc
+            |proof tactic implemented in the $name, because:
+            |
+            |* The claims of proof steps $fromStepId and ${step.id} abstracted over matching
+            |  $labeled are structurally equivalent, i.e.,
+            |
+            |  $aFromClaim
+            |  ≡
+            |  $aToClaim
+            |
+            |* Each of the matching labeled expressions are proven to be equivalent
+            |  under their respective execution context (by SMT2 solving), i.e.,
+            |
+            |  ${(eqSTs, "\n\n")}
+            |""".render)
+    }
 
   val (stat, nextFresh, premises, conclusion) =
       logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)

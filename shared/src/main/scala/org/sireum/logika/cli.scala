@@ -118,6 +118,9 @@ object cli {
         Opt(name = "logVcDir", longKey = "log-vc-dir", shortKey = None(),
           tpe = Type.Path(F, None()),
           description = "Write all verification conditions in a directory"),
+        Opt(name = "logDetailedInfo", longKey = "log-detailed-info", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Display detailed feedback information"),
         Opt(name = "stats", longKey = "stats", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Collect verification statistics")

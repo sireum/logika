@@ -442,7 +442,7 @@ object Logika {
 
           if (!reporter.hasError) {
             if (hasLogika) {
-              if (config.transitionCache || config.caching) {
+              if (config.transitionCache || config.smt2Caching) {
                 val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
                 val dummy2 = config.fingerprint
               }
@@ -557,7 +557,7 @@ object Logika {
                          smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter, par: Z,
                          plugins: ISZ[Plugin], line: Z, skipMethods: ISZ[String], skipTypes: ISZ[String],
                          sources: ISZ[(Option[String], String)]): Unit = {
-    if (config.transitionCache || config.caching) {
+    if (config.transitionCache || config.smt2Caching) {
       val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
       val dummy2 = config.fingerprint
     }

@@ -32,13 +32,15 @@ import org.sireum.lang.tipe.TypeHierarchy
 import java.util.concurrent.atomic.AtomicLong
 
 object ReporterImpl {
-  def create(logPc: B, logPcRaw: B, logVc: B): ReporterImpl = new ReporterImpl(logPc, logPcRaw, logVc, F, ISZ(), F,
-    new AtomicLong(0), new AtomicLong(0), new AtomicLong(0), new AtomicLong(0))
+  def create(logPc: B, logPcRaw: B, logVc: B, logDetailedInfo: B): ReporterImpl =
+    new ReporterImpl(logPc, logPcRaw, logVc, logDetailedInfo, F, ISZ(), F,
+      new AtomicLong(0), new AtomicLong(0), new AtomicLong(0), new AtomicLong(0))
 }
 
 final class ReporterImpl(val logPc: B,
                          val logPcRaw: B,
                          val logVc: B,
+                         val logDetailedInfo: B,
                          var _ignore: B,
                          var _messages: ISZ[Message],
                          var collectStats: B,
@@ -68,8 +70,8 @@ final class ReporterImpl(val logPc: B,
     this
   }
 
-  override def $clone: ReporterImpl = new ReporterImpl(logPc, logPcRaw, logVc, _ignore, _messages, collectStats,
-    _numOfVCs, _numOfSats, _vcMillis, _satMillis)
+  override def $clone: ReporterImpl = new ReporterImpl(logPc, logPcRaw, logVc, logDetailedInfo, _ignore, _messages,
+    collectStats, _numOfVCs, _numOfSats, _vcMillis, _satMillis)
 
   override def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
                      th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
@@ -110,8 +112,10 @@ final class ReporterImpl(val logPc: B,
     }
   }
 
-  override def inform(pos: Position, kind: Logika.Reporter.Info.Kind.Type, message: String): Unit = {
-  }
+  override def inform(pos: Position, kind: Logika.Reporter.Info.Kind.Type, message: String): Unit =
+    if (logDetailedInfo) {
+      info(Some(pos), Logika.kind, message)
+    }
 
   override def illFormed(): Unit = {
   }
@@ -120,7 +124,8 @@ final class ReporterImpl(val logPc: B,
   }
 
   override def empty: Logika.Reporter = {
-    return new ReporterImpl(logPc, logPcRaw, logVc, F, ISZ(), collectStats, _numOfVCs, _numOfSats, _vcMillis, _satMillis)
+    return new ReporterImpl(logPc, logPcRaw, logVc, logDetailedInfo, F, ISZ(), collectStats, _numOfVCs, _numOfSats,
+      _vcMillis, _satMillis)
   }
 
   override def messages: ISZ[Message] = {

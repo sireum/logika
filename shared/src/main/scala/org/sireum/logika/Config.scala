@@ -47,7 +47,7 @@ import org.sireum._
                        val simplifiedQuery: B,
                        val checkInfeasiblePatternMatch: B,
                        val fpRoundingMode: String,
-                       val caching: B,
+                       val smt2Caching: B,
                        val smt2Seq: B,
                        val branchPar: Config.BranchPar.Type,
                        val branchParCores: Z,
@@ -61,7 +61,8 @@ import org.sireum._
                        val flipStrictPure: B,
                        val transitionCache: B,
                        val patternExhaustive: B,
-                       val pureFun: B) {
+                       val pureFun: B,
+                       val detailedInfo: B) {
 
   @memoize def fingerprint: U64 = {
     return ops.StringOps(string).sha3U64(T, T)
