@@ -90,7 +90,7 @@ import org.sireum.logika.Logika.Reporter
           if (ips.reporter.messages.isEmpty && stepNoExpOpt.isEmpty) {
             reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying $id's assumption at [${pos.beginLine}, ${pos.beginColumn}]")
             ok = F
-          } else {
+          } else if (logika.config.detailedInfo) {
             val (stepNo, exp) = stepNoExpOpt.get
             evidence = evidence :+
               st"""* [Inferred] ${Plugin.stepNoDesc(T, stepNo)} satisfies $id's assumption at [${pos.beginLine}, ${pos.beginColumn}], i.e.,
@@ -130,11 +130,13 @@ import org.sireum.logika.Logika.Reporter
           val require = logika.th.normalizeExp(rs(i))
           witnesses.get(require) match {
             case Some((stepNo, exp)) =>
-              evidence = evidence :+
-                st"""* ${Plugin.stepNoDesc(T, stepNo)} satisfies $id's assumption at [${pos.beginLine}, ${pos.beginColumn}], i.e.,
-                    |  ${exp.prettyST}
-                    |  ≈ $ipsSubst(${requires(i).prettyST})
-                    |  = ${rs(i).prettyST}"""
+              if (logika.config.detailedInfo) {
+                evidence = evidence :+
+                  st"""* ${Plugin.stepNoDesc(T, stepNo)} satisfies $id's assumption at [${pos.beginLine}, ${pos.beginColumn}], i.e.,
+                      |  ${exp.prettyST}
+                      |  ≈ $ipsSubst(${requires(i).prettyST})
+                      |  = ${rs(i).prettyST}"""
+              }
             case _ =>
               reporter.error(posOpt, Logika.kind, s"Could not find a claim satisfying $id's assumption at [${pos.beginLine}, ${pos.beginColumn}]")
               ok = F
@@ -160,7 +162,7 @@ import org.sireum.logika.Logika.Reporter
         return emptyResult
       }
       val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-      if (status) {
+      if (status && logika.config.detailedInfo) {
         val (ePos, ensure, tensure) = ePosExpTExpOpt.get
         evidence = evidence :+
           st"""* The stated claim is guaranteed by $id's $conc at [${ePos.beginLine}, ${ePos.beginColumn}], i.e.,
@@ -172,8 +174,7 @@ import org.sireum.logika.Logika.Reporter
           st"""Accepted by inception because:
               |
               |${(evidence, "\n\n")}
-              |""".render
-        )
+              |""".render)
       }
       return Plugin.Result(status, nextFresh, claims :+ claim)
     }

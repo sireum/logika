@@ -113,14 +113,17 @@ object Task {
       for (i <- spcEntries.size - 1 to 0 by -1 if spcEntries(i)._2.isInstanceOf[StepProofContext.Regular]) {
         val StepProofContext.Regular(_, claim, _) = spcEntries(i)._2
         if (normClaim == th.normalizeExp(claim)) {
-          reporter.inform(normClaim.posOpt.get, Logika.Reporter.Info.Kind.Verified,
-            st"""Accepted by using ${Plugin.stepNoDesc(F, spcEntries(i)._1)}, i.e.:
-                |
-                |$claim
-                |""".render)
+          if (logika.config.detailedInfo) {
+            reporter.inform(normClaim.posOpt.get, Logika.Reporter.Info.Kind.Verified,
+              st"""Accepted by using ${Plugin.stepNoDesc(F, spcEntries(i)._1)}, i.e.:
+                  |
+                  |$claim
+                  |""".render)
+          }
           return reporter.messages
         }
       }
+      reporter.error(theorem.id.attr.posOpt, Logika.kind, "The theorem's claim has not been proven")
       return reporter.messages
     }
   }

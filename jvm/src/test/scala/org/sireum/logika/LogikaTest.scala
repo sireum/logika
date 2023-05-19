@@ -76,7 +76,7 @@ object LogikaTest {
       simplifiedQuery = F,
       checkInfeasiblePatternMatch = T,
       fpRoundingMode = "RNE",
-      caching = F,
+      smt2Caching = F,
       smt2Seq = F,
       branchPar = Config.BranchPar.All,
       branchParCores = Runtime.getRuntime.availableProcessors,
@@ -90,7 +90,8 @@ object LogikaTest {
       flipStrictPure = F,
       transitionCache = F,
       patternExhaustive = T,
-      pureFun = F
+      pureFun = F,
+      detailedInfo = F
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
@@ -184,13 +185,13 @@ class LogikaTest extends TestSuite {
   }
 
   def passingWorksheet(worksheet: String): Unit = {
-    val reporter = logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc)
+    val reporter = logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc, config.detailedInfo)
     val r = testWorksheet(worksheet, reporter, None())
     assert(r)
   }
 
   def failingWorksheet(worksheet: String, msg: String): Unit = {
-    val reporter = logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc)
+    val reporter = logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc, config.detailedInfo)
     val r = testWorksheet(worksheet, reporter, Some(msg))
     assert(!r)
   }
@@ -203,7 +204,7 @@ class LogikaTest extends TestSuite {
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>
-          val r = logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc)
+          val r = logika.ReporterImpl.create(config.logPc, config.logRawPc, config.logVc, config.detailedInfo)
           r.reports(ops.ISZOps(reporter.messages).filter((m: message.Message) => m.isInfo))
           r.printMessages()
           return reporter.messages.elements.exists(_.text.value.contains(msg))

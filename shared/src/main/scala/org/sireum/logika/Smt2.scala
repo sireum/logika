@@ -638,7 +638,7 @@ object Smt2 {
                 title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
     var cached = F
     var smt2res = Smt2Query.Result.empty
-    if (config.caching) {
+    if (config.smt2Caching) {
       cache.getSmt2(T, typeHierarchy, config, timeoutInMs, claims) match {
         case Some(res) =>
           cached = T
@@ -683,7 +683,7 @@ object Smt2 {
         writeFile(logDir, filename, res.query)
       case _ =>
     }
-    if (config.caching) {
+    if (config.smt2Caching) {
       cache.setSmt2(T, typeHierarchy, config, timeoutInMs, claims, res)
     }
     return (r, smt2res)
@@ -1663,7 +1663,7 @@ object Smt2 {
 
   def valid(context: ISZ[String], config: Config, cache: Logika.Cache, reportQuery: B, title: String,
             pos: message.Position, premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
-    if (config.caching) {
+    if (config.smt2Caching) {
       val claims = premises :+ conclusion
       cache.getSmt2(F, typeHierarchy, config, config.timeoutInMs, claims) match {
         case Some(res) =>
@@ -1700,7 +1700,7 @@ object Smt2 {
         writeFile(logDir, filename, res.query)
       case _ =>
     }
-    if (config.caching) {
+    if (config.smt2Caching) {
       cache.setSmt2(F, typeHierarchy, config, config.timeoutInMs, claims, res)
     }
     return res

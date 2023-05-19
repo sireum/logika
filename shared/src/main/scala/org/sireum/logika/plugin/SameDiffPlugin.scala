@@ -119,10 +119,8 @@ import org.sireum.message.Position
 
     if (args.size == 1) {
       if (id == "SameDiff_*") {
-        if (!checkEquivalences(posOpt, id, logika, smt2.emptyCache, cache, state(claims = ISZ()), fromStepId, step.id,
-          sortedNums, fromMap, stepMap, reporter)) {
-          return emptyResult
-        }
+        logika2.evalRegularStepClaim(smt2.emptyCache(logika.config), cache,
+          state(claims = logika.context.initClaims), step.claim, step.id.posOpt, reporter)
       } else {
         if (!checkEquivalences(posOpt, id, logika, smt2, cache, state, fromStepId, step.id, sortedNums, fromMap,
           stepMap, reporter)) {
@@ -130,8 +128,8 @@ import org.sireum.message.Position
         }
       }
     } else {
-      val psmt2 = smt2.emptyCache
-      var s1 = state(claims = ISZ())
+      val psmt2 = smt2.emptyCache(logika.config)
+      var s1 = state(claims = logika.context.initClaims)
       var ok = T
       for (i <- 1 until args.size if ok) {
         val stepNo = args(i)
@@ -156,9 +154,7 @@ import org.sireum.message.Position
         return emptyResult
       }
     }
-    val (stat, nextFresh, premises, conclusion) = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim,
-      step.id.posOpt, reporter)
-    if (stat) {
+    if (stat && logika.config.detailedInfo) {
       val eqSTs: ISZ[ST] = for (num <- sortedNums) yield
         st"""+ Labeled expression #$num:
             |

@@ -100,7 +100,7 @@ import org.sireum.logika.Logika.Reporter
         val claimPos = claim.posOpt.get
         val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
         val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
-        if (stat) {
+        if (stat && logika.config.detailedInfo) {
           reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
             st"""Accepted by using $kind ${(name, ".")}'s claim at [${claimPos.beginLine}, ${claimPos.beginColumn}], i.e.:
                 |

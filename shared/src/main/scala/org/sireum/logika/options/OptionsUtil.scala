@@ -142,7 +142,7 @@ object OptionsUtil {
       simplifiedQuery = o.simplify,
       checkInfeasiblePatternMatch = defaultConfig.checkInfeasiblePatternMatch,
       fpRoundingMode = fpRoundingMode,
-      caching = defaultConfig.caching,
+      smt2Caching = defaultConfig.smt2Caching,
       smt2Seq = o.sequential,
       branchPar = branchParMode,
       branchParCores = branchParCores,
@@ -156,7 +156,8 @@ object OptionsUtil {
       flipStrictPure = o.flipStrictPure,
       transitionCache = defaultConfig.transitionCache,
       patternExhaustive = o.patternExhaustive,
-      pureFun = o.pureFun
+      pureFun = o.pureFun,
+      detailedInfo = defaultConfig.detailedInfo
     )
     return Either.Left(config)
   }
@@ -189,7 +190,7 @@ object OptionsUtil {
     if (config.transitionCache != defaultConfig.transitionCache) {
       r = r :+ "--transition-caching"
     }
-    if (config.caching != defaultConfig.caching) {
+    if (config.smt2Caching != defaultConfig.smt2Caching) {
       r = r :+ "--smt2-caching"
     }
     if (config.parCores > 1) {

@@ -126,23 +126,27 @@ import org.sireum.logika.Logika.Reporter
       val spcOpt = provenClaims.get(claimNorm)
       spcOpt match {
         case Some(spc) =>
-          val spcPos = spc.stepNo.posOpt.get
-          reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
-            st"""Accepted by using ${Plugin.stepNoDesc(F, spc.stepNo)} at [${spcPos.beginLine}, ${spcPos.beginColumn}], i.e.:
-                |
-                |${spc.exp}
-                |""".render)
+          if (logika.config.detailedInfo) {
+            val spcPos = spc.stepNo.posOpt.get
+            reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
+              st"""Accepted by using ${Plugin.stepNoDesc(F, spc.stepNo)} at [${spcPos.beginLine}, ${spcPos.beginColumn}], i.e.:
+                  |
+                  |${spc.exp}
+                  |""".render)
+          }
           return Plugin.Result(T, state.nextFresh, spc.claims)
         case _ =>
           val (pathConditions, _) = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos,
             logika.context.methodName, state.claims, logika.th, logika.config.atLinesFresh)
           val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield logika.th.normalizeExp(e))
           if (normPathConditions.contains(claimNorm)) {
-            reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
-              st"""Accepted because the stated claim is in the path conditions:
-                  |{
-                  |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
-                  |}""".render)
+            if (logika.config.detailedInfo) {
+              reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+                st"""Accepted because the stated claim is in the path conditions:
+                    |{
+                    |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
+                    |}""".render)
+            }
             return Plugin.Result(T, state.nextFresh, ISZ())
           } else if (id == "Premise") {
             reporter.error(posOpt, Logika.kind,
@@ -160,7 +164,7 @@ import org.sireum.logika.Logika.Reporter
         val psmt2 = smt2.emptyCache(logika.config)
         val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
           state.claims, logika.th, F)._2
-        val s0 = state(claims = logika.context.methodOpt.get.initClaims)
+        val s0 = state(claims = logika.context.initClaims)
         val (s1, exp) = logika.rewriteAt(atMap, s0, step.claim, reporter)
         val (stat, nextFresh, premises, conclusion) = logika.evalRegularStepClaim(psmt2, cache, s1, exp,
           step.id.posOpt, reporter)
@@ -176,7 +180,7 @@ import org.sireum.logika.Logika.Reporter
       val psmt2 = smt2.emptyCache(logika.config)
       val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
         state.claims, logika.th, F)._2
-      var s1 = state(claims = logika.context.methodOpt.get.initClaims)
+      var s1 = state(claims = logika.context.initClaims)
       var ok = T
       for (arg <- args if ok) {
         val stepNo = arg

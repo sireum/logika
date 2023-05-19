@@ -88,7 +88,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
       if (id == "Smt2_*") {
         val atMap = org.sireum.logika.Util.claimsToExps(logikaSmt2.jescmPlugins._4, posOpt.get, logikaSmt2.context.methodName,
           state.claims, logikaSmt2.th, F)._2
-        val s0 = state(claims = logikaSmt2.context.methodOpt.get.initClaims)
+        val s0 = state(claims = logikaSmt2.context.initClaims)
         val (s1, exp) = logikaSmt2.rewriteAt(atMap, s0, step.claim, reporter)
         val (stat, nextFresh, premises, conclusion) = logikaSmt2.evalRegularStepClaim(smt2, cache, s1, exp,
           step.id.posOpt, reporter)
@@ -98,7 +98,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
         ((stat, nextFresh, state.claims ++ premises, conclusion), premises :+ conclusion)
       }
     } else {
-      var s0 = state(claims = logikaSmt2.context.methodOpt.get.initClaims)
+      var s0 = state(claims = logikaSmt2.context.initClaims)
       val atMap = org.sireum.logika.Util.claimsToExps(logikaSmt2.jescmPlugins._4, posOpt.get, logikaSmt2.context.methodName,
         state.claims, logikaSmt2.th, F)._2
       var ok = T

@@ -157,46 +157,39 @@ object Context {
                         val compMethods: ISZ[ISZ[String]],
                         val storage: HashMap[String, Context.Value]) {
 
-  @pure def isHelper: B = {
-    methodOpt match {
-      case Some(m) => return m.isHelper
-      case _ => return F
-    }
+  @strictpure def isHelper: B = methodOpt match {
+    case Some(m) => m.isHelper
+    case _ => F
   }
 
-  @pure def owner: ISZ[String] = {
-    methodOpt match {
-      case Some(m) => return m.owner
-      case _ => return ISZ()
-    }
+  @strictpure def owner: ISZ[String] = methodOpt match {
+    case Some(m) => m.owner
+    case _ => ISZ()
   }
 
-  @pure def methodName: ISZ[String] = {
-    methodOpt match {
-      case Some(m) => return m.name
-      case _ => return ISZ()
-    }
+  @strictpure def methodName: ISZ[String] = methodOpt match {
+    case Some(m) => m.name
+    case _ => ISZ()
   }
 
-  @pure def receiverTypeOpt: Option[AST.Typed] = {
-    methodOpt match {
-      case Some(cm) => return cm.receiverTypeOpt
-      case _ => return None()
-    }
+  @strictpure def receiverTypeOpt: Option[AST.Typed] = methodOpt match {
+    case Some(cm) => cm.receiverTypeOpt
+    case _ => None()
   }
 
-  @pure def receiverLocalTypeOpt: Option[(AST.ResolvedInfo.LocalVar, AST.Typed)] = {
-    methodOpt match {
-      case Some(cm) if cm.receiverTypeOpt.nonEmpty => return Some((AST.ResolvedInfo.LocalVar(cm.owner :+ cm.id,
-        AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), cm.receiverTypeOpt.get))
-      case _ => return None()
-    }
+  @strictpure def initClaims: ISZ[State.Claim] = methodOpt match {
+    case Some(cm) => cm.initClaims
+    case _ => ISZ()
   }
 
-  @pure def returnTypeOpt: Option[AST.Typed] = {
-    methodOpt match {
-      case Some(cm) => return Some(cm.retType)
-      case _ => return None()
-    }
+  @strictpure def receiverLocalTypeOpt: Option[(AST.ResolvedInfo.LocalVar, AST.Typed)] = methodOpt match {
+    case Some(cm) if cm.receiverTypeOpt.nonEmpty => Some((AST.ResolvedInfo.LocalVar(cm.owner :+ cm.id,
+      AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), cm.receiverTypeOpt.get))
+    case _ => None()
+  }
+
+  @strictpure def returnTypeOpt: Option[AST.Typed] = methodOpt match {
+    case Some(cm) => Some(cm.retType)
+    case _ => None()
   }
 }
