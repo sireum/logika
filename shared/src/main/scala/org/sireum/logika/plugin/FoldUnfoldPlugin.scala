@@ -255,8 +255,8 @@ import FoldUnfoldPlugin._
             |  ≡
             |  $aToClaim
             |
-            |* Each of the matching labeled expressions are proven to be equivalent
-            |  under their respective execution context (by SMT2 solving), i.e.,
+            |* Each of the matching labeled expressions are proven to be
+            |  equivalent by ${if (isUnfold) "unfolding" else "folding"}, i.e.,
             |
             |  ${(eqSTs, "\n\n")}
             |""".render)
