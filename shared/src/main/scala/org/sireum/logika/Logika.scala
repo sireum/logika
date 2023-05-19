@@ -164,7 +164,7 @@ object Logika {
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
   val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), FoldUnfoldPlugin(), SameDiffPlugin(), Smt2Plugin(),
-    ClaimOfPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
+    ValIntroElimPlugin(), ClaimOfPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin())
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
     (F, AST.Typed.isName, "firstIndex"), (F, AST.Typed.msName, "firstIndex"),
@@ -4096,7 +4096,7 @@ import Util._
         for (plugin <- jescmPlugins._1 if plugin.canHandle(this, step.just)) {
           val Plugin.Result(ok, nextFresh, claims) = plugin.handle(this, smt2, cache, m, s0, step, reporter)
           val nextState = s0(status = State.statusOf(ok), nextFresh = nextFresh).addClaims(claims)
-          if (config.transitionCache && ok) {
+          if (config.transitionCache && ok && !reporter.hasError) {
             val cached = cache.setTransition(th, config, Cache.Transition.ProofStep(step, m.values), s0, ISZ(nextState), smt2)
             reporter.coverage(T, cached, pos)
           } else {
