@@ -3489,8 +3489,11 @@ import Util._
               return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s0, res.owner :+ res.id, lhs.typedOpt.get, rhs,
                 lhs.posOpt, reporter))
             } else {
-              assert(lhs.receiverOpt.get.isInstanceOf[AST.Exp.This])
-              return ISZ(evalAssignThisVarH(s0, lhs.id.value, rhs, lhs.posOpt.get, reporter))
+              lhs.receiverOpt match {
+                case Some(_: AST.Exp.This) =>
+                  return ISZ(evalAssignThisVarH(s0, lhs.id.value, rhs, lhs.posOpt.get, reporter))
+                case _ =>
+              }
             }
           case _ =>
         }
