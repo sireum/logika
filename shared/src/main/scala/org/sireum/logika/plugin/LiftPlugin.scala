@@ -41,7 +41,7 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 
   @pure def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
-      case AST.ProofAst.Step.Justification.Apply(invoke, ISZ()) =>
+      case AST.ProofAst.Step.Justification.Apply(invoke, false, ISZ()) =>
         val lresOpt: Option[AST.ResolvedInfo] = invoke.ident.attr.resOpt
         lresOpt match {
           case Some(lres: AST.ResolvedInfo.Method) if lres.id == "Lift" && lres.owner == justificationName =>
@@ -71,7 +71,7 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
 
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-    val AST.ProofAst.Step.Justification.Apply(AST.Exp.Invoke(_, _, _, ISZ(invoke: AST.Exp.Invoke)), _) = just
+    val AST.ProofAst.Step.Justification.Apply(AST.Exp.Invoke(_, _, _, ISZ(invoke: AST.Exp.Invoke)), _, _) = just
     val res = invoke.ident.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     val args = invoke.args
     val posOpt = invoke.ident.attr.posOpt

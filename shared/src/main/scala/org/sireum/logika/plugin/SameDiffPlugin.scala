@@ -33,11 +33,7 @@ import org.sireum.message.Position
 
 @datatype class SameDiffPlugin extends JustificationPlugin {
 
-  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("SameDiff", "SameDiff_*")
-
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
-
-  val iszStepIdTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.stepId)))
 
   val name: String = "SameDiffPlugin"
 
@@ -45,7 +41,7 @@ import org.sireum.message.Position
     just match {
       case just: AST.ProofAst.Step.Justification.Apply if just.witnesses.isEmpty =>
         just.invokeIdent.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Method => return justificationIds.contains(res.id) && res.owner == justificationName
+          case res: AST.ResolvedInfo.Method => return res.id == "SameDiff" && res.owner == justificationName
           case _ => return F
         }
       case _ => return F
@@ -59,47 +55,18 @@ import org.sireum.message.Position
                       state: State,
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
+    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
 
-    val (id, posOpt, argsOpt): (String, Option[Position], Option[ISZ[AST.ProofAst.StepId]]) = step.just match {
+    val just = step.just
+    val (id, posOpt, arg): (String, Option[Position], AST.ProofAst.StepId) = step.just match {
       case just: AST.ProofAst.Step.Justification.Apply =>
         val invokeId = just.invokeIdent.id.value
-        val ao: Option[ISZ[AST.ProofAst.StepId]] = if (just.args.size == 2) {
-          def errISZ(posOpt: Option[Position]): Option[ISZ[AST.ProofAst.StepId]] = {
-            reporter.error(posOpt, Logika.kind, s"Expecting an ISZ construction of proof step IDs")
-            return None()
-          }
-          just.args(1) match {
-            case arg: AST.Exp.Invoke if arg.typedOpt == iszStepIdTypedOpt =>
-              arg.attr.resOpt.get match {
-                case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
-                  AST.Util.toStepIds(arg.args, Logika.kind, reporter) match {
-                    case Some(sids1) =>
-                      AST.Util.toStepIds(ISZ(just.args(0)), Logika.kind, reporter) match {
-                        case Some(sids0) => Some(sids0 ++ sids1)
-                        case _ => None()
-                      }
-                    case _ => None()
-                  }
-                case _ => errISZ(arg.posOpt)
-              }
-            case arg => errISZ(arg.posOpt)
-          }
-        } else {
-          AST.Util.toStepIds(just.args, Logika.kind, reporter)
-        }
-        (invokeId, just.invokeIdent.posOpt, ao)
+        val ao = AST.Util.toStepIds(just.args, Logika.kind, reporter).get
+        (invokeId, just.invokeIdent.posOpt, ao(0))
       case _ => halt("Infeasible")
     }
 
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
-
-    if (argsOpt.isEmpty) {
-      return emptyResult
-    }
-
-    val args = argsOpt.get
-
-    val fromStepId = args(0)
+    val fromStepId = arg
     val fromClaim: AST.Exp = spcMap.get(fromStepId) match {
       case Some(spc: StepProofContext.Regular) => spc.exp
       case Some(_) =>
@@ -119,19 +86,13 @@ import org.sireum.message.Position
 
     val logika2 = logika(plugins = SameDiffExpPlugin(posOpt, id, fromStepId, fromMap, step.id) +: logika.plugins)
 
-    val (stat, nextFresh, premises, conclusion): (B, Z, ISZ[State.Claim], State.Claim) = if (args.size == 1) {
-      if (id == "SameDiff_*") {
-        logika2.evalRegularStepClaim(smt2.emptyCache(logika.config), cache,
-          state(claims = logika.context.initClaims), step.claim, step.id.posOpt, reporter)
-      } else {
-        logika2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-      }
+    val (stat, nextFresh, premises, conclusion): (B, Z, ISZ[State.Claim], State.Claim) = if (!just.hasWitness) {
+      logika2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
     } else {
       val psmt2 = smt2.emptyCache(logika.config)
       var s1 = state(claims = logika.context.initClaims)
       var ok = T
-      for (i <- 1 until args.size if ok) {
-        val stepNo = args(i)
+      for (stepNo <- just.witnesses if ok) {
         spcMap.get(stepNo) match {
           case Some(spc: StepProofContext.Regular) =>
             val ISZ((s2, v)) = logika.evalExp(Logika.Split.Disabled, psmt2, cache, T, s1, spc.exp, reporter)

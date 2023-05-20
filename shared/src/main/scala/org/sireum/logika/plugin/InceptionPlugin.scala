@@ -66,7 +66,7 @@ import org.sireum.logika.Logika.Reporter
              step: AST.ProofAst.Step.Regular,
              reporter: Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
-    val just = step.just.asInstanceOf[AST.ProofAst.Step.Inception]
+    val just = step.just
     def handleH(conc: String, sm: HashMap[String, AST.Typed], name: ISZ[String], context: ISZ[String], paramNames: ISZ[String],
                 args: ISZ[AST.Exp], requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp], posOpt: Option[Position]): Plugin.Result = {
       val id = st"${(name, ".")}".render
@@ -262,7 +262,7 @@ import org.sireum.logika.Logika.Reporter
         }
       case _: AST.ProofAst.Step.Justification.ApplyEta =>
         halt("TODO") // TODO
-      case _: AST.ProofAst.Step.Justification.ApplyNamed => halt("Infeasible")
+      case _ => halt("Infeasible")
     }
   }
 }

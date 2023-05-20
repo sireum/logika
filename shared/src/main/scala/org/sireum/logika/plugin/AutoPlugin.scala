@@ -33,11 +33,9 @@ import org.sireum.logika.Logika.Reporter
 
 @datatype class AutoPlugin extends JustificationPlugin {
 
-  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("Auto", "Auto_*", "Premise", "Tauto")
+  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("Auto", "Premise")
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
-
-  val iszStepIdTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.stepId)))
 
   val name: String = "AutoPlugin"
 
@@ -45,11 +43,6 @@ import org.sireum.logika.Logika.Reporter
     just match {
       case just: AST.ProofAst.Step.Justification.Ref =>
         return justificationIds.contains(just.idString) && just.isOwnedBy(justificationName)
-      case just: AST.ProofAst.Step.Justification.Apply if just.witnesses.isEmpty =>
-        just.invokeIdent.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Method => return justificationIds.contains(res.id) && res.owner == justificationName
-          case _ => return F
-        }
       case _ => return F
     }
   }
@@ -62,38 +55,11 @@ import org.sireum.logika.Logika.Reporter
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): Plugin.Result = {
 
-    val (id, posOpt, argsOpt): (String, Option[Position], Option[ISZ[AST.ProofAst.StepId]]) = step.just match {
-      case just: AST.ProofAst.Step.Justification.Ref =>
-        val id = just.idString
-        (id, just.id.asExp.posOpt, Some(ISZ()))
-      case just: AST.ProofAst.Step.Justification.Apply =>
-        val invokeId = just.invokeIdent.id.value
-        val ao: Option[ISZ[AST.ProofAst.StepId]] = if (just.args.size == 1) {
-          just.args(0) match {
-            case arg: AST.Exp.Invoke if arg.typedOpt == iszStepIdTypedOpt =>
-              arg.attr.resOpt.get match {
-                case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
-                  AST.Util.toStepIds(arg.args, Logika.kind, reporter)
-                case _ =>
-                  AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
-              }
-            case arg: AST.Exp.LitString => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
-            case arg: AST.Exp.LitZ => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
-            case arg => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
-          }
-        } else {
-          AST.Util.toStepIds(just.args, Logika.kind, reporter)
-        }
-        (invokeId, just.invokeIdent.posOpt, ao)
-      case _ => halt("Infeasible")
-    }
+    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Ref]
 
-    if (argsOpt.isEmpty) {
-      return Plugin.Result(F, state.nextFresh, ISZ())
-    }
-
+    val id = just.idString
+    val posOpt = just.id.posOpt
     val pos = posOpt.get
-    val args = argsOpt.get
 
     def checkValid(psmt2: Smt2, stat: B, nextFresh: Z, premises: ISZ[State.Claim], conclusion: State.Claim,
                    claims: ISZ[State.Claim]): Plugin.Result = {
@@ -121,7 +87,7 @@ import org.sireum.logika.Logika.Reporter
     val provenClaims = HashMap ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
       (logika.th.normalizeExp(spc.asInstanceOf[StepProofContext.Regular].exp), spc.asInstanceOf[StepProofContext.Regular]))
 
-    if (args.isEmpty) {
+    if (!just.hasWitness) {
       val claimNorm = logika.th.normalizeExp(step.claim)
       val spcOpt = provenClaims.get(claimNorm)
       spcOpt match {
@@ -159,30 +125,17 @@ import org.sireum.logika.Logika.Reporter
       }
     }
 
-    if (args.isEmpty) {
-      if (id == "Auto_*" || id == "Tauto") {
-        val psmt2 = smt2.emptyCache(logika.config)
-        val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
-          state.claims, logika.th, F)._2
-        val s0 = state(claims = logika.context.initClaims)
-        val (s1, exp) = logika.rewriteAt(atMap, s0, step.claim, reporter)
-        val (stat, nextFresh, premises, conclusion) = logika.evalRegularStepClaim(psmt2, cache, s1, exp,
-          step.id.posOpt, reporter)
-        val r = checkValid(psmt2, stat, nextFresh, s0.claims ++ premises, conclusion, premises :+ conclusion)
-        smt2.combineWith(psmt2)
-        return r
-      } else {
-        val (stat, nextFresh, premises, conclusion) =
-          logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-        return checkValid(smt2, stat, nextFresh, state.claims ++ premises, conclusion, premises :+ conclusion)
-      }
+    if (!just.hasWitness) {
+      val (stat, nextFresh, premises, conclusion) =
+        logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+      return checkValid(smt2, stat, nextFresh, state.claims ++ premises, conclusion, premises :+ conclusion)
     } else {
       val psmt2 = smt2.emptyCache(logika.config)
       val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
         state.claims, logika.th, F)._2
       var s1 = state(claims = logika.context.initClaims)
       var ok = T
-      for (arg <- args if ok) {
+      for (arg <- just.witnesses if ok) {
         val stepNo = arg
         spcMap.get(stepNo) match {
           case Some(spc: StepProofContext.Regular) =>

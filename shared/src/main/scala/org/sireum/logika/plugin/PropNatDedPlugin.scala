@@ -42,7 +42,7 @@ import org.sireum.logika.Logika.Reporter
 
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
-      case just: AST.ProofAst.Step.Justification.Apply =>
+      case just: AST.ProofAst.Step.Justification.Apply if !just.hasWitness =>
         just.invokeIdent.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method => return justificationIds.contains(res.id) && res.owner == justificationName
           case _ => return F
