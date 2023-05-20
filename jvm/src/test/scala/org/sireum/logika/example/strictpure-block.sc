@@ -50,7 +50,7 @@ def unfoldTauto(): Unit = {
       } else {
         0
       }
-    }) by Tauto,
+    }) by Auto T,
 
     (sum(ISZ(1, 2, 3), 2) == {
       val s = ISZ[Z](1, 2, 3)
@@ -68,7 +68,7 @@ def unfoldTauto(): Unit = {
       } else {
         0
       }
-    }) by Tauto,
+    }) by Auto T,
 
     (sum(ISZ(1, 2, 3), 2) == {
       val s = ISZ[Z](1, 2, 3)
@@ -80,7 +80,7 @@ def unfoldTauto(): Unit = {
           0
         }
       }
-    }) by Tauto,
+    }) by Auto T,
 
     (sum(ISZ(1, 2, 3), 2) == {
       val s = ISZ[Z](1, 2, 3)
@@ -92,7 +92,7 @@ def unfoldTauto(): Unit = {
           0
         }
       }
-    }) by Tauto,
+    }) by Auto T,
 
     (sum(ISZ(1, 2, 3), 2) == {
       val s = ISZ[Z](1, 2, 3)
@@ -100,9 +100,9 @@ def unfoldTauto(): Unit = {
         val s1 = s
         0
       }
-    }) by Tauto,
+    }) by Auto T,
 
-    (sum(ISZ(1, 2, 3), 2) == 3) by Tauto
+    (sum(ISZ(1, 2, 3), 2) == 3) by Auto T
   )
 
   Deduce(
@@ -122,7 +122,7 @@ def unfoldTautoSameDiff(s: ISZ[Z], i: Z): Unit = {
       } else {
         0
       }
-    }) by Tauto,
+    }) by Auto T,
 
     2 #> (sum(s, i) == {
       if (s.isInBound(i)) {
@@ -147,7 +147,7 @@ def unfoldTautoSameDiff(s: ISZ[Z], i: Z): Unit = {
       } else {
         0
       }
-    }) by Tauto
+    }) by Auto T
 
   )
 }

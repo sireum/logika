@@ -8,7 +8,7 @@ import org.sireum.justification._
 def foo(seq: ISZ[Z], index: Z): Unit = {
   Deduce(
 
-    1 #> (sum(seq, index) == (sum(seq, index): @l)) by Tauto,
+    1 #> (sum(seq, index) == (sum(seq, index): @l)) by Auto T,
 
     2 #>
       (sum(seq, index) == ({

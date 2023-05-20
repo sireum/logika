@@ -12,7 +12,7 @@ import org.sireum.justification._
 def sumFoldUnfold(seq: ISZ[Z], index: Z): Unit = {
   Deduce(
 
-    1 #> (sum(seq, index) == (sum(seq, index): @l)) by Tauto,
+    1 #> (sum(seq, index) == (sum(seq, index): @l)) by Auto T,
 
     2 #>
       (sum(seq, index) == ({
@@ -36,7 +36,7 @@ def sumFoldUnfold(seq: ISZ[Z], index: Z): Unit = {
 def existsFoldUnfold[V](seq: ISZ[V], index: Z, element: V): Unit = {
   Deduce(
 
-    1 #> (exists(seq, index, element) == (exists(seq, index, element): @l)) by Tauto,
+    1 #> (exists(seq, index, element) == (exists(seq, index, element): @l)) by Auto T,
 
     2 #>
       (exists(seq, index, element) == ({
@@ -54,7 +54,7 @@ def existsFoldUnfold[V](seq: ISZ[V], index: Z, element: V): Unit = {
 def existsFoldUnfoldZ(seq: ISZ[Z], index: Z, element: Z): Unit = {
   Deduce(
 
-    1 #> (exists(seq, index, element) == (exists(seq, index, element): @l)) by Tauto,
+    1 #> (exists(seq, index, element) == (exists(seq, index, element): @l)) by Auto T,
 
     2 #>
       (exists(seq, index, element) == ({
@@ -80,7 +80,7 @@ def existsFoldUnfoldZ(seq: ISZ[Z], index: Z, element: Z): Unit = {
 def seqOpsExistsFoldUnfold[V](seqOps: SeqOps[V], index: Z, element: V): Unit = {
   Deduce(
 
-    1 #> (seqOps.exists(index, element) == (seqOps.exists(index, element): @l)) by Tauto,
+    1 #> (seqOps.exists(index, element) == (seqOps.exists(index, element): @l)) by Auto T,
 
     2 #>
       (seqOps.exists(index, element) == ({

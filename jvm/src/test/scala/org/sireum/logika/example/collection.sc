@@ -65,7 +65,7 @@ def map2(m0: Map[Z, Z]): Unit = {
     1 #> m.contains(n + 1)              by Auto,
     2 #> (m.get(n + 1) == Some(3))      by Auto,
     3 #> m.contains(n)                  by Auto,
-    4 #> (m.get(n) == Some(2))          by Smt2("cvc5,--full-saturate-quant", 5000, 2000000),
+    4 #> (m.get(n) == Some(2))          by Smt2("cvc5,--full-saturate-quant", 5000, 2000000)
     //@formatter:on
   )
 
@@ -79,7 +79,7 @@ def set1(): Unit = {
     //@formatter:off
     1 #> (s.size == 0)                  by Auto,
     2 #> (s.elements == ISZ[Z]())       by Auto,
-    3 #> (!s.contains(n))               by Auto,
+    3 #> (!s.contains(n))               by Auto
     //@formatter:on
   )
 
@@ -88,7 +88,7 @@ def set1(): Unit = {
   Deduce(
     //@formatter:off
     1 #> (s.elements == ISZ(n))         by Auto,
-    2 #> (s.contains(n))                by Auto,
+    2 #> (s.contains(n))                by Auto
     //@formatter:on
   )
 
@@ -97,7 +97,7 @@ def set1(): Unit = {
   Deduce(
     //@formatter:off
     1 #> s.contains(n + 1)              by Auto,
-    2 #> s.contains(n)                  by Auto,
+    2 #> s.contains(n)                  by Auto
     //@formatter:on
   )
 
@@ -106,7 +106,7 @@ def set1(): Unit = {
   Deduce(
     //@formatter:off
     1 #> !s.contains(n)                 by Auto,
-    2 #> s.contains(n + 1)              by Auto,
+    2 #> s.contains(n + 1)              by Auto
     //@formatter:on
   )
 }
@@ -121,7 +121,7 @@ def set2(s0: Set[Z]): Unit = {
   Deduce(
     //@formatter:off
     1 #> s.contains(n + 1)              by Auto,
-    2 #> s.contains(n)                  by Auto,
+    2 #> s.contains(n)                  by Auto
     //@formatter:on
   )
 }

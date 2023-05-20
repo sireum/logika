@@ -10,7 +10,7 @@ import org.sireum.justification._
   Deduce(
     //@formatter:off
     1 #>  (n * n >= 0)  by Auto,
-    2 #>  !(n * n < 0)  by Auto_*(ISZ(1)),
+    2 #>  !(n * n < 0)  by Auto T
     //@formatter:on
   )
 }
@@ -23,7 +23,7 @@ import org.sireum.justification._
   Deduce(
     //@formatter:off
     1 #>  (p & q)  by Auto,
-    2 #>  p        by Auto_*(ISZ(1))
+    2 #>  p        by Auto and 1
     //@formatter:on
   )
 }
@@ -37,7 +37,7 @@ import org.sireum.justification._
     //@formatter:off
     1 #>  p        by Auto,
     2 #>  q        by Auto,
-    3 #>  (p & q)  by Auto_*(ISZ(1, 2))
+    3 #>  (p & q)  by Auto and (1, 2)
     //@formatter:on
   )
 }
@@ -55,7 +55,7 @@ def andIntroInceptionExample(x: Z, y: Z): B = {
     3 #> ((x > 0) & (y > 0))    by andIntro(x > 0, y > 0) and (1, 2),
     4 #> ((x > 0) & (y > 0))    by andIntro(p = x > 0, q = y > 0) and (1, 2),
     5 #> ((x > 0) & (y > 0))    by andIntro(x > 0, y > 0),
-    6 #> ((x > 0) & (y > 0))    by andIntro(q = y > 0, p = x > 0),
+    6 #> ((x > 0) & (y > 0))    by andIntro(q = y > 0, p = x > 0)
     //7 #> ((x > 0) & (y > 0))    by andIntro _ and (1, 2),
     //@formatter:on
   )
@@ -70,7 +70,7 @@ def andIntroInceptionExample(x: Z, y: Z): B = {
   Deduce(
     //@formatter:off
     1 #>  p        by Auto,
-    2 #>  (p | q)  by Auto_*(ISZ(1))
+    2 #>  (p | q)  by Auto and 1
     //@formatter:on
   )
 }
@@ -83,7 +83,7 @@ def andIntroInceptionExample(x: Z, y: Z): B = {
   Deduce(
     1 #>  (p ->: q)        by Auto,
     2 #>  p                by Auto,
-    3 #>  q                by Smt2_*("z3", 2000, 1000000, ISZ(1, 2))
+    3 #>  q                by Smt2("z3", 2000, 1000000) and (1, 2)
   )
 }
 

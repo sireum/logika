@@ -3485,9 +3485,14 @@ import Util._
         return r
       case lhs: AST.Exp.Select =>
         lhs.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Var if res.isInObject =>
-            return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s0, res.owner :+ res.id, lhs.typedOpt.get, rhs,
-              lhs.posOpt, reporter))
+          case res: AST.ResolvedInfo.Var =>
+            if (res.isInObject) {
+              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s0, res.owner :+ res.id, lhs.typedOpt.get, rhs,
+                lhs.posOpt, reporter))
+            } else {
+              assert(lhs.receiverOpt.get.isInstanceOf[AST.Exp.This])
+              return ISZ(evalAssignThisVarH(s0, lhs.id.value, rhs, lhs.posOpt.get, reporter))
+            }
           case _ =>
         }
         val receiver = lhs.receiverOpt.get
