@@ -383,9 +383,9 @@ object Smt2 {
 
   def sTypeDeclsUp(newTypeDecls: HashSMap[AST.Typed.Name, ISZ[ST]]): Unit
 
-  def strictPureMethods: HashSMap[State.ProofFun, (ST, ST)]
+  def pureFuns: HashSMap[State.ProofFun, (ST, ST)]
 
-  def strictPureMethodsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit
+  def pureFunsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit
 
   def constraints: HashSMap[AST.Typed, ISZ[ST]]
 
@@ -448,7 +448,7 @@ object Smt2 {
           |  $claim
           |))"""
     val decl = st"(declare-fun $id (${(for (p <- paramIdTypes) yield adtId(p._2), " ")}) ${adtId(pf.returnType)})"
-    strictPureMethodsUp(strictPureMethods + pf ~> ((decl, declClaim)))
+    pureFunsUp(pureFuns + pf ~> ((decl, declClaim)))
   }
 
   def addProofFun(config: Config, pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value.Sym)],
@@ -463,7 +463,7 @@ object Smt2 {
     for (p <- ops.ISZOps(pf.paramIds).zip(pf.paramTypes)) {
       paramIdTypes = paramIdTypes :+ ((p._1, currentLocalIdString(context, p._1), p._2))
     }
-    val (decl, declClaim) = strictPureMethods.get(pf).get
+    val (decl, declClaim) = pureFuns.get(pf).get
 
     var ecs = ISZ[ST]()
     for (sv <- svs if sv._1.ok) {
@@ -505,7 +505,7 @@ object Smt2 {
       st"""$declClaim
           |(assert $ec)"""
     }
-    strictPureMethodsUp(strictPureMethods + pf ~> ((decl, claim)))
+    pureFunsUp(pureFuns + pf ~> ((decl, claim)))
   }
 
   def addSort(key: AST.Typed, d: ST): Unit = {
@@ -1604,7 +1604,7 @@ object Smt2 {
       decls = HashSMap.empty[String, ST] ++
         (for (d <- decls.entries if !ops.StringOps(d._1).startsWith(Smt2.symPrefix) || symNums.contains(d._1)) yield d)
     }
-    return query(seqLitDecls, decls.values, claimSmts)
+    return query(config, seqLitDecls, decls.values, claimSmts)
   }
 
   @pure def commentLines(s: String): ISZ[ST] = {
@@ -1706,13 +1706,17 @@ object Smt2 {
     return res
   }
 
-  def query(funDecls: ISZ[ST], decls: ISZ[ST], claims: ISZ[ST]): ST = {
+  def query(config: Config, funDecls: ISZ[ST], decls: ISZ[ST], claims: ISZ[ST]): ST = {
     var ss: ISZ[ST] = for (ds <- sorts.values; d <- ds) yield d
     if (typeHierarchyIds.size > 1) {
       ss = ss :+
         st"""(assert (distinct
             |  ${(typeHierarchyIds.values, "\n")}))"""
     }
+
+    val pureFunClaims: ISZ[ST] =
+      if (config.strictPureMode == Config.StrictPureMode.Uninterpreted) ISZ()
+      else for (p <- pureFuns.values) yield p._2
 
     val r =
       st"""(set-logic ALL)
@@ -1749,9 +1753,9 @@ object Smt2 {
           |
           |${(funDecls, "\n")}
           |
-          |${(for (p <- strictPureMethods.values) yield p._1, "\n")}
+          |${(for (p <- pureFuns.values) yield p._1, "\n")}
           |
-          |${(for (p <- strictPureMethods.values) yield p._2, "\n")}
+          |${(pureFunClaims, "\n")}
           |
           |${(decls, "\n")}
           |

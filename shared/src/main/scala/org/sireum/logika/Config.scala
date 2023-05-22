@@ -58,7 +58,7 @@ import org.sireum._
                        val interpContracts: B,
                        val elideEncoding: B,
                        val rawInscription: B,
-                       val flipStrictPure: B,
+                       val strictPureMode: Config.StrictPureMode.Type,
                        val transitionCache: B,
                        val patternExhaustive: B,
                        val pureFun: B,
@@ -74,6 +74,12 @@ object Config {
     "Disabled"
     "OnlyAllReturns"
     "All"
+  }
+
+  @enum object StrictPureMode {
+    "Default"
+    "Flip"
+    "Uninterpreted"
   }
 }
 

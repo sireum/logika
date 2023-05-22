@@ -87,7 +87,7 @@ object LogikaTest {
       interpContracts = F,
       elideEncoding = F,
       rawInscription = F,
-      flipStrictPure = F,
+      strictPureMode = Config.StrictPureMode.Default,
       transitionCache = F,
       patternExhaustive = T,
       pureFun = F,

@@ -2150,10 +2150,10 @@ object Util {
                  fileOptions: LibUtil.FileOptionMap, th: TypeHierarchy, config: Config,
                  plugins: ISZ[plugin.Plugin], smt2: Smt2, cache: Logika.Cache, state: State,
                  receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String], id: String,
-                 isHelper: B, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
+                 isHelper: B, isStrictPure: B, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
                  implicitContextOpt: Option[(String, Position)]): (State, State.ProofFun) = {
     val pf = State.ProofFun(receiverTypeOpt, owner, id, for (id <- paramIds) yield id.value, funType.args, Util.normType(funType.ret))
-    if (smt2.strictPureMethods.contains(pf)) {
+    if (smt2.pureFuns.contains(pf)) {
       return (state, pf)
     } else {
       val posOpt = body.asStmt.posOpt
@@ -2165,7 +2165,9 @@ object Util {
           ISZ(), ISZ(), plugins, implicitContextOpt, ISZ())
         var s0 = state(claims = ISZ())
         val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
-        val s2: State = if (isHelper) s1 else assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
+        val s2: State =
+          if (isHelper || isStrictPure && config.strictPureMode == Config.StrictPureMode.Uninterpreted) s1
+          else assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
         smt2.addProofFunDecl(config, pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size), reporter)
         s0 = s0(nextFresh = s2.nextFresh, status = s2.status)
         for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes) if pair._1.value != "this") {
@@ -2297,7 +2299,7 @@ object Util {
       }
       val (s2, pf) = pureMethod(logika.context.nameExePathMap, logika.context.maxCores, logika.context.fileOptions,
         logika.th, logika.config, logika.plugins, smt2, cache, s0, receiverTypeOpt, AST.Typed.Fun(T, F, paramTypes, t),
-        owner, id, isHelper, paramIds, AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter,
+        owner, id, isHelper, T, paramIds, AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter,
         logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)
       val s4 = s3.addClaim(State.Claim.Let.ProofFunApply(sym, pf, args))

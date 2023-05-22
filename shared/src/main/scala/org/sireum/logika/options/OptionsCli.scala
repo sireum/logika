@@ -46,6 +46,12 @@ object OptionsCli {
     'TowardZero
   }
 
+  @enum object LogikaStrictPureMode {
+    'Default
+    'Flip
+    'Uninterpreted
+  }
+
   @enum object LogikaBranchPar {
     'All
     'Returns
@@ -64,7 +70,7 @@ object OptionsCli {
     val intBitWidth: Z,
     val interprocedural: B,
     val interproceduralContracts: B,
-    val flipStrictPure: B,
+    val strictPureMode: LogikaStrictPureMode.Type,
     val line: Z,
     val loopBound: Z,
     val callBound: Z,
@@ -125,6 +131,26 @@ import OptionsCli._
     return r
   }
 
+  def parseLogikaStrictPureModeH(arg: String): Option[LogikaStrictPureMode.Type] = {
+    arg.native match {
+      case "default" => return Some(LogikaStrictPureMode.Default)
+      case "flip" => return Some(LogikaStrictPureMode.Flip)
+      case "uninterpreted" => return Some(LogikaStrictPureMode.Uninterpreted)
+      case s =>
+        reporter.error(None(), "OptionsCli", s"Expecting one of the following: { default, flip, uninterpreted }, but found '$s'.")
+        return None()
+    }
+  }
+
+  def parseLogikaStrictPureMode(args: ISZ[String], i: Z): Option[LogikaStrictPureMode.Type] = {
+    if (i >= args.size) {
+      reporter.error(None(), "OptionsCli", "Expecting one of the following: { default, flip, uninterpreted }, but none found.")
+      return None()
+    }
+    val r = parseLogikaStrictPureModeH(args(i))
+    return r
+  }
+
   def parseLogikaBranchParH(arg: String): Option[LogikaBranchPar.Type] = {
     arg.native match {
       case "all" => return Some(LogikaBranchPar.All)
@@ -177,11 +203,10 @@ import OptionsCli._
           |                           non-strict-pure methods
           |    --interprocedural-contracts
           |                          Use contracts in inter-procedural verification
-          |    --flip-strictpure-mode
-          |                          Enable inter-procedural verification of strict-pure
-          |                           methods if on compositional verification, and enable
-          |                           compositional verification of strict-pure methods if
-          |                           on inter-procededural verification
+          |    --strictpure-mode    Strict-pure method treatment mode in
+          |                           compositional/interprocedural verification (expects
+          |                           one of { default, flip, uninterpreted }; default:
+          |                           default)
           |    --line               Focus verification to the specified program line
           |                           number (expects an integer; min is 0; default is 0)
           |    --loop-bound         Loop bound for inter-procedural verification (expects
@@ -253,7 +278,7 @@ import OptionsCli._
     var intBitWidth: Z = 0
     var interprocedural: B = false
     var interproceduralContracts: B = false
-    var flipStrictPure: B = false
+    var strictPureMode: LogikaStrictPureMode.Type = LogikaStrictPureMode.Default
     var line: Z = 0
     var loopBound: Z = 3
     var callBound: Z = 3
@@ -347,10 +372,10 @@ import OptionsCli._
              case Some(v) => interproceduralContracts = v
              case _ => return None()
            }
-         } else if (arg == "--flip-strictpure-mode") {
-           val o: Option[B] = { j = j - 1; Some(!flipStrictPure) }
+         } else if (arg == "--strictpure-mode") {
+           val o: Option[LogikaStrictPureMode.Type] = parseLogikaStrictPureMode(args, j + 1)
            o match {
-             case Some(v) => flipStrictPure = v
+             case Some(v) => strictPureMode = v
              case _ => return None()
            }
          } else if (arg == "--line") {
@@ -554,7 +579,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, flipStrictPure, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, timeout))
+    return Some(LogikaOption(help, parseArguments(args, j), smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, timeout))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

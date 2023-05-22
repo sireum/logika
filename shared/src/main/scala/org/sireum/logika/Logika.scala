@@ -2112,7 +2112,7 @@ import Util._
         val typedAttr = AST.TypedAttr(posOpt, None())
         val (s8, pf) = Util.pureMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config,
           plugins, smt2, cache, s1, lComp.context.receiverTypeOpt, info.sig.funType.subst(typeSubstMap),
-          lComp.context.methodOpt.get.owner, info.sig.id.value, info.isHelper, for (p <- info.sig.params) yield p.id,
+          lComp.context.methodOpt.get.owner, info.sig.id.value, info.isHelper, F, for (p <- info.sig.params) yield p.id,
           AST.Stmt.Expr(AST.Exp.Result(None(), typedAttr), typedAttr), reporter, lComp.context.implicitCheckTitlePosOpt)
         s1 = s8
         Some(pf)
@@ -2453,7 +2453,7 @@ import Util._
         }
       }
       val (s2, pf) = pureMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config, plugins,
-        smt2, cache, s1, receiverTypeOpt, funType, mres.owner, mres.id, info.isHelper,
+        smt2, cache, s1, receiverTypeOpt, funType, mres.owner, mres.id, info.isHelper, T,
         for (p <- info.sig.params) yield p.id, body, reporter, context.implicitCheckTitlePosOpt)
       val (s3, re) = s2.freshSym(retType, pos)
       var args: ISZ[State.Value] = for (q <- paramArgs) yield q._4
@@ -2820,11 +2820,13 @@ import Util._
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
                 val isStrictPure = info.strictPureBodyOpt.nonEmpty
-                if ((if (isStrictPure) config.interp && !config.flipStrictPure || !config.interp && config.flipStrictPure
-                else config.interp) && !(config.interpContracts && info.contract.nonEmpty) && info.hasBody) {
+                if ((if (isStrictPure) config.interp && config.strictPureMode != Config.StrictPureMode.Flip ||
+                  !config.interp && config.strictPureMode == Config.StrictPureMode.Flip else config.interp) &&
+                  !(config.interpContracts && info.contract.nonEmpty) && info.hasBody) {
                   r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt, receiverOpt,
                     paramArgs)
-                } else if (isStrictPure && info.contract.isEmpty) {
+                } else if (isStrictPure &&
+                  (info.contract.isEmpty || config.strictPureMode == Config.StrictPureMode.Uninterpreted)) {
                   r = r ++ strictPure(pos, info, s1, typeSubstMap, retType, receiverOpt, paramArgs)
                 } else {
                   var default = T
