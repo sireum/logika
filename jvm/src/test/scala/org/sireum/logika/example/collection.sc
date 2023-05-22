@@ -65,7 +65,7 @@ def map2(m0: Map[Z, Z]): Unit = {
     1 #> m.contains(n + 1)              by Auto,
     2 #> (m.get(n + 1) == Some(3))      by Auto,
     3 #> m.contains(n)                  by Auto,
-    4 #> (m.get(n) == Some(2))          by Smt2("cvc5,--full-saturate-quant", 5000, 2000000)
+    4 #> (m.get(n) == Some(2))          by Smt2("cvc4,--full-saturate-quant;cvc5,--enum-inst-interleave", 5000, 2000000)
     //@formatter:on
   )
 
