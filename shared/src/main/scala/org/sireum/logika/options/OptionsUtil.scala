@@ -120,6 +120,11 @@ object OptionsUtil {
       case OptionsCli.LogikaBranchPar.Returns => org.sireum.logika.Config.BranchPar.OnlyAllReturns
       case OptionsCli.LogikaBranchPar.Disabled => org.sireum.logika.Config.BranchPar.Disabled
     }
+    val spMode: Config.StrictPureMode.Type = o.strictPureMode match {
+      case OptionsCli.LogikaStrictPureMode.Default => Config.StrictPureMode.Default
+      case OptionsCli.LogikaStrictPureMode.Flip => Config.StrictPureMode.Flip
+      case OptionsCli.LogikaStrictPureMode.Uninterpreted => Config.StrictPureMode.Uninterpreted
+    }
 
     val config = org.sireum.logika.Config(
       smt2Configs = smt2Configs,
@@ -153,7 +158,7 @@ object OptionsUtil {
       interpContracts = o.interproceduralContracts,
       elideEncoding = o.elideEncoding,
       rawInscription = o.rawInscription,
-      flipStrictPure = o.flipStrictPure,
+      strictPureMode = spMode,
       transitionCache = defaultConfig.transitionCache,
       patternExhaustive = o.patternExhaustive,
       pureFun = o.pureFun,
@@ -278,8 +283,13 @@ object OptionsUtil {
     if (config.interpContracts != defaultConfig.interpContracts) {
       r = r :+ "--interprocedural-contracts"
     }
-    if (config.flipStrictPure != defaultConfig.flipStrictPure) {
-      r = r :+ "--flip-strictpure-mode"
+    if (config.strictPureMode != defaultConfig.strictPureMode) {
+      val m: String = config.strictPureMode match {
+        case Config.StrictPureMode.Default => "default"
+        case Config.StrictPureMode.Flip => "flip"
+        case Config.StrictPureMode.Uninterpreted => "uninterpreted"
+      }
+      r = r ++ ISZ[String]("--strictpure-mode", m)
     }
     if (config.loopBound != defaultConfig.loopBound) {
       r = r ++ ISZ[String]("--loop-bound", config.loopBound.string)

@@ -54,7 +54,7 @@ object Smt2Impl {
                        var constraints: HashSMap[AST.Typed, ISZ[ST]],
                        var typeHierarchyIds: HashSMap[AST.Typed, ST],
                        var shortIds: HashMap[ISZ[String], ISZ[String]],
-                       var strictPureMethods: HashSMap[State.ProofFun, (ST, ST)],
+                       var pureFuns: HashSMap[State.ProofFun, (ST, ST)],
                        var filenameCount: HashMap[String, Z],
                        var seqLits: HashSSet[Smt2.SeqLit]) extends Smt2 {
 
@@ -75,7 +75,7 @@ object Smt2Impl {
       constraints = HashSMap.empty,
       typeHierarchyIds = HashSMap.empty,
       shortIds = shortIds,
-      strictPureMethods = HashSMap.empty,
+      pureFuns = HashSMap.empty,
       filenameCount = filenameCount,
       seqLits = HashSSet.empty
     )
@@ -97,7 +97,7 @@ object Smt2Impl {
     constraints = constraints ++ (that.constraints -- constraints.keys).entries
     typeHierarchyIds = typeHierarchyIds ++ (that.typeHierarchyIds -- typeHierarchyIds.keys).entries
     shortIds = shortIds ++ (that.shortIds -- shortIds.keys).entries
-    strictPureMethods = strictPureMethods ++ (that.strictPureMethods -- strictPureMethods.keys).entries
+    pureFuns = pureFuns ++ (that.pureFuns -- pureFuns.keys).entries
     for (p <- that.filenameCount.entries) {
       val count = filenameCount.get(p._1).getOrElse(0)
       if (count < p._2) {
@@ -117,7 +117,7 @@ object Smt2Impl {
     constraints = that.constraints
     typeHierarchyIds = that.typeHierarchyIds
     shortIds = that.shortIds
-    strictPureMethods = that.strictPureMethods
+    pureFuns = that.pureFuns
     filenameCount = that.filenameCount
     seqLits = that.seqLits
   }
@@ -162,8 +162,8 @@ object Smt2Impl {
     seqLits = newSeqLits
   }
 
-  def strictPureMethodsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit = {
-    strictPureMethods = newProofFuns
+  def pureFunsUp(newProofFuns: HashSMap[State.ProofFun, (ST, ST)]): Unit = {
+    pureFuns = newProofFuns
   }
 
   def writeFile(dir: String, filename: String, content: String): Unit = {
