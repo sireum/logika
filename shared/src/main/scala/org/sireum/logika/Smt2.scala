@@ -1127,15 +1127,13 @@ object Smt2 {
                 |    ${(for (q <- fieldInfos if q.isParam) yield st"(${typeOpId(q.fieldType, "==")} (${q.fieldLookupId} x!0) (${q.fieldLookupId} x!1))", "\n")}))
                 |(assert (forall ((x $tId) (y $tId)) (=> (= (type-of x) (type-of y) $thId) (= x y) ($eqId x y))))"""
           )
-          if (typeHierarchy.isSubstitutableWithoutSpecVars(t)) {
-            addTypeDecl(t,
-              st"""(assert (forall ((x $tId) (y $tId))
-                  |  (=>
-                  |    (= (type-of x) $thId)
-                  |    (= (type-of y) $thId)
-                  |    ($eqId x y)
-                  |    (= x y))))""")
-          }
+          addTypeDecl(t,
+            st"""(assert (forall ((x $tId) (y $tId))
+                |  (=>
+                |    (= (type-of x) $thId)
+                |    (= (type-of y) $thId)
+                |    ${(st"($eqId x y)" +: (for (q <- fieldInfos if !q.isParam) yield st"(= (${q.fieldLookupId} x) (${q.fieldLookupId} y))"), "\n")}
+                |    (= x y))))""")
           addTypeDecl(t, st"""(define-fun $neId ((x $tId) (y $tId)) B (not ($eqId x y)))""")
         }
         for (parent <- parents) {
