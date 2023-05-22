@@ -18,7 +18,8 @@ import org.sireum.message.Position
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
-  val iszzTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.z)))
+  val iszStepIdTypedOpt: Option[AST.Typed] = Some(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.stepId)))
+
 
   @pure override def canHandle(logika: Logika, just: Step.Justification): B = {
     just match {
@@ -33,40 +34,47 @@ import org.sireum.message.Position
     }
   }
 
-  override def handle(logika: Logika, smt2: Smt2, cache: Smt2.Cache, spcMap: HashSMap[ProofAst.StepId, StepProofContext], state: State, step: Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
+  override def handle(logika: Logika, smt2: Smt2, cache: Logika.Cache, spcMap: HashSMap[ProofAst.StepId, StepProofContext], state: State, step: Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
 
     val (id, posOpt, argsOpt): (String, Option[Position], Option[ISZ[AST.ProofAst.StepId]]) = step.just match {
+
       case just: AST.ProofAst.Step.Justification.Ref =>
-        (just.idString, just.id.asExp.posOpt, Some(ISZ()))
+        val id = just.idString
+        (id, just.id.asExp.posOpt, Some(ISZ()))
       case just: AST.ProofAst.Step.Justification.Apply =>
         val invokeId = just.invokeIdent.id.value
         val ao: Option[ISZ[AST.ProofAst.StepId]] = if (just.args.size == 1) {
           just.args(0) match {
-            case arg: AST.Exp.Invoke if arg.typedOpt == iszzTypedOpt =>
+            case arg: AST.Exp.Invoke if arg.typedOpt == iszStepIdTypedOpt =>
               arg.attr.resOpt.get match {
                 case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
                   AST.Util.toStepIds(arg.args, Logika.kind, reporter)
                 case _ =>
                   AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
               }
+            case arg: AST.Exp.LitString => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
+            case arg: AST.Exp.LitZ => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
             case arg => AST.Util.toStepIds(ISZ(arg), Logika.kind, reporter)
           }
         } else {
           AST.Util.toStepIds(just.args, Logika.kind, reporter)
         }
         (invokeId, just.invokeIdent.posOpt, ao)
-      case _ =>
-        halt("Infeasible")
+      case _ => halt("Infeasible")
     }
 
     val pos = posOpt.get
     val args = argsOpt.get
 
     def checkAlgebraExp(e: AST.Exp): B = {
-      val ac = AlgebraPlugin.MAlgebraChecker(reporter, posOpt, F)
+      val ac = AlgebraPlugin.MAlgebraChecker(F, Option.none())
       ac.transformExp(e)
-      return !ac.hasError
+      if (ac.hasError) {
+        reporter.error(posOpt, Logika.kind, ac.msgOpt.get)
+        return F
+      }
+      return T
     }
 
     var ok = T
@@ -99,7 +107,7 @@ import org.sireum.message.Position
       ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
     }
     if (ok) {
-      val r = smt2.valid(logika.context.methodName, cache, T, logika.config.logVc, logika.config.logVcDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
+      val r = smt2.valid(logika.context.methodName, logika.config, cache, T, logika.config.logVc, logika.config.logVcDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
       r.kind match {
         case Smt2Query.Result.Kind.Unsat =>
           reporter.inform(posOpt.get, Reporter.Info.Kind.Verified, "TODO - msg - thumbs up")
@@ -116,7 +124,7 @@ import org.sireum.message.Position
 
 object AlgebraPlugin {
 
-  @record class MAlgebraChecker(reporter: Logika.Reporter, posOpt: Option[Position], var hasError: B) extends AST.MTransformer {
+  @record class MAlgebraChecker(var hasError: B, var msgOpt: Option[String]) extends AST.MTransformer {
     @pure def isUnaryNumeric(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
       kind match {
         case AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus =>
@@ -165,29 +173,30 @@ object AlgebraPlugin {
     }
 
     override def postExp(e: Exp): MOption[AST.Exp] = {
-      var hasError = F
       e match {
         case _: AST.Exp.Quant =>
-          reporter.error(posOpt, Logika.kind, "TODO - error msg - can't use algebra with quantifiers")
-          hasError = T
+          fail("TODO - error msg - can't use algebra with quantifiers")
         case b: AST.Exp.Binary =>
           b.attr.resOpt.get match {
             case AST.ResolvedInfo.BuiltIn(kind) if !(isScalarArithmetic(kind) || isRelational(kind)) =>
-              reporter.error(posOpt, Logika.kind, s"TODO - error msg - cant use algebra w/ binary op $kind")
-              hasError = T
+              fail(s"TODO - error msg - cant use algebra w/ binary op $kind")
             case _ =>
           }
         case u: AST.Exp.Unary =>
           u.attr.resOpt.get match {
             case AST.ResolvedInfo.BuiltIn(kind) if !(isUnaryNumeric(kind) || isNegation(kind)) =>
-              reporter.error(posOpt, Logika.kind, s"TODO - error msg can't use algebra w/ unary op $kind")
-              hasError = T
+              fail(s"TODO - error msg - can't use algebra w/ unary op $kind")
             case _ =>
           }
         case _ =>
         // TODO - anything else?? methods?
       }
       return super.postExp(e)
+    }
+
+    def fail(msg: String): Unit = {
+      msgOpt = Some(msg)
+      hasError = T
     }
   }
 }

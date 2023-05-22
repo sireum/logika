@@ -30,7 +30,7 @@ import org.sireum.ops.ISZOps
     }
   }
 
-  override def handle(logika: Logika, smt2: Smt2, cache: Smt2.Cache, spcMap: HashSMap[ProofAst.StepId, StepProofContext], state: State, step: Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
+  override def handle(logika: Logika, smt2: Smt2, cache: Logika.Cache, spcMap: HashSMap[ProofAst.StepId, StepProofContext], state: State, step: Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
 
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]

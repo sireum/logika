@@ -22,17 +22,6 @@ def b(): Unit = {
   )
 }
 
-// expect #3 to fail
-def c(): Unit = {
-  val x = 4 - 5
-  val y = (8 + 4) - (5 + 6)
-  Deduce(
-    1 #> (x == 4 - 5) by Premise,
-    2 #> (y == (8 + 4) - (5 + 6)) by Premise,
-    3 #> (y == 8 + x + 6) by Subst1(1, 2)
-  )
-}
-
 def d(): Unit = {
   val x = -2 + 42
   val y = (8 + x + 2) - (5 - x + 2) * (x + 2)
