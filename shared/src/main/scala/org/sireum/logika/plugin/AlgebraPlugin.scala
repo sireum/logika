@@ -106,7 +106,7 @@ import org.sireum.message.Position
       ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
     }
     if (ok) {
-      val r = smt2.valid(logika.context.methodName, logika.config, cache, T, logika.config.logVc, logika.config.logVcDirOpt, s"$id Justification", pos, premises, conclusion, reporter)
+      val r = smt2.valid(logika.context.methodName, logika.config, cache, T, s"$id Justification", pos, premises, conclusion, reporter)
       r.kind match {
         case Smt2Query.Result.Kind.Unsat =>
           reporter.inform(posOpt.get, Reporter.Info.Kind.Verified, "TODO - msg - thumbs up")

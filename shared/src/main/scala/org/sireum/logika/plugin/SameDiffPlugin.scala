@@ -27,7 +27,7 @@ package org.sireum.logika.plugin
 
 import org.sireum._
 import org.sireum.lang.{ast => AST}
-import org.sireum.logika.Logika.Reporter
+import org.sireum.logika.Logika.{Reporter, Split}
 import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.message.Position
 
@@ -109,10 +109,7 @@ import org.sireum.message.Position
       if (!ok) {
         return emptyResult
       }
-      if (!checkEquivalences(posOpt, id, logika, psmt2, cache, s1, fromStepId, step.id, sortedNums, fromMap,
-        stepMap, reporter)) {
-        return emptyResult
-      }
+      logika2.evalRegularStepClaim(psmt2, cache, s1, step.claim, step.id.posOpt, reporter)
     }
     if (stat && logika.config.detailedInfo) {
       val eqSTs: ISZ[ST] = for (num <- sortedNums) yield
@@ -133,13 +130,15 @@ import org.sireum.message.Position
             |  ≡
             |  $aToClaim
             |
-            |* Each of the matching labeled expressions are proven to be equivalent by using SMT2, i.e.,
+            |* Each of the matching labeled expressions are proven to be equivalent
+            |  under their respective execution context (by SMT2 solving), i.e.,
             |
             |  ${(eqSTs, "\n\n")}
             |""".render)
     }
     return Plugin.Result(stat, nextFresh, premises :+ conclusion)
   }
+}
 
 @datatype class SameDiffExpPlugin(val posOpt: Option[Position],
                                   val id: String,
@@ -193,6 +192,14 @@ import org.sireum.message.Position
         }
       }
     }
-    return ok
+    if (found && ok) {
+      return svs2
+    } else {
+      if (!found) {
+        reporter.error(posOpt, Logika.kind, s"Could not deduce the equivalence of any labeled expression proof steps $stepId and $fromStepId")
+      }
+      return for (sv2 <- svs2) yield (sv2._1(status = State.Status.Error), sv2._2)
+    }
   }
+
 }

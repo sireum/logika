@@ -35,7 +35,7 @@ object NoTransitionSmt2Cache_Ext {
 
 trait CacheProperties extends Cache {
   def persistentCache: java.util.concurrent.ConcurrentHashMap[Cache.Key, Cache.Value]
-  def taskCache: java.util.concurrent.ConcurrentHashMap[(Int, Cache.Key), Cache.Value]
+  def taskCache: java.util.concurrent.ConcurrentHashMap[Cache.Key, Cache.Value]
 
   def keys: ISZ[Cache.Key] = {
     import org.sireum.$internal.CollectionCompat.Converters._
@@ -63,8 +63,8 @@ trait CacheProperties extends Cache {
     import org.sireum.$internal.CollectionCompat.Converters._
     val tid = System.identityHashCode(java.lang.Thread.currentThread)
     var r = ISZ[Cache.Key]()
-    for (p <- taskCache.keys.asScala if p._1 == tid) {
-      r = r :+ p._2
+    for (p <- taskCache.keys.asScala) {
+      r = r :+ p
     }
     return r
   }
@@ -76,13 +76,11 @@ trait CacheProperties extends Cache {
   }
 
   def setTaskValue(key: Cache.Key, value: Cache.Value): Unit = {
-    val tid = System.identityHashCode(java.lang.Thread.currentThread)
-    taskCache.put((tid, key), value)
+    taskCache.put(key, value)
   }
 
   def clearTaskValue(key: Cache.Key): Unit = {
-    val tid = System.identityHashCode(java.lang.Thread.currentThread)
-    taskCache.remove((tid, key))
+    taskCache.remove(key)
   }
 
   def clearTaskCache(): Unit
@@ -90,7 +88,7 @@ trait CacheProperties extends Cache {
 
 final class NoTransitionSmt2CacheImpl(val persistentCache: java.util.concurrent.ConcurrentHashMap[Cache.Key, Cache.Value] =
                                       new java.util.concurrent.ConcurrentHashMap,
-                                      val taskCache: java.util.concurrent.ConcurrentHashMap[(Int, Cache.Key), Cache.Value] =
+                                      val taskCache: java.util.concurrent.ConcurrentHashMap[Cache.Key, Cache.Value] =
                                       new java.util.concurrent.ConcurrentHashMap) extends CacheProperties {
 
   private var owned: Boolean = false
