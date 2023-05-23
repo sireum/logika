@@ -1,6 +1,6 @@
 // #Sireum #Logika
 import org.sireum._
-import org.sireum.justification.{Algebra_*, Auto, Auto_*, Premise, Subst1, Subst2}
+import org.sireum.justification.{Algebra_*, Auto, Premise, Subst1, Subst2}
 
 def a(x: Z): Unit = {
   val y = -3 + 42
@@ -56,7 +56,7 @@ def v3_seq_2(x: Z, y: Z): Z = {
     6 #> (g.size >= 1) by Subst2(4, 5),
     7 #> (x == 0) by Auto,
 //    8 #> (y > x) by Auto,
-    8 #> (y > x) by Auto_*(ISZ(3)),
+    8 #> (y > x) by Auto,
     9 #> (g(0) == y) by Subst1(7, 1),
     10 #> (g(0) > x) by Subst2(9, 8),
     11 #> (g(0) > 0) by Subst1(7, 10),
