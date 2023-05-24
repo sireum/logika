@@ -18,3 +18,28 @@ assert(F64.NaN == F64.NaN)
 assert(1f * 1.5f / 1.1f < 2f)
 assert(1d * 1.5d / 1.1d < 2d)
 assert(r"1" * r"1.5" / r"1.1" < r"2")
+
+
+var c: F32 = 0f
+var l: F32 = 0f
+var u: F32 = 0f
+
+def foo(): Unit = {
+  Contract(
+    Requires(
+      c != F32.NaN,
+      l != F32.NaN,
+      u != F32.NaN
+    ),
+    Ensures(T)
+  )
+  if (c < l | c > u) {
+    assert(T)
+  } else if ((c >= l & c < l + 0.5f) | (c > (u - 0.5f) & c <= u)) {
+    assert(T)
+  } else if (c >= (l + 0.5f) & c <= (u - 0.5f)) {
+    assert(T)
+  } else {
+    assert(F)
+  }
+}
