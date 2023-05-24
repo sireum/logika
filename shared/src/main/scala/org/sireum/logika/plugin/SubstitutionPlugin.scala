@@ -4,11 +4,13 @@ package org.sireum.logika.plugin
 
 import org.sireum._
 import org.sireum.{B, HashSMap}
-import org.sireum.lang.ast.{ProofAst, ResolvedAttr}
+import org.sireum.lang.ast.{ProofAst, ResolvedAttr, ResolvedInfo}
 import org.sireum.lang.ast.ProofAst.Step
+import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Reporter
+import org.sireum.logika.plugin.SubstitutionPlugin.resolveOp
 import org.sireum.ops.ISZOps
 
 @datatype class SubstitutionPlugin extends JustificationPlugin {
@@ -38,23 +40,25 @@ import org.sireum.ops.ISZOps
     val ISZ(x, y) = AST.Util.toStepIds(just.args, Logika.kind, reporter).get
 
     spcMap.get(x) match {
-      case Some(StepProofContext.Regular(_, AST.Exp.Binary(e1, AST.Exp.BinaryOp.Eq, e2), _)) =>
-        val (sub, repl): (AST.Exp, AST.Exp) = res.id match {
-          case "Subst1" => (e1, e2)
-          case "Subst2" => (e2, e1)
-        }
-        val exp = spcMap.get(y).get.asInstanceOf[StepProofContext.Regular].exp // TODO - is casting to StepProofContext.Regular safe? what about "".SubProof??
-        val subResult = AST.Transformer(SubstitutionPlugin.Substitutor(sub, repl)).transformExp(SubstitutionPlugin.unit, exp)
-        if (subResult.resultOpt.get != step.claim) {
-          reporter.error(step.claim.posOpt, Logika.kind, "TODO - error msg - substitution not as expected")
-          return emptyResult
+      case Some(StepProofContext.Regular(_, b@AST.Exp.Binary(e1, _, e2), _)) =>
+        if (resolveOp(b) == AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv) {
+          val (sub, repl): (AST.Exp, AST.Exp) = res.id match {
+            case "Subst1" => (e1, e2)
+            case "Subst2" => (e2, e1)
+          }
+          val exp = spcMap.get(y).get.asInstanceOf[StepProofContext.Regular].exp // TODO - is casting to StepProofContext.Regular safe? what about "".SubProof??
+          val subResult = AST.Transformer(SubstitutionPlugin.Substitutor(sub, repl)).transformExp(SubstitutionPlugin.unit, exp)
+          if (subResult.resultOpt.get != step.claim) {
+            reporter.error(step.claim.posOpt, Logika.kind, "TODO - error msg - substitution not as expected")
+            return emptyResult
+          } else {
+            reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, "TODO - msg - good sub")
+            return Plugin.Result(T, state.nextFresh, ISZ()) // TODO - unsure about nextfresh & claims here
+          }
         } else {
-          reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, "TODO - msg - good sub")
-          return Plugin.Result(T, state.nextFresh, ISZ()) // TODO - unsure about nextfresh & claims here
+          reporter.error(x.attr.posOpt, Logika.kind, "TODO - error msg - gotta be a BinaryEquiv")
+          return emptyResult
         }
-      case Some(StepProofContext.Regular(_, _: AST.Exp.Binary, _)) =>
-        reporter.error(step.claim.posOpt, Logika.kind, "TODO - error msg - gotta be an equality")
-        return emptyResult
       case _ =>
         return emptyResult
     }
@@ -69,13 +73,21 @@ object SubstitutionPlugin {
     return ResolvedAttr(Option.none(), Option.none(), Option.none())
   }
 
+  def resolveOp(b: AST.Exp.Binary): ResolvedInfo.BuiltIn.Kind.Type = {
+    b.attr.resOpt.get match {
+      case AST.ResolvedInfo.BuiltIn(kind) => return kind
+      case _ => halt("???")
+    }
+  }
+
   @datatype class Substitutor(sub: AST.Exp, repl: AST.Exp) extends AST.Transformer.PrePost[Unit] {
     override def postExp(ctx: Unit, exp: AST.Exp): AST.Transformer.TPostResult[Unit, AST.Exp] = {
       val substitutedExp: AST.Exp = exp match {
-        case AST.Exp.Binary(left, op, right) =>
+        case b@AST.Exp.Binary(left, opS, right) =>
+          val op = resolveOp(b)
           sub match {
-            case AST.Exp.Binary(subLeft, subOp, subRight) if subOp == op =>
-              val optFlattenableOp: Option[String] = AST.Exp.BinaryOp.precendenceLevel(op) match {
+            case subB@AST.Exp.Binary(subLeft, _, subRight) if resolveOp(subB) == op =>
+              val optFlattenableOp: Option[String] = AST.Exp.BinaryOp.precendenceLevel(opS) match {
                 case z"2" => Some(AST.Exp.BinaryOp.Mul)
                 case z"3" => Some(AST.Exp.BinaryOp.Add)
                 case _ => Option.none()
@@ -99,7 +111,7 @@ object SubstitutionPlugin {
                   @pure def f(r: AST.Exp, t: AST.Exp): AST.Exp = {
                     return AST.Exp.Binary(r, flattenedOp, t, emptyResolvedAttr)
                   }
-                  val leftTree = ISZOps(ISZOps(restL).takeRight(restL.size - 1)).foldLeft((r: AST.Exp, t: AST.Exp) => f(r,t), restL(0))
+                  val leftTree = ISZOps(ISZOps(restL).takeRight(restL.size - 1)).foldLeft((r: AST.Exp, t: AST.Exp) => f(r, t), restL(0))
                   AST.Exp.Binary(leftTree, flattenedOp, repl, emptyResolvedAttr)
                 }
               } else {
