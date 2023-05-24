@@ -38,28 +38,42 @@ import org.sireum.ops.ISZOps
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     val ISZ(x, y) = AST.Util.toStepIds(just.args, Logika.kind, reporter).get
-
     spcMap.get(x) match {
-      case Some(StepProofContext.Regular(_, b@AST.Exp.Binary(e1, _, e2), _)) =>
-        if (resolveOp(b) == AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv) {
-          val (sub, repl): (AST.Exp, AST.Exp) = res.id match {
-            case "Subst_>" => (e1, e2)
-            case "Subst_<" => (e2, e1)
-          }
-          val exp = spcMap.get(y).get.asInstanceOf[StepProofContext.Regular].exp // TODO - is casting to StepProofContext.Regular safe? what about "".SubProof??
-          val subResult = AST.Transformer(SubstitutionPlugin.Substitutor(sub, repl)).transformExp(SubstitutionPlugin.unit, exp)
-          if (subResult.resultOpt.get != step.claim) {
-            reporter.error(step.claim.posOpt, Logika.kind, "TODO - error msg - substitution not as expected")
+      case Some(xSpc: StepProofContext.Regular) =>
+        xSpc.exp match {
+          case b@AST.Exp.Binary(e1, _, e2) if resolveOp(b) == AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv =>
+            val (sub, repl): (AST.Exp, AST.Exp) = res.id match {
+              case "Subst_>" => (e1, e2)
+              case "Subst_<" => (e2, e1)
+            }
+            spcMap.get(y) match {
+              case Some(ySpc: StepProofContext.Regular) =>
+                val subResult = AST.Transformer(SubstitutionPlugin.Substitutor(sub, repl)).transformExp(SubstitutionPlugin.unit, ySpc.exp)
+                if (subResult.resultOpt.get != step.claim) {
+                  val msg = s"Claim ${step.id} does not match the substituted expression of ${res.id} of $x for $y"
+                  reporter.error(step.claim.posOpt, Logika.kind, msg)
+                  return emptyResult
+                } else {
+                  reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, "TODO - msg - good sub")
+                  return Plugin.Result(T, state.nextFresh, ISZ()) // TODO - unsure about nextfresh & claims here
+                }
+              case Some(_) =>
+                reporter.error(y.posOpt, Logika.kind, s"Cannot use compound proof step $y as an argument for Substitution")
+                return emptyResult
+              case _ =>
+                reporter.error(y.posOpt, Logika.kind, s"Could not find proof step $y")
+                return emptyResult
+            }
+          case _ =>
+            val msg = s"The first expression argument of step #$x for ${res.id} in step #${step.id} has to be a ${AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv}"
+            reporter.error(x.attr.posOpt, Logika.kind, msg)
             return emptyResult
-          } else {
-            reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, "TODO - msg - good sub")
-            return Plugin.Result(T, state.nextFresh, ISZ()) // TODO - unsure about nextfresh & claims here
-          }
-        } else {
-          reporter.error(x.attr.posOpt, Logika.kind, "TODO - error msg - gotta be a BinaryEquiv")
-          return emptyResult
         }
+      case Some(_) =>
+        reporter.error(x.posOpt, Logika.kind, s"Cannot use compound proof step $x as an argument for Substitution")
+        return emptyResult
       case _ =>
+        reporter.error(x.posOpt, Logika.kind, s"Could not find proof step $x")
         return emptyResult
     }
   }

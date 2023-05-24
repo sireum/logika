@@ -97,6 +97,8 @@ import org.sireum.message.Position
               val (s2, sym) = logika.value2Sym(s1, v, spc.exp.posOpt.get)
               s0 = s2.addClaim(State.Claim.Prop(T, sym))
             }
+          case Some(_) =>
+            reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for Algebra")
           case _ =>
             reporter.error(posOpt, Logika.kind, s"Could not find proof step $stepNo")
             ok = F
@@ -112,7 +114,7 @@ import org.sireum.message.Position
           reporter.inform(posOpt.get, Reporter.Info.Kind.Verified, "TODO - msg - thumbs up")
           return Plugin.Result(T, nextFresh, claims) // TODO - unsure about nextfresh & claims here
         case _ =>
-          reporter.error(posOpt, Logika.kind, "TODO - error msg - negation not unsat :(")
+          reporter.error(posOpt, Logika.kind, s"Could not use algebra to deduce claim $id")
           return emptyResult
       }
     } else {
@@ -156,7 +158,7 @@ object AlgebraPlugin {
       return T
     }
 
-    // TODO - equiv? equivUni? inequiv? inequivUni? fp ops?
+    // TODO - equivUni? inequiv? inequivUni? fp ops?
     @pure def isRelational(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
       kind match {
         case AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv =>
@@ -175,17 +177,17 @@ object AlgebraPlugin {
     override def postExp(e: Exp): MOption[AST.Exp] = {
       e match {
         case _: AST.Exp.Quant =>
-          fail("TODO - error msg - can't use algebra with quantifiers")
+          fail("Algebra cannot be used with quantifier ")
         case b: AST.Exp.Binary =>
           b.attr.resOpt.get match {
             case AST.ResolvedInfo.BuiltIn(kind) if !(isScalarArithmetic(kind) || isRelational(kind)) =>
-              fail(s"TODO - error msg - cant use algebra w/ binary op $kind")
+              fail(s"Algebra cannot be used with binary op $kind")
             case _ =>
           }
         case u: AST.Exp.Unary =>
           u.attr.resOpt.get match {
             case AST.ResolvedInfo.BuiltIn(kind) if !(isUnaryNumeric(kind) || isNegation(kind)) =>
-              fail(s"TODO - error msg - can't use algebra w/ unary op $kind")
+              fail(s"Algebra cannot be used with unary op $kind")
             case _ =>
           }
         case _ =>
