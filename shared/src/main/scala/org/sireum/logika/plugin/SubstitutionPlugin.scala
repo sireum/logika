@@ -17,7 +17,7 @@ import org.sireum.ops.ISZOps
 
   val name: String = "SubstitutionPlugin"
 
-  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("Subst1", "Subst2")
+  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("Subst_>", "Subst_<")
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
@@ -43,8 +43,8 @@ import org.sireum.ops.ISZOps
       case Some(StepProofContext.Regular(_, b@AST.Exp.Binary(e1, _, e2), _)) =>
         if (resolveOp(b) == AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv) {
           val (sub, repl): (AST.Exp, AST.Exp) = res.id match {
-            case "Subst1" => (e1, e2)
-            case "Subst2" => (e2, e1)
+            case "Subst_>" => (e1, e2)
+            case "Subst_<" => (e2, e1)
           }
           val exp = spcMap.get(y).get.asInstanceOf[StepProofContext.Regular].exp // TODO - is casting to StepProofContext.Regular safe? what about "".SubProof??
           val subResult = AST.Transformer(SubstitutionPlugin.Substitutor(sub, repl)).transformExp(SubstitutionPlugin.unit, exp)
