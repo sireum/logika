@@ -6,7 +6,6 @@ import org.sireum._
 import org.sireum.{B, HashSMap}
 import org.sireum.lang.ast.{ProofAst, ResolvedAttr, ResolvedInfo}
 import org.sireum.lang.ast.ProofAst.Step
-import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Reporter
@@ -54,7 +53,8 @@ import org.sireum.ops.ISZOps
                   reporter.error(step.claim.posOpt, Logika.kind, msg)
                   return emptyResult
                 } else {
-                  reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, "TODO - msg - good sub")
+                  val msg = s"Accepted because the claim of step ${step.id} matches ${ySpc.exp} with $sub replaced by $repl"
+                  reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, msg)
                   return Plugin.Result(T, state.nextFresh, ISZ()) // TODO - unsure about nextfresh & claims here
                 }
               case Some(_) =>

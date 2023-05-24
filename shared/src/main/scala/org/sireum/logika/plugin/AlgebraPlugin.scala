@@ -6,7 +6,6 @@ import org.sireum._
 import org.sireum.lang.ast.{Exp, ProofAst}
 import org.sireum.lang.ast.ProofAst.Step
 import org.sireum.lang.{ast => AST}
-import org.sireum.logika.Logika.Reporter
 import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.message.Position
 
@@ -109,17 +108,22 @@ import org.sireum.message.Position
     }
     if (ok) {
       val r = smt2.valid(logika.context.methodName, logika.config, cache, T, s"$id Justification", pos, premises, conclusion, reporter)
-      r.kind match {
-        case Smt2Query.Result.Kind.Unsat =>
-          reporter.inform(posOpt.get, Reporter.Info.Kind.Verified, "TODO - msg - thumbs up")
-          return Plugin.Result(T, nextFresh, claims) // TODO - unsure about nextfresh & claims here
-        case _ =>
-          reporter.error(posOpt, Logika.kind, s"Could not use algebra to deduce claim $id")
-          return emptyResult
+
+      def error(msg: String): B = {
+        reporter.error(posOpt, Logika.kind, msg)
+        return F
       }
-    } else {
-      return emptyResult
+
+      val status: B = r.kind match {
+        case Smt2Query.Result.Kind.Unsat => T
+        case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step ${step.id}")
+        case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step ${step.id}")
+        case Smt2Query.Result.Kind.Timeout => error(s"Timed out when deducing the claim of proof step ${step.id}")
+        case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step ${step.id}")
+      }
+      return Plugin.Result(status, state.nextFresh, ISZ())
     }
+    return emptyResult
   }
 }
 
