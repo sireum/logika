@@ -159,6 +159,7 @@ object AlgebraPlugin {
     // TODO - equiv? equivUni? inequiv? inequivUni? fp ops?
     @pure def isRelational(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
       kind match {
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv =>
         case AST.ResolvedInfo.BuiltIn.Kind.BinaryEq =>
         case AST.ResolvedInfo.BuiltIn.Kind.BinaryNe =>
         case AST.ResolvedInfo.BuiltIn.Kind.BinaryLt =>
