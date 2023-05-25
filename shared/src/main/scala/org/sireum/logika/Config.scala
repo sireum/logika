@@ -62,7 +62,8 @@ import org.sireum._
                        val transitionCache: B,
                        val patternExhaustive: B,
                        val pureFun: B,
-                       val detailedInfo: B) {
+                       val detailedInfo: B,
+                       val satTimeout: B) {
 
   @memoize def fingerprint: U64 = {
     return ops.StringOps(string).sha3U64(T, T)

@@ -101,6 +101,7 @@ object OptionsCli {
     val simplify: B,
     val smt2SatConfigs: Option[String],
     val smt2ValidConfigs: Option[String],
+    val satTimeout: B,
     val timeout: Z
   ) extends LogikaTopOption
 }
@@ -266,8 +267,10 @@ import OptionsCli._
           |    --solver-valid       SMT2 configurations for validity queries (expects a
           |                           string; default is "cvc4,--full-saturate-quant; z3;
           |                           cvc5,--full-saturate-quant")
-          |-t, --timeout            Timeout (seconds) for SMT2 solver (expects an integer;
-          |                           min is 1; default is 2)""".render
+          |    --sat-timeout        Use validity checking timeout for satisfiability
+          |                           checking (otherwise: 500ms)
+          |-t, --timeout            Timeout (seconds) for validity checking (expects an
+          |                           integer; min is 1; default is 2)""".render
 
     var smt2Caching: B = true
     var transitionCaching: B = true
@@ -309,6 +312,7 @@ import OptionsCli._
     var simplify: B = false
     var smt2SatConfigs: Option[String] = Some("z3")
     var smt2ValidConfigs: Option[String] = Some("cvc4,--full-saturate-quant; z3; cvc5,--full-saturate-quant")
+    var satTimeout: B = false
     var timeout: Z = 2
     var j = i
     var isOption = T
@@ -564,6 +568,12 @@ import OptionsCli._
              case Some(v) => smt2ValidConfigs = v
              case _ => return None()
            }
+         } else if (arg == "--sat-timeout") {
+           val o: Option[B] = { j = j - 1; Some(!satTimeout) }
+           o match {
+             case Some(v) => satTimeout = v
+             case _ => return None()
+           }
          } else if (arg == "-t" || arg == "--timeout") {
            val o: Option[Z] = parseNum(args, j + 1, Some(1), None())
            o match {
@@ -579,7 +589,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, timeout))
+    return Some(LogikaOption(help, parseArguments(args, j), smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

@@ -91,7 +91,8 @@ object LogikaTest {
       transitionCache = F,
       patternExhaustive = T,
       pureFun = F,
-      detailedInfo = F
+      detailedInfo = F,
+      satTimeout = F
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty

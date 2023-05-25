@@ -43,3 +43,24 @@ def foo(): Unit = {
     assert(F)
   }
 }
+
+def bar(): Unit = {
+  Contract(
+    Requires(
+      c != F32.NaN,
+      l != F32.NaN,
+      u != F32.NaN
+    ),
+    Ensures(T)
+  )
+  setOptions("Logika", """--par --par-branch --rlimit 500000 --timeout 5 --sat-timeout --solver-sat cvc4""")
+  if (c < l || c > u) {
+    assert(T)
+  } else if ((c >= l && c < l + 0.5f) || (c > (u - 0.5f) && c <= u)) {
+    assert(T)
+  } else if (c >= (l + 0.5f) && c <= (u - 0.5f)) {
+    assert(T)
+  } else {
+    assert(F)
+  }
+}

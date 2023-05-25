@@ -179,9 +179,13 @@ object cli {
           tpe = Type.Str(None(), Some(logika.Smt2.defaultValidOpts)),
           description = "SMT2 configurations for validity queries"
         ),
+        Opt(name = "satTimeout", longKey = "sat-timeout", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = s"Use validity checking timeout for satisfiability checking (otherwise: ${Smt2.satTimeoutInMs}ms)"
+        ),
         Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
           tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
-          description = "Timeout (seconds) for SMT2 solver"
+          description = "Timeout (seconds) for validity checking"
         )
       ))
     )
