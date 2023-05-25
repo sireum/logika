@@ -162,7 +162,8 @@ object OptionsUtil {
       transitionCache = defaultConfig.transitionCache,
       patternExhaustive = o.patternExhaustive,
       pureFun = o.pureFun,
-      detailedInfo = defaultConfig.detailedInfo
+      detailedInfo = defaultConfig.detailedInfo,
+      satTimeout = o.satTimeout
     )
     return Either.Left(config)
   }
@@ -230,6 +231,9 @@ object OptionsUtil {
     }
     if (config.timeoutInMs != defaultConfig.timeoutInMs) {
       r = r ++ ISZ[String]("--timeout", max(config.timeoutInMs / 1000, 1).string)
+    }
+    if (config.satTimeout != defaultConfig.satTimeout) {
+      r = r :+ "--sat-timeout"
     }
     if (config.charBitWidth != defaultConfig.charBitWidth) {
       r = r ++ ISZ[String]("--c-bitwidth", config.charBitWidth.string)

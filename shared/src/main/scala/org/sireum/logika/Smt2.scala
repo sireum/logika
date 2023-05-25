@@ -32,7 +32,6 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.Logika.Reporter
 import Util._
-import org.sireum.logika.Smt2.satTimeoutInMs
 
 object Smt2 {
 
@@ -691,7 +690,8 @@ object Smt2 {
 
   def sat(context: ISZ[String], config: Config, cache: Logika.Cache, reportQuery: B,
           title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): B = {
-    val (status, r) = satResult(context, config, cache, satTimeoutInMs, reportQuery, title, pos, claims, reporter)
+    val (status, r) = satResult(context, config, cache,
+      if (config.satTimeout) config.timeoutInMs else Smt2.satTimeoutInMs, reportQuery, title, pos, claims, reporter)
     if (r.kind == Smt2Query.Result.Kind.Error) {
       reporter.error(Some(pos), Logika.kind, s"Error occurred when doing ${ops.StringOps(title).firstToLower}")
     }
