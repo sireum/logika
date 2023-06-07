@@ -98,10 +98,6 @@ object SubstitutionPlugin {
 
   def unit: Unit = {} // TODO - using this for transformer's context - probably want something else
 
-  def emptyResolvedAttr: ResolvedAttr = {
-    return ResolvedAttr(Option.none(), Option.none(), Option.none())
-  }
-
   def resolveOp(b: AST.Exp.Binary): ResolvedInfo.BuiltIn.Kind.Type = {
     b.attr.resOpt.get match {
       case AST.ResolvedInfo.BuiltIn(kind) => return kind
@@ -111,47 +107,7 @@ object SubstitutionPlugin {
 
   @datatype class Substitutor(sub: AST.Exp, repl: AST.Exp) extends AST.Transformer.PrePost[Unit] {
     override def postExp(ctx: Unit, exp: AST.Exp): AST.Transformer.TPostResult[Unit, AST.Exp] = {
-      val substitutedExp: AST.Exp = exp match {
-        case b@AST.Exp.Binary(left, opS, right) =>
-          val op = resolveOp(b)
-          sub match {
-            case subB@AST.Exp.Binary(subLeft, _, subRight) if resolveOp(subB) == op =>
-              val optFlattenableOp: Option[String] = AST.Exp.BinaryOp.precendenceLevel(opS) match {
-                case z"2" => Some(AST.Exp.BinaryOp.Mul)
-                case z"3" => Some(AST.Exp.BinaryOp.Add)
-                case _ => Option.none()
-              }
-              def flatten(e: AST.Exp): ISZ[AST.Exp] = {
-                e match {
-                  case AST.Exp.Binary(l, o, r) if optFlattenableOp.exists(fOp => o == fOp) =>
-                    return flatten(l) ++ ISZ(r) // due to plus/mul ops being parsed as left-associative, right subtree has to be an exact match... I think??
-                  case _ =>
-                    return ISZ(e)
-                }
-              }
-              val fLeft = flatten(left)
-              val fSubLeft = flatten(subLeft)
-              if (ISZOps(fLeft).takeRight(fSubLeft.size) == fSubLeft && right == subRight) {
-                val restL = ISZOps(fLeft).take(fLeft.size - fSubLeft.size)
-                if (restL.isEmpty) {
-                  repl
-                } else {
-                  val flattenedOp = optFlattenableOp.get
-                  @pure def f(r: AST.Exp, t: AST.Exp): AST.Exp = {
-                    return AST.Exp.Binary(r, flattenedOp, t, emptyResolvedAttr)
-                  }
-                  val leftTree = ISZOps(ISZOps(restL).takeRight(restL.size - 1)).foldLeft((r: AST.Exp, t: AST.Exp) => f(r, t), restL(0))
-                  AST.Exp.Binary(leftTree, flattenedOp, repl, emptyResolvedAttr)
-                }
-              } else {
-                exp
-              }
-            case _ =>
-              exp
-          }
-        case _ =>
-          if (exp == sub) repl else exp
-      }
+      val substitutedExp: AST.Exp = if (exp == sub) repl else exp
       return AST.Transformer.TPostResult(ctx, Some(substitutedExp))
     }
   }
