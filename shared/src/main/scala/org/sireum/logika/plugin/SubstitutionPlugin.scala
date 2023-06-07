@@ -37,10 +37,25 @@ import org.sireum.ops.ISZOps
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     val ISZ(x, y) = AST.Util.toStepIds(just.args, Logika.kind, reporter).get
+
+
     spcMap.get(x) match {
       case Some(xSpc: StepProofContext.Regular) =>
         xSpc.exp match {
-          case b@AST.Exp.Binary(e1, _, e2) if resolveOp(b) == AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv =>
+          case b@AST.Exp.Binary(e1, _, e2) =>
+            resolveOp(b) match {
+              case AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv =>
+              case AST.ResolvedInfo.BuiltIn.Kind.BinaryEq =>
+                if (!logika.th.isSubstitutableWithoutSpecVars(b.typedOpt.get)) {
+                  val msg = s"Step $x must be substitutable without spec vars in or to use ${AST.ResolvedInfo.BuiltIn.Kind.BinaryEq} for substitution"
+                  reporter.error(x.attr.posOpt, Logika.kind, msg)
+                  return emptyResult
+                }
+              case _ =>
+                val msg = s"The first expression argument of step $x for ${res.id} in step ${step.id} has to be an equality"
+                reporter.error(x.attr.posOpt, Logika.kind, msg)
+                return emptyResult
+            }
             val (sub, repl): (AST.Exp, AST.Exp) = res.id match {
               case "Subst_>" => (e1, e2)
               case "Subst_<" => (e2, e1)
@@ -65,7 +80,7 @@ import org.sireum.ops.ISZOps
                 return emptyResult
             }
           case _ =>
-            val msg = s"The first expression argument of step #$x for ${res.id} in step #${step.id} has to be a ${AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv}"
+            val msg = s"The first expression argument of step $x for ${res.id} in step ${step.id} has to be an equality"
             reporter.error(x.attr.posOpt, Logika.kind, msg)
             return emptyResult
         }
