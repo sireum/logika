@@ -4,30 +4,30 @@ import org.sireum.justification.{Algebra_*, Auto, Premise, Subst_>, Subst_<}
 
 def a(x: Z): Unit = {
   val y = -3 + 42
-  val z = x + 1 + y + 3 + 4
+  val z = x + 1 + (y + 3) + 4
   Deduce(
     1 #> (y + 3 == 42) by Auto,
-    2 #> (z == x + 1 + y + 3 + 4) by Premise,
+    2 #> (z == x + 1 + (y + 3) + 4) by Premise,
       3 #> (z == x + 1 + 42 + 4) by Subst_>(1, 2)
   )
 }
 
 def b(): Unit = {
   val x = 4 - 5
-  val y = 8 + 4 - 5 + 6
+  val y = 8 + (4 - 5) + 6
   Deduce(
     1 #> (x == 4 - 5) by Premise,
-    2 #> (y == 8 + 4 - 5 + 6) by Premise,
+    2 #> (y == 8 + (4 - 5) + 6) by Premise,
     3 #> (y == 8 + x + 6) by Subst_<(1, 2)
   )
 }
 
 def d(): Unit = {
   val x = -2 + 42
-  val y = (8 + x + 2) - (5 - x + 2) * (x + 2)
+  val y = (8 + (x + 2)) - (5 - x + 2) * (x + 2)
   Deduce(
     1 #> (x + 2 == 42) by Auto,
-    2 #> (y == (8 + x + 2) - (5 - x + 2) * (x + 2)) by Premise,
+    2 #> (y == (8 + (x + 2)) - (5 - x + 2) * (x + 2)) by Premise,
     3 #> (y == (8 + 42) - (5 - x + 2) * 42) by Subst_>(1, 2)
   )
 }
