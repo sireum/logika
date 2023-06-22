@@ -38,7 +38,6 @@ import org.sireum.ops.ISZOps
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     val ISZ(x, y) = AST.Util.toStepIds(just.args, Logika.kind, reporter).get
 
-
     spcMap.get(x) match {
       case Some(xSpc: StepProofContext.Regular) =>
         xSpc.exp match {
@@ -68,9 +67,13 @@ import org.sireum.ops.ISZOps
                   reporter.error(step.claim.posOpt, Logika.kind, msg)
                   return emptyResult
                 } else {
-                  val msg = s"Accepted because the claim of step ${step.id} matches ${ySpc.exp} with $sub replaced by $repl"
-                  reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, msg)
-                  return Plugin.Result(T, state.nextFresh, ISZ()) // TODO - unsure about nextfresh & claims here
+                  val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+                  val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
+                  if (stat && logika.config.detailedInfo) {
+                    val msg = s"Accepted because the claim of step ${step.id} matches ${ySpc.exp} with $sub replaced by $repl"
+                    reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, msg)
+                  }
+                  return Plugin.Result(stat, nextFresh, claims)
                 }
               case Some(_) =>
                 reporter.error(y.posOpt, Logika.kind, s"Cannot use compound proof step $y as an argument for Substitution")

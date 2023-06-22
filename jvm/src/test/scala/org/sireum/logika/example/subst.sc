@@ -22,7 +22,7 @@ def b(): Unit = {
   )
 }
 
-def d(): Unit = {
+def c(): Unit = {
   val x = -2 + 42
   val y = (8 + (x + 2)) - (5 - x + 2) * (x + 2)
   Deduce(
@@ -55,7 +55,6 @@ def v3_seq_2(x: Z, y: Z): Z = {
     5 #> (g_old.size >= 1) by Auto,
     6 #> (g.size >= 1) by Subst_<(4, 5),
     7 #> (x == 0) by Auto,
-//    8 #> (y > x) by Auto,
     8 #> (y > x) by Auto,
     9 #> (g(0) == y) by Subst_>(7, 1),
     10 #> (g(0) > x) by Subst_<(9, 8),

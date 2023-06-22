@@ -70,9 +70,8 @@ import org.sireum.message.Position
       ac.transformExp(e)
       if (ac.hasError) {
         reporter.error(posOpt, Logika.kind, ac.msgOpt.get)
-        return F
       }
-      return T
+      return !ac.hasError
     }
 
     var ok = T
@@ -89,15 +88,15 @@ import org.sireum.message.Position
         spcMap.get(stepNo) match {
           case Some(spc: StepProofContext.Regular) =>
             if (!checkAlgebraExp(spc.exp)) {
-              ok = F // TODO - grab errors?
+              ok = F
             } else {
-              // not sure what's going on here
               val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, smt2, cache, T, s0, spc.exp, reporter)
               val (s2, sym) = logika.value2Sym(s1, v, spc.exp.posOpt.get)
               s0 = s2.addClaim(State.Claim.Prop(T, sym))
             }
           case Some(_) =>
             reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $stepNo as an argument for Algebra")
+            ok = F
           case _ =>
             reporter.error(posOpt, Logika.kind, s"Could not find proof step $stepNo")
             ok = F
@@ -121,7 +120,7 @@ import org.sireum.message.Position
         case Smt2Query.Result.Kind.Timeout => error(s"Timed out when deducing the claim of proof step ${step.id}")
         case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step ${step.id}")
       }
-      return Plugin.Result(status, state.nextFresh, ISZ())
+      return Plugin.Result(status, nextFresh, claims)
     }
     return emptyResult
   }
@@ -181,7 +180,7 @@ object AlgebraPlugin {
     override def postExp(e: Exp): MOption[AST.Exp] = {
       e match {
         case _: AST.Exp.Quant =>
-          fail("Algebra cannot be used with quantifier ")
+          fail("Algebra cannot be used with quantifiers")
         case b: AST.Exp.Binary =>
           b.attr.resOpt.get match {
             case AST.ResolvedInfo.BuiltIn(kind) if !(isScalarArithmetic(kind) || isRelational(kind)) =>
