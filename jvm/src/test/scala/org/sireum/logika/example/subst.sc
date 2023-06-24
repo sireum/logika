@@ -1,6 +1,6 @@
 // #Sireum #Logika
 import org.sireum._
-import org.sireum.justification.{Algebra_*, Auto, Premise, Subst_>, Subst_<}
+import org.sireum.justification.{Algebra_*, Auto, Premise, Subst_<, Subst_>, Unfold, ValE}
 
 def a(x: Z): Unit = {
   val y = -3 + 42
@@ -89,6 +89,58 @@ def v3_assignment_14(): Unit = {
     4 #> (money - 10 == ((dimes - 1) * 10)) by Subst_>(3, 1),
     5 #> (money == ((dimes - 1) * 10) + 10) by Algebra_*(ISZ(4)),
     6 #> (money == dimes * 10) by Algebra_*(ISZ(5))
+  )
+}
+
+@strictpure def sum(s: ISZ[Z], i: Z): Z = if (s.isInBound(i)) s(i) + sum(s, i + 1) else 0
+
+def foo(seq: ISZ[Z], index: Z): Unit = {
+
+  val s1 = seq
+
+  Deduce(
+
+    1 #> (s1 === seq) by Premise,
+
+    2 #> (sum(seq, index) == (sum(seq, index): @l)) by Auto T,
+
+    3 #>
+      (sum(seq, index) == ({
+        val s0 = seq
+        val i0 = index
+        if (s0.isInBound(i0)) s0(i0) + sum(s0, i0 + 1) else 0
+      }: @l)) by Unfold(2),
+
+    4 #>
+      (sum(seq, index) == ({
+        val s0 = seq
+        val i0 = index
+        if (s0.isInBound(i0)) {
+          s0(i0) + sum(s0, i0 + 1)
+        } else {
+          0
+        }
+      }: @l)) by Auto,
+
+    5 #>
+      (sum(seq, index) == ({
+        val i0 = index
+        if (seq.isInBound(i0)) {
+          seq(i0) + sum(seq, i0 + 1)
+        } else {
+          0
+        }
+      }: @l)) by ValE(4),
+
+    6 #>
+      (sum(s1, index) == ({
+        val i0 = index
+        if (s1.isInBound(i0)) {
+          s1(i0) + sum(s1, i0 + 1)
+        } else {
+          0
+        }
+      }: @l)) by Subst_<(1, 5),
   )
 }
 

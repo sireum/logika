@@ -3,8 +3,9 @@
 package org.sireum.logika.plugin
 
 import org.sireum._
+import org.sireum.lang.ast.MTransformer.PreResult
 import org.sireum.{B, HashSMap}
-import org.sireum.lang.ast.{ProofAst, ResolvedAttr, ResolvedInfo}
+import org.sireum.lang.ast.{Exp, ProofAst, ResolvedAttr, ResolvedInfo}
 import org.sireum.lang.ast.ProofAst.Step
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.lang.{ast => AST}
@@ -61,8 +62,10 @@ import org.sireum.ops.ISZOps
             }
             spcMap.get(y) match {
               case Some(ySpc: StepProofContext.Regular) =>
-                val subResult = AST.Transformer(SubstitutionPlugin.Substitutor(sub, repl)).transformExp(SubstitutionPlugin.unit, ySpc.exp)
-                if (subResult.resultOpt.get != step.claim) {
+                val exp = ySpc.exp
+                val s = SubstitutionPlugin.Substitutor(sub, repl)
+                val subResult = s.transformExp(exp).getOrElseEager(exp)
+                if (subResult != step.claim) {
                   val msg = s"Claim ${step.id} does not match the substituted expression of ${res.id} of $x for $y"
                   reporter.error(step.claim.posOpt, Logika.kind, msg)
                   return emptyResult
@@ -99,8 +102,6 @@ import org.sireum.ops.ISZOps
 
 object SubstitutionPlugin {
 
-  def unit: Unit = {} // TODO - using this for transformer's context - probably want something else
-
   def resolveOp(b: AST.Exp.Binary): ResolvedInfo.BuiltIn.Kind.Type = {
     b.attr.resOpt.get match {
       case AST.ResolvedInfo.BuiltIn(kind) => return kind
@@ -108,10 +109,36 @@ object SubstitutionPlugin {
     }
   }
 
-  @datatype class Substitutor(sub: AST.Exp, repl: AST.Exp) extends AST.Transformer.PrePost[Unit] {
-    override def postExp(ctx: Unit, exp: AST.Exp): AST.Transformer.TPostResult[Unit, AST.Exp] = {
-      val substitutedExp: AST.Exp = if (exp == sub) repl else exp
-      return AST.Transformer.TPostResult(ctx, Some(substitutedExp))
+  @record class Substitutor(val sub: AST.Exp, val repl: AST.Exp) extends Plugin.InvocationSubstitutor {
+
+    override def preExp(exp: AST.Exp): PreResult[AST.Exp] = {
+      exp match {
+        case i: AST.Exp.Invoke => return preExpInvoke(i)
+        case i: AST.Exp.InvokeNamed => return preExpInvokeNamed(i)
+        case _ =>
+          if (exp == sub) {
+            return PreResult(F, MSome(repl))
+          } else {
+            return PreResult(T, MNone())
+          }
+      }
     }
+
+    override def preExpInvoke(i: AST.Exp.Invoke): PreResult[AST.Exp] = {
+      val o: MOption[AST.Exp] = transformExpInvoke(i) match {
+        case MSome(exp: AST.Exp) => MSome(exp)
+        case MNone() => MNone()
+      }
+      return PreResult(F, o)
+    }
+
+    override def preExpInvokeNamed(i: Exp.InvokeNamed): PreResult[Exp] = {
+      val o: MOption[AST.Exp] = transformExpInvokeNamed(i) match {
+        case MSome(exp: AST.Exp) => MSome(exp)
+        case MNone() => MNone()
+      }
+      return PreResult(F, o)
+    }
+
   }
 }
