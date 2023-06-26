@@ -92,55 +92,30 @@ def v3_assignment_14(): Unit = {
   )
 }
 
-@strictpure def sum(s: ISZ[Z], i: Z): Z = if (s.isInBound(i)) s(i) + sum(s, i + 1) else 0
-
 def foo(seq: ISZ[Z], index: Z): Unit = {
+  Contract(
+    Requires(
+      seq.isInBound(0),
+      seq.isInBound(index)
+    )
+  )
 
-  val s1 = seq
+  val s = seq
+  val i = seq(index)
+  val index0 = index
+  val b = seq.isInBound(index)
 
   Deduce(
+    1 #> (s === seq) by Premise,
+    2 #> (i == seq(index)) by Premise,
+    3 #> (i == s(index)) by Subst_<(1, 2)
+  )
 
-    1 #> (s1 === seq) by Premise,
-
-    2 #> (sum(seq, index) == (sum(seq, index): @l)) by Auto T,
-
-    3 #>
-      (sum(seq, index) == ({
-        val s0 = seq
-        val i0 = index
-        if (s0.isInBound(i0)) s0(i0) + sum(s0, i0 + 1) else 0
-      }: @l)) by Unfold(2),
-
-    4 #>
-      (sum(seq, index) == ({
-        val s0 = seq
-        val i0 = index
-        if (s0.isInBound(i0)) {
-          s0(i0) + sum(s0, i0 + 1)
-        } else {
-          0
-        }
-      }: @l)) by Auto,
-
-    5 #>
-      (sum(seq, index) == ({
-        val i0 = index
-        if (seq.isInBound(i0)) {
-          seq(i0) + sum(seq, i0 + 1)
-        } else {
-          0
-        }
-      }: @l)) by ValE(4),
-
-    6 #>
-      (sum(s1, index) == ({
-        val i0 = index
-        if (s1.isInBound(i0)) {
-          s1(i0) + sum(s1, i0 + 1)
-        } else {
-          0
-        }
-      }: @l)) by Subst_<(1, 5),
+  Deduce(
+    1 #> (s === seq) by Premise,
+    2 #> (index0 == index) by Premise,
+    3 #> (b == seq.isInBound(index)) by Premise,
+    4 #> (b == s.isInBound(index)) by Subst_<(1, 3),
+    5 #> (b == s.isInBound(index0)) by Subst_<(2, 4)
   )
 }
-

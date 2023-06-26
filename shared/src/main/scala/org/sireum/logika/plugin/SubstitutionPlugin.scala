@@ -119,26 +119,17 @@ object SubstitutionPlugin {
           if (exp == sub) {
             return PreResult(F, MSome(repl))
           } else {
-            return PreResult(T, MNone())
+            return PreResult(T, MSome(exp))
           }
       }
     }
 
     override def preExpInvoke(i: AST.Exp.Invoke): PreResult[AST.Exp] = {
-      val o: MOption[AST.Exp] = transformExpInvoke(i) match {
-        case MSome(exp: AST.Exp) => MSome(exp)
-        case MNone() => MNone()
-      }
-      return PreResult(F, o)
+      return PreResult(F, transformExpInvoke(i).map((e: AST.Exp) => e))
     }
 
     override def preExpInvokeNamed(i: Exp.InvokeNamed): PreResult[Exp] = {
-      val o: MOption[AST.Exp] = transformExpInvokeNamed(i) match {
-        case MSome(exp: AST.Exp) => MSome(exp)
-        case MNone() => MNone()
-      }
-      return PreResult(F, o)
+      return PreResult(F, transformExpInvokeNamed(i).map((e: AST.Exp) => e))
     }
-
   }
 }
