@@ -32,7 +32,7 @@ import org.sireum.logika.Logika.Reporter
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 
 object ValIntroElimPlugin {
-  @record class Substitutor(val i: Z, val map: HashSMap[ISZ[String], (Z, message.Position, AST.Exp)]) extends AST.MTransformer {
+  @record class Substitutor(val i: Z, val map: HashSMap[ISZ[String], (Z, message.Position, AST.Exp)]) extends Plugin.InvocationSubstitutor {
     override def preExpIdent(o: AST.Exp.Ident): AST.MTransformer.PreResult[AST.Exp] = {
       o.resOpt match {
         case Some(res: AST.ResolvedInfo.LocalVar) =>
@@ -43,76 +43,6 @@ object ValIntroElimPlugin {
         case _ =>
       }
       return AST.MTransformer.PreResultExpIdent
-    }
-
-    override def transformExpInvoke(o: AST.Exp.Invoke): MOption[AST.Exp.Invoke] = {
-      var changed = F
-      val newReceiverOpt: Option[AST.Exp] = o.receiverOpt match {
-        case Some(receiver) => transformExp(receiver) match {
-          case MSome(r) =>
-            changed = T
-            Some(r)
-          case _ => None()
-        }
-        case _ => None()
-      }
-      val newIdent: AST.Exp = transformExp(o.ident) match {
-        case MSome(e) =>
-          changed = T
-          e
-        case _ => o.ident
-      }
-      var newArgs = ISZ[AST.Exp]()
-      for (arg <- o.args) {
-        transformExp(arg) match {
-          case MSome(e) =>
-            changed = T
-            newArgs = newArgs :+ e
-          case _ =>
-            newArgs = newArgs :+ arg
-        }
-      }
-      if (!changed) {
-        return MNone()
-      }
-      val (isApply, nro, ni) = AST.Util.invokeReceiverIdent(newReceiverOpt, newIdent)
-      return if (isApply) MSome(o(receiverOpt = nro, ident = ni, args = newArgs, attr = ni.attr))
-      else MSome(o(receiverOpt = nro, ident = ni, args = newArgs))
-    }
-
-    override def transformExpInvokeNamed(o: AST.Exp.InvokeNamed): MOption[AST.Exp.InvokeNamed] = {
-      var changed = F
-      val newReceiverOpt: Option[AST.Exp] = o.receiverOpt match {
-        case Some(receiver) => transformExp(receiver) match {
-          case MSome(r) =>
-            changed = T
-            Some(r)
-          case _ => None()
-        }
-        case _ => None()
-      }
-      val newIdent: AST.Exp = transformExp(o.ident) match {
-        case MSome(e) =>
-          changed = T
-          e
-        case _ => o.ident
-      }
-      var newArgs = ISZ[AST.NamedArg]()
-      for (arg <- o.args) {
-        transformNamedArg(arg) match {
-          case MSome(e) =>
-            changed = T
-            newArgs = newArgs :+ e
-          case _ =>
-            newArgs = newArgs :+ arg
-        }
-      }
-      if (!changed) {
-        return MNone()
-      }
-      val (isApply, nro, ni) = AST.Util.invokeReceiverIdent(newReceiverOpt, newIdent)
-      return if (isApply) MSome(o(receiverOpt = nro, ident = ni, args = newArgs, attr = ni.attr))
-      else MSome(o(receiverOpt = nro, ident = ni, args = newArgs))
     }
   }
 }
