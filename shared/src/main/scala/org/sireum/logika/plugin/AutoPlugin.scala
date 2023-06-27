@@ -26,14 +26,93 @@
 package org.sireum.logika.plugin
 
 import org.sireum._
-import org.sireum.message.Position
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
+object AutoPlugin {
+  @record class MAlgebraChecker(var hasError: B, var msgOpt: Option[String]) extends AST.MTransformer {
+    @pure def isUnaryNumeric(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
+      kind match {
+        case AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus =>
+        case AST.ResolvedInfo.BuiltIn.Kind.UnaryMinus =>
+        case _ =>
+          return F
+      }
+      return T
+    }
+
+    @pure def isNegation(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
+      kind match {
+        case AST.ResolvedInfo.BuiltIn.Kind.UnaryNot =>
+        case _ =>
+          return F
+      }
+      return T
+    }
+
+    @pure def isScalarArithmetic(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
+      kind match {
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryAdd =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinarySub =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryMul =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryDiv =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryRem =>
+        case _ =>
+          return F
+      }
+      return T
+    }
+
+    @pure def isRelational(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
+      kind match {
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryEq =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryNe =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryLt =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryLe =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryGt =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryGe =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryFpEq =>
+        case AST.ResolvedInfo.BuiltIn.Kind.BinaryFpNe =>
+        case _ =>
+          return F
+      }
+      return T
+    }
+
+    override def postExp(e: AST.Exp): MOption[AST.Exp] = {
+      e match {
+        case _: AST.Exp.Quant =>
+          fail("Algebra cannot be used with quantifiers")
+        case b: AST.Exp.Binary =>
+          b.attr.resOpt.get match {
+            case AST.ResolvedInfo.BuiltIn(kind) if !(isScalarArithmetic(kind) || isRelational(kind)) =>
+              fail(s"Algebra cannot be used with binary op $kind")
+            case _ =>
+          }
+        case u: AST.Exp.Unary =>
+          u.attr.resOpt.get match {
+            case AST.ResolvedInfo.BuiltIn(kind) if !(isUnaryNumeric(kind) || isNegation(kind)) =>
+              fail(s"Algebra cannot be used with unary op $kind")
+            case _ =>
+          }
+        case _ =>
+      }
+      return super.postExp(e)
+    }
+
+    def fail(msg: String): Unit = {
+      msgOpt = Some(msg)
+      hasError = T
+    }
+  }
+
+}
+
 @datatype class AutoPlugin extends JustificationPlugin {
 
-  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("Auto", "Premise")
+  val justificationIds: HashSet[String] = HashSet ++ ISZ[String]("Algebra", "Auto", "Premise")
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
@@ -61,8 +140,21 @@ import org.sireum.logika.Logika.Reporter
     val posOpt = just.id.posOpt
     val pos = posOpt.get
 
+    def checkAlgebraExp(e: AST.Exp): B = {
+      val ac = AutoPlugin.MAlgebraChecker(F, Option.none())
+      ac.transformExp(e)
+      if (ac.hasError) {
+        reporter.error(posOpt, Logika.kind, ac.msgOpt.get)
+      }
+      return !ac.hasError
+    }
+
     def checkValid(psmt2: Smt2, stat: B, nextFresh: Z, premises: ISZ[State.Claim], conclusion: State.Claim,
                    claims: ISZ[State.Claim]): Plugin.Result = {
+      if (id == "Algebra" && !checkAlgebraExp(step.claim)) {
+        return Plugin.Result(F, state.nextFresh, ISZ())
+      }
+
       var status = stat
       if (status) {
         val r = psmt2.valid(logika.context.methodName, logika.config, cache, T, s"$id Justification", pos, premises,

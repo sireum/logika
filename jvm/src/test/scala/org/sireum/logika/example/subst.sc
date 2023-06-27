@@ -1,6 +1,6 @@
 // #Sireum #Logika
 import org.sireum._
-import org.sireum.justification.{Algebra_*, Auto, Premise, Subst_<, Subst_>, Unfold, ValE}
+import org.sireum.justification.{Algebra, Auto, Premise, Subst_<, Subst_>}
 
 def a(x: Z): Unit = {
   val y = -3 + 42
@@ -41,9 +41,9 @@ def v3_seq_2(x: Z, y: Z): Z = {
     1 #> (g(0) > 0 && g.size >= 1) by Auto,
     2 #> (x == 0 && y > x) by Premise,
     3 #> (x == 0) by Auto,
-    4 #> (0 <= x) by Algebra_*(ISZ(3)),
+    4 #> (0 <= x) by Algebra and 3,
     5 #> (g.size >= 1) by Auto,
-    6 #> (x < g.size) by Algebra_*(ISZ(3, 5))
+    6 #> (x < g.size) by Algebra and (3, 5)
   )
   val g_old = g
   g(x) = y
@@ -77,7 +77,7 @@ def v3_assignment_14(): Unit = {
   Deduce(
     1 #> (dimes == dimes_old + 1) by Auto,
     2 #> (money == dimes_old * 10) by Auto,
-    3 #> (dimes_old == dimes - 1) by Algebra_*(ISZ(1)),
+    3 #> (dimes_old == dimes - 1) by Algebra and 1,
     4 #> (money == (dimes - 1) * 10) by Subst_>(3, 2)
   )
   val money_old = money
@@ -85,10 +85,10 @@ def v3_assignment_14(): Unit = {
   Deduce(
     1 #> (money_old == (dimes - 1) * 10) by Auto,
     2 #> (money == money_old + 10) by Auto,
-    3 #> (money_old == money - 10) by Algebra_*(ISZ(2)),
+    3 #> (money_old == money - 10) by Algebra and 2,
     4 #> (money - 10 == ((dimes - 1) * 10)) by Subst_>(3, 1),
-    5 #> (money == ((dimes - 1) * 10) + 10) by Algebra_*(ISZ(4)),
-    6 #> (money == dimes * 10) by Algebra_*(ISZ(5))
+    5 #> (money == ((dimes - 1) * 10) + 10) by Algebra and 4,
+    6 #> (money == dimes * 10) by Algebra and 5
   )
 }
 

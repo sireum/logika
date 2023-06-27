@@ -165,7 +165,7 @@ object Logika {
   val verifyingDesc: String = "Verifying"
   val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), FoldUnfoldPlugin(), SameDiffPlugin(), Smt2Plugin(),
     ValIntroElimPlugin(), ClaimOfPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin(),
-    SubstitutionPlugin(), AlgebraPlugin())
+    SubstitutionPlugin())
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
     (F, AST.Typed.isName, "firstIndex"), (F, AST.Typed.msName, "firstIndex"),

@@ -13,9 +13,9 @@ def disallowed(): Unit = {
   val b = 44
   Deduce(
     1 #> (a == 2) by Premise,
-    2 #> (a <= 42) by Algebra_*(ISZ(1)),
+    2 #> (a <= 42) by Algebra and 1,
     3 #> (b == 44) by Premise,
-    4 #> (b >= 42) by Algebra_*(ISZ(3)),
-    5 #> (a > 42 imply_: a != b) by Algebra_*(ISZ(1, 2))
+    4 #> (b >= 42) by Algebra and 3,
+    5 #> (a > 42 imply_: a != b) by Algebra and (1, 2)
   )
 }
