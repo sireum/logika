@@ -127,9 +127,6 @@ def unfoldTautoSameDiff(s: ISZ[Z], i: Z): Unit = {
     }) by Auto T,
 
     2 #> (sum(s, i) == {
-      if (s.isInBound(i)) {
-        s(i) + ({
-          val i1 = i + 1
       val s0 = s
       val i0 = i
       if (s0.isInBound(i0)) {
