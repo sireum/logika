@@ -117,8 +117,10 @@ def unfoldTautoSameDiff(s: ISZ[Z], i: Z): Unit = {
   Deduce(
 
     1 #> (sum(s, i) == {
-      if (s.isInBound(i)) {
-        s(i) + (sum(s, i + 1): @l)
+      val s0 = s
+      val i0 = i
+      if (s0.isInBound(i0)) {
+        s0(i0) + (sum(s0, i0 + 1): @l)
       } else {
         0
       }
@@ -128,6 +130,11 @@ def unfoldTautoSameDiff(s: ISZ[Z], i: Z): Unit = {
       if (s.isInBound(i)) {
         s(i) + ({
           val i1 = i + 1
+      val s0 = s
+      val i0 = i
+      if (s0.isInBound(i0)) {
+        s0(i0) + ({
+          val i1 = i0 + 1
           if (s.isInBound(i1)) {
             s(i1) + sum(s, i + 2)
           } else {
