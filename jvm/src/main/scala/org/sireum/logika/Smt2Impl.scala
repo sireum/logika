@@ -195,7 +195,13 @@ object Smt2Impl {
   }
 
   def checkQuery(config: Config, isSat: B, timeoutInMs: Z, query: String): Smt2Query.Result = {
-    return Smt2Invoke.query(config.smt2Configs, isSat, config.smt2Seq, query, timeoutInMs, config.rlimit)
+    val result = Smt2Invoke.query(config.smt2Configs, isSat, config.smt2Seq, query, timeoutInMs, config.rlimit) // filter configs that give sat (look at result info)
+
+    if(!isSat && result.kind == Smt2Query.Result.Kind.Sat) {
+      val v = Smt2Invoke.query(config.smt2Configs, isSat, config.smt2Seq, s"${ops.StringOps(query).substring(0, query.size-7)}\n(get-model)\n(exit)", timeoutInMs, config.rlimit)
+    }
+
+    return result
   }
 
   def formatVal(width: Z, n: Z): ST = {
