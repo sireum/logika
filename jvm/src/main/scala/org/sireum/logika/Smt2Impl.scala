@@ -30,6 +30,8 @@ import org.sireum._
 import org.sireum.lang.symbol.Info
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
+import org.antlr.v4.runtime._
+import org.sireum.logika.modelparser.ResponseParser
 
 object Smt2Impl {
 
@@ -198,7 +200,9 @@ object Smt2Impl {
     val result = Smt2Invoke.query(config.smt2Configs, isSat, config.smt2Seq, query, timeoutInMs, config.rlimit) // filter configs that give sat (look at result info)
 
     if(!isSat && result.kind == Smt2Query.Result.Kind.Sat) {
-      val v = Smt2Invoke.query(config.smt2Configs, isSat, config.smt2Seq, s"${ops.StringOps(query).substring(0, query.size-7)}\n(get-model)\n(exit)", timeoutInMs, config.rlimit)
+      val v = Smt2Invoke.query(config.smt2Configs, isSat, config.smt2Seq, s"${ops.StringOps(query).substring(0, query.size-7)}\n(get-model)\n(exit)", timeoutInMs, config.rlimit).output
+      val cleanedResponse = ops.StringOps(v).substring(4, v.size-1)
+      val stuff = ResponseParser.parseResponse(cleanedResponse)
     }
 
     return result
