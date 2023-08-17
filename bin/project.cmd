@@ -20,7 +20,7 @@ import org.sireum._
 import org.sireum.project.ProjectUtil._
 import org.sireum.project.Project
 
-val parser = "slang-parser"
+val library = "library"
 
 val frontend = "slang-frontend"
 
@@ -33,7 +33,7 @@ val (logikaShared, logikaJvm) = moduleSharedJvmPub(
   baseDir = homeDir,
   sharedDeps = ISZ(frontend),
   sharedIvyDeps = ISZ(),
-  jvmDeps = ISZ(parser),
+  jvmDeps = ISZ(library),
   jvmIvyDeps = ISZ(),
   pubOpt = pub(
     desc = "Logika Slang Program Verifier",

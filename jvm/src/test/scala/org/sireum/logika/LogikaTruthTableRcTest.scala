@@ -29,7 +29,7 @@ import org.sireum._
 import org.sireum.parser._
 import org.sireum.test._
 import org.antlr.runtime._
-import org.sireum.lang.parser.{SlangTruthTableLexer, SlangTruthTableParser, TruthTableParser}
+import org.sireum.lang.parser._
 
 class LogikaTruthTableRcTest extends SireumRcSpec {
 
@@ -49,45 +49,11 @@ class LogikaTruthTableRcTest extends SireumRcSpec {
     }) yield pair
   }
 
-  def parseTable(uriOpt: Option[String],
-                 input: String,
-                 reporter: message.Reporter): Option[ParseTree] = {
-    val docInfo = message.DocInfo.create(uriOpt, input)
-
-    val lex = new SlangTruthTableLexer(new ANTLRStringStream(input.value)) {
-      override def displayRecognitionError(tokenNames: Array[Predef.String], e: RecognitionException): Unit = {
-        val msg = getErrorMessage(e, tokenNames)
-        val line = e.line
-        val column = org.sireum.U32(e.charPositionInLine)
-        val offsetLength = (conversions.U32.toU64(docInfo.lineOffsets(line - 1) + column) << org.sireum.U64(32)) | org.sireum.U64(1)
-        reporter.error(Some(message.PosInfo(docInfo, offsetLength)), "SlangTruthTableLexer", msg)
-      }
-    }
-    val cts = new CommonTokenStream(lex)
-    val r = new SlangTruthTableParser(cts) {
-      override def displayRecognitionError(tokenNames: Array[Predef.String], e: RecognitionException): Unit = {
-        val msg = getErrorMessage(e, tokenNames)
-        val line = e.line
-        val column = org.sireum.U32(e.charPositionInLine)
-        val offsetLength = (conversions.U32.toU64(docInfo.lineOffsets(line - 1) + column) << org.sireum.U64(32)) | org.sireum.U64(e.token.getText.length)
-        reporter.error(Some(message.PosInfo(docInfo, offsetLength)), "SlangTruthTableParser", msg)
-      }
-    }
-    r.setTreeAdaptor(new Antlr3Util.Adaptor(SlangTruthTableParser.tokenNames, docInfo))
-    val tree = r.file().getTree.asInstanceOf[ParseTree]
-    return Some(tree)
-  }
-
-
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
     val uriOpt = Option.some[String](path.mkString("/"))
     val reporter = ReporterImpl.create(F, F, F, F)
-    parseTable(uriOpt, content, reporter) match {
-      case Some(tree) =>
-        TruthTableParser.buildTruthTable(uriOpt, content, tree, reporter) match {
-          case Some(tt) => Logika.checkTruthTable(tt, reporter)
-          case _ =>
-        }
+    SlangTruthTableParser.parse(uriOpt, content, reporter) match {
+      case Some(tt) => Logika.checkTruthTable(tt, reporter)
       case _ =>
     }
     reporter.printMessages()
