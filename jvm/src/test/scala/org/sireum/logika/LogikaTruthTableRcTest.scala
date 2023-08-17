@@ -29,7 +29,7 @@ import org.sireum._
 import org.sireum.parser._
 import org.sireum.test._
 import org.antlr.runtime._
-import org.sireum.lang.parser.{SlangTruthTableLexer, SlangTruthTableParser}
+import org.sireum.lang.parser.{SlangTruthTableLexer, SlangTruthTableParser, TruthTableParser}
 
 class LogikaTruthTableRcTest extends SireumRcSpec {
 
@@ -81,10 +81,17 @@ class LogikaTruthTableRcTest extends SireumRcSpec {
 
   def check(path: scala.Vector[Predef.String], content: Predef.String): scala.Boolean = {
     val uriOpt = Option.some[String](path.mkString("/"))
-    val reporter = message.Reporter.create
-    val r = parseTable(uriOpt, content, reporter)
+    val reporter = ReporterImpl.create(F, F, F, F)
+    parseTable(uriOpt, content, reporter) match {
+      case Some(tree) =>
+        TruthTableParser.buildTruthTable(uriOpt, content, tree, reporter) match {
+          case Some(tt) => Logika.checkTruthTable(tt, reporter)
+          case _ =>
+        }
+      case _ =>
+    }
     reporter.printMessages()
-    return !reporter.hasError && r.nonEmpty
+    return !reporter.hasError
   }
 
 }
