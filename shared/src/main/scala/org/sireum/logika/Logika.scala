@@ -179,7 +179,7 @@ object Logika {
   val emptyBindings: Bindings = Map.empty[String, (State.Value.Sym, AST.Typed, Position)]
   val trueClaim: State.Claim = State.Claim.And(ISZ())
   val idxSuffix: String = "$Idx"
-  val zeroU64: U64 = U64.fromZ(0)
+  val zeroU64: U64 = org.sireum.U64.fromZ(0)
 
   def checkStmts(nameExePathMap: HashMap[String, String], maxCores: Z, fileOptions: LibUtil.FileOptionMap,
                  initStmts: ISZ[AST.Stmt], typeStmts: ISZ[(ISZ[String], AST.Stmt)], defaultConfig: Config,
@@ -461,6 +461,11 @@ object Logika {
           } else {
             reporter.illFormed()
           }
+        case Some(tt: AST.TopUnit.TruthTableUnit) =>
+          Logika.checkTruthTable(tt, reporter)
+          if (reporter.hasError) {
+            reporter.illFormed()
+          }
         case _ =>
       }
     }
@@ -657,6 +662,7 @@ object Logika {
         }
         return allAssignments(i + 1, keys, for (s <- ss; v <- vs) yield s :+ v)
       }
+      @strictpure def a2s(a: Assignment): String = st"[${(for (e <- a) yield if (e) "T" else "F", "")}]".render
 
       val vars: ISZ[String] = for (id <- tt.vars) yield id.value
       val assignments = Set ++ allAssignments(0, vars, ISZ(ISZ()))
@@ -671,12 +677,12 @@ object Logika {
         }
         val rowAssignment: Assignment = for (b <- ra) yield b.value
         if (!assignments.contains(rowAssignment)) {
-          reporter.error(row.assignment.attr.posOpt, kind, s"Invalid truth assignment $rowAssignment.")
+          reporter.error(row.assignment.attr.posOpt, kind, s"Invalid truth assignment ${a2s(rowAssignment)}.")
         } else {
           if (currentAssignments.contains(rowAssignment)) {
             currentAssignments = currentAssignments - rowAssignment
           } else {
-            reporter.error(row.assignment.attr.posOpt, kind, s"Duplicated truth assignment $rowAssignment.")
+            reporter.error(row.assignment.attr.posOpt, kind, s"Duplicated truth assignment ${a2s(rowAssignment)}.")
           }
         }
       }
