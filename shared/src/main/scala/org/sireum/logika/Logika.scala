@@ -4403,8 +4403,47 @@ import Util._
             case _ =>
           }
         }
-        for (plugin <- jescmPlugins._1 if plugin.canHandle(this, step.just)) {
-          val Plugin.Result(ok, nextFresh, claims) = plugin.handle(this, smt2, cache, m, s0, step, reporter)
+        val normStep: AST.ProofAst.Step.Regular = step.just match {
+          case j: AST.ProofAst.Step.Justification.Apply =>
+            j.invokeIdent.attr.resOpt.get match {
+              case res: AST.ResolvedInfo.Method =>
+                th.nameMap.get(res.owner :+ res.id).get match {
+                  case info: Info.JustMethod if info.ast.etaOpt.nonEmpty =>
+                    val id = info.ast.etaOpt.get.value
+                    th.nameMap.get(res.owner :+ id) match {
+                      case Some(minfo: Info.Method) =>
+                        val minfoAttr = AST.ResolvedAttr(
+                          j.invokeIdent.posOpt,
+                          Some(AST.ResolvedInfo.Method(T, AST.MethodMode.Method,
+                            for (tp <- minfo.ast.sig.typeParams) yield tp.id.value, res.owner, id,
+                            for (p <- minfo.ast.sig.params) yield p.id.value, Some(minfo.ast.sig.funType),
+                            ISZ(), ISZ())),
+                          Some(minfo.ast.sig.funType)
+                        )
+                        var witnesses = ISZ[AST.ProofAst.StepId]()
+                        for (arg <- j.invoke.args) {
+                          arg match {
+                            case arg: AST.Exp.LitZ => witnesses = witnesses :+ AST.ProofAst.StepId.Num(arg.value, arg.attr)
+                            case arg: AST.Exp.LitString => witnesses :+ AST.ProofAst.StepId.Str(F, arg.value, arg.attr)
+                            case _ =>
+                              reporter.error(arg.posOpt, Logika.kind, "Invalid witness reference (has to be either a number or a string)")
+                          }
+                        }
+                        step(just = AST.ProofAst.Step.Justification.ApplyEta(
+                          AST.Exp.Eta(AST.Exp.Ident(AST.Id(id, AST.Attr(j.invokeIdent.posOpt)), minfoAttr),
+                            AST.TypedAttr(j.invokeIdent.posOpt, info.typedOpt)), j.invoke.args.nonEmpty, witnesses))
+                      case _ =>
+                        reporter.error(step.just.posOpt, Logika.kind, st"Could not find ${(res.owner :+ id, ".")}".render)
+                        return (s0(status = State.Status.Error), m)
+                    }
+                  case _ => step
+                }
+              case _ => step
+            }
+          case _ => step
+        }
+        for (plugin <- jescmPlugins._1 if plugin.canHandle(this, normStep.just)) {
+          val Plugin.Result(ok, nextFresh, claims) = plugin.handle(this, smt2, cache, m, s0, normStep, reporter)
           val nextState = s0(status = State.statusOf(ok), nextFresh = nextFresh).addClaims(claims)
           if (config.transitionCache && ok && !reporter.hasError) {
             val cached = cache.setTransition(th, config, Cache.Transition.ProofStep(step, m.values), s0, ISZ(nextState), smt2)

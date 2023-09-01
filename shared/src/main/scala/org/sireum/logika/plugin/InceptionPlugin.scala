@@ -88,7 +88,6 @@ object InceptionPlugin {
         case res: AST.ResolvedInfo.Method =>
           logika.th.nameMap.get(res.owner :+ res.id).get match {
             case _: Info.Method => T
-            case info: Info.JustMethod if info.ast.etaOpt.nonEmpty => T
             case _ => F
           }
         case _: AST.ResolvedInfo.Fact => T
