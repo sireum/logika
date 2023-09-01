@@ -114,13 +114,14 @@ object InceptionPlugin {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val just = step.just
 
-    def handleH(conc: String, sm: HashMap[String, AST.Typed], name: ISZ[String], context: ISZ[String], paramNames: ISZ[String],
-                args: ISZ[AST.Exp], requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp], posOpt: Option[Position]): Plugin.Result = {
-      val id = st"${(name, ".")}".render
+    def handleH(conc: String, sm: HashMap[String, AST.Typed], name: ISZ[String], context: ISZ[String],
+                paramNames: ISZ[String], args: ISZ[AST.Exp], requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp],
+                posOpt: Option[Position], evidenceInit: ISZ[ST]): Plugin.Result = {
+      val id = name(name.size - 1)
       val ips = org.sireum.logika.Util.Substitutor(sm, context,
         HashSMap.empty[String, AST.Exp] ++ ops.ISZOps(paramNames).zip(args), reporter.empty)
       val ipsSubst: ST = st"[${(for (pair <- ips.paramMap.entries) yield st"${pair._2.prettyST} / ${pair._1}", ", ")}]"
-      var evidence = ISZ[ST]()
+      var evidence = evidenceInit
       if (just.witnesses.isEmpty) {
         var provenClaims = HashMap.empty[AST.Exp, (AST.ProofAst.StepId, AST.Exp)]
         for (spc <- spcMap.values) {
@@ -232,6 +233,7 @@ object InceptionPlugin {
         reporter.error(posOpt, Logika.kind, s"Requires ${requires.size} witnesses, but found ${just.witnesses}")
         return emptyResult
       }
+      val id = name(name.size - 1)
       var ok = T
       var idExpMap = HashSMap.empty[String, AST.Exp]
       val paramIds = HashSet ++ paramNames
@@ -268,11 +270,17 @@ object InceptionPlugin {
         idExpMap.get(p) match {
           case Some(e) => args = args :+ e
           case _ =>
-            reporter.error(posOpt, Logika.kind, st"Could not infer argument for ${(name, ".")}'s parameter $p".render)
+            reporter.error(posOpt, Logika.kind, st"Could not infer argument for $id's parameter $p".render)
+            ok = F
         }
       }
 
-      return handleH(conc, sm, name, context, paramNames, args, requires, ensures, posOpt)
+      if (ok) {
+        return handleH(conc, sm, name, context, paramNames, args, requires, ensures, posOpt,
+          for (p <- ops.ISZOps(paramNames).zip(args)) yield st"* [Inferred] $id's ${p._1} ≡ ${p._2.prettyST}")
+      } else {
+        return emptyResult
+      }
     }
 
     def handleMethod(isEta: B, res: AST.ResolvedInfo.Method, posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
@@ -304,7 +312,7 @@ object InceptionPlugin {
       if (isEta) {
         return handleEtaH("conclusion", sm, mi.name, mi.name, res.paramNames, requires, ensures, posOpt)
       } else {
-        return handleH("conclusion", sm, mi.name, mi.name, res.paramNames, args, requires, ensures, posOpt)
+        return handleH("conclusion", sm, mi.name, mi.name, res.paramNames, args, requires, ensures, posOpt, ISZ())
       }
     }
     def handleFactTheorem(name: ISZ[String], posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
@@ -328,7 +336,7 @@ object InceptionPlugin {
               for (c <- info.ast.claims) {
                 claims = claims :+ c.asInstanceOf[AST.Exp.Quant].fun.exp.asInstanceOf[AST.Stmt.Expr].exp
               }
-              return handleH("claim", sm, info.name, fun.context, paramNames, args, ISZ(), claims, posOpt)
+              return handleH("claim", sm, info.name, fun.context, paramNames, args, ISZ(), claims, posOpt, ISZ())
             case _ =>
               reporter.error(posOpt, Logika.kind, s"Inception on a Fact requires argument types ($argTypes) to be equal to parameter types ($paramTypes)")
               return emptyResult
@@ -345,7 +353,7 @@ object InceptionPlugin {
           reporter.setIgnore(oldIgnore)
           smOpt match {
             case Some(sm) =>
-              return handleH("claim", sm, info.name, fun.context, paramNames, args, ISZ(), claims, posOpt)
+              return handleH("claim", sm, info.name, fun.context, paramNames, args, ISZ(), claims, posOpt, ISZ())
             case _ =>
               reporter.error(posOpt, Logika.kind, s"Inception on a ${if (info.ast.isLemma) "Lemma" else "Theorem"} requires equal argument types to parameter types")
               return emptyResult
