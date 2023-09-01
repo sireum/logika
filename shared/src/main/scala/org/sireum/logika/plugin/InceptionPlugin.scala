@@ -29,9 +29,83 @@ import org.sireum._
 import org.sireum.message.Position
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.Info
-import org.sireum.lang.tipe.TypeChecker
+import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
+import org.sireum.logika.plugin.InceptionPlugin.extractIdExpMapping
+
+object InceptionPlugin {
+
+  def extractIdExpMapping(th: TypeHierarchy, from: AST.Exp, to: AST.Exp, init: HashSMap[String, AST.Exp],
+                          context: ISZ[String], ids: HashSet[String]): Option[HashSMap[String, AST.Exp]] = {
+    @pure def shouldExtract(resOpt: Option[AST.ResolvedInfo]): B = {
+      resOpt match {
+        case Some(res: AST.ResolvedInfo.LocalVar) => return res.context == context && ids.contains(res.id)
+        case _ => return F
+      }
+    }
+    var r = init
+    var ok = T
+    def addResult(id: String, exp: AST.Exp): Unit = {
+      r.get(id) match {
+        case Some(e) => ok = th.normalizeExp(exp) == th.normalizeExp(e)
+        case _ => r = r + id ~> exp
+      }
+    }
+    def rec(fe: AST.Exp, te: AST.Exp): Unit = {
+      def recAssignExp(fae: AST.AssignExp, tae: AST.AssignExp): Unit = {
+        (fae, tae) match {
+          case (fae: AST.Stmt.Expr, tae: AST.Stmt.Expr) => rec(fae.exp, tae.exp)
+          case _ =>
+            ok = F
+        }
+      }
+      if (!ok) {
+        return
+      }
+      (fe, te) match {
+        case (fe: AST.Exp.Ident, te) =>
+          if (shouldExtract(fe.resOpt)) {
+            addResult(fe.id.value, te)
+          } else {
+            ok = th.normalizeExp(fe) == th.normalizeExp(te)
+          }
+        case (fe: AST.Exp.Unary, te: AST.Exp.Unary) =>
+          ok = fe.attr.resOpt == te.attr.resOpt
+          rec(fe.exp, te.exp)
+        case (fe: AST.Exp.Binary, te: AST.Exp.Binary) =>
+          ok = fe.attr.resOpt == te.attr.resOpt
+          rec(fe.left, te.left)
+          rec(fe.right, te.right)
+        case (fe: AST.Exp.QuantType, te: AST.Exp.QuantType) =>
+          val fen = th.normalizeExp(fe).asInstanceOf[AST.Exp.QuantType]
+          val ten = th.normalizeExp(te).asInstanceOf[AST.Exp.QuantType]
+          ok = fen.isForall == ten.isForall && fen.fun.params.size == ten.fun.params.size
+          if (!ok) {
+            return
+          }
+          recAssignExp(fen.fun.exp, ten.fun.exp)
+        case (fe: AST.Exp.Invoke, te: AST.Exp.Invoke) =>
+          ok = fe.receiverOpt.isEmpty == te.receiverOpt.isEmpty && fe.args.size == te.args.size
+          if (!ok) {
+            return
+          }
+          (fe.receiverOpt, te.receiverOpt) match {
+            case (Some(fre), Some(tre)) => rec(fre, tre)
+            case (_, _) =>
+          }
+          rec(fe.ident, te.ident)
+          for (p <- ops.ISZOps(fe.args).zip(te.args) if ok) {
+            val (farg, targ) = p
+            rec(farg, targ)
+          }
+        case (_, _) => ok = F
+      }
+    }
+    rec(from, to)
+    return if (ok) Some(r) else None()
+  }
+}
 
 @datatype class InceptionPlugin extends JustificationPlugin {
 
@@ -54,6 +128,7 @@ import org.sireum.logika.Logika.Reporter
     }
     just match {
       case just: AST.ProofAst.Step.Justification.Apply => return canHandleRes(just.invokeIdent.attr.resOpt.get)
+      case just: AST.ProofAst.Step.Justification.ApplyEta => return canHandleRes(just.eta.ref.resOpt.get)
       case _ => return F
     }
   }
@@ -67,6 +142,7 @@ import org.sireum.logika.Logika.Reporter
              reporter: Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val just = step.just
+
     def handleH(conc: String, sm: HashMap[String, AST.Typed], name: ISZ[String], context: ISZ[String], paramNames: ISZ[String],
                 args: ISZ[AST.Exp], requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp], posOpt: Option[Position]): Plugin.Result = {
       val id = st"${(name, ".")}".render
@@ -178,7 +254,57 @@ import org.sireum.logika.Logika.Reporter
       }
       return Plugin.Result(status, nextFresh, claims :+ claim)
     }
-    def handleMethod(res: AST.ResolvedInfo.Method, posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
+
+    def handleEtaH(conc: String, sm: HashMap[String, AST.Typed], name: ISZ[String], context: ISZ[String], paramNames: ISZ[String],
+                   requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp], posOpt: Option[Position]): Plugin.Result = {
+      if (requires.size != just.witnesses.size) {
+        reporter.error(posOpt, Logika.kind, s"Requires ${requires.size} witnesses, but found ${just.witnesses}")
+        return emptyResult
+      }
+      var ok = T
+      var idExpMap = HashSMap.empty[String, AST.Exp]
+      val paramIds = HashSet ++ paramNames
+      for (p <- ops.ISZOps(just.witnesses).zip(requires)) {
+        val (w, r) = p
+        spcMap.get(w) match {
+          case Some(spc: StepProofContext.Regular) =>
+            extractIdExpMapping(logika.th, r, spc.exp, idExpMap, context, paramIds) match {
+              case Some(newIdExpMap) => idExpMap = newIdExpMap
+              case _ =>
+                reporter.error(w.posOpt, Logika.kind, st"Could not infer { ${(paramNames, ", ")} } from witness ${spc.stepNo} for ${r.prettyST}".render)
+                ok = F
+            }
+          case Some(_) =>
+            reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step $w as an argument for inception")
+            ok = F
+          case _ =>
+            ok = F
+        }
+      }
+      if (!ok) {
+        return emptyResult
+      }
+
+      for (e <- ensures) {
+        extractIdExpMapping(logika.th, e, step.claim, idExpMap, context, paramIds) match {
+          case Some(newIdExpMap) => idExpMap = newIdExpMap
+          case _ =>
+        }
+      }
+
+      var args = ISZ[AST.Exp]()
+      for (p <- paramNames) {
+        idExpMap.get(p) match {
+          case Some(e) => args = args :+ e
+          case _ =>
+            reporter.error(posOpt, Logika.kind, st"Could not infer argument for ${(name, ".")}'s parameter $p".render)
+        }
+      }
+
+      return handleH(conc, sm, name, context, paramNames, args, requires, ensures, posOpt)
+    }
+
+    def handleMethod(isEta: B, res: AST.ResolvedInfo.Method, posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
       val mi: Info.Method = logika.th.nameMap.get(res.owner :+ res.id).get match {
         case info: Info.Method => info
         case _: Info.JustMethod =>
@@ -204,7 +330,11 @@ import org.sireum.logika.Logika.Reporter
       }
       val sm = TypeChecker.unifyFun(Logika.kind, logika.th, posOpt, TypeChecker.TypeRelation.Subtype, res.tpeOpt.get,
         mi.methodType.tpe, reporter).get
-      return handleH("conclusion", sm, mi.name, mi.name, res.paramNames, args, requires, ensures, posOpt)
+      if (isEta) {
+        return handleEtaH("conclusion", sm, mi.name, mi.name, res.paramNames, requires, ensures, posOpt)
+      } else {
+        return handleH("conclusion", sm, mi.name, mi.name, res.paramNames, args, requires, ensures, posOpt)
+      }
     }
     def handleFactTheorem(name: ISZ[String], posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
       if (args.isEmpty) {
@@ -255,13 +385,22 @@ import org.sireum.logika.Logika.Reporter
     just match {
       case just: AST.ProofAst.Step.Justification.Apply =>
         just.invoke.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Method => return handleMethod(res, just.invoke.ident.posOpt, just.args)
+          case res: AST.ResolvedInfo.Method => return handleMethod(F, res, just.invoke.ident.posOpt, just.args)
           case res: AST.ResolvedInfo.Fact => return handleFactTheorem(res.name, just.invoke.ident.posOpt, just.args)
           case res: AST.ResolvedInfo.Theorem => return handleFactTheorem(res.name, just.invoke.ident.posOpt, just.args)
           case _ => halt("Infeasible")
         }
-      case _: AST.ProofAst.Step.Justification.ApplyEta =>
-        halt("TODO") // TODO
+      case just: AST.ProofAst.Step.Justification.ApplyEta =>
+        just.eta.ref.resOpt.get match {
+          case res: AST.ResolvedInfo.Method => return handleMethod(T, res, just.eta.ref.posOpt, ISZ())
+          case _: AST.ResolvedInfo.Fact =>
+            reporter.error(just.eta.posOpt, Logika.kind, "Cannot use argument-less justifications on facts")
+            return emptyResult
+          case _: AST.ResolvedInfo.Theorem =>
+            reporter.error(just.eta.posOpt, Logika.kind, "Cannot use argument-less justifications on theorems")
+            return emptyResult
+          case _ => halt("Infeasible")
+        }
       case _ => halt("Infeasible")
     }
   }
