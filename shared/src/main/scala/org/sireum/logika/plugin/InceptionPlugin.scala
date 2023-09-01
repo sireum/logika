@@ -53,13 +53,6 @@ object InceptionPlugin {
       }
     }
     def rec(fe: AST.Exp, te: AST.Exp): Unit = {
-      def recAssignExp(fae: AST.AssignExp, tae: AST.AssignExp): Unit = {
-        (fae, tae) match {
-          case (fae: AST.Stmt.Expr, tae: AST.Stmt.Expr) => rec(fae.exp, tae.exp)
-          case _ =>
-            ok = F
-        }
-      }
       if (!ok) {
         return
       }
@@ -77,28 +70,6 @@ object InceptionPlugin {
           ok = fe.attr.resOpt == te.attr.resOpt
           rec(fe.left, te.left)
           rec(fe.right, te.right)
-        case (fe: AST.Exp.QuantType, te: AST.Exp.QuantType) =>
-          val fen = th.normalizeExp(fe).asInstanceOf[AST.Exp.QuantType]
-          val ten = th.normalizeExp(te).asInstanceOf[AST.Exp.QuantType]
-          ok = fen.isForall == ten.isForall && fen.fun.params.size == ten.fun.params.size
-          if (!ok) {
-            return
-          }
-          recAssignExp(fen.fun.exp, ten.fun.exp)
-        case (fe: AST.Exp.Invoke, te: AST.Exp.Invoke) =>
-          ok = fe.receiverOpt.isEmpty == te.receiverOpt.isEmpty && fe.args.size == te.args.size
-          if (!ok) {
-            return
-          }
-          (fe.receiverOpt, te.receiverOpt) match {
-            case (Some(fre), Some(tre)) => rec(fre, tre)
-            case (_, _) =>
-          }
-          rec(fe.ident, te.ident)
-          for (p <- ops.ISZOps(fe.args).zip(te.args) if ok) {
-            val (farg, targ) = p
-            rec(farg, targ)
-          }
         case (_, _) => ok = F
       }
     }
