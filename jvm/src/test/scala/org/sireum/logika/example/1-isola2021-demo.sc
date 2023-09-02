@@ -20,7 +20,7 @@ import org.sireum.justification.natded.prop._
         6 #> mortal(a)                            by implyE(human(a), mortal(a))               and (9, 4),
         7 #> ∃{(z: T) => mortal(z)}               by existsI((z: T) => mortal(z), a)           and 6
       )},
-      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE[T](2, 5),
+      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE(2, 5),
     )
     //@formatter:on
   )

@@ -358,6 +358,7 @@ import org.sireum.justification.natded.pred._
   )
 }
 
+
 @pure def universal1[T](human: T => B @pure, mortal: T => B @pure, Socrates: T): Unit = {
   Deduce(
     //@formatter:off
@@ -369,7 +370,7 @@ import org.sireum.justification.natded.pred._
       Proof(
       1 #> ∀{(x: T) => human(x) ->: mortal(x)}        by Premise,
       2 #> human(Socrates)                            by Premise,
-      3 #> (human(Socrates) ->: mortal(Socrates))     by allE((x: T) => human(x) ->: mortal(x), Socrates) and 1,
+      3 #> (human(Socrates) ->: mortal(Socrates))     by AllE[T](1),
       4 #> mortal(Socrates)                           by ImplyE(3, 2),
     )
     //@formatter:on
@@ -388,8 +389,8 @@ import org.sireum.justification.natded.pred._
       1 #> ∀{(x: T) => gt(inc(x), x)}                   by Premise,
       2 #> ∀{(x: T) => gt(x, dec(x))}                   by Premise,
       3 #> Let { (a: T) => SubProof(
-        4 #> gt(inc(a), a)                              by allE((x: T) => gt(inc(x), x), a)   and 1,
-        5 #> gt(a, dec(a))                              by allE((x: T) => gt(x, dec(x)), a)   and 2,
+        4 #> gt(inc(a), a)                              by AllE[T](1),
+        5 #> gt(a, dec(a))                              by AllE[T](2),
         6 #> (gt(inc(a), a) & gt(a, dec(a)))            by AndI(4, 5)
       )},
       7 #> ∀{(x: T) => gt(inc(x), x) & gt(x, dec(x))}   by AllI(3),
@@ -412,9 +413,9 @@ import org.sireum.justification.natded.pred._
       3 #> Let { (a: T) => SubProof(
         4 #> SubProof(
           5 #> Assume(human(a)),
-          6 #> (human(a) ->: mortal(a))          by allE((x: T) => human(x) ->: mortal(x), a) and 1,
+          6 #> (human(a) ->: mortal(a))          by AllE[T](1),
           7 #> mortal(a)                         by ImplyE(6, 5),
-          8 #> (mortal(a) ->: soul(a))           by allE((y: T) => mortal(y) ->: soul(y), a)  and 2,
+          8 #> (mortal(a) ->: soul(a))           by AllE[T](2),
           9 #> soul(a)                           by ImplyE(8, 7)
         ),
         10 #> (human(a) ->: soul(a))             by ImplyI(4)
@@ -434,8 +435,8 @@ import org.sireum.justification.natded.pred._
       2 #> SubProof(
         3 #> Assume(∀{(y: T) => healthy(y)}),
         4 #> Let { (a: T) => SubProof(
-          5 #> healthy(a)                                         by allE((y: T) => healthy(y), a)              and 3,
-          6 #> (healthy(a) ->: happy(a))                          by allE((x: T) => healthy(x) ->: happy(x), a) and 1,
+          5 #> healthy(a)                                         by AllE[T](3),
+          6 #> (healthy(a) ->: happy(a))                          by AllE[T](1),
           7 #> happy(a)                                           by ImplyE(6, 5)
         )},
         8 #> ∀{(x: T) => happy(x)}                                by AllI(4)
@@ -454,7 +455,7 @@ import org.sireum.justification.natded.pred._
       1 #> human(Socrates)                        by Premise,
       2 #> mortal(Socrates)                       by Premise,
       3 #> (human(Socrates) & mortal(Socrates))   by AndI(1, 2),
-      4 #> ∃{(x: T) => human(x) & mortal(x)}      by existsI((y: T) => human(y) & mortal(y), Socrates) and 3
+      4 #> ∃{(x: T) => human(x) & mortal(x)}      by ExistsI[T](3)
     )
     //@formatter:on
   )
@@ -467,9 +468,9 @@ import org.sireum.justification.natded.pred._
       Proof(
       1 #> vowel(e)                                           by Premise,
       2 #> holds(square(1, 4), e)                             by Premise,
-      3 #> ∃{(x: C) => holds(x, e)}                           by existsI((z: C) => holds(z, e), square(1, 4))              and 2,
+      3 #> ∃{(x: C) => holds(x, e)}                           by ExistsI[C](2),
       4 #> (vowel(e) & ∃{(x: C) => holds(x, e)})              by AndI(1, 3),
-      5 #> ∃{(y: C) => vowel(y) & ∃{(x: C) => holds(x, y)}}   by existsI((y: C) => vowel(y) & ∃{(x: C) => holds(x, y)}, e) and 4
+      5 #> ∃{(y: C) => vowel(y) & ∃{(x: C) => holds(x, y)}}   by ExistsI[C](4)
     )
     //@formatter:on
   )
@@ -483,8 +484,8 @@ import org.sireum.justification.natded.pred._
       1 #> vowel(e)                                    by Premise,
       2 #> holds(square(1, 4), e)                      by Premise,
       3 #> (vowel(e) & holds(square(1, 4), e))         by AndI(1, 2),
-      4 #> ∃{(x: C) => vowel(e) & holds(x, e)}         by existsI((z: C) => vowel(e) & holds(z, e), square(1, 4))   and 3,
-      5 #> ∃{(y: C, x: C) => vowel(y) & holds(x, y)}   by existsI((z: C) => ∃{(x: C) => vowel(z) & holds(x, z)}, e) and 4,
+      4 #> ∃{(x: C) => vowel(e) & holds(x, e)}         by ExistsI[C](3),
+      5 #> ∃{(y: C, x: C) => vowel(y) & holds(x, y)}   by ExistsI[C](4),
     )
     //@formatter:on
   )
@@ -503,11 +504,11 @@ import org.sireum.justification.natded.pred._
       2 #> ∃{(y: T) => human(y)}                  by Premise,
       3 #> Let { (a: T) => SubProof(
         4 #> Assume(human(a)),
-        5 #> (human(a) ->: mortal(a))             by allE((x: T) => human(x) ->: mortal(x), a) and 1,
+        5 #> (human(a) ->: mortal(a))             by AllE[T](1),
         6 #> mortal(a)                            by ImplyE(5, 4),
-        7 #> ∃{(z: T) => mortal(z)}               by existsI((z: T) => mortal(z), a)           and 6
+        7 #> ∃{(z: T) => mortal(z)}               by ExistsI[T](6)
       )},
-      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE[T](2, 3),
+      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE(2, 3),
     )
     //@formatter:on
   )
@@ -528,12 +529,11 @@ import org.sireum.justification.natded.pred._
       3 #> Let { (a: Z) => SubProof(
         4 #> Assume(covered(a) & ∃{(c: C) => vowel(c) & holds(a, c)}),
         5 #> covered(a)                                                    by AndE1(4),
-        6 #> ∃{(x: Z) => covered(x)}                                       by existsI((x: Z) => covered(x), a) and 5
+        6 #> ∃{(x: Z) => covered(x)}                                       by ExistsI[Z](5)
       )},
-      7 #> ∃{(x: Z) => covered(x)}                                         by ExistsE[Z](1, 3),
+      7 #> ∃{(x: Z) => covered(x)}                                         by ExistsE(1, 3),
       8 #> (!gameOver)                                                     by ImplyE(2, 7),
     )
     //@formatter:on
   )
 }
-

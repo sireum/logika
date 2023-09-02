@@ -32,12 +32,20 @@ import org.sireum.lang.symbol.Info
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
-import org.sireum.logika.plugin.InceptionPlugin.extractIdExpMapping
 
 object InceptionPlugin {
 
+  @record class ExpSubstitutor(val map: HashMap[AST.Exp, AST.Exp]) extends AST.MTransformer {
+    override def preExp(o: AST.Exp): AST.MTransformer.PreResult[AST.Exp] = {
+      map.get(o) match {
+        case Some(o2) => return AST.MTransformer.PreResult(F, MSome(o2))
+        case _ => return AST.MTransformer.PreResult(T, MNone())
+      }
+    }
+  }
+
   def extractIdExpMapping(th: TypeHierarchy, from: AST.Exp, to: AST.Exp, init: HashSMap[String, AST.Exp],
-                          context: ISZ[String], ids: HashSet[String]): Option[HashSMap[String, AST.Exp]] = {
+                          context: ISZ[String], ids: HashSet[String], sm: HashMap[String, AST.Typed]): Option[HashSMap[String, AST.Exp]] = {
     @pure def shouldExtract(resOpt: Option[AST.ResolvedInfo]): B = {
       resOpt match {
         case Some(res: AST.ResolvedInfo.LocalVar) => return res.context == context && ids.contains(res.id)
@@ -53,6 +61,13 @@ object InceptionPlugin {
       }
     }
     def rec(fe: AST.Exp, te: AST.Exp): Unit = {
+      def recAssignExp(fae: AST.AssignExp, tae: AST.AssignExp): Unit = {
+        (fae, tae) match {
+          case (fae: AST.Stmt.Expr, tae: AST.Stmt.Expr) => rec(fae.exp, tae.exp)
+          case _ =>
+            ok = F
+        }
+      }
       if (!ok) {
         return
       }
@@ -70,6 +85,71 @@ object InceptionPlugin {
           ok = fe.attr.resOpt == te.attr.resOpt
           rec(fe.left, te.left)
           rec(fe.right, te.right)
+        case (fe: AST.Exp.QuantType, te: AST.Exp.QuantType) =>
+          var fen = th.normalizeExp(fe).asInstanceOf[AST.Exp.QuantType]
+          var ten = th.normalizeExp(te).asInstanceOf[AST.Exp.QuantType]
+          ok = fen.isForall == ten.isForall
+          if (fen.fun.params.size != ten.fun.params.size) {
+            val n: Z = if (fen.fun.params.size < ten.fun.params.size) fen.fun.params.size else ten.fun.params.size
+            fen = if (fen.fun.params.size == n) fen else
+              fen(fun = fen.fun(params = ops.ISZOps(fen.fun.params).slice(0, n), exp = AST.Stmt.Expr(
+                AST.Exp.QuantType(fen.isForall, AST.Exp.Fun(fen.fun.context,
+                  ops.ISZOps(fen.fun.params).slice(n, fen.fun.params.size), fen.fun.exp, fen.fun.attr), fen.attr),
+                AST.TypedAttr(fen.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
+            ten = if (ten.fun.params.size == n) fen else ten(fun = ten.fun(params =
+              ops.ISZOps(ten.fun.params).slice(0, n), exp = AST.Stmt.Expr(AST.Exp.QuantType(ten.isForall,
+              AST.Exp.Fun(ten.fun.context, ops.ISZOps(ten.fun.params).slice(n, ten.fun.params.size), ten.fun.exp,
+                ten.fun.attr), ten.attr), AST.TypedAttr(ten.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
+          }
+          if (!ok) {
+            return
+          }
+          recAssignExp(fen.fun.exp, ten.fun.exp)
+        case (fe: AST.Exp.Invoke, te) if ids.contains(fe.ident.id.value) =>
+          val id = fe.ident.id.value
+          val fcontext = ISZ(id)
+          var params = ISZ[AST.Exp.Fun.Param]()
+          var paramTypes = ISZ[AST.Typed]()
+          var argParamRefMap = HashMap.empty[AST.Exp, AST.Exp]
+          for (i <- 0 until fe.args.size) {
+            val arg = fe.args(i)
+            val pid = s"${id}X$i"
+            val ptOpt = Some(arg.typedOpt.get.subst(sm))
+            params = params :+ AST.Exp.Fun.Param(Some(AST.Id(pid, AST.Attr(arg.posOpt))), None(), ptOpt)
+            paramTypes = paramTypes :+ ptOpt.get
+            argParamRefMap = argParamRefMap + arg ~> AST.Exp.Ident(AST.Id(pid, AST.Attr(arg.posOpt)),
+              AST.ResolvedAttr(arg.posOpt, Some(AST.ResolvedInfo.LocalVar(fcontext,
+                AST.ResolvedInfo.LocalVar.Scope.Current, F, T, pid)), ptOpt))
+          }
+          ExpSubstitutor(argParamRefMap).transformExp(te) match {
+            case MSome(te2) =>
+              val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(te2, AST.TypedAttr(te.posOpt, te.typedOpt)),
+                AST.TypedAttr(fe.posOpt, Some(AST.Typed.Fun(T, F, paramTypes, fe.typedOpt.get))))
+              addResult(id, fun)
+            case _ =>
+          }
+          r.get(id) match {
+            case Some(AST.Exp.Fun(_, _, e: AST.Stmt.Expr)) =>
+              val paramRefArgMap = HashMap ++ (for (p <- argParamRefMap.entries) yield (p._2, p._1))
+              val e2 = ExpSubstitutor(paramRefArgMap).transformExp(e.exp).getOrElseEager(e.exp)
+              rec(e2, te)
+              ok = T
+            case _ =>
+          }
+        case (fe: AST.Exp.Invoke, te: AST.Exp.Invoke) =>
+          ok = fe.receiverOpt.isEmpty == te.receiverOpt.isEmpty && fe.args.size == te.args.size
+          if (!ok) {
+            return
+          }
+          (fe.receiverOpt, te.receiverOpt) match {
+            case (Some(fre), Some(tre)) => rec(fre, tre)
+            case (_, _) =>
+          }
+          rec(fe.ident, te.ident)
+          for (p <- ops.ISZOps(fe.args).zip(te.args) if ok) {
+            val (farg, targ) = p
+            rec(farg, targ)
+          }
         case (_, _) => ok = F
       }
     }
@@ -77,6 +157,8 @@ object InceptionPlugin {
     return if (ok) Some(r) else None()
   }
 }
+
+import InceptionPlugin._
 
 @datatype class InceptionPlugin extends JustificationPlugin {
 
@@ -236,16 +318,12 @@ object InceptionPlugin {
       var ok = T
       var idExpMap = HashSMap.empty[String, AST.Exp]
       val paramIds = HashSet ++ paramNames
+      var fromToStepIdChecks = ISZ[(AST.Exp, AST.Exp, AST.ProofAst.StepId, B)]()
       for (p <- ops.ISZOps(just.witnesses).zip(requires)) {
         val (w, r) = p
         spcMap.get(w) match {
           case Some(spc: StepProofContext.Regular) =>
-            extractIdExpMapping(logika.th, r, spc.exp, idExpMap, context, paramIds) match {
-              case Some(newIdExpMap) => idExpMap = newIdExpMap
-              case _ =>
-                reporter.error(w.posOpt, Logika.kind, st"Could not infer { ${(paramNames, ", ")} } from witness ${spc.stepNo} for ${r.prettyST}".render)
-                ok = F
-            }
+            fromToStepIdChecks = fromToStepIdChecks :+ (r, spc.exp, spc.stepNo, T)
           case Some(_) =>
             reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step $w as an argument for inception")
             ok = F
@@ -258,10 +336,21 @@ object InceptionPlugin {
       }
 
       for (e <- ensures) {
-        extractIdExpMapping(logika.th, e, step.claim, idExpMap, context, paramIds) match {
+        fromToStepIdChecks = fromToStepIdChecks :+ (e, step.claim, step.id, F)
+      }
+
+      var done = F
+      for (_ <- 0 until 2 if !done; q <- fromToStepIdChecks) {
+        val (from, to, stepId, check) = q
+        extractIdExpMapping(logika.th, from, to, idExpMap, context, paramIds, sm) match {
           case Some(newIdExpMap) => idExpMap = newIdExpMap
           case _ =>
+            if (check) {
+              reporter.error(posOpt, Logika.kind, st"Could not infer { ${(paramNames -- idExpMap.keys, ", ")} } from witness $stepId for ${from.prettyST}".render)
+              ok = F
+            }
         }
+        done = paramNames.size == idExpMap.size
       }
 
       var args = ISZ[AST.Exp]()
@@ -275,8 +364,11 @@ object InceptionPlugin {
       }
 
       if (ok) {
-        return handleH(conc, sm, name, context, paramNames, args, requires, ensures, posOpt,
-          for (p <- ops.ISZOps(paramNames).zip(args)) yield st"* [Inferred] $id's ${p._1} ≡ ${p._2.prettyST}")
+        return handleH(conc, sm, name, context, paramNames, args, requires, ensures, posOpt, ISZ(
+          st"""* [Inferred] $id's parameter(s) and argument(s)
+              |
+              |  ${(for (p <- ops.ISZOps(paramNames).zip(args)) yield st"+ ${p._1} ≡ ${p._2.prettyST}", "\n\n")}
+              |"""))
       } else {
         return emptyResult
       }

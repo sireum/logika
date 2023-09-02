@@ -4407,19 +4407,20 @@ import Util._
           case j: AST.ProofAst.Step.Justification.Apply =>
             j.invokeIdent.attr.resOpt.get match {
               case res: AST.ResolvedInfo.Method =>
-                th.nameMap.get(res.owner :+ res.id).get match {
+                val name = res.owner :+ res.id
+                th.nameMap.get(name).get match {
                   case info: Info.JustMethod if info.ast.etaOpt.nonEmpty =>
+                    val sm = TypeChecker.buildTypeSubstMap(name, j.posOpt, info.ast.sig.typeParams,
+                      for (t <- j.invoke.targs) yield t.typedOpt.get, reporter).get
                     val id = info.ast.etaOpt.get.value
                     th.nameMap.get(res.owner :+ id) match {
                       case Some(minfo: Info.Method) =>
+                        val t = minfo.ast.sig.funType.subst(sm)
                         val minfoAttr = AST.ResolvedAttr(
                           j.invokeIdent.posOpt,
                           Some(AST.ResolvedInfo.Method(T, AST.MethodMode.Method,
                             for (tp <- minfo.ast.sig.typeParams) yield tp.id.value, res.owner, id,
-                            for (p <- minfo.ast.sig.params) yield p.id.value, Some(minfo.ast.sig.funType),
-                            ISZ(), ISZ())),
-                          Some(minfo.ast.sig.funType)
-                        )
+                            for (p <- minfo.ast.sig.params) yield p.id.value, Some(t), ISZ(), ISZ())), Some(t))
                         var witnesses = ISZ[AST.ProofAst.StepId]()
                         for (arg <- j.invoke.args) {
                           arg match {
@@ -4431,7 +4432,7 @@ import Util._
                         }
                         step(just = AST.ProofAst.Step.Justification.ApplyEta(
                           AST.Exp.Eta(AST.Exp.Ident(AST.Id(id, AST.Attr(j.invokeIdent.posOpt)), minfoAttr),
-                            AST.TypedAttr(j.invokeIdent.posOpt, info.typedOpt)), j.invoke.args.nonEmpty, witnesses))
+                            AST.TypedAttr(j.invokeIdent.posOpt, Some(t))), j.invoke.args.nonEmpty, witnesses))
                       case _ =>
                         reporter.error(step.just.posOpt, Logika.kind, st"Could not find ${(res.owner :+ id, ".")}".render)
                         return (s0(status = State.Status.Error), m)

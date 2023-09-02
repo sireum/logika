@@ -226,6 +226,8 @@ object Util {
             case ref: AST.Exp.Select =>
               return AST.MTransformer.PreResult(T, MSome(o(receiverOpt = ref.receiverOpt, ident = AST.Exp.Ident(ref.id, ref.attr))))
           }
+        case ident: AST.Exp.Ident =>
+          return AST.MTransformer.PreResult(T, MSome(o(ident = ident)))
         case _ =>
           reporter.error(arg.posOpt, Logika.kind, "Invalid argument form for inception")
       }

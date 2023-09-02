@@ -507,7 +507,7 @@ import org.sireum.justification.natded.pred._
         6 #> mortal(a)                            by implyE(human(a), mortal(a))               and (5, 4),
         7 #> ∃{(z: T) => mortal(z)}               by existsI((z: T) => mortal(z), a)           and 6
       )},
-      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE[T](2, 3),
+      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE(2, 3),
     )
     //@formatter:on
   )
@@ -530,7 +530,7 @@ import org.sireum.justification.natded.pred._
         5 #> covered(a)                                                    by andE1(covered(a), ∃{(c: C) => vowel(c) & holds(a, c)}) and 4,
         6 #> ∃{(x: Z) => covered(x)}                                       by existsI((x: Z) => covered(x), a)                       and 5
       )},
-      7 #> ∃{(x: Z) => covered(x)}                                         by ExistsE[Z](1, 3),
+      7 #> ∃{(x: Z) => covered(x)}                                         by ExistsE(1, 3),
       8 #> (!gameOver)                                                     by implyE(∃{(x: Z) => covered(x)}, !gameOver)             and (2, 7),
     )
     //@formatter:on
