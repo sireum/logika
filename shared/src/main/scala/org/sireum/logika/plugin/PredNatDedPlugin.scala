@@ -76,6 +76,7 @@ object PredNatDedPlugin {
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+    var acceptedMsg = st"""Accepted by using the ${res.id}, because"""
     res.id match {
       case string"AllI" =>
         val quant: AST.Exp.QuantType = step.claim match {
@@ -129,7 +130,16 @@ object PredNatDedPlugin {
             exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
-        if (!subProof.contains(logika.th.normalizeExp(substClaim))) {
+        if (subProof.contains(logika.th.normalizeExp(substClaim))) {
+          acceptedMsg =
+            st"""$acceptedMsg sub-proof $subProofNo:
+                |
+                |* starts with assuming a fresh value of type ${quant.fun.params(0).typedOpt.get}
+                |
+                |* proves that the instantiation of ${step.claim}'s universally quantified claim
+                |  using the fresh value holds, i.e., ${substClaim.prettyST}
+                |"""
+        } else {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not infer the stated claim using ${just.invokeIdent.id.value}")
           return emptyResult
         }
@@ -189,17 +199,23 @@ object PredNatDedPlugin {
           return emptyResult
         }
         val stepClaim = logika.th.normalizeExp(step.claim)
-        if (!subProof.contains(stepClaim) && stepClaim != assumption) {
+        if (subProof.contains(stepClaim) && stepClaim != assumption) {
+          acceptedMsg =
+            st"""$acceptedMsg sub-proof $subProofNo:
+                |
+                |* starts with assuming a fresh value of type ${quant.fun.params(0).typedOpt.get} and
+                |  $existsP's instantiated claim using the fresh value
+                |
+                |* proves ${step.claim}'s claim, i.e., $stepClaim
+                |"""
+        } else {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not find the stated claim in let sub-proof $subProofNo")
           return emptyResult
         }
     }
     val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
     if (status) {
-      val desc = st"${res.id} (of ${(res.owner, ".")})".render
-      reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
-        st"""Accepted by using the $desc
-            |proof tactic implemented in the $name""".render)
+      reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, acceptedMsg.render)
     }
     return Plugin.Result(status, nextFresh, claims :+ claim)
   }
