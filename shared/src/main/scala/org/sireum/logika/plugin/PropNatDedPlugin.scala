@@ -96,6 +96,9 @@ import org.sireum.logika.Logika.Reporter
       return emptyResult
     }
     val args = argsOpt.get
+    var acceptedMsg: ST =
+      st"""Accepted by using the ${res.id} proof tactic implemented in the $name,
+          |because"""
 
     def implyH(opKind: AST.ResolvedInfo.BuiltIn.Kind.Type, opDesc: String): B = {
       val claim: AST.Exp.Binary = step.claim match {
@@ -115,6 +118,12 @@ import org.sireum.logika.Logika.Reporter
         reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find the consequent of step ${step.id}'s claim in sub-proof $subProofNo")
         return F
       }
+      acceptedMsg =
+        st"""$acceptedMsg sub-proof $subProofNo:
+            |
+            | * starts by assuming ${step.id}'s antecedent claim, i.e., ${claim.left.prettyST}, and
+            |
+            | * proves ${step.id}'s consequent claim, i.e., ${claim.right.prettyST}"""
       return T
     }
 
@@ -140,8 +149,16 @@ import org.sireum.logika.Logika.Reporter
             return emptyResult
         }
         val stepClaim = logika.th.normalizeExp(step.claim)
-        val ok = leftSubProof.contains(stepClaim) && rightSubProof.contains(stepClaim)
-        if (!ok) {
+        if (leftSubProof.contains(stepClaim) && rightSubProof.contains(stepClaim)) {
+          acceptedMsg =
+            st"""$acceptedMsg: sub-proofs $leftSubProofNo and $rightSubProofNo contain ${step.id}'s claim:
+                |
+                |* sub-proof $leftSubProofNo starts with assuming the left-hand-side of $orClaimNo,
+                |
+                |* sub-proof $rightSubProofNo starts with assuming the right-hand-side of $orClaimNo, and
+                |
+                |* both sub-proofs proves ${step.claim.prettyST}"""
+        } else {
           stepClaim match {
             case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) && leftSubProof.contains(logika.th.normalizeExp(stepClaim.left)) && rightSubProof.contains(logika.th.normalizeExp(stepClaim.right)) =>
             case _ =>
@@ -171,7 +188,14 @@ import org.sireum.logika.Logika.Reporter
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the operand of step ${step.id}'s claim")
             return emptyResult
         }
-        if (!ops.ISZOps(subProof).exists(isBottom _)) {
+        if (ops.ISZOps(subProof).exists(isBottom _)) {
+          acceptedMsg =
+            st"""$acceptedMsg because sub-proof $subProofNo:
+                |
+                |* starts with assuming the non-negation of ${step.id}'s claim, and
+                |
+                |* proves F"""
+        } else {
           reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof $subProofNo")
           return emptyResult
         }
@@ -179,6 +203,7 @@ import org.sireum.logika.Logika.Reporter
         val ISZ(bottomNo) = args
         spcMap.get(bottomNo) match {
           case Some(sp: StepProofContext.Regular) if isBottom(sp.exp) =>
+            acceptedMsg = st"""$acceptedMsg ${sp.stepNo}'s claim is F"""
           case _ =>
             reporter.error(bottomNo.posOpt, Logika.kind, s"Expecting F as step $bottomNo's claim")
             return emptyResult
@@ -191,17 +216,21 @@ import org.sireum.logika.Logika.Reporter
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the negation of step ${step.id}'s claim")
             return emptyResult
         }
-        if (!ops.ISZOps(subProof).exists(isBottom _)) {
+        if (ops.ISZOps(subProof).exists(isBottom _)) {
+          acceptedMsg =
+            st"""$acceptedMsg sub-proof $subProofNo:
+                |
+                |* starts with assuming the negation of ${step.id}'s claim, and
+                |
+                |* proves F"""
+        } else {
           reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof $subProofNo")
           return emptyResult
         }
     }
     val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
     if (status) {
-      val desc = st"${res.id} (of ${(res.owner, ".")})".render
-      reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
-        st"""Accepted by using the $desc
-            |proof tactic implemented in the $name""".render)
+      reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, acceptedMsg.render)
     }
     return Plugin.Result(status, nextFresh, claims :+ claim)
   }
