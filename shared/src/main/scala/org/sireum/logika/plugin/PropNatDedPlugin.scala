@@ -85,7 +85,7 @@ import org.sireum.logika.Logika.Reporter
       }
       res match {
         case res: AST.ResolvedInfo.Var => return res.id == "F" && res.owner == AST.Typed.sireumName
-        case _ =>return F
+        case _ => return F
       }
     }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
@@ -123,7 +123,8 @@ import org.sireum.logika.Logika.Reporter
             |
             | * starts by assuming ${step.id}'s antecedent claim, i.e., ${claim.left.prettyST}, and
             |
-            | * proves ${step.id}'s consequent claim, i.e., ${claim.right.prettyST}"""
+            | * proves ${step.id}'s consequent claim, i.e., ${claim.right.prettyST}
+            |"""
       return T
     }
 
@@ -194,7 +195,8 @@ import org.sireum.logika.Logika.Reporter
                 |
                 |* starts with assuming the non-negation of ${step.id}'s claim, and
                 |
-                |* proves F"""
+                |* proves F
+                |"""
         } else {
           reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof $subProofNo")
           return emptyResult
@@ -203,7 +205,9 @@ import org.sireum.logika.Logika.Reporter
         val ISZ(bottomNo) = args
         spcMap.get(bottomNo) match {
           case Some(sp: StepProofContext.Regular) if isBottom(sp.exp) =>
-            acceptedMsg = st"""$acceptedMsg ${sp.stepNo}'s claim is F"""
+            acceptedMsg =
+              st"""$acceptedMsg ${sp.stepNo}'s claim is F
+                  |"""
           case _ =>
             reporter.error(bottomNo.posOpt, Logika.kind, s"Expecting F as step $bottomNo's claim")
             return emptyResult
@@ -222,7 +226,8 @@ import org.sireum.logika.Logika.Reporter
                 |
                 |* starts with assuming the negation of ${step.id}'s claim, and
                 |
-                |* proves F"""
+                |* proves F
+                |"""
         } else {
           reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof $subProofNo")
           return emptyResult
