@@ -392,7 +392,7 @@ import org.sireum.justification.natded.pred._
         5 #> gt(a, dec(a))                              by allE((x: T) => gt(x, dec(x)), a)   and 2,
         6 #> (gt(inc(a), a) & gt(a, dec(a)))            by andI(gt(inc(a), a), gt(a, dec(a))) and (4, 5)
       )},
-      7 #> ∀{(x: T) => gt(inc(x), x) & gt(x, dec(x))}   by AllI(3),
+      7 #> ∀{(x: T) => gt(inc(x), x) & gt(x, dec(x))}   by AllI[T](3),
     )
     //@formatter:on
   )
@@ -419,7 +419,7 @@ import org.sireum.justification.natded.pred._
         ),
         10 #> (human(a) ->: soul(a))             by ImplyI(4)
       )},
-      11 #> ∀{(x: T) => human(x) ->: soul(x)}    by AllI(3),
+      11 #> ∀{(x: T) => human(x) ->: soul(x)}    by AllI[T](3),
     )
     //@formatter:on
   )
@@ -438,7 +438,7 @@ import org.sireum.justification.natded.pred._
           6 #> (healthy(a) ->: happy(a))                          by allE((x: T) => healthy(x) ->: happy(x), a) and 1,
           7 #> happy(a)                                           by implyE(healthy(a), happy(a))               and (6, 5)
         )},
-        8 #> ∀{(x: T) => happy(x)}                                by AllI(4)
+        8 #> ∀{(x: T) => happy(x)}                                by AllI[T](4)
       ),
       9 #> (∀{(y: T) => healthy(y)} ->: ∀{(x: T) => happy(x)})    by ImplyI(2)
     )
@@ -507,7 +507,7 @@ import org.sireum.justification.natded.pred._
         6 #> mortal(a)                            by implyE(human(a), mortal(a))               and (5, 4),
         7 #> ∃{(z: T) => mortal(z)}               by existsI((z: T) => mortal(z), a)           and 6
       )},
-      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE(2, 3),
+      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE[T](2, 3),
     )
     //@formatter:on
   )
@@ -530,7 +530,7 @@ import org.sireum.justification.natded.pred._
         5 #> covered(a)                                                    by andE1(covered(a), ∃{(c: C) => vowel(c) & holds(a, c)}) and 4,
         6 #> ∃{(x: Z) => covered(x)}                                       by existsI((x: Z) => covered(x), a)                       and 5
       )},
-      7 #> ∃{(x: Z) => covered(x)}                                         by ExistsE(1, 3),
+      7 #> ∃{(x: Z) => covered(x)}                                         by ExistsE[Z](1, 3),
       8 #> (!gameOver)                                                     by implyE(∃{(x: Z) => covered(x)}, !gameOver)             and (2, 7),
     )
     //@formatter:on

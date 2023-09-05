@@ -393,7 +393,7 @@ import org.sireum.justification.natded.pred._
         5 #> gt(a, dec(a))                              by AllE[T](2),
         6 #> (gt(inc(a), a) & gt(a, dec(a)))            by AndI(4, 5)
       )},
-      7 #> ∀{(x: T) => gt(inc(x), x) & gt(x, dec(x))}   by AllI(3),
+      7 #> ∀{(x: T) => gt(inc(x), x) & gt(x, dec(x))}   by AllI[T](3),
     )
     //@formatter:on
   )
@@ -420,7 +420,7 @@ import org.sireum.justification.natded.pred._
         ),
         10 #> (human(a) ->: soul(a))             by ImplyI(4)
       )},
-      11 #> ∀{(x: T) => human(x) ->: soul(x)}    by AllI(3),
+      11 #> ∀{(x: T) => human(x) ->: soul(x)}    by AllI[T](3),
     )
     //@formatter:on
   )
@@ -439,7 +439,7 @@ import org.sireum.justification.natded.pred._
           6 #> (healthy(a) ->: happy(a))                          by AllE[T](1),
           7 #> happy(a)                                           by ImplyE(6, 5)
         )},
-        8 #> ∀{(x: T) => happy(x)}                                by AllI(4)
+        8 #> ∀{(x: T) => happy(x)}                                by AllI[T](4)
       ),
       9 #> (∀{(y: T) => healthy(y)} ->: ∀{(x: T) => happy(x)})    by ImplyI(2)
     )
@@ -508,7 +508,7 @@ import org.sireum.justification.natded.pred._
         6 #> mortal(a)                            by ImplyE(5, 4),
         7 #> ∃{(z: T) => mortal(z)}               by ExistsI[T](6)
       )},
-      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE(2, 3),
+      8 #> ∃{(z: T) => mortal(z)}                 by ExistsE[T](2, 3),
     )
     //@formatter:on
   )
@@ -531,7 +531,7 @@ import org.sireum.justification.natded.pred._
         5 #> covered(a)                                                    by AndE1(4),
         6 #> ∃{(x: Z) => covered(x)}                                       by ExistsI[Z](5)
       )},
-      7 #> ∃{(x: Z) => covered(x)}                                         by ExistsE(1, 3),
+      7 #> ∃{(x: Z) => covered(x)}                                         by ExistsE[Z](1, 3),
       8 #> (!gameOver)                                                     by ImplyE(2, 7),
     )
     //@formatter:on

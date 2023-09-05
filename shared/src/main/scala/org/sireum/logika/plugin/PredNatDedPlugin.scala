@@ -89,6 +89,10 @@ object PredNatDedPlugin {
         if (argsOpt.isEmpty) {
           return emptyResult
         }
+        if (quant.fun.params(0).typedOpt != just.invoke.targs(0).typedOpt) {
+          reporter.error(just.invoke.targs(0).posOpt, Logika.kind, s"Expecting type '${quant.fun.params(0).typedOpt.get}', but '${just.invoke.targs(0).typedOpt.get}' found")
+          return emptyResult
+        }
         val ISZ(subProofNo) = argsOpt.get
         val (params, subProof): (ISZ[AST.ProofAst.Step.Let.Param], HashSet[AST.Exp]) = spcMap.get(subProofNo) match {
           case Some(sp@StepProofContext.FreshSubProof(_, ps, _)) => (ps, HashSet ++ sp.claims)
@@ -112,7 +116,7 @@ object PredNatDedPlugin {
                   funArg.id.attr.posOpt,
                   Some(AST.ResolvedInfo.LocalVar(logika.context.methodName, AST.ResolvedInfo.LocalVar.Scope.Closure, T,
                     T, funArg.id.value)),
-                  funArg.tipeOpt.get.typedOpt,
+                  funArg.tipeOpt.get.typedOpt
                 )
               )
             case _ =>
@@ -141,6 +145,10 @@ object PredNatDedPlugin {
             reporter.error(existsP.posOpt, Logika.kind, "Expecting a simple existential quantified type claim")
             return emptyResult
         }
+        if (quant.fun.params(0).typedOpt != just.invoke.targs(0).typedOpt) {
+          reporter.error(just.invoke.targs(0).posOpt, Logika.kind, s"Expecting type '${quant.fun.params(0).typedOpt.get}', but '${just.invoke.targs(0).typedOpt.get}' found")
+          return emptyResult
+        }
         val (params, assumption, subProof): (ISZ[AST.ProofAst.Step.Let.Param], AST.Exp, HashSet[AST.Exp]) = spcMap.get(subProofNo) match {
           case Some(sp@StepProofContext.FreshAssumeSubProof(_, ps, ac, _)) => (ps, ac, HashSet ++ sp.claims)
           case _ =>
@@ -163,7 +171,7 @@ object PredNatDedPlugin {
                   funArg.id.attr.posOpt,
                   Some(AST.ResolvedInfo.LocalVar(logika.context.methodName, AST.ResolvedInfo.LocalVar.Scope.Closure, T,
                     T, funArg.id.value)),
-                  funArg.tipeOpt.get.typedOpt,
+                  funArg.tipeOpt.get.typedOpt
                 )
               )
             case _ =>
