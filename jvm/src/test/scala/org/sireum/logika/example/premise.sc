@@ -44,7 +44,7 @@ def testId(): Unit = {
   Deduce(
     //@formatter:off
     At(x, 0) == 4       by Premise,
-    x == 5              by Premise,
+    x == 5              by Premise
     //@formatter:on
   )
 
@@ -52,7 +52,7 @@ def testId(): Unit = {
 
   Deduce(
     //@formatter:off
-    y == At(y, 0) + 1   by Premise
+    y == Old(y) + 1   by Premise
     //@formatter:on
   )
 }
@@ -75,8 +75,8 @@ def testName(): Unit = {
 
   Deduce(
     //@formatter:off
-    At(Foo.y, 1) == At(Foo.y, 0) + 1   by Premise,
-    Foo.y == At(Foo.y, 1) + 2          by Premise
+    Old(Foo.y) == At(Foo.y, 0) + 1   by Premise,
+    Foo.y == Old(Foo.y) + 2          by Premise
     //@formatter:on
   )
 }
@@ -173,7 +173,7 @@ def testQuant2(foos: ISZ[Foo], i: Z): Unit = {
     foos(i).x >= 0               by Auto,
     0 <= i                       by Premise,
     i < foos.size                by Premise,
-    ∀(foos)(foo => foo.x > -1)   by Premise,
+    ∀(foos)(foo => foo.x > -1)   by Premise
     //@formatter:on
   )
 }

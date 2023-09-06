@@ -35,15 +35,6 @@ import org.sireum.logika.Logika.Reporter
 
 object InceptionPlugin {
 
-  @record class ExpSubstitutor(val map: HashMap[AST.Exp, AST.Exp]) extends AST.MTransformer {
-    override def preExp(o: AST.Exp): AST.MTransformer.PreResult[AST.Exp] = {
-      map.get(o) match {
-        case Some(o2) => return AST.MTransformer.PreResult(F, MSome(o2))
-        case _ => return AST.MTransformer.PreResult(T, MNone())
-      }
-    }
-  }
-
   def extractIdExpMapping(th: TypeHierarchy, from: AST.Exp, to: AST.Exp, init: HashSMap[String, AST.Exp],
                           context: ISZ[String], ids: HashSet[String], sm: HashMap[String, AST.Typed]): Option[HashSMap[String, AST.Exp]] = {
     @pure def shouldExtract(resOpt: Option[AST.ResolvedInfo]): B = {
@@ -121,7 +112,7 @@ object InceptionPlugin {
               AST.ResolvedAttr(arg.posOpt, Some(AST.ResolvedInfo.LocalVar(fcontext,
                 AST.ResolvedInfo.LocalVar.Scope.Current, F, T, pid)), ptOpt))
           }
-          ExpSubstitutor(argParamRefMap).transformExp(te) match {
+          AST.Util.ExpSubstitutor(argParamRefMap).transformExp(te) match {
             case MSome(te2) =>
               val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(te2, AST.TypedAttr(te.posOpt, te.typedOpt)),
                 AST.TypedAttr(fe.posOpt, Some(AST.Typed.Fun(T, F, paramTypes, fe.typedOpt.get))))
@@ -131,7 +122,7 @@ object InceptionPlugin {
           r.get(id) match {
             case Some(AST.Exp.Fun(_, _, e: AST.Stmt.Expr)) =>
               val paramRefArgMap = HashMap ++ (for (p <- argParamRefMap.entries) yield (p._2, p._1))
-              val e2 = ExpSubstitutor(paramRefArgMap).transformExp(e.exp).getOrElseEager(e.exp)
+              val e2 = AST.Util.ExpSubstitutor(paramRefArgMap).transformExp(e.exp).getOrElseEager(e.exp)
               rec(e2, te)
               ok = T
             case _ =>

@@ -145,6 +145,10 @@ object MStateTransformer {
 
   val PostResultStateClaimLabel: MOption[State.Claim] = MNone()
 
+  val PreResultStateClaimOld: PreResult[State.Claim] = PreResult(T, MNone())
+
+  val PostResultStateClaimOld: MOption[State.Claim] = MNone()
+
   val PreResultStateClaimProp: PreResult[State.Claim] = PreResult(T, MNone())
 
   val PostResultStateClaimProp: MOption[State.Claim] = MNone()
@@ -477,6 +481,7 @@ import MStateTransformer._
   def preStateClaim(o: State.Claim): PreResult[State.Claim] = {
     o match {
       case o: State.Claim.Label => return preStateClaimLabel(o)
+      case o: State.Claim.Old => return preStateClaimOld(o)
       case o: State.Claim.Prop => return preStateClaimProp(o)
       case o: State.Claim.Eq => return preStateClaimEq(o)
       case o: State.Claim.And =>
@@ -681,6 +686,10 @@ import MStateTransformer._
 
   def preStateClaimLabel(o: State.Claim.Label): PreResult[State.Claim] = {
     return PreResultStateClaimLabel
+  }
+
+  def preStateClaimOld(o: State.Claim.Old): PreResult[State.Claim] = {
+    return PreResultStateClaimOld
   }
 
   def preStateClaimProp(o: State.Claim.Prop): PreResult[State.Claim] = {
@@ -1042,6 +1051,7 @@ import MStateTransformer._
   def postStateClaim(o: State.Claim): MOption[State.Claim] = {
     o match {
       case o: State.Claim.Label => return postStateClaimLabel(o)
+      case o: State.Claim.Old => return postStateClaimOld(o)
       case o: State.Claim.Prop => return postStateClaimProp(o)
       case o: State.Claim.Eq => return postStateClaimEq(o)
       case o: State.Claim.And =>
@@ -1246,6 +1256,10 @@ import MStateTransformer._
 
   def postStateClaimLabel(o: State.Claim.Label): MOption[State.Claim] = {
     return PostResultStateClaimLabel
+  }
+
+  def postStateClaimOld(o: State.Claim.Old): MOption[State.Claim] = {
+    return PostResultStateClaimOld
   }
 
   def postStateClaimProp(o: State.Claim.Prop): MOption[State.Claim] = {
@@ -1678,6 +1692,12 @@ import MStateTransformer._
         case o2: State.Claim.Label =>
           if (hasChanged)
             MSome(o2)
+          else
+            MNone()
+        case o2: State.Claim.Old =>
+          val r0: MOption[State.Value] = transformStateValue(o2.value)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(value = r0.getOrElse(o2.value)))
           else
             MNone()
         case o2: State.Claim.Prop =>

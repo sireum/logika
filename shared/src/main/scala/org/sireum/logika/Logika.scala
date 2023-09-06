@@ -1820,6 +1820,17 @@ import Util._
       return evalAtH(state, Util.claimsToExps(jescmPlugins._4, pos, context.methodName, state.claims, th, F)._2, exp, reporter)
     }
 
+    def evalOld(exp: AST.Exp.Old): (State, State.Value) = {
+      for (i <- state.claims.size - 1 to 0 by -1) {
+        state.claims(i) match {
+          case c: State.Claim.Old => return (state, c.value)
+          case _ =>
+        }
+      }
+      reporter.error(exp.posOpt, kind, st"Could not find old value of ${exp.exp.prettyST}".render)
+      return (state(status = State.Status.Error), State.errorValue)
+    }
+
     def evalInput(input: AST.Exp.Input): (State, State.Value) = {
       input.exp match {
         case e: AST.Exp.Ref =>
@@ -3454,6 +3465,7 @@ import Util._
           return ISZ((s0(status = State.Status.Error), State.errorValue))
         case e: AST.Exp.Result => return ISZ(evalResult(e))
         case e: AST.Exp.Input => return ISZ(evalInput(e))
+        case e: AST.Exp.Old => return ISZ(evalOld(e))
         case e: AST.Exp.QuantType => return ISZ(evalQuantType(e))
         case e: AST.Exp.QuantRange => return evalQuantRange(e)
         case e: AST.Exp.QuantEach =>
@@ -4619,14 +4631,32 @@ import Util._
     }
 
     def evalAssign(s0: State, assignStmt: AST.Stmt.Assign): ISZ[State] = {
+      val s2: State = assignStmt.prevAssignLhsOpt match {
+        case Some(prevAssignLhs) =>
+         val (s1, old) = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, prevAssignLhs, reporter)(0)
+          val oldClaim: State.Claim = prevAssignLhs match {
+            case prevAssignLhs: AST.Exp.This => State.Claim.Old(T, F, ISZ(), "this", old, prevAssignLhs.posOpt.get)
+            case prevAssignLhs: AST.Exp.Ref =>
+              prevAssignLhs.resOpt.get match {
+                case res: AST.ResolvedInfo.LocalVar =>
+                  State.Claim.Old(T, res.isSpec, res.context, res.id, old, prevAssignLhs.posOpt.get)
+                case res: AST.ResolvedInfo.Var =>
+                  State.Claim.Old(F, res.isSpec, res.owner, res.id, old, prevAssignLhs.posOpt.get)
+                case _ => halt("Infeasible")
+              }
+            case _ => halt("Infeasible")
+          }
+          s1.addClaim(oldClaim)
+        case _ => s0
+      }
       var r = ISZ[State]()
-      for (p <- evalAssignExpValue(split, smt2, cache, assignStmt.lhs.typedOpt.get, rtCheck, s0, assignStmt.rhs, reporter)) {
-        val (s1, init) = p
-        if (s1.ok) {
-          val (s2, sym) = value2Sym(s1, init, assignStmt.rhs.asStmt.posOpt.get)
-          r = r ++ assignRec(split, smt2, cache, rtCheck, s2, assignStmt.lhs, sym, reporter)
+      for (p <- evalAssignExpValue(split, smt2, cache, assignStmt.lhs.typedOpt.get, rtCheck, s2, assignStmt.rhs, reporter)) {
+        val (s3, init) = p
+        if (s3.ok) {
+          val (s4, sym) = value2Sym(s3, init, assignStmt.rhs.asStmt.posOpt.get)
+          r = r ++ assignRec(split, smt2, cache, rtCheck, s4, assignStmt.lhs, sym, reporter)
         } else {
-          r = r :+ s1
+          r = r :+ s3
         }
       }
       return r
@@ -4999,6 +5029,20 @@ import Util._
     }
 
     def evalStmtH(): ISZ[State] = {
+      @pure def removeOld(ss: ISZ[State]): ISZ[State] = {
+        var r = ISZ[State]()
+        for (s <- ss) {
+          var cs = ISZ[State.Claim]()
+          for (c <- s.claims) {
+            c match {
+              case c: State.Claim.Old =>
+              case _ => cs = cs :+ c
+            }
+          }
+          r = r :+ s(claims = cs)
+        }
+        return r
+      }
       stmt match {
         case stmt: AST.Stmt.Expr =>
           stmt.exp match {
@@ -5046,9 +5090,9 @@ import Util._
           val s1 = evalInv(None(), F, "Invariant", smt2, cache, rtCheck, state, stmt, HashMap.empty, reporter)
           return ISZ(state(status = s1.status, nextFresh = s1.nextFresh))
         case stmt: AST.Stmt.DeduceSteps =>
-          return evalDeduceSteps(state, stmt)
+          return removeOld(evalDeduceSteps(state, stmt))
         case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty =>
-          return evalDeduceSequent(state, stmt)
+          return removeOld(evalDeduceSequent(state, stmt))
         case _: AST.Stmt.Object => return ISZ(state)
         case _: AST.Stmt.Import => return ISZ(state)
         case _: AST.Stmt.Method => return ISZ(state)

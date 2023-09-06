@@ -589,6 +589,7 @@ object Util {
         case _: State.Claim.Let.Id => return F
         case _: State.Claim.Let.Name => return F
         case _: State.Claim.Custom => return F
+        case _: State.Claim.Old => return F
         case _ => return T
       }
     }
@@ -790,6 +791,35 @@ object Util {
         }
       }
       return r.elements
+    }
+
+    @pure def rewriteOld(cs: ISZ[AST.Exp]): ISZ[AST.Exp] = {
+      def rewriteOldH(old: AST.Exp, e: AST.Exp): ISZ[AST.Exp] = {
+        val map = HashMap.empty[AST.Exp, AST.Exp] + e ~> old
+        val es = AST.Util.ExpSubstitutor(map)
+        var r = ISZ[AST.Exp]()
+        for (c <- cs) {
+          c match {
+            case AST.Exp.Binary(_: AST.Exp.Old, _, _) => //r = r :+ c
+            case _ =>
+              es.transformExp(c) match {
+                case MSome(c2) =>
+                  //r = r :+ c
+                  r = r :+ c2
+                case _ => r = r :+ c
+              }
+          }
+        }
+        return r
+      }
+      for (i <- cs.size - 1 to 1 by -1) {
+        cs(i) match {
+          case AST.Exp.Binary(old: AST.Exp.Old, _, e) =>
+            return rewriteOldH(old, e)
+          case _ =>
+        }
+      }
+      return cs
     }
 
     def computeAtNum(key: ClaimsToExps.AtPossKey, poss: ISZ[Position], num: Z, sym: State.Value.Sym): Z = {
@@ -1273,7 +1303,7 @@ object Util {
                 case t: AST.Typed.Tuple =>
                   return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                     AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Tuple(t.args.size,
-                      Z(ops.StringOps(let.id).substring(1, let.id.size)).get)), Some(sym.tipe))))
+                      org.sireum.Z(ops.StringOps(let.id).substring(1, let.id.size)).get)), Some(sym.tipe))))
                 case t: AST.Typed.TypeVar if t.isIndex =>
                   assert(let.id == "toZ")
                   return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
@@ -1643,6 +1673,25 @@ object Util {
             case _ => return None()
           }
         case claim: State.Claim.Let => return letToExp(claim)
+        case claim: State.Claim.Old =>
+          val posOpt = Option.some(claim.pos)
+          val tOpt = Option.some(claim.value.tipe)
+          val oldExp: AST.Exp = if (claim.isLocal) {
+            if (claim.id == "this") {
+              AST.Exp.This(AST.TypedAttr(posOpt, tOpt))
+            } else {
+              AST.Exp.Ident(AST.Id(claim.id, AST.Attr(posOpt)), AST.ResolvedAttr(posOpt,
+                Some(AST.ResolvedInfo.LocalVar(claim.owner, AST.ResolvedInfo.LocalVar.Scope.Current, claim.isSpec, F,
+                  claim.id)), tOpt))
+            }
+          } else {
+            th.nameToExp(claim.owner :+ claim.id, claim.pos).asExp
+          }
+          val r: Option[AST.Exp] = valueToExp(claim.value) match {
+            case Some(oldValue) => Some(equate(claim.value.tipe, AST.Exp.Old(oldExp, AST.Attr(oldExp.posOpt)), oldValue))
+            case _ => None()
+          }
+          return r
         case _: State.Claim.Label => return None()
         case _: State.Claim.Custom => return None()
         case claim => halt(s"Infeasible: $claim")
@@ -1659,7 +1708,7 @@ object Util {
         }
       }
 
-      return simplify(r.elements)
+      return rewriteOld(simplify(r.elements))
     }
   }
 
@@ -2757,7 +2806,7 @@ object Util {
                 OptionsUtil.toConfig(initConfig, l.context.maxCores, LibUtil.setOptions, l.context.nameExePathMap, value) match {
                   case Either.Left(c) =>
                     logika = logika(config = c)
-                    reporter.coverage(F, U64.fromZ(0), stmt.posOpt.get)
+                    reporter.coverage(F, org.sireum.U64.fromZ(0), stmt.posOpt.get)
                     currents = currents :+ current
                   case Either.Right(msgs) =>
                     for (msg <- msgs) {
