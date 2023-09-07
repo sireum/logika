@@ -43,7 +43,7 @@ def testId(): Unit = {
 
   Deduce(
     //@formatter:off
-    At(x, 0) == 4       by Premise,
+    Old(x) == 4         by Premise,
     x == 5              by Premise
     //@formatter:on
   )
