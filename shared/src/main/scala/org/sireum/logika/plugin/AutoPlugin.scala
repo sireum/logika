@@ -225,7 +225,7 @@ object AutoPlugin {
       val psmt2 = smt2.emptyCache(logika.config)
       val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
         state.claims, logika.th, F)._2
-      var s1 = state(claims = logika.context.initClaims)
+      var s1 = state.unconstrainedClaims
       var ok = T
       for (arg <- just.witnesses if ok) {
         val stepNo = arg

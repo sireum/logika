@@ -74,6 +74,25 @@ import org.sireum.message.Position
     return (newState, State.Value.sym(n, tipe, pos))
   }
 
+  @pure def unconstrainedClaims: State = {
+    var r = ISZ[State.Claim]()
+    for (c <- claims) {
+      val add: B = c match {
+        case _: State.Claim.Let.Id => T
+        case _: State.Claim.Let.Name => T
+        case _: State.Claim.Let.CurrentId => T
+        case _: State.Claim.Let.CurrentName => T
+        case _: State.Claim.Old => T
+        case _ => F
+      }
+      if (add) {
+        r = r :+ c
+      }
+    }
+    val thisL = this
+    return thisL(claims = r)
+  }
+
 }
 
 object State {

@@ -82,7 +82,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
       val (stat, nextFresh, premises, conclusion) = logikaSmt2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
       ((stat, nextFresh, state.claims ++ premises, conclusion), premises :+ conclusion)
     } else {
-      var s0 = state(claims = logikaSmt2.context.initClaims)
+      var s0 = state.unconstrainedClaims
       val atMap = org.sireum.logika.Util.claimsToExps(logikaSmt2.jescmPlugins._4, posOpt.get, logikaSmt2.context.methodName,
         state.claims, logikaSmt2.th, F)._2
       var ok = T

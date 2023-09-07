@@ -90,7 +90,7 @@ import org.sireum.message.Position
       logika2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
     } else {
       val psmt2 = smt2.emptyCache(logika.config)
-      var s1 = state(claims = logika.context.initClaims)
+      var s1 = state.unconstrainedClaims
       var ok = T
       for (stepNo <- just.witnesses if ok) {
         spcMap.get(stepNo) match {

@@ -47,7 +47,6 @@ object Context {
                          val objectVarInMap: HashMap[ISZ[String], State.Value.Sym],
                          val fieldVarInMap: HashMap[String, State.Value.Sym],
                          val localInMap: HashMap[String, State.Value.Sym],
-                         val initClaims: ISZ[State.Claim],
                          val posOpt: Option[Position],
                          val storage: HashMap[String, Value]) {
 
@@ -175,11 +174,6 @@ object Context {
   @strictpure def receiverTypeOpt: Option[AST.Typed] = methodOpt match {
     case Some(cm) => cm.receiverTypeOpt
     case _ => None()
-  }
-
-  @strictpure def initClaims: ISZ[State.Claim] = methodOpt match {
-    case Some(cm) => cm.initClaims
-    case _ => ISZ()
   }
 
   @strictpure def receiverLocalTypeOpt: Option[(AST.ResolvedInfo.LocalVar, AST.Typed)] = methodOpt match {

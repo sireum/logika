@@ -1812,7 +1812,7 @@ object Util {
                    plugins: ISZ[plugin.Plugin], implicitContext: Option[(String, Position)],
                    compMethods: ISZ[ISZ[String]]): Logika = {
     val mctx = Context.Method(isHelper, owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
-      HashMap.empty, HashMap.empty, HashMap.empty, ISZ(), posOpt, HashMap.empty)
+      HashMap.empty, HashMap.empty, HashMap.empty, posOpt, HashMap.empty)
     val ctx = Context.empty(nameExePathMap, maxCores, fileOptions)(methodOpt = Some(mctx),
       caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext, compMethods = compMethods)
     return Logika(th, config, ctx, plugins)
@@ -1958,7 +1958,7 @@ object Util {
       }
     }
     return (l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,
-      localInMap = localInMap, initClaims = s0.claims)))), s0)
+      localInMap = localInMap)))), s0)
   }
 
   def checkMethod(nameExePathMap: HashMap[String, String],
@@ -2413,7 +2413,6 @@ object Util {
       objectVarInMap = HashMap.empty,
       fieldVarInMap = HashMap.empty,
       localInMap = HashMap.empty,
-      initClaims = ISZ(),
       posOpt = None(),
       storage = logika.context.methodOpt.map((mctx: Context.Method) => mctx.storage).getOrElse(HashMap.empty)
     ))))
