@@ -4631,10 +4631,10 @@ import Util._
     }
 
     def evalAssign(s0: State, assignStmt: AST.Stmt.Assign): ISZ[State] = {
-      val s2: State = assignStmt.prevAssignLhsOpt match {
-        case Some(prevAssignLhs) =>
-         val (s1, old) = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, prevAssignLhs, reporter)(0)
-          val oldClaim: State.Claim = prevAssignLhs match {
+      val s2: State = assignStmt.deduceOldLhsOpt match {
+        case Some(deduceOldLhs) =>
+         val (s1, old) = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, deduceOldLhs, reporter)(0)
+          val oldClaim: State.Claim = deduceOldLhs match {
             case prevAssignLhs: AST.Exp.This => State.Claim.Old(T, F, ISZ(), "this", old, prevAssignLhs.posOpt.get)
             case prevAssignLhs: AST.Exp.Ref =>
               prevAssignLhs.resOpt.get match {
