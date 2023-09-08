@@ -682,7 +682,7 @@ object Smt2 {
         writeFile(logDir, filename, res.query)
       case _ =>
     }
-    if (config.smt2Caching) {
+    if (config.smt2Caching && res.solverName != "none") {
       cache.setSmt2(T, typeHierarchy, config, timeoutInMs, claims, res)
     }
     return (r, smt2res)
@@ -1699,7 +1699,7 @@ object Smt2 {
         writeFile(logDir, filename, res.query)
       case _ =>
     }
-    if (config.smt2Caching) {
+    if (config.smt2Caching && res.solverName != "none") {
       cache.setSmt2(F, typeHierarchy, config, config.timeoutInMs, claims, res)
     }
     return res

@@ -170,7 +170,7 @@ object Smt2Invoke {
           Os.path(t1._1).name < Os.path(t2._1).name
         )
         val kinds = Set.empty[String] ++ (for (t <- sortedTs) yield t._3.string)
-        Smt2Query.Result(Smt2Query.Result.Kind.Unknown, "all", queryString,
+        Smt2Query.Result(Smt2Query.Result.Kind.Unknown, if (ts.isEmpty) "none" else "all", queryString,
           st"""; Result: ${(ops.ISZOps(kinds.elements).sortWith((s1: String, s2: String) => s1 < s2), " or ")}
               |; Solvers and arguments:
               |${(for (t <- sortedTs) yield st"; * ${t._3}: ${t._1}, ${(t._2, " ")}", "\n")}""".render,
