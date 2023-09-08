@@ -81,8 +81,8 @@ import org.sireum.ops.ISZOps
                 return emptyResult
             }
             val (sub, repl): (AST.Exp, AST.Exp) = res.id match {
-              case "Subst_>" => (e1, e2)
-              case "Subst_<" => (e2, e1)
+              case "Subst_<" => (e1, e2)
+              case "Subst_>" => (e2, e1)
             }
             spcMap.get(y) match {
               case Some(ySpc: StepProofContext.Regular) =>
@@ -136,24 +136,11 @@ object SubstitutionPlugin {
   @record class Substitutor(val sub: AST.Exp, val repl: AST.Exp) extends Plugin.InvocationSubstitutor {
 
     override def preExp(exp: AST.Exp): PreResult[AST.Exp] = {
-      exp match {
-        case i: AST.Exp.Invoke => return preExpInvoke(i)
-        case i: AST.Exp.InvokeNamed => return preExpInvokeNamed(i)
-        case _ =>
-          if (exp == sub) {
-            return PreResult(F, MSome(repl))
-          } else {
-            return PreResult(T, MSome(exp))
-          }
+      if (exp == sub) {
+        return PreResult(F, MSome(repl))
+      } else {
+        return PreResult(T, MNone())
       }
-    }
-
-    override def preExpInvoke(i: AST.Exp.Invoke): PreResult[AST.Exp] = {
-      return PreResult(F, transformExpInvoke(i).map((e: AST.Exp) => e))
-    }
-
-    override def preExpInvokeNamed(i: Exp.InvokeNamed): PreResult[Exp] = {
-      return PreResult(F, transformExpInvokeNamed(i).map((e: AST.Exp) => e))
     }
   }
 }

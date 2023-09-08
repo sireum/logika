@@ -94,6 +94,14 @@ object Plugin {
 
   @msig trait InvocationSubstitutor extends AST.MTransformer {
 
+    override def transformExp(o: AST.Exp): MOption[AST.Exp] = {
+      o match {
+        case o: AST.Exp.Invoke => return transformExpInvoke(o).map((e: AST.Exp) => e)
+        case o: AST.Exp.InvokeNamed => return transformExpInvokeNamed(o).map((e: AST.Exp) => e)
+        case _ => return super.transformExp(o)
+      }
+    }
+
     override def transformExpInvoke(o: AST.Exp.Invoke): MOption[AST.Exp.Invoke] = {
       var changed = F
       val newReceiverOpt: Option[AST.Exp] = o.receiverOpt match {
@@ -101,7 +109,7 @@ object Plugin {
           case MSome(r) =>
             changed = T
             Some(r)
-          case _ => None()
+          case _ => Some(receiver)
         }
         case _ => None()
       }
@@ -136,7 +144,7 @@ object Plugin {
           case MSome(r) =>
             changed = T
             Some(r)
-          case _ => None()
+          case _ => Some(receiver)
         }
         case _ => None()
       }
