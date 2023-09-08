@@ -27,6 +27,7 @@ package org.sireum.logika.plugin
 
 import org.sireum._
 import org.sireum.lang.{ast => AST}
+import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
@@ -106,6 +107,83 @@ object AutoPlugin {
       msgOpt = Some(msg)
       hasError = T
     }
+  }
+
+  def detectOrIntro(th: TypeHierarchy, claim: AST.Exp, pc: ISZ[AST.Exp]): Option[ST] = {
+    val (left, right): (AST.Exp, AST.Exp) = claim match {
+      case claim: AST.Exp.Binary =>
+        claim.attr.resOpt match {
+          case Some(AST.ResolvedInfo.BuiltIn(kind)) if kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryOr || kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr =>
+            (claim.left, claim.right)
+          case _ => return None()
+        }
+      case _ => return None()
+    }
+
+    val leftNorm = th.normalizeExp(left)
+    val rightNorm = th.normalizeExp(right)
+
+    var posAntecedents = HashMap.empty[(AST.Exp, AST.Exp), AST.Exp.Binary]
+    var negAntecedents = HashMap.empty[(AST.Exp, AST.Exp), AST.Exp.Binary]
+
+    for (c <- pc) {
+      c match {
+        case c: AST.Exp.Binary =>
+          c.attr.resOpt match {
+            case Some(AST.ResolvedInfo.BuiltIn(kind)) if kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryImply || kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply =>
+              val crNorm = th.normalizeExp(c.right)
+              val isLeft = crNorm == leftNorm
+              val isRight = crNorm == rightNorm
+              if (isLeft || isRight) {
+                c.left match {
+                  case ant: AST.Exp.Unary if ant.op == AST.Exp.UnaryOp.Not =>
+                    val antNorm = th.normalizeExp(ant.exp)
+                    val key = (if (isLeft) rightNorm else leftNorm, antNorm)
+                    posAntecedents.get(key) match {
+                      case Some(v) =>
+                        return Some(
+                          st"""Accepted because both:
+                              |
+                              |* ${v.prettyST}, and
+                              |
+                              |* ${c.prettyST}
+                              |
+                              |are in the path conditions:
+                              |{
+                              |  ${(for (e <- pc) yield e.prettyST, ";\n")}
+                              |}"""
+                        )
+                      case _ => negAntecedents = negAntecedents + (if (isLeft) leftNorm else rightNorm, antNorm) ~> c
+                    }
+                  case ant =>
+                    val antNorm = th.normalizeExp(ant)
+                    val key = (if (isLeft) rightNorm else leftNorm, antNorm)
+                    negAntecedents.get(key) match {
+                      case Some(v) =>
+                        return Some(
+                          st"""Accepted because both:
+                              |
+                              |* ${c.prettyST}, and
+                              |
+                              |* ${v.prettyST}
+                              |
+                              |are in the path conditions:
+                              |{
+                              |  ${(for (e <- pc) yield e.prettyST, ";\n")}
+                              |}
+                              |"""
+                        )
+                      case _ =>
+                        posAntecedents = posAntecedents + (if (isLeft) leftNorm else rightNorm, antNorm) ~> c
+                    }
+                }
+              }
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    return None()
   }
 
 }
@@ -207,12 +285,18 @@ object AutoPlugin {
             }
             return Plugin.Result(T, state.nextFresh, ISZ())
           } else if (id == "Premise") {
-            reporter.error(posOpt, Logika.kind,
-              st"""The stated claim has not been proven before nor is a premise in:
-                  |{
-                  |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
-                  |}""".render)
-            return Plugin.Result(F, state.nextFresh, ISZ())
+            AutoPlugin.detectOrIntro(logika.th, step.claim, pathConditions) match {
+              case Some(acceptMsg) =>
+                reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
+                return Plugin.Result(T, state.nextFresh, ISZ())
+              case _ =>
+                reporter.error(posOpt, Logika.kind,
+                  st"""The stated claim has not been proven before nor is a premise in:
+                      |{
+                      |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
+                      |}""".render)
+                return Plugin.Result(F, state.nextFresh, ISZ())
+            }
           }
       }
     }
