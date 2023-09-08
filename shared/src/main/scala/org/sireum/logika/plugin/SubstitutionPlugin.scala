@@ -87,7 +87,7 @@ import org.sireum.ops.ISZOps
             spcMap.get(y) match {
               case Some(ySpc: StepProofContext.Regular) =>
                 val exp = ySpc.exp
-                val s = SubstitutionPlugin.Substitutor(sub, repl)
+                val s = AST.Util.ExpSubstitutor(HashMap.empty[AST.Exp, AST.Exp] + sub ~> repl)
                 val subResult = s.transformExp(exp).getOrElseEager(exp)
                 if (subResult != step.claim) {
                   val msg = s"Claim ${step.id} does not match the substituted expression of ${res.id} of $x for $y"
@@ -133,14 +133,4 @@ object SubstitutionPlugin {
     }
   }
 
-  @record class Substitutor(val sub: AST.Exp, val repl: AST.Exp) extends Plugin.InvocationSubstitutor {
-
-    override def preExp(exp: AST.Exp): PreResult[AST.Exp] = {
-      if (exp == sub) {
-        return PreResult(F, MSome(repl))
-      } else {
-        return PreResult(T, MNone())
-      }
-    }
-  }
 }

@@ -32,7 +32,7 @@ import org.sireum.logika.Logika.Reporter
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 
 object ValIntroElimPlugin {
-  @record class Substitutor(val i: Z, val map: HashSMap[ISZ[String], (Z, message.Position, AST.Exp)]) extends Plugin.InvocationSubstitutor {
+  @record class Substitutor(val i: Z, val map: HashSMap[ISZ[String], (Z, message.Position, AST.Exp)]) extends AST.Util.InvocationSubstitutor {
     override def preExpIdent(o: AST.Exp.Ident): AST.MTransformer.PreResult[AST.Exp] = {
       o.resOpt match {
         case Some(res: AST.ResolvedInfo.LocalVar) =>
