@@ -17,6 +17,6 @@ def valid(): Unit = {
   Deduce(
     1 #> (x == 0) by Premise,
     2 #> (y == 42) by Premise,
-        3 #> (y > x) by Algebra and (1, 2)
+    3 #> (y > x) by Algebra* (1, 2)
   )
 }
