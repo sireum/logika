@@ -750,10 +750,9 @@ object Util {
     }
 
     @pure def simplify(cs: ISZ[AST.Exp]): ISZ[AST.Exp] = {
-      var r = HashSSet.empty[AST.Exp]
+      var rs = HashSSet.empty[AST.Exp]
       var ipMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
       var inpMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
-
       for (exp <- cs) {
         exp match {
           case exp: AST.Exp.Binary if exp.attr.resOpt == implyResOpt || exp.attr.resOpt == condImplyResOpt =>
@@ -767,10 +766,10 @@ object Util {
                 }
                 ipMap.get(th.normalizeExp(left.exp)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
                   case Some(es) =>
-                    r = r -- es
-                    r = r + exp.right
+                    rs = rs -- es
+                    rs = rs + exp.right
                   case _ =>
-                    r = r + exp
+                    rs = rs + exp
                 }
               case left =>
                 ipMap = {
@@ -781,16 +780,52 @@ object Util {
                 }
                 inpMap.get(th.normalizeExp(left)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
                   case Some(es) =>
-                    r = r -- es
-                    r = r + exp.right
+                    rs = rs -- es
+                    rs = rs + exp.right
                   case _ =>
-                    r = r + exp
+                    rs = rs + exp
                 }
             }
-          case _ => r = r + exp
+          case _ => rs = rs + exp
         }
       }
-      return r.elements
+      var changed = T
+      var r = rs.elements
+      while (changed) {
+        changed = F
+        var atSubstMap = HashMap.empty[AST.Exp, AST.Exp]
+        for (e <- r) {
+          e match {
+            case e: AST.Exp.Binary if e.attr.resOpt == equivResOpt || e.attr.resOpt == eqResOpt &&
+              th.isSubstitutableWithoutSpecVars(e.right.typedOpt.get) =>
+              (e.left, e.right) match {
+                case (left: AST.Exp.At, right) =>
+                  atSubstMap = atSubstMap + left ~> right
+                case (left, right: AST.Exp.At) =>
+                  atSubstMap = atSubstMap + right ~> left
+                case (_, _) =>
+              }
+            case _ =>
+          }
+        }
+        if (atSubstMap.nonEmpty) {
+          val es = AST.Util.ExpSubstitutor(atSubstMap)
+          var r2 = ISZ[AST.Exp]()
+          for (e <- r) {
+            es.transformExp(e) match {
+              case MSome(e2: AST.Exp.Binary) if (e2.attr.resOpt == equivResOpt || e2.attr.resOpt == eqResOpt) && e2.left == e2.right =>
+                r2 = r2 :+ e
+              case MSome(e2) =>
+                r2 = r2 :+ e2
+                changed = T
+              case _ =>
+                r2 = r2 :+ e
+            }
+          }
+          r = r2
+        }
+      }
+      return r
     }
 
     @pure def rewriteOld(cs: ISZ[AST.Exp]): ISZ[AST.Exp] = {
@@ -800,7 +835,7 @@ object Util {
         var r = ISZ[AST.Exp]()
         for (c <- cs) {
           c match {
-            case AST.Exp.Binary(_: AST.Exp.Old, _, _) => //r = r :+ c
+            case AST.Exp.Binary(_: AST.Exp.Old, _, _) => r = r :+ c
             case _ =>
               es.transformExp(c) match {
                 case MSome(c2) =>

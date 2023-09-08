@@ -27,7 +27,9 @@ Deduce(
 baz.bar = Bar(2)
 Deduce(
   At(baz, 0) ≡ Baz(Foo(0), Bar(10), 100) by Premise,
-  Old(baz) ≡ At(baz, 0)(foo = At(baz, 0).foo(x = 1)) by Premise,
+  Old(baz) ≡ Baz(Foo(0), Bar(10), 100)(foo =
+    Baz(Foo(0), Bar(10), 100).foo(x = 1)
+  ) by Premise,
   baz ≡ Old(baz)(bar = Bar(2)) by Premise
 )
 assert(baz.foo.x == 1 & baz.bar.y == 2 & baz.z == 100)
