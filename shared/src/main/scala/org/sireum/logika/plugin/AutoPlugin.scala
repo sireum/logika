@@ -32,7 +32,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
 object AutoPlugin {
-  @record class MAlgebraChecker(var hasError: B, var msgOpt: Option[String]) extends AST.MTransformer {
+  @record class MAlgebraChecker(var reporter: Reporter) extends AST.MTransformer {
     @pure def isUnaryNumeric(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
       kind match {
         case AST.ResolvedInfo.BuiltIn.Kind.UnaryPlus =>
@@ -74,8 +74,6 @@ object AutoPlugin {
         case AST.ResolvedInfo.BuiltIn.Kind.BinaryLe =>
         case AST.ResolvedInfo.BuiltIn.Kind.BinaryGt =>
         case AST.ResolvedInfo.BuiltIn.Kind.BinaryGe =>
-        case AST.ResolvedInfo.BuiltIn.Kind.BinaryFpEq =>
-        case AST.ResolvedInfo.BuiltIn.Kind.BinaryFpNe =>
         case _ =>
           return F
       }
@@ -83,29 +81,42 @@ object AutoPlugin {
     }
 
     override def postExp(e: AST.Exp): MOption[AST.Exp] = {
+      def failE(): Unit = {
+        fail(e.posOpt, st"Algebra cannot be used on '${e.prettyST}'".render)
+      }
       e match {
-        case _: AST.Exp.Quant =>
-          fail("Algebra cannot be used with quantifiers")
-        case b: AST.Exp.Binary =>
-          b.attr.resOpt.get match {
-            case AST.ResolvedInfo.BuiltIn(kind) if !(isScalarArithmetic(kind) || isRelational(kind)) =>
-              fail(s"Algebra cannot be used with binary op $kind")
-            case _ =>
+        case _: AST.Exp.Quant => fail(e.posOpt, "Algebra cannot be used with quantifiers")
+        case _: AST.Exp.LitZ =>
+        case _: AST.Exp.Ident if e.typedOpt == AST.Typed.zOpt =>
+        case e: AST.Exp.Binary =>
+          e.attr.resOpt.get match {
+            case AST.ResolvedInfo.BuiltIn(kind) =>
+              if (!(isScalarArithmetic(kind) || isRelational(kind))) {
+                fail(e.posOpt, s"Algebra cannot be used with binary op '${e.op}'")
+              }
+            case _ => failE()
           }
-        case u: AST.Exp.Unary =>
-          u.attr.resOpt.get match {
-            case AST.ResolvedInfo.BuiltIn(kind) if !(isUnaryNumeric(kind) || isNegation(kind)) =>
-              fail(s"Algebra cannot be used with unary op $kind")
-            case _ =>
+        case e: AST.Exp.Unary =>
+          e.attr.resOpt.get match {
+            case AST.ResolvedInfo.BuiltIn(kind) =>
+              if (!(isUnaryNumeric(kind) || isNegation(kind))) {
+                fail(e.posOpt, s"Algebra cannot be used with unary op '${e.op}'")
+              }
+            case _ => failE()
           }
-        case _ =>
+        case e: AST.Exp.Invoke =>
+          e.ident.resOpt match {
+            case Some(res: AST.ResolvedInfo.Method) if res.mode == AST.MethodMode.Spec =>
+            case _ =>
+              fail(e.ident.posOpt, s"Algebra cannot be used with non-spec method invocation")
+          }
+        case _ => failE()
       }
       return super.postExp(e)
     }
 
-    def fail(msg: String): Unit = {
-      msgOpt = Some(msg)
-      hasError = T
+    def fail(posOpt: Option[message.Position], msg: String): Unit = {
+      reporter.error(posOpt, Logika.kind, msg)
     }
   }
 
@@ -219,12 +230,10 @@ object AutoPlugin {
     val pos = posOpt.get
 
     def checkAlgebraExp(e: AST.Exp): B = {
-      val ac = AutoPlugin.MAlgebraChecker(F, Option.none())
+      val ac = AutoPlugin.MAlgebraChecker(reporter.empty)
       ac.transformExp(e)
-      if (ac.hasError) {
-        reporter.error(posOpt, Logika.kind, ac.msgOpt.get)
-      }
-      return !ac.hasError
+      reporter.combine(ac.reporter)
+      return !ac.reporter.hasError
     }
 
     def checkValid(psmt2: Smt2, stat: B, nextFresh: Z, premises: ISZ[State.Claim], conclusion: State.Claim,
