@@ -305,12 +305,18 @@ object AutoPlugin {
                     |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
                     |}""".render)
             }
-            return Plugin.Result(T, state.nextFresh, ISZ())
+            val (stat, nextFresh, premises, conclusion) =
+              logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+            return Plugin.Result(stat, nextFresh, premises :+ conclusion)
           } else if (id == "Premise") {
             AutoPlugin.detectOrIntro(logika.th, step.claim, pathConditions) match {
               case Some(acceptMsg) =>
-                reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
-                return Plugin.Result(T, state.nextFresh, ISZ())
+                if (logika.config.detailedInfo) {
+                  reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
+                }
+                val (stat, nextFresh, premises, conclusion) =
+                  logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+                return Plugin.Result(stat, nextFresh, premises :+ conclusion)
               case _ =>
                 reporter.error(posOpt, Logika.kind,
                   st"""The stated claim has not been proven before nor is a premise in:
