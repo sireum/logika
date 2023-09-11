@@ -81,13 +81,26 @@ object AutoPlugin {
     }
 
     override def postExp(e: AST.Exp): MOption[AST.Exp] = {
+      @pure def isSeq(t: AST.Typed): B = {
+        t match {
+          case t: AST.Typed.Name if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) &&
+            t.args(0) == AST.Typed.z && t.args(1) == AST.Typed.z => return T
+          case _ => return F
+        }
+      }
       def failE(): Unit = {
         fail(e.posOpt, st"Algebra cannot be used on '${e.prettyST}'".render)
       }
       e match {
         case _: AST.Exp.Quant => fail(e.posOpt, "Algebra cannot be used with quantifiers")
         case _: AST.Exp.LitZ =>
-        case _: AST.Exp.Ident if e.typedOpt == AST.Typed.zOpt =>
+        case _: AST.Exp.Ident =>
+          e.typedOpt.get match {
+            case AST.Typed.z =>
+            case t if isSeq(t) =>
+            case _ => fail(e.posOpt, s"Algebra cannot be used on expression of type '${e.typedOpt.get}'")
+          }
+        case e: AST.Exp.Select if e.id.value == "size" && e.receiverOpt.nonEmpty && isSeq(e.receiverOpt.get.typedOpt.get) =>
         case e: AST.Exp.Binary =>
           e.attr.resOpt.get match {
             case AST.ResolvedInfo.BuiltIn(kind) =>
