@@ -234,6 +234,7 @@ object StateTransformer {
       o match {
         case o: State.Claim.Label => return preStateClaimLabel(ctx, o)
         case o: State.Claim.Old => return preStateClaimOld(ctx, o)
+        case o: State.Claim.Input => return preStateClaimInput(ctx, o)
         case o: State.Claim.Prop => return preStateClaimProp(ctx, o)
         case o: State.Claim.Eq => return preStateClaimEq(ctx, o)
         case o: State.Claim.And =>
@@ -441,6 +442,10 @@ object StateTransformer {
     }
 
     @pure def preStateClaimOld(ctx: Context, o: State.Claim.Old): PreResult[Context, State.Claim] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preStateClaimInput(ctx: Context, o: State.Claim.Input): PreResult[Context, State.Claim] = {
       return PreResult(ctx, T, None())
     }
 
@@ -804,6 +809,7 @@ object StateTransformer {
       o match {
         case o: State.Claim.Label => return postStateClaimLabel(ctx, o)
         case o: State.Claim.Old => return postStateClaimOld(ctx, o)
+        case o: State.Claim.Input => return postStateClaimInput(ctx, o)
         case o: State.Claim.Prop => return postStateClaimProp(ctx, o)
         case o: State.Claim.Eq => return postStateClaimEq(ctx, o)
         case o: State.Claim.And =>
@@ -1011,6 +1017,10 @@ object StateTransformer {
     }
 
     @pure def postStateClaimOld(ctx: Context, o: State.Claim.Old): TPostResult[Context, State.Claim] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postStateClaimInput(ctx: Context, o: State.Claim.Input): TPostResult[Context, State.Claim] = {
       return TPostResult(ctx, None())
     }
 
@@ -1473,6 +1483,12 @@ import StateTransformer._
           else
             TPostResult(preR.ctx, None())
         case o2: State.Claim.Old =>
+          val r0: TPostResult[Context, State.Value] = transformStateValue(preR.ctx, o2.value)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(value = r0.resultOpt.getOrElse(o2.value))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: State.Claim.Input =>
           val r0: TPostResult[Context, State.Value] = transformStateValue(preR.ctx, o2.value)
           if (hasChanged || r0.resultOpt.nonEmpty)
             TPostResult(r0.ctx, Some(o2(value = r0.resultOpt.getOrElse(o2.value))))

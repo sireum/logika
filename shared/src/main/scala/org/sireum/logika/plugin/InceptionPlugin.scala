@@ -319,6 +319,7 @@ import InceptionPlugin._
             reporter.error(w.posOpt, Logika.kind, s"Cannot use compound proof step $w as an argument for inception")
             ok = F
           case _ =>
+            reporter.error(w.posOpt, Logika.kind, s"Could not find proof step $w")
             ok = F
         }
       }

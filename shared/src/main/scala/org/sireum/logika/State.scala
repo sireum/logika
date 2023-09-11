@@ -386,6 +386,20 @@ object State {
       }
     }
 
+    @datatype class Input(val isLocal: B, isSpec: B, val owner: ISZ[String], val id: String, val value: Value,
+                          val pos: Position) extends Claim {
+      @pure override def toRawST: ST = {
+        return value.toRawST
+      }
+
+      override def toSTs(claimSTs: Util.ClaimSTs, numMap: Util.NumMap, defs: HashMap[Z, ISZ[Claim.Let]]): Unit = {
+      }
+
+      @pure def types: ISZ[AST.Typed] = {
+        return ISZ(value.tipe)
+      }
+    }
+
     @datatype class Prop(val isPos: B, val value: Value.Sym) extends Claim {
       @pure override def toRawST: ST = {
         return if (isPos) value.toRawST else st"¬(${value.toRawST})"

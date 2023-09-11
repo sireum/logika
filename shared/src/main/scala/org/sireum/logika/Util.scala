@@ -590,6 +590,7 @@ object Util {
         case _: State.Claim.Let.Name => return F
         case _: State.Claim.Custom => return F
         case _: State.Claim.Old => return F
+        case _: State.Claim.Input => return F
         case _ => return T
       }
     }
@@ -1608,6 +1609,26 @@ object Util {
     }
 
     def toExp(claim: State.Claim): Option[AST.Exp] = {
+      def toOldOrInput(isOld: B, isLocal: B, isSpec: B, owner: ISZ[String], id: String, value: State.Value, pos: Position): Option[AST.Exp] = {
+        val posOpt = Option.some(pos)
+        val tOpt = Option.some(value.tipe)
+        val exp: AST.Exp = if (isLocal) {
+          if (id == "this") {
+            AST.Exp.This(AST.TypedAttr(posOpt, tOpt))
+          } else {
+            AST.Exp.Ident(AST.Id(id, AST.Attr(posOpt)), AST.ResolvedAttr(posOpt,
+              Some(AST.ResolvedInfo.LocalVar(owner, AST.ResolvedInfo.LocalVar.Scope.Current, isSpec, F, id)), tOpt))
+          }
+        } else {
+          th.nameToExp(owner :+ id, pos).asExp
+        }
+        val r: Option[AST.Exp] = valueToExp(value) match {
+          case Some(valueExp) => Some(equate(value.tipe,
+            if (isOld) AST.Exp.Old(exp, AST.Attr(exp.posOpt)) else AST.Exp.Input(exp, AST.Attr(exp.posOpt)), valueExp))
+          case _ => None()
+        }
+        return r
+      }
       if (plugins.nonEmpty) {
         for (p <- plugins if p.canHandleExp(claim)) {
           return p.handleExp(this, claim)
@@ -1708,25 +1729,10 @@ object Util {
             case _ => return None()
           }
         case claim: State.Claim.Let => return letToExp(claim)
-        case claim: State.Claim.Old =>
-          val posOpt = Option.some(claim.pos)
-          val tOpt = Option.some(claim.value.tipe)
-          val oldExp: AST.Exp = if (claim.isLocal) {
-            if (claim.id == "this") {
-              AST.Exp.This(AST.TypedAttr(posOpt, tOpt))
-            } else {
-              AST.Exp.Ident(AST.Id(claim.id, AST.Attr(posOpt)), AST.ResolvedAttr(posOpt,
-                Some(AST.ResolvedInfo.LocalVar(claim.owner, AST.ResolvedInfo.LocalVar.Scope.Current, claim.isSpec, F,
-                  claim.id)), tOpt))
-            }
-          } else {
-            th.nameToExp(claim.owner :+ claim.id, claim.pos).asExp
-          }
-          val r: Option[AST.Exp] = valueToExp(claim.value) match {
-            case Some(oldValue) => Some(equate(claim.value.tipe, AST.Exp.Old(oldExp, AST.Attr(oldExp.posOpt)), oldValue))
-            case _ => None()
-          }
-          return r
+        case claim: State.Claim.Old => return toOldOrInput(T, claim.isLocal, claim.isSpec, claim.owner, claim.id,
+          claim.value, claim.pos)
+        case claim: State.Claim.Input => return toOldOrInput(F, claim.isLocal, claim.isSpec, claim.owner, claim.id,
+          claim.value, claim.pos)
         case _: State.Claim.Label => return None()
         case _: State.Claim.Custom => return None()
         case claim => halt(s"Infeasible: $claim")
@@ -1943,14 +1949,14 @@ object Util {
       mctx.modObjectVarMap(TypeChecker.emptySubstMap).entries).entries) {
       val (ids, (t, posOpt)) = p
       val pos = posOpt.get
-      val owner: ISZ[String] = l.th.nameMap.get(ids).get match {
-        case info: Info.Var => info.owner
-        case info: Info.SpecVar => info.owner
+      val (owner, isSpec): (ISZ[String], B) = l.th.nameMap.get(ids).get match {
+        case info: Info.Var => (info.owner, F)
+        case info: Info.SpecVar => (info.owner, T)
         case info => halt(s"Unexpected: $info")
       }
       objectNames = objectNames + owner ~> pos
       val (s1, sym) = nameIntro(posOpt.get, s0, ids, t, posOpt)
-      s0 = s1
+      s0 = s1.addClaim(State.Claim.Input(F, isSpec, owner, ids(ids.size - 1), sym, sym.pos))
       if (!isHelper) {
         s0 = assumeValueInv(l, smt2, cache, T, s0, sym, pos, reporter)
       }
@@ -1963,10 +1969,14 @@ object Util {
       }
     }
     var fieldVarInMap = mctx.fieldVarInMap
+    var localInMap = mctx.localInMap
+    var thisAdded = F
     mctx.receiverTypeOpt match {
       case Some(receiverType) =>
         val (s1, thiz) = idIntro(mctx.posOpt.get, s0, mctx.name, "this", receiverType, mctx.posOpt)
-        s0 = s1
+        localInMap = localInMap + "this" ~> thiz
+        s0 = s1.addClaim(State.Claim.Input(T, F, mctx.name, "this", thiz, thiz.pos))
+        thisAdded = T
         for (p <- mctx.fieldVarMap(TypeChecker.emptySubstMap).entries) {
           val (id, (t, posOpt)) = p
           val (s2, sym) = s0.freshSym(t, posOpt.get)
@@ -1975,21 +1985,21 @@ object Util {
         }
       case _ =>
     }
-    var localInMap = mctx.localInMap
     for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
       val (mname, id, t) = v
       val posOpt = id.attr.posOpt
       if (id.value != "this") {
         val (s1, sym) = idIntro(posOpt.get, s0, mname, id.value, t, posOpt)
-        s0 = s1
+        s0 = s1.addClaim(State.Claim.Input(T, F, mname, id.value, sym, sym.pos))
         if (!isHelper) {
           s0 = assumeValueInv(l, smt2, cache, T, s0, sym, posOpt.get, reporter)
         }
         localInMap = localInMap + id.value ~> sym
-      } else {
-        val (s1, sym) = idIntro(posOpt.get, s0, mname, id.value, t, None())
-        s0 = s1
+      } else if (!thisAdded) {
+        val (s1, sym) = idIntro(posOpt.get, s0, mname, id.value, t, mctx.posOpt)
+        s0 = s1.addClaim(State.Claim.Input(T, F, mname, id.value, sym, sym.pos))
         localInMap = localInMap + id.value ~> sym
+        thisAdded = T
       }
     }
     return (l(context = l.context(methodOpt = Some(mctx(objectVarInMap = objectVarInMap, fieldVarInMap = fieldVarInMap,

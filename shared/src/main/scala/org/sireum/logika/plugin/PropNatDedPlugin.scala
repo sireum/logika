@@ -102,9 +102,9 @@ import org.sireum.logika.Logika.Reporter
 
     def implyH(opKind: AST.ResolvedInfo.BuiltIn.Kind.Type, opDesc: String): B = {
       val claim: AST.Exp.Binary = step.claim match {
-        case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.BinaryImply) => stepClaim
+        case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, opKind) => stepClaim
         case _ =>
-          reporter.error(step.claim.posOpt, Logika.kind, s"Expecting an $opDesc")
+          reporter.error(step.claim.posOpt, Logika.kind, s"Expecting $opDesc")
           return F
       }
       val ISZ(subProofNo) = args
@@ -168,11 +168,11 @@ import org.sireum.logika.Logika.Reporter
           }
         }
       case string"ImplyI" =>
-        if(!implyH(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply, "implication")) {
+        if(!implyH(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply, "an implication")) {
           return emptyResult
         }
       case string"SImplyI" =>
-        if (!implyH(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply, "conditional implication")) {
+        if (!implyH(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply, "a conditional implication")) {
           return emptyResult
         }
       case string"NegI" =>

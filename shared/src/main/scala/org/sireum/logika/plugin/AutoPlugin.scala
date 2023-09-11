@@ -94,9 +94,13 @@ object AutoPlugin {
       e match {
         case _: AST.Exp.Quant => fail(e.posOpt, "Algebra cannot be used with quantifiers")
         case _: AST.Exp.LitZ =>
-        case _: AST.Exp.Ident =>
+        case AST.Exp.LitB(F) =>
+        case _: AST.Exp.Input =>
+        case _: AST.Exp.Old =>
+        case e: AST.Exp.Ident =>
           e.typedOpt.get match {
             case AST.Typed.z =>
+            case AST.Typed.b if e.resOpt.get == AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, "F") =>
             case t if isSeq(t) =>
             case _ => fail(e.posOpt, s"Algebra cannot be used on expression of type '${e.typedOpt.get}'")
           }
@@ -121,11 +125,16 @@ object AutoPlugin {
           e.ident.resOpt match {
             case Some(res: AST.ResolvedInfo.Method) if res.mode == AST.MethodMode.Spec =>
             case _ =>
-              fail(e.ident.posOpt, s"Algebra cannot be used with non-spec method invocation")
+            e.attr.resOpt match {
+              case Some(res: AST.ResolvedInfo.Method) if res.mode == AST.MethodMode.Select ||
+                res.mode == AST.MethodMode.Store =>
+              case _ =>
+                failE()
+            }
           }
         case _ => failE()
       }
-      return super.postExp(e)
+      return MNone()
     }
 
     def fail(posOpt: Option[message.Position], msg: String): Unit = {

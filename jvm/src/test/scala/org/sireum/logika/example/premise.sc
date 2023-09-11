@@ -75,7 +75,7 @@ def testName(): Unit = {
 
   Deduce(
     //@formatter:off
-    Old(Foo.y) == At(Foo.y, 0) + 1   by Premise,
+    Old(Foo.y) == In(Foo.y) + 1      by Premise,
     Foo.y == Old(Foo.y) + 2          by Premise
     //@formatter:on
   )
@@ -91,7 +91,7 @@ def testIdString(): Unit = {
   Deduce(
     //@formatter:off
     At[Z]("addY.n", 0) == 0                         by Premise,
-    y == At(y, 0) + 0                               by Premise
+    y == In(y) + 0                                  by Premise
     //@formatter:on
   )
 
@@ -101,8 +101,8 @@ def testIdString(): Unit = {
     //@formatter:off
     At[Z]("addY.n", 0) == 0                         by Premise,
     At[Z]("addY.n", 1) == 1                         by Premise,
-    At(y, 1) == At(y, 0) + At[Z]("addY.n", 0)       by Premise,
-    y == At(y, 0) + 0 + 1                           by Premise
+    At(y, 0) + 0 == In(y) + 0                       by Premise,
+    y == In(y) + 0 + 1                              by Premise
     //@formatter:on
   )
 }
@@ -118,7 +118,7 @@ def testNameString(): Unit = {
   Deduce(
     //@formatter:off
     At[Z]("addFooY.n", 0) == 0                                 by Premise,
-    Foo.y == At(Foo.y, 0) + 0                                  by Premise
+    Foo.y == In(Foo.y) + 0                                     by Premise
     //@formatter:on
   )
 
@@ -128,8 +128,8 @@ def testNameString(): Unit = {
     //@formatter:off
     At[Z]("addFooY.n", 0) == 0                                 by Premise,
     At[Z]("addFooY.n", 1) == 1                                 by Premise,
-    At(Foo.y, 1) == At(Foo.y, 0) + 0                           by Premise,
-    Foo.y == At(Foo.y, 0) + 0 + 1                              by Premise
+    At(Foo.y, 0) + 0 == In(Foo.y) + 0                          by Premise,
+    Foo.y == In(Foo.y) + 0 + 1                                 by Premise
     //@formatter:on
   )
 }

@@ -1563,6 +1563,7 @@ object Smt2 {
           case _: State.Claim.Eq =>
           case _: State.Claim.Custom =>
           case _: State.Claim.Old =>
+          case _: State.Claim.Input =>
         }
       }
     }
@@ -1937,6 +1938,7 @@ object Smt2 {
         case _: State.Claim.Eq => return acc
         case _: State.Claim.Custom => return acc
         case _: State.Claim.Old => return acc
+        case _: State.Claim.Input => return acc
       }
     }
     val lids = collectLids(claims) -- declIds.keys
@@ -1961,6 +1963,7 @@ object Smt2 {
           case claim: State.Claim.Eq => rest = rest :+ claim
           case claim: State.Claim.Custom => rest = rest :+ claim
           case _: State.Claim.Old =>
+          case _: State.Claim.Input =>
         }
       }
       var body: ST =
@@ -2194,6 +2197,8 @@ object Smt2 {
         return None()
       case _: State.Claim.Old =>
         return None()
+      case _: State.Claim.Input =>
+        return None()
       case c: State.Claim.If =>
         return Some(
           st"""(ite ${v2st(config, c.cond, reporter)}
@@ -2322,6 +2327,7 @@ object Smt2 {
       case _: State.Claim.Label => return ISZ()
       case _: State.Claim.Eq => return ISZ()
       case _: State.Claim.Old => return ISZ()
+      case _: State.Claim.Input => return ISZ()
       case c: State.Claim.Prop =>
         val vST = v2ST(config, c.value, reporter)
         return ISZ[(String, ST)](vST.render ~> st"(declare-const $vST B)")
