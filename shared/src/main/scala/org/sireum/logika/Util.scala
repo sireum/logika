@@ -799,9 +799,9 @@ object Util {
             case e: AST.Exp.Binary if e.attr.resOpt == equivResOpt || e.attr.resOpt == eqResOpt &&
               th.isSubstitutableWithoutSpecVars(e.right.typedOpt.get) =>
               (e.left, e.right) match {
-                case (left: AST.Exp.At, right) =>
+                case (left: AST.Exp.At, right) if left != right =>
                   atSubstMap = atSubstMap + left ~> right
-                case (left, right: AST.Exp.At) =>
+                case (left, right: AST.Exp.At) if left != right =>
                   atSubstMap = atSubstMap + right ~> left
                 case (_, _) =>
               }
