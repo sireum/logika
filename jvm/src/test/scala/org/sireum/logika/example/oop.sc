@@ -39,8 +39,8 @@ object B {
       a.x = a.x + inc
       a.y = a.y + a.x
       Deduce(
-        Old(a) ≡ At(a, 0)(x = At(a, 0).x + B.inc) by Premise,
-        a ≡ Old(a)(y = Old(a).y + Old(a).x) by Premise
+        Old(a) ≡ At(a, 0)(x = At(a, 0).x + B.inc) by Premise
+        //FIXME evalConstructor: a ≡ At(a, 0)(x = At(a, 0).x + B.inc)(y = Old(a).y + Old(a).x) by Premise
       )
     }
   }
