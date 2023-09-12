@@ -89,8 +89,10 @@ import org.sireum.ops.ISZOps
                 val exp = ySpc.exp
                 val s = AST.Util.ExpSubstitutor(HashMap.empty[AST.Exp, AST.Exp] + sub ~> repl)
                 val subResult = s.transformExp(exp).getOrElseEager(exp)
-                if (subResult != step.claim) {
-                  val msg = s"Claim ${step.id} does not match the substituted expression of ${res.id} of $x for $y"
+                if (logika.th.normalizeExp(subResult) != logika.th.normalizeExp(step.claim)) {
+                  val msg =
+                    st"""Claim ${step.id} does not match the substituted expression of ${res.id} of $x for $y, i.e.,:
+                        |$subResult""".render
                   reporter.error(step.claim.posOpt, Logika.kind, msg)
                   return emptyResult
                 } else {
