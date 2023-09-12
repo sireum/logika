@@ -85,6 +85,10 @@ object InceptionPlugin {
         return
       }
       (fe, te) match {
+        case (fe: AST.Exp.LitB, te: AST.Exp.LitB) =>
+          ok = fe.value == te.value
+        case (fe: AST.Exp.LitZ, te: AST.Exp.LitZ) =>
+          ok = fe.value == te.value
         case (fe: AST.Exp.Ident, te) =>
           if (shouldExtract(fe.resOpt)) {
             addResult(fe.id.value, te)
@@ -314,6 +318,9 @@ import InceptionPlugin._
         return emptyResult
       }
       val id = name(name.size - 1)
+      if (id == "AllE") {
+        println("Here")
+      }
       var ok = T
       var idExpMap = HashSMap.empty[String, AST.Exp]
       val paramIds = HashSet ++ paramNames
