@@ -59,6 +59,28 @@ object InceptionPlugin {
             ok = F
         }
       }
+
+      def recQuant(fq: AST.Exp.QuantType, tq: AST.Exp.QuantType): Unit = {
+        var fen = fq
+        var ten = tq
+        ok = fen.isForall == ten.isForall
+        if (fen.fun.params.size != ten.fun.params.size) {
+          val n: Z = if (fen.fun.params.size < ten.fun.params.size) fen.fun.params.size else ten.fun.params.size
+          fen = if (fen.fun.params.size == n) fen else
+            fen(fun = fen.fun(params = ops.ISZOps(fen.fun.params).slice(0, n), exp = AST.Stmt.Expr(
+              AST.Exp.QuantType(fen.isForall, AST.Exp.Fun(fen.fun.context,
+                ops.ISZOps(fen.fun.params).slice(n, fen.fun.params.size), fen.fun.exp, fen.fun.attr), fen.attr),
+              AST.TypedAttr(fen.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
+          ten = if (ten.fun.params.size == n) fen else ten(fun = ten.fun(params =
+            ops.ISZOps(ten.fun.params).slice(0, n), exp = AST.Stmt.Expr(AST.Exp.QuantType(ten.isForall,
+            AST.Exp.Fun(ten.fun.context, ops.ISZOps(ten.fun.params).slice(n, ten.fun.params.size), ten.fun.exp,
+              ten.fun.attr), ten.attr), AST.TypedAttr(ten.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
+        }
+        if (!ok) {
+          return
+        }
+        recAssignExp(fen.fun.exp, ten.fun.exp)
+      }
       if (!ok) {
         return
       }
@@ -76,26 +98,12 @@ object InceptionPlugin {
           ok = fe.attr.resOpt == te.attr.resOpt
           rec(fe.left, te.left)
           rec(fe.right, te.right)
+        case (fe: AST.Exp.QuantType, te: AST.Exp.QuantRange) =>
+          recQuant(th.normalizeExp(fe).asInstanceOf[AST.Exp.QuantType],
+            th.normalizeExp(te).asInstanceOf[AST.Exp.QuantType])
         case (fe: AST.Exp.QuantType, te: AST.Exp.QuantType) =>
-          var fen = th.normalizeExp(fe).asInstanceOf[AST.Exp.QuantType]
-          var ten = th.normalizeExp(te).asInstanceOf[AST.Exp.QuantType]
-          ok = fen.isForall == ten.isForall
-          if (fen.fun.params.size != ten.fun.params.size) {
-            val n: Z = if (fen.fun.params.size < ten.fun.params.size) fen.fun.params.size else ten.fun.params.size
-            fen = if (fen.fun.params.size == n) fen else
-              fen(fun = fen.fun(params = ops.ISZOps(fen.fun.params).slice(0, n), exp = AST.Stmt.Expr(
-                AST.Exp.QuantType(fen.isForall, AST.Exp.Fun(fen.fun.context,
-                  ops.ISZOps(fen.fun.params).slice(n, fen.fun.params.size), fen.fun.exp, fen.fun.attr), fen.attr),
-                AST.TypedAttr(fen.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
-            ten = if (ten.fun.params.size == n) fen else ten(fun = ten.fun(params =
-              ops.ISZOps(ten.fun.params).slice(0, n), exp = AST.Stmt.Expr(AST.Exp.QuantType(ten.isForall,
-              AST.Exp.Fun(ten.fun.context, ops.ISZOps(ten.fun.params).slice(n, ten.fun.params.size), ten.fun.exp,
-                ten.fun.attr), ten.attr), AST.TypedAttr(ten.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
-          }
-          if (!ok) {
-            return
-          }
-          recAssignExp(fen.fun.exp, ten.fun.exp)
+          recQuant(th.normalizeExp(fe).asInstanceOf[AST.Exp.QuantType],
+            th.normalizeExp(te).asInstanceOf[AST.Exp.QuantType])
         case (fe: AST.Exp.Invoke, te) if ids.contains(fe.ident.id.value) =>
           val id = fe.ident.id.value
           val fcontext = ISZ(id)
