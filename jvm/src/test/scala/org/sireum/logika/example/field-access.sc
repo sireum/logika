@@ -30,11 +30,7 @@ Deduce(
   Old(baz) ≡ Baz(Foo(0), Bar(10), 100)(foo =
     Baz(Foo(0), Bar(10), 100).foo(x = 1)
   ) by Premise,
-  baz ≡ Baz(
-    Foo(1),
-    Baz(Foo(0), Bar(10), 100).bar,
-    Baz(Foo(0), Bar(10), 100).z
-  )(bar = Bar(2)) by Premise
+  baz ≡ Old(baz)(bar = Bar(2)) by Premise
 )
 assert(baz.foo.x == 1 & baz.bar.y == 2 & baz.z == 100)
 
