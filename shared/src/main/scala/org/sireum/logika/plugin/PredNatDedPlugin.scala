@@ -80,10 +80,12 @@ object PredNatDedPlugin {
     res.id match {
       case string"AllI" =>
         val quant: AST.Exp.QuantType = step.claim match {
-          case stepClaim@AST.Exp.QuantType(_, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)) if stepClaim.isForall =>
+          case stepClaim@AST.Exp.QuantType(T, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)) =>
+            logika.th.normalizeQuantType(stepClaim).asInstanceOf[AST.Exp.QuantType]
+          case stepClaim@AST.Exp.QuantRange(T, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)) =>
             logika.th.normalizeQuantType(stepClaim).asInstanceOf[AST.Exp.QuantType]
           case _ =>
-            reporter.error(step.claim.posOpt, Logika.kind, "Expecting a simple universal quantified type claim")
+            reporter.error(step.claim.posOpt, Logika.kind, "Expecting a simple universal quantified type/range claim")
             return emptyResult
         }
         val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
@@ -150,9 +152,12 @@ object PredNatDedPlugin {
         }
         val ISZ(existsP, subProofNo) = argsOpt.get
         val quant: AST.Exp.QuantType = spcMap.get(existsP) match {
-          case Some(StepProofContext.Regular(_, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) => q
+          case Some(StepProofContext.Regular(_, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) =>
+            logika.th.normalizeQuantType(q).asInstanceOf[AST.Exp.QuantType]
+          case Some(StepProofContext.Regular(_, q@AST.Exp.QuantRange(F, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) =>
+            logika.th.normalizeQuantType(q).asInstanceOf[AST.Exp.QuantType]
           case _ =>
-            reporter.error(existsP.posOpt, Logika.kind, "Expecting a simple existential quantified type claim")
+            reporter.error(existsP.posOpt, Logika.kind, "Expecting a simple existential quantified type/range claim")
             return emptyResult
         }
         if (quant.fun.params(0).typedOpt != just.invoke.targs(0).typedOpt) {
