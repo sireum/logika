@@ -132,7 +132,22 @@ import org.sireum.logika.Logika.Reporter
       case string"OrE" =>
         val ISZ(orClaimNo, leftSubProofNo, rightSubProofNo) = args
         val orClaim: AST.Exp.Binary = spcMap.get(orClaimNo) match {
-          case Some(StepProofContext.Regular(_, exp: AST.Exp.Binary, _)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) => exp
+          case Some(StepProofContext.Regular(_, exp: AST.Exp.Binary, _)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) =>
+            exp
+          case Some(StepProofContext.Regular(_, exp: AST.Exp.Binary, _)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryLe) =>
+            AST.Exp.Binary(
+              exp(op = AST.Exp.BinaryOp.Lt, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLt)))),
+              AST.Exp.BinaryOp.Or,
+              exp(op = AST.Exp.BinaryOp.Eq, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)))),
+              AST.ResolvedAttr(exp.posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)), AST.Typed.bOpt)
+            )
+          case Some(StepProofContext.Regular(_, exp: AST.Exp.Binary, _)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryGe) =>
+            AST.Exp.Binary(
+              exp(op = AST.Exp.BinaryOp.Gt, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryGt)))),
+              AST.Exp.BinaryOp.Or,
+              exp(op = AST.Exp.BinaryOp.Eq, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)))),
+              AST.ResolvedAttr(exp.posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)), AST.Typed.bOpt)
+            )
           case _ =>
             reporter.error(orClaimNo.posOpt, Logika.kind, s"Expecting a proof step with a disjunction binary expression claim")
             return emptyResult
