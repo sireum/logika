@@ -303,37 +303,43 @@ object AutoPlugin {
           }
           return Plugin.Result(T, state.nextFresh, spc.claims)
         case _ =>
-          val (pathConditions, _) = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos,
-            logika.context.methodName, state.claims, logika.th, logika.config.atLinesFresh)
-          val normPathConditions = HashSSet.empty[AST.Exp] ++ (for (e <- pathConditions) yield logika.th.normalizeExp(e))
-          if (normPathConditions.contains(claimNorm)) {
-            if (logika.config.detailedInfo) {
-              reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
-                st"""Accepted because the stated claim is in the path conditions:
-                    |{
-                    |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
-                    |}""".render)
-            }
-            val (stat, nextFresh, premises, conclusion) =
-              logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-            return Plugin.Result(stat, nextFresh, premises :+ conclusion)
-          } else if (id == "Premise") {
-            AutoPlugin.detectOrIntro(logika.th, step.claim, pathConditions) match {
-              case Some(acceptMsg) =>
+          logika.context.pathConditionsOpt match {
+            case Some(pcs@Logika.PathConditions(_, pathConditions)) =>
+              val normPathConditions = HashSSet.empty[AST.Exp] ++ pcs.normalize
+              if (normPathConditions.contains(claimNorm)) {
                 if (logika.config.detailedInfo) {
-                  reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
+                  reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+                    st"""Accepted because the stated claim is in the path conditions:
+                        |{
+                        |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
+                        |}""".render)
                 }
                 val (stat, nextFresh, premises, conclusion) =
                   logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
                 return Plugin.Result(stat, nextFresh, premises :+ conclusion)
-              case _ =>
-                reporter.error(posOpt, Logika.kind,
-                  st"""The stated claim has not been proven before nor is a premise in:
-                      |{
-                      |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
-                      |}""".render)
+              } else if (id == "Premise") {
+                AutoPlugin.detectOrIntro(logika.th, step.claim, pathConditions) match {
+                  case Some(acceptMsg) =>
+                    if (logika.config.detailedInfo) {
+                      reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
+                    }
+                    val (stat, nextFresh, premises, conclusion) =
+                      logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+                    return Plugin.Result(stat, nextFresh, premises :+ conclusion)
+                  case _ =>
+                    reporter.error(posOpt, Logika.kind,
+                      st"""The stated claim has not been proven before nor is a premise in:
+                          |{
+                          |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
+                          |}""".render)
+                    return Plugin.Result(F, state.nextFresh, ISZ())
+                }
+              }
+            case _ =>
+              if (id == "Premise") {
+                reporter.error(posOpt, Logika.kind, "The stated claim has not been proven before")
                 return Plugin.Result(F, state.nextFresh, ISZ())
-            }
+              }
           }
       }
     }

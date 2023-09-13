@@ -56,6 +56,13 @@ object Logika {
                          val bindings: Bindings,
                          val bindingIdMap: HashMap[String, (Z, ISZ[Position])])
 
+  @datatype class PathConditions(val th: TypeHierarchy, val value: ISZ[AST.Exp]) {
+    @memoize def normalize: ISZ[AST.Exp] = {
+      return for (e <- value) yield th.normalizeExp(e)
+    }
+  }
+
+
   @msig trait Cache {
     def clearTransition(): Unit
 
@@ -1403,13 +1410,13 @@ import Util._
       def evalCond(kind: AST.ResolvedInfo.BuiltIn.Kind.Type): ISZ[(State, State.Value)] = {
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
-            return evalIfExp("&&", F, split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(F, AST.Attr(exp.left.posOpt)),
+            return evalIfExp("&&", split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(F, AST.Attr(exp.left.posOpt)),
               AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr =>
-            return evalIfExp("||", F, split, AST.Exp.If(exp.left, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)), exp.right,
+            return evalIfExp("||", split, AST.Exp.If(exp.left, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)), exp.right,
               AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply =>
-            return evalIfExp("-->:", F, split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)),
+            return evalIfExp("-->:", split, AST.Exp.If(exp.left, exp.right, AST.Exp.LitB(T, AST.Attr(exp.left.posOpt)),
               AST.TypedAttr(exp.posOpt, exp.typedOpt)))
           case _ => halt("Infeasible")
         }
@@ -3196,7 +3203,7 @@ import Util._
       return if (r.size > 1) r else for (p <- r) yield (p._1(nextFresh = nextFresh), p._2)
     }
 
-    def evalIfExp(construct: String, disableSat: B, sp: Split.Type, ifExp: AST.Exp.If): ISZ[(State, State.Value)] = {
+    def evalIfExp(construct: String, sp: Split.Type, ifExp: AST.Exp.If): ISZ[(State, State.Value)] = {
       var r = ISZ[(State, State.Value)]()
       val shouldSplit: B = sp match {
         case Split.Default => config.splitAll || config.splitIf
@@ -3211,9 +3218,9 @@ import Util._
           val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
-          val thenBranch = disableSat || smt2.sat(context.methodName, config, cache, T,
+          val thenBranch = !rtCheck || smt2.sat(context.methodName, config, cache, T,
             s"$construct-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
-          val elseBranch = disableSat || smt2.sat(context.methodName, config, cache, T,
+          val elseBranch = !rtCheck || smt2.sat(context.methodName, config, cache, T,
             s"$construct-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
@@ -3410,7 +3417,7 @@ import Util._
         case e: AST.Exp.Select => return evalSelect(e)
         case e: AST.Exp.Unary => return evalUnaryExp(e)
         case e: AST.Exp.Binary => return evalBinaryExp(e)
-        case e: AST.Exp.If => return evalIfExp("if", F, split, e)
+        case e: AST.Exp.If => return evalIfExp("if", split, e)
         case e: AST.Exp.Tuple => return evalTupleExp(e)
         case e: AST.Exp.Invoke =>
           e.attr.resOpt.get match {
@@ -4515,7 +4522,7 @@ import Util._
           reporter.error(step.claim.posOpt, Logika.kind, "The claim is not proven in the assertion's sub-proof")
           return (s0(status = State.Status.Error), stateMap._2)
         }
-        val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
+        val (ok, nextFresh, claims, claim) = evalRegularStepClaimRtCheck(smt2, cache, F, s0, step.claim, step.id.posOpt, reporter)
         return (s0(status = State.statusOf(ok), nextFresh = nextFresh,
           claims = (s0.claims ++ claims) :+ claim),
           m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
@@ -4902,8 +4909,12 @@ import Util._
     def evalDeduceSteps(s0: State, deduceStmt: AST.Stmt.DeduceSteps): ISZ[State] = {
       var p = (s0, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
       var stepIds = ISZ[AST.ProofAst.StepId]()
+      val lpcs = this
+      val l = lpcs(context = lpcs.context(pathConditionsOpt = Some(
+        Logika.PathConditions(th, Util.claimsToExps(jescmPlugins._4, deduceStmt.posOpt.get, context.methodName,
+          s0.claims, th, config.atLinesFresh)._1))))
       for (step <- deduceStmt.steps if p._1.ok) {
-        p = evalProofStep(smt2, cache, p, step, reporter)
+        p = l.evalProofStep(smt2, cache, p, step, reporter)
         step match {
           case step: AST.ProofAst.Step.Regular if p._1.ok => stepIds = stepIds :+ step.id
           case _ =>
@@ -4921,6 +4932,11 @@ import Util._
     }
 
     def evalDeduceSequent(s0: State, deduceStmt: AST.Stmt.DeduceSequent): ISZ[State] = {
+      val thisL = this
+      val l = thisL(context = thisL.context(pathConditionsOpt = Some(
+        Logika.PathConditions(th, Util.claimsToExps(jescmPlugins._4, deduceStmt.posOpt.get, context.methodName,
+          s0.claims, th, config.atLinesFresh)._1))))
+
       @pure def premises(st: State, sequent: AST.Sequent): (State, HashSMap[AST.ProofAst.StepId, StepProofContext]) = {
         var r = HashSMap.empty[AST.ProofAst.StepId, StepProofContext]
         var id = AST.ProofAst.StepId.Num(-1, AST.Attr(None()))
@@ -4968,7 +4984,7 @@ import Util._
         } else {
           var p = premises(st0, sequent)
           for (step <- sequent.steps if p._1.ok) {
-            p = evalProofStep(smt2, cache, p, step, reporter)
+            p = l.evalProofStep(smt2, cache, p, step, reporter)
           }
           st0 = s0(status = p._1.status, nextFresh = p._1.nextFresh, claims = s0.claims)
           val provenClaims = HashSet ++ (for (spc <- p._2.values if spc.isInstanceOf[StepProofContext.Regular]) yield
@@ -4995,7 +5011,6 @@ import Util._
                 sequent.premises(0)), AST.Exp.BinaryOp.Imply, AST.ResolvedInfo.BuiltIn.Kind.BinaryImply,
               sequent.conclusion, sequent.attr.posOpt)
           }
-          val thisL = this
           st0 = thisL(config = config(sat = F)).evalAssume(smt2, cache, F, s"Sequent #$i", st0, seqClaim, seqClaim.posOpt, reporter)._1
           i = i + 1
         }
