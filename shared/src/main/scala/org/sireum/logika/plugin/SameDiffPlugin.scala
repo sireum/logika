@@ -95,7 +95,7 @@ import org.sireum.message.Position
       for (stepNo <- just.witnesses if ok) {
         spcMap.get(stepNo) match {
           case Some(spc: StepProofContext.Regular) =>
-            val ISZ((s2, v)) = logika.evalExp(Logika.Split.Disabled, psmt2, cache, T, s1, spc.exp, reporter)
+            val ISZ((s2, v)) = logika.evalExp(Logika.Split.Disabled, psmt2, cache, F, s1, spc.exp, reporter)
             val (s3, sym) = logika.value2Sym(s2, v, spc.exp.posOpt.get)
             s1 = s3.addClaim(State.Claim.Prop(T, sym))
           case Some(_) =>

@@ -530,6 +530,7 @@ object Util {
                              val context: ISZ[String],
                              val th: TypeHierarchy,
                              val includeFreshLines: B,
+                             val atRewrite: B,
                              val letMap: HashMap[Z, HashSSet[State.Claim.Let]],
                              val eqMap: HashMap[Z, HashSSet[State.Claim.Eq]],
                              var atPossMap: HashMap[ClaimsToExps.AtPossKey, HashMap[ISZ[Position], HashMap[Z, (Z, State.Value.Sym)]]]) {
@@ -751,7 +752,7 @@ object Util {
     }
 
     @pure def simplify(cs: ISZ[AST.Exp]): ISZ[AST.Exp] = {
-      var rs = HashSSet.empty[AST.Exp]
+      var rs = ISZ[AST.Exp]()
       var ipMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
       var inpMap = HashSMap.empty[AST.Exp, HashMap[AST.Exp, ISZ[AST.Exp]]]
       for (exp <- cs) {
@@ -768,9 +769,9 @@ object Util {
                 ipMap.get(th.normalizeExp(left.exp)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
                   case Some(es) =>
                     rs = rs -- es
-                    rs = rs + exp.right
+                    rs = rs :+ exp.right
                   case _ =>
-                    rs = rs + exp
+                    rs = rs :+ exp
                 }
               case left =>
                 ipMap = {
@@ -782,23 +783,22 @@ object Util {
                 inpMap.get(th.normalizeExp(left)).getOrElse(HashMap.empty).get(th.normalizeExp(exp.right)) match {
                   case Some(es) =>
                     rs = rs -- es
-                    rs = rs + exp.right
+                    rs = rs :+ exp.right
                   case _ =>
-                    rs = rs + exp
+                    rs = rs :+ exp
                 }
             }
-          case _ => rs = rs + exp
+          case _ => rs = rs :+ exp
         }
       }
-      var changed = T
-      var r = rs.elements
+      var changed = atRewrite
+      var r = rs
       while (changed) {
         changed = F
         var atSubstMap = HashMap.empty[AST.Exp, AST.Exp]
         for (e <- r) {
           e match {
-            case e: AST.Exp.Binary if e.attr.resOpt == equivResOpt || e.attr.resOpt == eqResOpt &&
-              th.isSubstitutableWithoutSpecVars(e.right.typedOpt.get) =>
+            case e: AST.Exp.Binary if isEquivResOpt(th, e.attr.resOpt, e.right.typedOpt.get) =>
               (e.left, e.right) match {
                 case (left: AST.Exp.At, right) if left != right =>
                   atSubstMap = atSubstMap + left ~> right
@@ -830,6 +830,9 @@ object Util {
     }
 
     @pure def rewriteOld(cs: ISZ[AST.Exp]): ISZ[AST.Exp] = {
+      if (!atRewrite) {
+        return cs
+      }
       def rewriteOldH(old: AST.Exp, e: AST.Exp): ISZ[AST.Exp] = {
         val map = HashMap.empty[AST.Exp, AST.Exp] + e ~> old
         val es = AST.Util.ExpSubstitutor(map)
@@ -883,10 +886,14 @@ object Util {
 
       let match {
         case let: State.Claim.Let.CurrentId =>
-          return Some(AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
-            symPosOpt,
-            Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
-            Some(sym.tipe))))
+          if (let.id == "Res" && context == let.context) {
+            return Some(AST.Exp.Result(None(), AST.TypedAttr(symPosOpt, Some(sym.tipe))))
+          } else {
+            return Some(AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
+              symPosOpt,
+              Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+              Some(sym.tipe))))
+          }
         case let: State.Claim.Let.CurrentName =>
           return Some(th.nameToExp(let.ids, symPos).asExp)
         case let: State.Claim.Let.Id =>
@@ -1008,7 +1015,9 @@ object Util {
             case AST.Exp.BinaryOp.RemoveAll if isS(let.left.tipe) => return sOp(let.op)
             case _ => halt(s"Infeasible: ${let.op}")
           }
-          (valueToExp(let.left), valueToExp(let.right)) match {
+          val leftOpt = valueToExp(let.left)
+          val rightOpt = valueToExp(let.right)
+          (leftOpt, rightOpt) match {
             case (Some(left), Some(right)) =>
               kind match {
                 case AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv => return Some(equate(let.left.tipe, left, right))
@@ -1740,16 +1749,17 @@ object Util {
     }
 
     @pure def translate(claims: ISZ[State.Claim]): ISZ[AST.Exp] = {
-      var r = HashSSet.empty[AST.Exp]
+      var r = ISZ[AST.Exp]()
 
-      for (claim <- claims if !ignore(claim)) {
-        toExp(claim) match {
-          case Some(exp) if exp != trueLit => r = r + exp
+      for (i <- 0 until claims.size if !ignore(claims(i))) {
+        toExp(claims(i)) match {
+          case Some(exp) if exp != trueLit =>
+            r = r :+ exp
           case _ =>
         }
       }
 
-      return rewriteOld(simplify(r.elements))
+      return rewriteOld(simplify(r))
     }
   }
 
@@ -1902,6 +1912,15 @@ object Util {
   def checkMethodPost(logika: Logika, smt2: Smt2, cache: Logika.Cache, reporter: Reporter, states: ISZ[State],
                       methodPosOpt: Option[Position], invs: ISZ[Info.Inv], ensures: ISZ[AST.Exp], logPc: B, logRawPc: B,
                       postPosOpt: Option[Position]): ISZ[State] = {
+    var rwLocals = ISZ[AST.ResolvedInfo]()
+    logika.context.methodOpt match {
+      case Some(m) =>
+        val context = m.owner :+ m.id
+        for (p <- m.params) {
+          rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, p._1.value)
+        }
+      case _ =>
+    }
     var r = ISZ[State]()
     for (state <- states) {
       if (!state.ok) {
@@ -1922,7 +1941,7 @@ object Util {
           }
           if (!cacheHit) {
             val s0 = s
-            s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, reporter)._1
+            s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, rwLocals, reporter)._1
             if (logika.config.transitionCache && s.ok) {
               val cached = cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s0, ISZ(s), smt2)
               reporter.coverage(T, cached, e.posOpt.get)
@@ -2632,7 +2651,7 @@ object Util {
         val s3 = logika.evalAssumeH(T, smt2, cache, title, s2, sym, posOpt, reporter)
         return Some(s3)
       } else {
-        val s3 = logika.evalAssertH(T, smt2, cache, title, s2, sym, posOpt, reporter)
+        val s3 = logika.evalAssertH(T, smt2, cache, title, s2, sym, posOpt, ISZ(), reporter)
         if (!s3.ok) {
           return None()
         }
@@ -2783,29 +2802,30 @@ object Util {
   }
 
   @pure def createClaimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
-                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): ClaimsToExps = {
+                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B, atRewrite: B): ClaimsToExps = {
     val collector = LetEqNumMapCollector(HashMap.empty, HashMap.empty)
     for (claim <- claims) {
       collector.transformStateClaim(claim)
     }
-    val cs2es = ClaimsToExps(plugins, pos, context, th, includeFreshLines, collector.letMap, collector.eqMap,
+    val cs2es = ClaimsToExps(plugins, pos, context, th, includeFreshLines, atRewrite, collector.letMap, collector.eqMap,
       HashMap.empty)
     return cs2es
   }
 
   @pure def claimsToExps(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
-                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): (ISZ[AST.Exp], ClaimsToExps.AtMap) = {
-    val cs2es = createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines)
+                         claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B, atRewrite: B): (ISZ[AST.Exp], ClaimsToExps.AtMap) = {
+    val cs2es = createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines, atRewrite)
     val r = cs2es.translate(claims)
-    return (r, cs2es.atMap)
+    val rs = HashSSet ++ r
+    return (rs.elements, cs2es.atMap)
   }
 
   @pure def claimsToExpsLastOpt(plugins: ISZ[plugin.ClaimPlugin], pos: Position, context: ISZ[String],
-                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B): (ISZ[AST.Exp], Option[AST.Exp], ClaimsToExps.AtMap) = {
-    val cs2es = createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines)
-    val l = cs2es.translate(ops.ISZOps(claims).dropRight(1))
-    val r: ISZ[AST.Exp] = if (claims.nonEmpty) cs2es.translate(ISZ(claims(claims.size - 1))) else ISZ()
-    return (l, if (r.isEmpty) None() else Some(r(0)), cs2es.atMap)
+                               claims: ISZ[State.Claim], th: TypeHierarchy, includeFreshLines: B, atRewrite: B): (ISZ[AST.Exp], Option[AST.Exp], ClaimsToExps.AtMap) = {
+    val cs2es = createClaimsToExps(plugins, pos, context, claims, th, includeFreshLines, atRewrite)
+    val rOps = ops.ISZOps(cs2es.translate(claims))
+    val hasLast: B = if (claims.nonEmpty) cs2es.translate(ISZ(claims(claims.size - 1))).nonEmpty else F
+    return ((HashSSet ++ rOps.dropRight(1)).elements, if (hasLast) Some(rOps.s(rOps.s.size - 1)) else None(), cs2es.atMap)
   }
 
   @pure def saveLocals(depth: Z, s0: State, currentContext: ISZ[String]): (State, LocalSaveMap) = {
@@ -2949,5 +2969,19 @@ object Util {
     } else {
       return None()
     }
+  }
+
+  @pure def isEquivResOpt(th: TypeHierarchy, resOpt: Option[AST.ResolvedInfo], t: AST.Typed): B = {
+    resOpt match {
+      case Some(res: AST.ResolvedInfo.BuiltIn) =>
+        if (res.kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv) {
+          return T
+        }
+        if (res.kind == AST.ResolvedInfo.BuiltIn.Kind.BinaryEq && th.isSubstitutableWithoutSpecVars(t)) {
+          return T
+        }
+      case _ =>
+    }
+    return F
   }
 }

@@ -38,6 +38,18 @@ object OptionsCli {
 
   @datatype class HelpOption extends LogikaTopOption
 
+  @enum object LogikaBackground {
+    'Type
+    'Save
+    'Disabled
+  }
+
+  @enum object LogikaMode {
+    'Symexe
+    'Manual
+    'Auto
+  }
+
   @enum object LogikaFPRoundingMode {
     'NearestTiesToEven
     'NearestTiesToAway
@@ -61,6 +73,8 @@ object OptionsCli {
   @datatype class LogikaOption(
     val help: String,
     val args: ISZ[String],
+    val background: LogikaBackground.Type,
+    val mode: LogikaMode.Type,
     val smt2Caching: B,
     val transitionCaching: B,
     val infoFlow: B,
@@ -85,6 +99,7 @@ object OptionsCli {
     val logVc: B,
     val logVcDir: Option[String],
     val logDetailedInfo: B,
+    val logAtRewrite: B,
     val stats: B,
     val par: Option[Z],
     val branchParMode: LogikaBranchPar.Type,
@@ -109,6 +124,46 @@ object OptionsCli {
 import OptionsCli._
 
 @record class OptionsCli(val pathSep: C, reporter: message.Reporter) {
+
+  def parseLogikaBackgroundH(arg: String): Option[LogikaBackground.Type] = {
+    arg.native match {
+      case "type" => return Some(LogikaBackground.Type)
+      case "save" => return Some(LogikaBackground.Save)
+      case "disabled" => return Some(LogikaBackground.Disabled)
+      case s =>
+        reporter.error(None(), "OptionsCli", s"Expecting one of the following: { type, save, disabled }, but found '$s'.")
+        return None()
+    }
+  }
+
+  def parseLogikaBackground(args: ISZ[String], i: Z): Option[LogikaBackground.Type] = {
+    if (i >= args.size) {
+      reporter.error(None(), "OptionsCli", "Expecting one of the following: { type, save, disabled }, but none found.")
+      return None()
+    }
+    val r = parseLogikaBackgroundH(args(i))
+    return r
+  }
+
+  def parseLogikaModeH(arg: String): Option[LogikaMode.Type] = {
+    arg.native match {
+      case "symexe" => return Some(LogikaMode.Symexe)
+      case "manual" => return Some(LogikaMode.Manual)
+      case "auto" => return Some(LogikaMode.Auto)
+      case s =>
+        reporter.error(None(), "OptionsCli", s"Expecting one of the following: { symexe, manual, auto }, but found '$s'.")
+        return None()
+    }
+  }
+
+  def parseLogikaMode(args: ISZ[String], i: Z): Option[LogikaMode.Type] = {
+    if (i >= args.size) {
+      reporter.error(None(), "OptionsCli", "Expecting one of the following: { symexe, manual, auto }, but none found.")
+      return None()
+    }
+    val r = parseLogikaModeH(args(i))
+    return r
+  }
 
   def parseLogikaFPRoundingModeH(arg: String): Option[LogikaFPRoundingMode.Type] = {
     arg.native match {
@@ -179,6 +234,10 @@ import OptionsCli._
           |Usage: <option>*
           |
           |Available Options:
+          |    --background         Background verification mode (expects one of { type,
+          |                           save, disabled }; default: type)
+          |-m, --mode               Verification mode for Slang scripts (expects one of {
+          |                           symexe, manual, auto }; default: symexe)
           |    --smt2-caching       Disable SMT2 query caching
           |    --transition-caching Disable transition caching
           |-h, --help               Display this information
@@ -235,6 +294,8 @@ import OptionsCli._
           |    --log-vc-dir         Write all verification conditions in a directory
           |                           (expects a path)
           |    --log-detailed-info  Display detailed feedback information
+          |    --log-rewrite-at     Disable At(...) rewriting as In(...)/Old(...) in
+          |                           symexe mode
           |    --stats              Collect verification statistics
           |
           |Optimizations Options:
@@ -272,6 +333,8 @@ import OptionsCli._
           |-t, --timeout            Timeout (seconds) for validity checking (expects an
           |                           integer; min is 1; default is 2)""".render
 
+    var background: LogikaBackground.Type = LogikaBackground.Type
+    var mode: LogikaMode.Type = LogikaMode.Symexe
     var smt2Caching: B = true
     var transitionCaching: B = true
     var infoFlow: B = false
@@ -296,6 +359,7 @@ import OptionsCli._
     var logVc: B = false
     var logVcDir: Option[String] = None[String]()
     var logDetailedInfo: B = false
+    var logAtRewrite: B = true
     var stats: B = false
     var par: Option[Z] = None()
     var branchParMode: LogikaBranchPar.Type = LogikaBranchPar.All
@@ -322,7 +386,19 @@ import OptionsCli._
         if (args(j) == "-h" || args(j) == "--help") {
           println(help)
           return Some(HelpOption())
-        } else if (arg == "--smt2-caching") {
+        } else if (arg == "--background") {
+           val o: Option[LogikaBackground.Type] = parseLogikaBackground(args, j + 1)
+           o match {
+             case Some(v) => background = v
+             case _ => return None()
+           }
+         } else if (arg == "-m" || arg == "--mode") {
+           val o: Option[LogikaMode.Type] = parseLogikaMode(args, j + 1)
+           o match {
+             case Some(v) => mode = v
+             case _ => return None()
+           }
+         } else if (arg == "--smt2-caching") {
            val o: Option[B] = { j = j - 1; Some(!smt2Caching) }
            o match {
              case Some(v) => smt2Caching = v
@@ -466,6 +542,12 @@ import OptionsCli._
              case Some(v) => logDetailedInfo = v
              case _ => return None()
            }
+         } else if (arg == "--log-rewrite-at") {
+           val o: Option[B] = { j = j - 1; Some(!logAtRewrite) }
+           o match {
+             case Some(v) => logAtRewrite = v
+             case _ => return None()
+           }
          } else if (arg == "--stats") {
            val o: Option[B] = { j = j - 1; Some(!stats) }
            o match {
@@ -589,7 +671,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout))
+    return Some(LogikaOption(help, parseArguments(args, j), background, mode, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

@@ -96,7 +96,7 @@ import org.sireum.ops.ISZOps
                   reporter.error(step.claim.posOpt, Logika.kind, msg)
                   return emptyResult
                 } else {
-                  val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+                  val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
                   val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
                   if (stat && logika.config.detailedInfo) {
                     val msg = s"Accepted because the claim of step ${step.id} matches ${ySpc.exp} with $sub replaced by $repl"

@@ -29,7 +29,7 @@ package org.sireum.logika.plugin
 import org.sireum._
 import org.sireum.lang.symbol.Info
 import org.sireum.lang.{ast => AST}
-import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
+import org.sireum.logika.{Config, Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
 @datatype class ClaimOfPlugin extends JustificationPlugin {
@@ -98,7 +98,7 @@ import org.sireum.logika.Logika.Reporter
       val substNormClaim = AST.Util.substExpSkipResolvedInfo(normClaim, sm)
       if (stepClaim == substNormClaim) {
         val claimPos = claim.posOpt.get
-        val q = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+        val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
         val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
         if (stat && logika.config.detailedInfo) {
           reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,

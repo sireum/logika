@@ -63,7 +63,10 @@ import org.sireum._
                        val patternExhaustive: B,
                        val pureFun: B,
                        val detailedInfo: B,
-                       val satTimeout: B) {
+                       val satTimeout: B,
+                       val mode: Config.VerificationMode.Type,
+                       val background: Config.BackgroundMode.Type,
+                       val atRewrite: B) {
 
   @memoize def fingerprint: U64 = {
     return ops.StringOps(string).sha3U64(T, T)
@@ -81,6 +84,18 @@ object Config {
     "Default"
     "Flip"
     "Uninterpreted"
+  }
+
+  @enum object BackgroundMode {
+    "Type"
+    "Save"
+    "Disabled"
+  }
+
+  @enum object VerificationMode {
+    "Manual"
+    "Auto"
+    "SymExe"
   }
 }
 

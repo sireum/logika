@@ -30,7 +30,7 @@ import org.sireum.message.Position
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.Info
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
-import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
+import org.sireum.logika.{Config, Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
 object InceptionPlugin {
@@ -293,7 +293,9 @@ import InceptionPlugin._
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from $id's $conc${if (ensures.size > 1) "s" else ""}".render)
         return emptyResult
       }
-      val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+      val (status, nextFresh, claims, claim) = if (logika.config.mode == Config.VerificationMode.SymExe)
+        logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+      else logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
       if (status && logika.config.detailedInfo) {
         val (ePos, ensure, tensure) = ePosExpTExpOpt.get
         evidence = evidence :+

@@ -152,7 +152,7 @@ object Logika {
     def satMillis: Z
 
     def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
-              th: TypeHierarchy, s: State, atLinesFresh: B): Unit
+              th: TypeHierarchy, s: State, atLinesFresh: B, atRewrite: B): Unit
 
     def query(pos: Position, title: String, isSat: B, time: Z, forceReport: B, detailElided:B, r: Smt2Query.Result): Unit
 
@@ -936,27 +936,82 @@ import Util._
       return s0
     }
     val pos = posOpt.get
-    val (s1, v) = s0.freshSym(AST.Typed.b, pos)
-    val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
-    val claim = State.Claim.Prop(T, v)
-    val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
-      context.implicitCheckTitlePosOpt match {
-        case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
-        case _ => (None(), posOpt, None())
+    if (config.mode != Config.VerificationMode.SymExe) {
+      val (s1, size) = s0.freshSym(AST.Typed.z, pos)
+      val (s2, loCond) = s1.freshSym(AST.Typed.b, pos)
+      val (s3, hiCond) = s2.freshSym(AST.Typed.b, pos)
+      val (s4, loHiCond) = s3.freshSym(AST.Typed.b, pos)
+      val s5 = s4.addClaims(ISZ(
+        State.Claim.Let.Binary(loCond, State.Value.Z(0, pos), AST.Exp.BinaryOp.Le, i, AST.Typed.z),
+        State.Claim.Prop(T, loCond),
+        State.Claim.Let.FieldLookup(size, seq, "size"),
+        State.Claim.Let.Binary(hiCond, i, AST.Exp.BinaryOp.Lt, size, AST.Typed.z),
+        State.Claim.Prop(T, hiCond),
+        State.Claim.Let.Binary(loHiCond, loCond, AST.Exp.BinaryOp.And, hiCond, AST.Typed.b),
+        State.Claim.Prop(T, loHiCond)
+      ))
+      val cs2es = createClaimsToExps(jescmPlugins._4, pos, context.methodName, s5.claims, th, F, T)
+      val pcsOps = ops.ISZOps(cs2es.translate(s5.claims))
+      val pcs = HashSSet ++ pcsOps.dropRight(3)
+      val ISZ(loCondExp: AST.Exp.Binary, hiCondExp: AST.Exp.Binary, loHiCondExp: AST.Exp.Binary) = pcsOps.takeRight(3)
+      val normPCs = HashSet ++ PathConditions(th, pcs.elements).normalize
+      def accept(): State = {
+        reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+          st"""The sequence indexing accepted because it is in bound in the path conditions:
+              |{
+              |  ${(for (pc <- pcs.elements) yield pc.prettyST, ";\n")}
+              |}""".render)
+        return s0
       }
-    if (s2.ok) {
-      val r = smt2.valid(context.methodName, config, cache, T,
-        st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
-        pos, s2.claims, claim, reporter)
-      r.kind match {
-        case Smt2Query.Result.Kind.Unsat => return s0
-        case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly out of bound sequence indexing$suffixOpt".render, reporter)
-        case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce that the sequence indexing is in bound$suffixOpt".render, reporter)
-        case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
-        case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+      if (normPCs.contains(th.normalizeExp(loCondExp)) && normPCs.contains(hiCondExp) || normPCs.contains(loHiCondExp)) {
+        return accept()
+      } else {
+        val sizeCond = hiCondExp.right
+        for (pc <- pcs.elements) {
+          pc match {
+            case pc@AST.Exp.Binary(`sizeCond`, _, right) if Util.isEquivResOpt(th, pc.attr.resOpt, AST.Typed.z) =>
+              val altLoHiCondExp = th.normalizeExp(loHiCondExp(right = hiCondExp(right = right)))
+              if (normPCs.contains(altLoHiCondExp)) {
+                return accept()
+              }
+            case pc@AST.Exp.Binary(left, _, `sizeCond`) if Util.isEquivResOpt(th, pc.attr.resOpt, AST.Typed.z) =>
+              val altLoHiCondExp = th.normalizeExp(loHiCondExp(right = hiCondExp(right = left)))
+              if (normPCs.contains(altLoHiCondExp)) {
+                return accept()
+              }
+            case _ =>
+          }
+        }
+        reporter.error(posOpt, kind,
+          st"""Sequence indexing has not been proven to be in bound in the path conditions:
+              |{
+              |  ${(for (pc <- pcs.elements) yield pc.prettyST, ";\n")}
+              |}""".render)
+        return s0(status = State.Status.Error)
       }
+    } else {
+      val (s1, v) = s0.freshSym(AST.Typed.b, pos)
+      val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
+      val claim = State.Claim.Prop(T, v)
+      val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
+        context.implicitCheckTitlePosOpt match {
+          case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
+          case _ => (None(), posOpt, None())
+        }
+      if (s2.ok) {
+        val r = smt2.valid(context.methodName, config, cache, T,
+          st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
+          pos, s2.claims, claim, reporter)
+        r.kind match {
+          case Smt2Query.Result.Kind.Unsat => return s0
+          case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly out of bound sequence indexing$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce that the sequence indexing is in bound$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+        }
+      }
+      return s2(status = State.Status.Error)
     }
-    return s2(status = State.Status.Error)
   }
 
   def evalLit(smt2: Smt2, lit: AST.Lit, reporter: Reporter): State.Value = {
@@ -1220,12 +1275,12 @@ import Util._
               if (ti.ast.hasMin) {
                 val (s2, sym) = s1.freshSym(AST.Typed.b, pos)
                 val s3 = s2.addClaim(State.Claim.Let.Binary(sym, z2SubZVal(ti, ti.ast.min, pos), AST.Exp.BinaryOp.Le, value, t))
-                s1 = evalAssertH(T, smt2, cache, s"Min range check for $t", s3, sym, e.posOpt, reporter)
+                s1 = evalAssertH(T, smt2, cache, s"Min range check for $t", s3, sym, e.posOpt, ISZ(), reporter)
               }
               if (s1.ok && ti.ast.hasMax) {
                 val (s4, sym) = s1.freshSym(AST.Typed.b, pos)
                 val s5 = s4.addClaim(State.Claim.Let.Binary(sym, value, AST.Exp.BinaryOp.Le, z2SubZVal(ti, ti.ast.max, pos), t))
-                s1 = evalAssertH(T, smt2, cache, s"Max range check for $t", s5, sym, e.posOpt, reporter)
+                s1 = evalAssertH(T, smt2, cache, s"Max range check for $t", s5, sym, e.posOpt, ISZ(), reporter)
               }
               return s1
             case _ =>
@@ -1350,27 +1405,56 @@ import Util._
         if (!rtCheck || !s0.ok) {
           return s0
         }
-        val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
-        val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
-        val claim = State.Claim.Let.Binary(sym, value,
-          if (AST.Typed.floatingPointTypes.contains(tipe)) AST.Exp.BinaryOp.FpNe
-          else AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
-        val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
-          context.implicitCheckTitlePosOpt match {
-            case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
-            case _ => (None(), Some(pos), None())
+        if (config.mode != Config.VerificationMode.SymExe) {
+          val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
+          val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
+          val s2 = s1.addClaims(ISZ(
+            State.Claim.Let.Binary(cond, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe),
+            State.Claim.Prop(T, cond)
+          ))
+          Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s2.claims, th, F, T) match {
+            case (pcs, Some(condExp: AST.Exp.Binary), _) =>
+              val normPCs = HashSet ++ PathConditions(th, pcs).normalize
+              if (normPCs.contains(th.normalizeExp(condExp))) {
+                reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+                  st"""Accepted because the right-hand-side operand is non-zero in the path conditions:
+                      |{
+                      |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
+                      |}""".render)
+                return s0
+              } else {
+                reporter.error(Some(pos), kind,
+                  st"""Could not find the fact that the right-hand-side operand is non-zero in the path conditions:
+                      |{
+                      |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
+                      |}""".render)
+                return s0(status = State.Status.Error)
+              }
+            case _ => halt("Infeasible")
           }
-        val r = smt2.valid(context.methodName, config, cache, T,
-          st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
-          pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
-        r.kind match {
-          case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
-          case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly zero second operand for ${exp.op}$suffixOpt".render, reporter)
-          case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
-          case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
-          case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}$suffixOpt\n${r.info}".render, reporter)
+        } else {
+          val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
+          val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
+          val claim = State.Claim.Let.Binary(sym, value,
+            if (AST.Typed.floatingPointTypes.contains(tipe)) AST.Exp.BinaryOp.FpNe
+            else AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
+          val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
+            context.implicitCheckTitlePosOpt match {
+              case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
+              case _ => (None(), Some(pos), None())
+            }
+          val r = smt2.valid(context.methodName, config, cache, T,
+            st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
+            pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
+          r.kind match {
+            case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
+            case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly zero second operand for ${exp.op}$suffixOpt".render, reporter)
+            case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
+            case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
+            case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}$suffixOpt\n${r.info}".render, reporter)
+          }
+          return s1(status = State.Status.Error)
         }
-        return s1(status = State.Status.Error)
       }
 
       def evalBasic(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value): ISZ[(State, State.Value)] = {
@@ -1507,7 +1591,7 @@ import Util._
               val (s3, cv) = s2.freshSym(tipe, pos)
               r = r :+ ((s3.addClaim(State.Claim.Let.Def(cv, v)), cv))
             } else {
-              val s3 = evalAssertH(T, smt2, cache, "asInstanceOf", s2, cond, Some(pos), reporter)
+              val s3 = evalAssertH(T, smt2, cache, "asInstanceOf", s2, cond, Some(pos), ISZ(), reporter)
               if (s3.ok) {
                 val (s4, cv) = s3.freshSym(tipe, pos)
                 r = r :+ ((s4.addClaim(State.Claim.Let.Def(cv, v)), cv))
@@ -1542,7 +1626,7 @@ import Util._
                     val (s1, size) = s0.freshSym(AST.Typed.z, pos)
                     val (s2, cond) = s1.addClaim(State.Claim.Let.FieldLookup(size, o, "size")).freshSym(AST.Typed.b, pos)
                     val s3 = s2.addClaim(State.Claim.Let.Binary(cond, size, AST.Exp.BinaryOp.Gt, State.Value.Z(0, pos), AST.Typed.z))
-                    s0 = evalAssertH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), reporter)
+                    s0 = evalAssertH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), ISZ(), reporter)
                   }
                 } else {
                   evalConstantVarInstance(smt2, cache, rtCheck, s0, tipe.ids, id, reporter) match {
@@ -1711,7 +1795,8 @@ import Util._
               val (s5, vs) = addValueInv(this, smt2, cache, T, s4, sym, attr.posOpt.get, reporter)
               var s6 = s5
               for (v <- vs if s6.ok) {
-                s6 = evalAssertH(T, smt2, cache, st"Invariant on ${(ti.name, ".")} construction".render, s6, v, attr.posOpt, reporter)
+                s6 = evalAssertH(T, smt2, cache, st"Invariant on ${(ti.name, ".")} construction".render, s6, v,
+                  attr.posOpt, ISZ(), reporter)
               }
               r = r :+ ((s4(nextFresh = s6.nextFresh, status = s6.status), sym))
             } else {
@@ -1831,7 +1916,8 @@ import Util._
 
     def evalAt(exp: AST.Exp.At): (State, State.Value) = {
       val pos = exp.posOpt.get
-      return evalAtH(state, Util.claimsToExps(jescmPlugins._4, pos, context.methodName, state.claims, th, F)._2, exp, reporter)
+      return evalAtH(state, Util.claimsToExps(jescmPlugins._4, pos, context.methodName, state.claims, th, F,
+        config.atRewrite)._2, exp, reporter)
     }
 
     def evalOld(exp: AST.Exp.Old): (State, State.Value) = {
@@ -2534,6 +2620,7 @@ import Util._
           var requireSyms = ISZ[State.Value]()
           var i = 0
           var csr0 = cs1
+          val pLocals: ISZ[AST.ResolvedInfo] = for (p <- paramArgs) yield p._1.asInstanceOf[AST.ResolvedInfo]
           for (require <- requires if csr0.ok) {
             val title: String =
               if (requires.size == 1) st"${label}re-condition of $resST".render
@@ -2546,7 +2633,8 @@ import Util._
                 assert(p._1.claims(size - 1) == State.Claim.Prop(T, p._2))
                 (p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1)), p._2)
               } else {
-                logikaComp.evalAssert(smt2, cache, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
+                logikaComp.evalAssert(smt2, cache, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt,
+                  pLocals, rep)
               }
             requireSyms = requireSyms :+ sym
             csr0 = csr1
@@ -2811,21 +2899,21 @@ import Util._
                 State.Claim.Let.Binary(symGe, arg, AST.Exp.BinaryOp.Le, State.Value.Z(max, pos), AST.Typed.z),
                 State.Claim.Let.Binary(symCond, symLe, AST.Exp.BinaryOp.And, symGe, AST.Typed.b)
               ))
-              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s4, symCond, Some(pos), reporter)
+              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s4, symCond, Some(pos), ISZ(), reporter)
               p._1
             case (Some(min), _) =>
               val (s1, symCond) = p._1.freshSym(AST.Typed.b, pos)
               val s2 = s1.addClaim(
                 State.Claim.Let.Binary(symCond, State.Value.Z(min, pos), AST.Exp.BinaryOp.Le, arg, AST.Typed.z)
               )
-              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), reporter)
+              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), ISZ(), reporter)
               p._1
             case (_, Some(max)) =>
               val (s1, symCond) = p._1.freshSym(AST.Typed.b, pos)
               val s2 = s1.addClaim(
                 State.Claim.Let.Binary(symCond, arg, AST.Exp.BinaryOp.Le, State.Value.Z(max, pos), AST.Typed.z)
               )
-              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), reporter)
+              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), ISZ(), reporter)
               p._1
             case (_, _) => p._1
           }
@@ -2874,7 +2962,7 @@ import Util._
           val min = args(0)
           val max = args(1)
           evalAssertH(T, smt2, cache, s"$tpe.randomBetween min <= max", s2.addClaim(
-            State.Claim.Let.Binary(cond, min, AST.Exp.BinaryOp.Le, max, tpe)), cond, posOpt, reporter)
+            State.Claim.Let.Binary(cond, min, AST.Exp.BinaryOp.Le, max, tpe)), cond, posOpt, ISZ(), reporter)
           val (s4, sym) = s1.freshSym(tpe, pos)
           val (s5, condMin) = s4.freshSym(AST.Typed.b, pos)
           val (s6, condMax) = s5.freshSym(AST.Typed.b, pos)
@@ -2900,7 +2988,7 @@ import Util._
           val min = args(1)
           val max = args(2)
           evalAssertH(T, smt2, cache, s"$tpe.randomSeedBetween min <= max", s2.addClaim(
-            State.Claim.Let.Binary(cond, min, AST.Exp.BinaryOp.Le, max, tpe)), cond, posOpt, reporter)
+            State.Claim.Let.Binary(cond, min, AST.Exp.BinaryOp.Le, max, tpe)), cond, posOpt, ISZ(), reporter)
           val (s4, sym) = s1.freshSym(tpe, pos)
           val (s5, condMin) = s4.freshSym(AST.Typed.b, pos)
           val (s6, condMax) = s5.freshSym(AST.Typed.b, pos)
@@ -3593,32 +3681,77 @@ import Util._
   }
 
   def evalAssertH(reportQuery: B, smt2: Smt2, cache: Logika.Cache, title: String, s0: State, sym: State.Value.Sym,
-                  posOpt: Option[Position], reporter: Reporter): State = {
-    if (s0.ok) {
-      val conclusion = State.Claim.Prop(T, sym)
-      val pos = posOpt.get
-      val r = smt2.valid(context.methodName, config, cache, reportQuery,
-        s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s0.claims, conclusion, reporter)
-      r.kind match {
-        case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
-        case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
-        case Smt2Query.Result.Kind.Unknown => error(posOpt, s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
-        case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower} holds", reporter)
-        case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower} holds\n${r.info}", reporter)
+                  posOpt: Option[Position], rwLocals: ISZ[AST.ResolvedInfo], reporter: Reporter): State = {
+    val conclusion = State.Claim.Prop(T, sym)
+    val pos = posOpt.get
+    if (config.mode != Config.VerificationMode.SymExe) {
+      Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s0.claims :+ conclusion, th, F, config.atRewrite) match {
+        case (pcs, Some(conc), _) =>
+          val pcs2: HashSSet[AST.Exp] = if (rwLocals.nonEmpty) {
+            val rwLocalSet = HashSet ++ rwLocals
+            var substMap = HashMap.empty[AST.Exp, AST.Exp]
+            for (pc <- pcs) {
+              pc match {
+                case pc@AST.Exp.Binary(left: AST.Exp.Ident, _, right) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) && rwLocalSet.contains(left.attr.resOpt.get) =>
+                  substMap = substMap + right ~> left
+                case pc@AST.Exp.Binary(left: AST.Exp.Result, _, right) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) =>
+                  substMap = substMap + right ~> left
+                case pc@AST.Exp.Binary(left, _, right: AST.Exp.Ident) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) && rwLocalSet.contains(right.attr.resOpt.get) =>
+                  substMap = substMap + left ~> right
+                case pc@AST.Exp.Binary(left, _, right: AST.Exp.Result) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) =>
+                  substMap = substMap + left ~> right
+                case _ =>
+              }
+            }
+            val es = AST.Util.ExpSubstitutor(substMap)
+            HashSSet ++ pcs ++ (for (pc <- pcs) yield es.transformExp(pc).getOrElseEager(pc))
+          } else {
+            HashSSet ++ pcs
+          }
+          val normPCs = HashSet ++ PathConditions(th, pcs2.elements).normalize
+          val normConclusion = th.normalizeExp(conc)
+          if (normPCs.contains(normConclusion)) {
+            reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+              st"""Accepted because the ${ops.StringOps(title).firstToLower} is in the path conditions:
+                  |{
+                  |  ${(for (pc2 <- pcs2.elements) yield pc2.prettyST, ";\n")}
+                  |}""".render)
+            return s0
+          } else {
+            reporter.error(posOpt, kind,
+              st"""The ${ops.StringOps(title).firstToLower} has not been proven yet in the path conditions:
+                  |{
+                  |  ${(for (pc2 <- pcs2.elements) yield pc2.prettyST, ";\n")}
+                  |}""".render)
+          }
+        case _ =>
+      }
+    } else {
+      if (s0.ok) {
+        val r = smt2.valid(context.methodName, config, cache, reportQuery,
+          s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s0.claims, conclusion, reporter)
+        r.kind match {
+          case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
+          case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
+          case Smt2Query.Result.Kind.Unknown => error(posOpt, s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
+          case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower} holds", reporter)
+          case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower} holds\n${r.info}", reporter)
+        }
       }
     }
     return s0(status = State.Status.Error)
   }
 
   def evalAssert(smt2: Smt2, cache: Logika.Cache, rtCheck: B, title: String, s0: State, cond: AST.Exp,
-                 posOpt: Option[Position], reporter: Reporter): (State, State.Value.Sym) = {
+                 posOpt: Option[Position], rwLocals: ISZ[AST.ResolvedInfo],
+                 reporter: Reporter): (State, State.Value.Sym) = {
     val pos = cond.posOpt.get
     val (s1, v) = singleStateValue(pos, s0, evalExp(Split.Disabled, smt2, cache, rtCheck, s0, cond, reporter))
     if (!s1.ok) {
       return value2Sym(s1, v, pos)
     }
     val (s2, sym): (State, State.Value.Sym) = value2Sym(s1, v, pos)
-    return (evalAssertH(T, smt2, cache, title, s2, sym, posOpt, reporter), sym)
+    return (evalAssertH(T, smt2, cache, title, s2, sym, posOpt, rwLocals, reporter), sym)
   }
 
   def evalAssignExp(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B,
@@ -4367,11 +4500,11 @@ import Util._
         kind match {
           case AST.ResolvedInfo.BuiltIn.Kind.Assert =>
             val exp = e.args(0)
-            val (s0, v) = evalAssert(smt2, cache, T, "Assertion", state, exp, exp.posOpt, reporter)
+            val (s0, v) = evalAssert(smt2, cache, T, "Assertion", state, exp, exp.posOpt, ISZ(), reporter)
             return ISZ((s0, v))
           case AST.ResolvedInfo.BuiltIn.Kind.AssertMsg =>
             val exp = e.args(0)
-            val (s0, v) = evalAssert(smt2, cache, T, "Assertion", state, exp, exp.posOpt, reporter)
+            val (s0, v) = evalAssert(smt2, cache, T, "Assertion", state, exp, exp.posOpt, ISZ(), reporter)
             return ISZ((s0, v))
           case AST.ResolvedInfo.BuiltIn.Kind.Assume =>
             val exp = e.args(0)
@@ -4612,7 +4745,7 @@ import Util._
       }
       s1 =
         if (isAssume) evalAssume(smt2, cache, rtCheck, titl, s1, claim, pOpt, reporter)._1
-        else evalAssert(smt2, cache, rtCheck, titl, s1, claim, pOpt, reporter)._1
+        else evalAssert(smt2, cache, rtCheck, titl, s1, claim, pOpt, ISZ(), reporter)._1
       i = i + 1
     }
     return s1
@@ -4912,7 +5045,7 @@ import Util._
       val lpcs = this
       val l = lpcs(context = lpcs.context(pathConditionsOpt = Some(
         Logika.PathConditions(th, Util.claimsToExps(jescmPlugins._4, deduceStmt.posOpt.get, context.methodName,
-          s0.claims, th, config.atLinesFresh)._1))))
+          s0.claims, th, config.atLinesFresh, config.atRewrite)._1))))
       for (step <- deduceStmt.steps if p._1.ok) {
         p = l.evalProofStep(smt2, cache, p, step, reporter)
         step match {
@@ -4935,7 +5068,7 @@ import Util._
       val thisL = this
       val l = thisL(context = thisL.context(pathConditionsOpt = Some(
         Logika.PathConditions(th, Util.claimsToExps(jescmPlugins._4, deduceStmt.posOpt.get, context.methodName,
-          s0.claims, th, config.atLinesFresh)._1))))
+          s0.claims, th, config.atLinesFresh, config.atRewrite)._1))))
 
       @pure def premises(st: State, sequent: AST.Sequent): (State, HashSMap[AST.ProofAst.StepId, StepProofContext]) = {
         var r = HashSMap.empty[AST.ProofAst.StepId, StepProofContext]
@@ -4972,7 +5105,8 @@ import Util._
               i = i + 1
             }
             if (st0.ok) {
-              st0 = evalAssert(smt2, cache, rtCheck, "Conclusion", st0, sequent.conclusion, sequent.conclusion.posOpt, reporter)._1
+              st0 = evalAssert(smt2, cache, rtCheck, "Conclusion", st0, sequent.conclusion, sequent.conclusion.posOpt,
+                ISZ(), reporter)._1
             }
             if (config.transitionCache && st0.ok) {
               val cached = cache.setTransition(th, config, Cache.Transition.Sequent(sequent), st00, ISZ(st0), smt2)
@@ -5038,7 +5172,7 @@ import Util._
             s4 = s7.addClaim(State.Claim.Eq(lhs, rhs))
           }
           val (s8, condSym) = value2Sym(s4, cond, varPattern.pattern.posOpt.get)
-          evalAssertH(T, smt2, cache, "Variable Pattern Matching", s8, condSym, varPattern.pattern.posOpt, reporter)
+          evalAssertH(T, smt2, cache, "Variable Pattern Matching", s8, condSym, varPattern.pattern.posOpt, ISZ(), reporter)
         } else {
           s1
         }
@@ -5160,7 +5294,7 @@ import Util._
   }
 
   def logPc(state: State, reporter: Reporter, posOpt: Option[Position]): Unit = {
-    reporter.state(jescmPlugins._4, posOpt, context.methodName, th, state, config.atLinesFresh)
+    reporter.state(jescmPlugins._4, posOpt, context.methodName, th, state, config.atLinesFresh, config.atRewrite)
   }
 
   def evalTypeTestH(s0: State, v: State.Value, t: AST.Typed, pos: Position): (State, State.Value) = {
@@ -5260,6 +5394,8 @@ import Util._
 
   def assumeExps(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, exps: ISZ[AST.Exp],
                  reporter: Reporter): ISZ[State] = {
+    val thisL = this
+    val l = thisL(config = thisL.config(mode = Config.VerificationMode.SymExe))
     var currents = ISZ(s0)
     var done = ISZ[State]()
     for (exp <- exps) {
@@ -5267,7 +5403,7 @@ import Util._
       currents = ISZ()
       for (current <- cs) {
         if (current.ok) {
-          currents = currents ++ assumeExp(split, smt2, cache, rtCheck, current, exp, reporter)
+          currents = currents ++ l.assumeExp(split, smt2, cache, rtCheck, current, exp, reporter)
         } else {
           done = done :+ current
         }

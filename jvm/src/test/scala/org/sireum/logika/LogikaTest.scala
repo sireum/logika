@@ -92,7 +92,10 @@ object LogikaTest {
       patternExhaustive = T,
       pureFun = F,
       detailedInfo = F,
-      satTimeout = F
+      satTimeout = F,
+      mode = Config.VerificationMode.SymExe,
+      background = Config.BackgroundMode.Type,
+      atRewrite = T
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty

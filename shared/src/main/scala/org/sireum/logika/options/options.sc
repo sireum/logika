@@ -34,6 +34,10 @@ val options = Tool(
   usage = "<option>*",
   usageDescOpt = None(),
   opts = ISZ(
+    Opt(name = "background", longKey = "background", shortKey = None(),
+      tpe = Type.Choice(name = "background", sep = None(), elements = ISZ("type", "save", "disabled")),
+      description = "Background verification mode"),
+    logika.cli.modeOpt,
     Opt(name = "smt2Caching", longKey = "smt2-caching", shortKey = None(),
       tpe = Type.Flag(T),
       description = "Disable SMT2 query caching"),

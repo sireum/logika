@@ -74,13 +74,13 @@ final class ReporterImpl(val logPc: B,
     collectStats, _numOfVCs, _numOfSats, _vcMillis, _satMillis)
 
   override def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
-                     th: TypeHierarchy, s: State, atLinesFresh: B): Unit = {
+                     th: TypeHierarchy, s: State, atLinesFresh: B, atRewrite: B): Unit = {
     if (logPc || logPcRaw) {
       val sts: ISZ[ST] =
         if (logPcRaw) {
           State.Claim.claimsRawSTs(s.claims)
         } else {
-          val (es, _) = Util.claimsToExps(plugins,posOpt.get, context, s.claims, th, atLinesFresh)
+          val (es, _) = Util.claimsToExps(plugins,posOpt.get, context, s.claims, th, atLinesFresh, atRewrite)
           for (e <- es) yield e.prettyST
         }
       if (sts.isEmpty) {

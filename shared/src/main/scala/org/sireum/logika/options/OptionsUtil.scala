@@ -126,6 +126,18 @@ object OptionsUtil {
       case OptionsCli.LogikaStrictPureMode.Uninterpreted => Config.StrictPureMode.Uninterpreted
     }
 
+    val background: Config.BackgroundMode.Type = o.background match {
+      case OptionsCli.LogikaBackground.Type => Config.BackgroundMode.Type
+      case OptionsCli.LogikaBackground.Save => Config.BackgroundMode.Save
+      case OptionsCli.LogikaBackground.Disabled => Config.BackgroundMode.Disabled
+    }
+
+    val mode: Config.VerificationMode.Type = o.mode match {
+      case OptionsCli.LogikaMode.Symexe => Config.VerificationMode.SymExe
+      case OptionsCli.LogikaMode.Auto => Config.VerificationMode.Auto
+      case OptionsCli.LogikaMode.Manual => Config.VerificationMode.Manual
+    }
+
     val config = org.sireum.logika.Config(
       smt2Configs = smt2Configs,
       parCores = parCores,
@@ -163,12 +175,15 @@ object OptionsUtil {
       patternExhaustive = o.patternExhaustive,
       pureFun = o.pureFun,
       detailedInfo = defaultConfig.detailedInfo,
-      satTimeout = o.satTimeout
+      satTimeout = o.satTimeout,
+      mode = mode,
+      background = background,
+      atRewrite = o.logAtRewrite
     )
     return Either.Left(config)
   }
 
-  def fromConfig(maxCores: Z, nameExePathMap: HashMap[String, String], config: Config): String = {
+  def fromConfig(addMode: B, maxCores: Z, nameExePathMap: HashMap[String, String], config: Config): String = {
     val defaultConfig = toConfig(config, maxCores, "default", nameExePathMap, "").left
 
     var r = ISZ[String]()
@@ -192,6 +207,14 @@ object OptionsUtil {
 
     @strictpure def max(value1: Z, value2: Z): Z =
       if (value1 > value2) value1 else value2
+
+    if (addMode) {
+      config.mode match {
+        case Config.VerificationMode.SymExe => r = r ++ ISZ[String]("--mode", "symexe")
+        case Config.VerificationMode.Auto => r = r ++ ISZ[String]("--mode", "auto")
+        case Config.VerificationMode.Manual => r = r ++ ISZ[String]("--mode", "manual")
+      }
+    }
 
     if (config.transitionCache != defaultConfig.transitionCache) {
       r = r :+ "--transition-caching"
@@ -312,6 +335,11 @@ object OptionsUtil {
     }
     if (config.pureFun != defaultConfig.pureFun) {
       r = r :+ "--pure-proof-fun"
+    }
+    config.background match {
+      case Config.BackgroundMode.Type => r = r ++ ISZ[String]("--background", "type")
+      case Config.BackgroundMode.Save => r = r ++ ISZ[String]("--background", "save")
+      case Config.BackgroundMode.Disabled => r = r ++ ISZ[String]("--background", "disabled")
     }
 
     addSmt2Config(F)

@@ -84,14 +84,14 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
     } else {
       var s0 = state.unconstrainedClaims
       val atMap = org.sireum.logika.Util.claimsToExps(logikaSmt2.jescmPlugins._4, posOpt.get, logikaSmt2.context.methodName,
-        state.claims, logikaSmt2.th, F)._2
+        state.claims, logikaSmt2.th, F, logikaSmt2.config.atRewrite)._2
       var ok = T
       for (arg <- just.witnesses) {
         val stepNo = arg
         spcMap.get(stepNo) match {
           case Some(spc: StepProofContext.Regular) =>
             val (s1, exp) = logikaSmt2.rewriteAt(atMap, s0, spc.exp, reporter)
-            val ISZ((s2, v)) = logikaSmt2.evalExp(Logika.Split.Disabled, smt2, cache, T, s1, exp, reporter)
+            val ISZ((s2, v)) = logikaSmt2.evalExp(Logika.Split.Disabled, smt2, cache, F, s1, exp, reporter)
             val (s3, sym) = logikaSmt2.value2Sym(s2, v, spc.exp.posOpt.get)
             s0 = s3.addClaim(State.Claim.Prop(T, sym))
           case Some(_) =>

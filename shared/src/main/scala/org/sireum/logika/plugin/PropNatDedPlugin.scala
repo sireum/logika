@@ -248,7 +248,7 @@ import org.sireum.logika.Logika.Reporter
           return emptyResult
         }
     }
-    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
     if (status) {
       reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, acceptedMsg.render)
     }

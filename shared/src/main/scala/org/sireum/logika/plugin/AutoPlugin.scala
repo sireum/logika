@@ -28,7 +28,7 @@ package org.sireum.logika.plugin
 import org.sireum._
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
-import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
+import org.sireum.logika.{Config, Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
 object AutoPlugin {
@@ -346,12 +346,13 @@ object AutoPlugin {
 
     if (!just.hasWitness) {
       val (stat, nextFresh, premises, conclusion) =
-        logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+        logika(config = logika.config(mode = Config.VerificationMode.SymExe)).
+          evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
       return checkValid(smt2, stat, nextFresh, state.claims ++ premises, conclusion, premises :+ conclusion)
     } else {
       val psmt2 = smt2.emptyCache(logika.config)
       val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
-        state.claims, logika.th, F)._2
+        state.claims, logika.th, F, logika.config.atRewrite)._2
       var s1 = state.unconstrainedClaims
       var ok = T
       for (arg <- just.witnesses if ok) {
@@ -359,7 +360,7 @@ object AutoPlugin {
         spcMap.get(stepNo) match {
           case Some(spc: StepProofContext.Regular) =>
             val (s2, exp) = logika.rewriteAt(atMap, s1, spc.exp, reporter)
-            val ISZ((s3, v)) = logika.evalExp(Logika.Split.Disabled, psmt2, cache, T, s2, exp, reporter)
+            val ISZ((s3, v)) = logika.evalExp(Logika.Split.Disabled, psmt2, cache, F, s2, exp, reporter)
             val (s4, sym) = logika.value2Sym(s3, v, spc.exp.posOpt.get)
             s1 = s4.addClaim(State.Claim.Prop(T, sym))
           case Some(_) =>
@@ -375,7 +376,8 @@ object AutoPlugin {
       }
       val (s5, exp) = logika.rewriteAt(atMap, s1, step.claim, reporter)
       val (stat, nextFresh, premises, conclusion) =
-        logika.evalRegularStepClaim(psmt2, cache, s5, exp, step.id.posOpt, reporter)
+        logika(config = logika.config(mode = Config.VerificationMode.SymExe)).
+          evalRegularStepClaim(psmt2, cache, s5, exp, step.id.posOpt, reporter)
       val r = checkValid(psmt2, stat, nextFresh, s1.claims ++ premises, conclusion, premises :+ conclusion)
       smt2.combineWith(psmt2)
       return r

@@ -31,6 +31,10 @@ import org.sireum.cli.CliOpt._
 
 object cli {
 
+  val modeOpt: Opt = Opt(name = "mode", longKey = "mode", shortKey = Some('m'),
+    tpe = Type.Choice(name = "mode", sep = None(), elements = ISZ("symexe", "manual", "auto")),
+    description = "Verification mode for Slang scripts")
+
   val parOpt: Opt = Opt(name = "par", longKey = "par", shortKey = Some('p'),
     tpe = Type.NumFlag(100, Some(1), Some(100)),
     description = "Enable parallelization (with CPU cores percentage to use)")
@@ -43,6 +47,7 @@ object cli {
     usage = "<option>* <slang-file>+",
     usageDescOpt = None(),
     opts = ISZ(
+      modeOpt,
       Opt(name = "noRuntime", longKey = "no-runtime", shortKey = Some('r'),
         tpe = Type.Flag(F), description = "Do not use built-in runtime (use runtime in sourcepath)"),
       Opt(name = "sourcepath", longKey = "sourcepath", shortKey = Some('s'),
@@ -122,6 +127,9 @@ object cli {
         Opt(name = "logDetailedInfo", longKey = "log-detailed-info", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Display detailed feedback information"),
+        Opt(name = "logAtRewrite", longKey = "log-rewrite-at", shortKey = None(),
+          tpe = Type.Flag(T),
+          description = "Disable At(...) rewriting as In(...)/Old(...) in symexe mode"),
         Opt(name = "stats", longKey = "stats", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Collect verification statistics")
