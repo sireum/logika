@@ -183,7 +183,7 @@ object OptionsUtil {
     return Either.Left(config)
   }
 
-  def fromConfig(addMode: B, maxCores: Z, nameExePathMap: HashMap[String, String], config: Config): String = {
+  def fromConfig(ext: String, maxCores: Z, nameExePathMap: HashMap[String, String], config: Config): String = {
     val defaultConfig = toConfig(config, maxCores, "default", nameExePathMap, "").left
 
     var r = ISZ[String]()
@@ -208,7 +208,7 @@ object OptionsUtil {
     @strictpure def max(value1: Z, value2: Z): Z =
       if (value1 > value2) value1 else value2
 
-    if (addMode) {
+    if (ext == "sc") {
       config.mode match {
         case Config.VerificationMode.SymExe => r = r ++ ISZ[String]("--mode", "symexe")
         case Config.VerificationMode.Auto => r = r ++ ISZ[String]("--mode", "auto")
@@ -216,134 +216,137 @@ object OptionsUtil {
       }
     }
 
-    if (config.transitionCache != defaultConfig.transitionCache) {
-      r = r :+ "--transition-caching"
-    }
-    if (config.smt2Caching != defaultConfig.smt2Caching) {
-      r = r :+ "--smt2-caching"
-    }
-    if (config.parCores > 1) {
-      val value = config.parCores * 100 / maxCores
-      if (value == 100) {
-        r = r :+ "--par"
-      } else {
-        r = r ++ ISZ[String]("--par", value.string)
+    if (ext != "logika") {
+      if (config.transitionCache != defaultConfig.transitionCache) {
+        r = r :+ "--transition-caching"
       }
-    }
-    if (config.branchParCores > 1) {
-      val value = config.branchParCores * 100 / maxCores
-      if (value == 100) {
-        r = r :+ "--par-branch"
-      } else {
-        r = r ++ ISZ[String]("--par-branch", value.string)
+      if (config.smt2Caching != defaultConfig.smt2Caching) {
+        r = r :+ "--smt2-caching"
       }
-    }
-    if (config.branchPar != defaultConfig.branchPar) {
-      val value: String = config.branchPar match {
-        case Config.BranchPar.All => "all"
-        case Config.BranchPar.OnlyAllReturns => "returns"
-        case Config.BranchPar.Disabled => "disabled"
+      if (config.parCores > 1) {
+        val value = config.parCores * 100 / maxCores
+        if (value == 100) {
+          r = r :+ "--par"
+        } else {
+          r = r ++ ISZ[String]("--par", value.string)
+        }
       }
-      r = r ++ ISZ[String]("--par-branch-mode", value)
-    }
-    if (config.sat != defaultConfig.sat) {
-      r = r :+ "--sat"
-    }
-    if (config.rlimit != defaultConfig.rlimit) {
-      r = r ++ ISZ[String]("--rlimit", config.rlimit.string)
-    }
-    if (config.timeoutInMs != defaultConfig.timeoutInMs) {
-      r = r ++ ISZ[String]("--timeout", max(config.timeoutInMs / 1000, 1).string)
-    }
-    if (config.satTimeout != defaultConfig.satTimeout) {
-      r = r :+ "--sat-timeout"
-    }
-    if (config.charBitWidth != defaultConfig.charBitWidth) {
-      r = r ++ ISZ[String]("--c-bitwidth", config.charBitWidth.string)
-    }
-    if (config.intBitWidth != defaultConfig.intBitWidth) {
-      r = r ++ ISZ[String]("--z-bitwidth", config.intBitWidth.string)
-    }
-    if (config.useReal != defaultConfig.useReal) {
-      r = r :+ "--use-real"
-    }
-    if (config.logRawPc != defaultConfig.logRawPc) {
-      r = r :+ "--log-raw-smt2"
-    }
-    if (config.dontSplitPfq != defaultConfig.dontSplitPfq) {
-      r = r :+ "--dont-split-pfq"
-    }
-    if (config.splitAll != defaultConfig.splitAll) {
-      r = r :+ "--split-all"
-    }
-    if (config.splitIf != defaultConfig.splitIf) {
-      r = r :+ "--split-if"
-    }
-    if (config.splitMatch != defaultConfig.splitMatch) {
-      r = r :+ "--split-match"
-    }
-    if (config.splitContract != defaultConfig.splitContract) {
-      r = r :+ "--split-contract"
-    }
-    if (config.simplifiedQuery != defaultConfig.simplifiedQuery) {
-      r = r :+ "--simplify"
-    }
-    if (config.fpRoundingMode != defaultConfig.fpRoundingMode) {
-      val value: String = config.fpRoundingMode.native match {
-        case "RNE" => "NearestTiesToEven"
-        case "RNA" => "NearestTiesToAway"
-        case "RTP" => "TowardPositive"
-        case "RTN" => "TowardNegative"
-        case "RTZ" => "TowardZero"
+      if (config.branchParCores > 1) {
+        val value = config.branchParCores * 100 / maxCores
+        if (value == 100) {
+          r = r :+ "--par-branch"
+        } else {
+          r = r ++ ISZ[String]("--par-branch", value.string)
+        }
       }
-      r = r ++ ISZ[String]("--fp-rounding", value)
-    }
-    if (config.smt2Seq != defaultConfig.smt2Seq) {
-      r = r :+ "--smt2-seq"
-    }
-    if (config.atLinesFresh != defaultConfig.atLinesFresh) {
-      r = r :+ "--log-pc-lines"
-    }
-    if (config.interp != defaultConfig.interp) {
-      r = r :+ "--interprocedural"
-    }
-    if (config.interpContracts != defaultConfig.interpContracts) {
-      r = r :+ "--interprocedural-contracts"
-    }
-    if (config.strictPureMode != defaultConfig.strictPureMode) {
-      val m: String = config.strictPureMode match {
-        case Config.StrictPureMode.Default => "default"
-        case Config.StrictPureMode.Flip => "flip"
-        case Config.StrictPureMode.Uninterpreted => "uninterpreted"
+      if (config.branchPar != defaultConfig.branchPar) {
+        val value: String = config.branchPar match {
+          case Config.BranchPar.All => "all"
+          case Config.BranchPar.OnlyAllReturns => "returns"
+          case Config.BranchPar.Disabled => "disabled"
+        }
+        r = r ++ ISZ[String]("--par-branch-mode", value)
       }
-      r = r ++ ISZ[String]("--strictpure-mode", m)
-    }
-    if (config.loopBound != defaultConfig.loopBound) {
-      r = r ++ ISZ[String]("--loop-bound", config.loopBound.string)
-    }
-    if (config.callBound != defaultConfig.callBound) {
-      r = r ++ ISZ[String]("--recursive-bound", config.callBound.string)
-    }
-    if (config.elideEncoding != defaultConfig.elideEncoding) {
-      r = r :+ "--elide-encoding"
-    }
-    if (config.rawInscription != defaultConfig.rawInscription) {
-      r = r :+ "--raw-inscription"
-    }
-    if (config.patternExhaustive != defaultConfig.patternExhaustive) {
-      r = r :+ "--pattern-inexhaustive"
-    }
-    if (config.pureFun != defaultConfig.pureFun) {
-      r = r :+ "--pure-proof-fun"
+      if (config.sat != defaultConfig.sat) {
+        r = r :+ "--sat"
+      }
+      if (config.rlimit != defaultConfig.rlimit) {
+        r = r ++ ISZ[String]("--rlimit", config.rlimit.string)
+      }
+      if (config.timeoutInMs != defaultConfig.timeoutInMs) {
+        r = r ++ ISZ[String]("--timeout", max(config.timeoutInMs / 1000, 1).string)
+      }
+      if (config.satTimeout != defaultConfig.satTimeout) {
+        r = r :+ "--sat-timeout"
+      }
+      if (config.charBitWidth != defaultConfig.charBitWidth) {
+        r = r ++ ISZ[String]("--c-bitwidth", config.charBitWidth.string)
+      }
+      if (config.intBitWidth != defaultConfig.intBitWidth) {
+        r = r ++ ISZ[String]("--z-bitwidth", config.intBitWidth.string)
+      }
+      if (config.useReal != defaultConfig.useReal) {
+        r = r :+ "--use-real"
+      }
+      if (config.logRawPc != defaultConfig.logRawPc) {
+        r = r :+ "--log-raw-smt2"
+      }
+      if (config.dontSplitPfq != defaultConfig.dontSplitPfq) {
+        r = r :+ "--dont-split-pfq"
+      }
+      if (config.splitAll != defaultConfig.splitAll) {
+        r = r :+ "--split-all"
+      }
+      if (config.splitIf != defaultConfig.splitIf) {
+        r = r :+ "--split-if"
+      }
+      if (config.splitMatch != defaultConfig.splitMatch) {
+        r = r :+ "--split-match"
+      }
+      if (config.splitContract != defaultConfig.splitContract) {
+        r = r :+ "--split-contract"
+      }
+      if (config.simplifiedQuery != defaultConfig.simplifiedQuery) {
+        r = r :+ "--simplify"
+      }
+      if (config.fpRoundingMode != defaultConfig.fpRoundingMode) {
+        val value: String = config.fpRoundingMode.native match {
+          case "RNE" => "NearestTiesToEven"
+          case "RNA" => "NearestTiesToAway"
+          case "RTP" => "TowardPositive"
+          case "RTN" => "TowardNegative"
+          case "RTZ" => "TowardZero"
+        }
+        r = r ++ ISZ[String]("--fp-rounding", value)
+      }
+      if (config.smt2Seq != defaultConfig.smt2Seq) {
+        r = r :+ "--smt2-seq"
+      }
+      if (config.atLinesFresh != defaultConfig.atLinesFresh) {
+        r = r :+ "--log-pc-lines"
+      }
+      if (config.interp != defaultConfig.interp) {
+        r = r :+ "--interprocedural"
+      }
+      if (config.interpContracts != defaultConfig.interpContracts) {
+        r = r :+ "--interprocedural-contracts"
+      }
+      if (config.strictPureMode != defaultConfig.strictPureMode) {
+        val m: String = config.strictPureMode match {
+          case Config.StrictPureMode.Default => "default"
+          case Config.StrictPureMode.Flip => "flip"
+          case Config.StrictPureMode.Uninterpreted => "uninterpreted"
+        }
+        r = r ++ ISZ[String]("--strictpure-mode", m)
+      }
+      if (config.loopBound != defaultConfig.loopBound) {
+        r = r ++ ISZ[String]("--loop-bound", config.loopBound.string)
+      }
+      if (config.callBound != defaultConfig.callBound) {
+        r = r ++ ISZ[String]("--recursive-bound", config.callBound.string)
+      }
+      if (config.elideEncoding != defaultConfig.elideEncoding) {
+        r = r :+ "--elide-encoding"
+      }
+      if (config.rawInscription != defaultConfig.rawInscription) {
+        r = r :+ "--raw-inscription"
+      }
+      if (config.patternExhaustive != defaultConfig.patternExhaustive) {
+        r = r :+ "--pattern-inexhaustive"
+      }
+      if (config.pureFun != defaultConfig.pureFun) {
+        r = r :+ "--pure-proof-fun"
+      }
     }
     config.background match {
       case Config.BackgroundMode.Type => r = r ++ ISZ[String]("--background", "type")
       case Config.BackgroundMode.Save => r = r ++ ISZ[String]("--background", "save")
       case Config.BackgroundMode.Disabled => r = r ++ ISZ[String]("--background", "disabled")
     }
-
-    addSmt2Config(F)
-    addSmt2Config(T)
+    if (ext != "logika") {
+      addSmt2Config(F)
+      addSmt2Config(T)
+    }
 
     return st"${(r, " ")}".render
   }
