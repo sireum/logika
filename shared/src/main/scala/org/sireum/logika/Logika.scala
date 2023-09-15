@@ -918,6 +918,8 @@ import Util._
     (jps, eps, sps, cps, mps)
   }
 
+  @strictpure def isSymExe: B = config.mode == Config.VerificationMode.SymExe
+
   def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
     tipe match {
       case AST.Typed.z => return State.Value.Z(0, pos)
@@ -936,7 +938,7 @@ import Util._
       return s0
     }
     val pos = posOpt.get
-    if (config.mode != Config.VerificationMode.SymExe) {
+    if (!isSymExe) {
       val (s1, size) = s0.freshSym(AST.Typed.z, pos)
       val (s2, loCond) = s1.freshSym(AST.Typed.b, pos)
       val (s3, hiCond) = s2.freshSym(AST.Typed.b, pos)
@@ -1085,7 +1087,7 @@ import Util._
     if (!info.ast.isVal) {
       return None()
     }
-    AST.Util.constantInitOpt(info.ast) match {
+    AST.Util.constantInitOpt(info.ast.initOpt, info.ast.attr.typedOpt) match {
       case Some(exp) =>
         val r = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, exp, reporter)
         assert(r.size == 1)
@@ -1298,6 +1300,16 @@ import Util._
           val (s1, v) = nameIntro(pos, s0, name :+ id, t, Some(pos))
           return (s1, v)
         case res: AST.ResolvedInfo.LocalVar =>
+          if (res.context.isEmpty) {
+            th.nameMap.get(ISZ(res.id)) match {
+              case Some(info: Info.LocalVar) =>
+                AST.Util.constantInitOpt(info.initOpt, info.typedOpt) match {
+                  case Some(init) => return evalExp(split, smt2, cache, rtCheck, s0, init, reporter)(0)
+                  case _ =>
+                }
+              case _ =>
+            }
+          }
           val (s1, r) = idIntro(pos, s0, res.context, res.id, t, None())
           return (s1, r)
         case res: AST.ResolvedInfo.Var =>
@@ -1405,7 +1417,7 @@ import Util._
         if (!rtCheck || !s0.ok) {
           return s0
         }
-        if (config.mode != Config.VerificationMode.SymExe) {
+        if (!isSymExe) {
           val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
           val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
           val s2 = s1.addClaims(ISZ(
@@ -2507,7 +2519,7 @@ import Util._
         }
         var localInMap = mctx.localInMap
         for (p <- mctx.localMap(typeSubstMap).entries) {
-          val (id, (ctx, _, t)) = p
+          val (id, (_, ctx, _, t)) = p
           val (s7, sym): (State, State.Value.Sym) = idIntro(pos, s1, ctx, id, t, None())
           localInMap = localInMap + id ~> sym
           s1 = s7
@@ -3684,7 +3696,7 @@ import Util._
                   posOpt: Option[Position], rwLocals: ISZ[AST.ResolvedInfo], reporter: Reporter): State = {
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
-    if (config.mode != Config.VerificationMode.SymExe) {
+    if (!isSymExe) {
       Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s0.claims :+ conclusion, th, F, config.atRewrite) match {
         case (pcs, Some(conc), _) =>
           val pcs2: HashSSet[AST.Exp] = if (rwLocals.nonEmpty) {

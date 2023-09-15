@@ -107,18 +107,18 @@ object Context {
       return r
     }
 
-    def localMap(sm: HashMap[String, AST.Typed]): HashSMap[String, (ISZ[String], AST.Id, AST.Typed)] = {
-      var r = HashSMap.empty[String, (ISZ[String], AST.Id, AST.Typed)]
+    def localMap(sm: HashMap[String, AST.Typed]): HashSMap[String, (B, ISZ[String], AST.Id, AST.Typed)] = {
+      var r = HashSMap.empty[String, (B, ISZ[String], AST.Id, AST.Typed)]
       for (p <- params) {
         val (id, t) = p
-        r = r + id.value ~> ((name, id, t.subst(sm)))
+        r = r + id.value ~> ((T, name, id, t.subst(sm)))
       }
       for (x <- reads ++ modifies) {
         x.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar if !r.contains(res.id) =>
-            r = r + res.id ~> ((res.context, AST.Id(res.id, AST.Attr(x.posOpt)), x.typedOpt.get.subst(sm)))
+            r = r + res.id ~> ((res.isVal, res.context, AST.Id(res.id, AST.Attr(x.posOpt)), x.typedOpt.get.subst(sm)))
           case res: AST.ResolvedInfo.Var if !(res.isInObject || res.owner.isEmpty) && !r.contains("this") =>
-            r = r + "this" ~> ((name, AST.Id("this", AST.Attr(x.posOpt)), receiverTypeOpt.get))
+            r = r + "this" ~> ((T, name, AST.Id("this", AST.Attr(x.posOpt)), receiverTypeOpt.get))
           case _ =>
         }
       }

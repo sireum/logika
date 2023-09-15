@@ -1994,7 +1994,7 @@ object Util {
       case Some(receiverType) =>
         val (s1, thiz) = idIntro(mctx.posOpt.get, s0, mctx.name, "this", receiverType, mctx.posOpt)
         localInMap = localInMap + "this" ~> thiz
-        s0 = s1.addClaim(State.Claim.Input(T, F, mctx.name, "this", thiz, thiz.pos))
+        s0 = if (!l.th.isMutable(receiverType)) s1 else s1.addClaim(State.Claim.Input(T, F, mctx.name, "this", thiz, thiz.pos))
         thisAdded = T
         for (p <- mctx.fieldVarMap(TypeChecker.emptySubstMap).entries) {
           val (id, (t, posOpt)) = p
@@ -2005,18 +2005,18 @@ object Util {
       case _ =>
     }
     for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
-      val (mname, id, t) = v
+      val (isVal, mname, id, t) = v
       val posOpt = id.attr.posOpt
       if (id.value != "this") {
         val (s1, sym) = idIntro(posOpt.get, s0, mname, id.value, t, posOpt)
-        s0 = s1.addClaim(State.Claim.Input(T, F, mname, id.value, sym, sym.pos))
+        s0 = if (isVal && !l.th.isMutable(t)) s1 else s1.addClaim(State.Claim.Input(T, F, mname, id.value, sym, sym.pos))
         if (!isHelper) {
           s0 = assumeValueInv(l, smt2, cache, T, s0, sym, posOpt.get, reporter)
         }
         localInMap = localInMap + id.value ~> sym
       } else if (!thisAdded) {
         val (s1, sym) = idIntro(posOpt.get, s0, mname, id.value, t, mctx.posOpt)
-        s0 = s1.addClaim(State.Claim.Input(T, F, mname, id.value, sym, sym.pos))
+        s0 = if (!l.th.isMutable(t)) s1 else s1.addClaim(State.Claim.Input(T, F, mname, id.value, sym, sym.pos))
         localInMap = localInMap + id.value ~> sym
         thisAdded = T
       }
