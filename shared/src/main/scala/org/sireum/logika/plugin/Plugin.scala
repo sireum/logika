@@ -36,6 +36,10 @@ object Plugin {
                          val nextFresh: Z,
                          val claims: ISZ[State.Claim])
 
+  object Result {
+    @strictpure def empty(nextFresh: Z): Result = Result(F, nextFresh, ISZ())
+  }
+
   @strictpure def stepNoDesc(cap: B, stepId: AST.ProofAst.StepId): ST =
     stepId match {
       case stepId: AST.ProofAst.StepId.Num =>
@@ -104,6 +108,14 @@ object Plugin {
 
   @pure def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B
 
+  def checkMode(logika: Logika, just: AST.ProofAst.Step.Justification, reporter: Reporter): B = {
+    if (logika.isManual) {
+      reporter.error(just.id.attr.posOpt, Logika.kind, s"${just.id.value} cannot be used in ${logika.config.mode} mode")
+      return F
+    }
+    return T
+  }
+
   def handle(logika: Logika,
              smt2: Smt2,
              cache: Logika.Cache,
@@ -112,6 +124,7 @@ object Plugin {
              step: AST.ProofAst.Step.Regular,
              reporter: Reporter): Plugin.Result
 }
+
 
 @sig trait ExpPlugin extends Plugin {
 

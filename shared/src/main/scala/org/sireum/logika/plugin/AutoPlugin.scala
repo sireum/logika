@@ -232,8 +232,21 @@ object AutoPlugin {
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Ref =>
-        return justificationIds.contains(just.idString) && just.isOwnedBy(justificationName)
+        return justificationIds.contains(just.id.value) && just.isOwnedBy(justificationName)
       case _ => return F
+    }
+  }
+
+  override def checkMode(logika: Logika, just: AST.ProofAst.Step.Justification, reporter: Reporter): B = {
+    just.id.value.native match {
+      case "Auto" if logika.isManual =>
+        reporter.error(just.id.attr.posOpt, Logika.kind, "Auto cannot be used in manual mode")
+        return F
+      case "Algebra" if logika.isManual && !just.hasWitness =>
+        reporter.error(just.id.attr.posOpt, Logika.kind, "Manual mode can only use Algebra* or Algebra T")
+        return F
+      case _ =>
+        return T
     }
   }
 
@@ -247,8 +260,9 @@ object AutoPlugin {
 
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Ref]
 
-    val id = just.idString
-    val posOpt = just.id.posOpt
+    val id = just.id.value
+    val posOpt = just.ref.posOpt
+
     val pos = posOpt.get
 
     def checkAlgebraExp(e: AST.Exp): B = {
@@ -261,7 +275,7 @@ object AutoPlugin {
     def checkValid(psmt2: Smt2, stat: B, nextFresh: Z, premises: ISZ[State.Claim], conclusion: State.Claim,
                    claims: ISZ[State.Claim]): Plugin.Result = {
       if (id == "Algebra" && !checkAlgebraExp(step.claim)) {
-        return Plugin.Result(F, state.nextFresh, ISZ())
+        return Plugin.Result.empty(nextFresh)
       }
 
       var status = stat
@@ -332,13 +346,13 @@ object AutoPlugin {
                           |{
                           |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
                           |}""".render)
-                    return Plugin.Result(F, state.nextFresh, ISZ())
+                    return Plugin.Result.empty(state.nextFresh)
                 }
               }
             case _ =>
               if (id == "Premise") {
                 reporter.error(posOpt, Logika.kind, "The stated claim has not been proven before")
-                return Plugin.Result(F, state.nextFresh, ISZ())
+                return Plugin.Result.empty(state.nextFresh)
               }
           }
       }
@@ -372,7 +386,7 @@ object AutoPlugin {
         }
       }
       if (!ok) {
-        return Plugin.Result(F, state.nextFresh, ISZ())
+        return Plugin.Result.empty(state.nextFresh)
       }
       val (s5, exp) = logika.rewriteAt(atMap, s1, step.claim, reporter)
       val (stat, nextFresh, premises, conclusion) =

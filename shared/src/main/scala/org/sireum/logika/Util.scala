@@ -814,7 +814,7 @@ object Util {
           var r2 = ISZ[AST.Exp]()
           for (e <- r) {
             es.transformExp(e) match {
-              case MSome(e2: AST.Exp.Binary) if (e2.attr.resOpt == equivResOpt || e2.attr.resOpt == eqResOpt) && e2.left == e2.right =>
+              case MSome(e2: AST.Exp.Binary) if isEquivLeftRight(e2) =>
                 r2 = r2 :+ e
               case MSome(e2) =>
                 r2 = r2 :+ e2
@@ -1648,6 +1648,7 @@ object Util {
           var es = ISZ[AST.Exp]()
           for (c <- defsToEqs(claim.claims)) {
             toExp(c) match {
+              case Some(e: AST.Exp.Binary) if isEquivLeftRight(e) =>
               case Some(e) => es = es :+ e
               case _ =>
             }
@@ -1753,7 +1754,9 @@ object Util {
 
       for (i <- 0 until claims.size if !ignore(claims(i))) {
         toExp(claims(i)) match {
-          case Some(exp) if exp != trueLit =>
+          case Some(`trueLit`) =>
+          case Some(exp: AST.Exp.Binary) if isEquivLeftRight(exp) =>
+          case Some(exp) =>
             r = r :+ exp
           case _ =>
         }
@@ -2970,6 +2973,9 @@ object Util {
       return None()
     }
   }
+
+  @strictpure def isEquivLeftRight(e: AST.Exp.Binary): B =
+    (e.attr.resOpt == equivResOpt || e.attr.resOpt == eqResOpt) && e.left == e.right
 
   @pure def isEquivResOpt(th: TypeHierarchy, resOpt: Option[AST.ResolvedInfo], t: AST.Typed): B = {
     resOpt match {

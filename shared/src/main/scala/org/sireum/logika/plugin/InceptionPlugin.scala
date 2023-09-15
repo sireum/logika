@@ -188,6 +188,10 @@ import InceptionPlugin._
     }
   }
 
+  override def checkMode(logika: Logika, just: AST.ProofAst.Step.Justification, reporter: Reporter): B = {
+    return T
+  }
+
   def handle(logika: Logika,
              smt2: Smt2,
              cache: Logika.Cache,

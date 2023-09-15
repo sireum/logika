@@ -919,6 +919,8 @@ import Util._
   }
 
   @strictpure def isSymExe: B = config.mode == Config.VerificationMode.SymExe
+  @strictpure def isAuto: B = config.mode == Config.VerificationMode.Auto
+  @strictpure def isManual: B = config.mode == Config.VerificationMode.Manual
 
   def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
     tipe match {
@@ -1300,11 +1302,14 @@ import Util._
           val (s1, v) = nameIntro(pos, s0, name :+ id, t, Some(pos))
           return (s1, v)
         case res: AST.ResolvedInfo.LocalVar =>
-          if (res.context.isEmpty) {
+          if (res.context.isEmpty && context.methodName.nonEmpty) {
             th.nameMap.get(ISZ(res.id)) match {
               case Some(info: Info.LocalVar) =>
                 AST.Util.constantInitOpt(info.initOpt, info.typedOpt) match {
-                  case Some(init) => return evalExp(split, smt2, cache, rtCheck, s0, init, reporter)(0)
+                  case Some(init) =>
+                    val (s1, c) = evalExp(split, smt2, cache, rtCheck, s0, init, reporter)(0)
+                    val (s2, r) = idIntro(pos, s1, res.context, res.id, t, None())
+                    return (s2.addClaim(State.Claim.Eq(r, c)), r)
                   case _ =>
                 }
               case _ =>
@@ -3697,29 +3702,30 @@ import Util._
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
     if (!isSymExe) {
-      Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s0.claims :+ conclusion, th, F, config.atRewrite) match {
-        case (pcs, Some(conc), _) =>
-          val pcs2: HashSSet[AST.Exp] = if (rwLocals.nonEmpty) {
-            val rwLocalSet = HashSet ++ rwLocals
-            var substMap = HashMap.empty[AST.Exp, AST.Exp]
-            for (pc <- pcs) {
-              pc match {
-                case pc@AST.Exp.Binary(left: AST.Exp.Ident, _, right) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) && rwLocalSet.contains(left.attr.resOpt.get) =>
-                  substMap = substMap + right ~> left
-                case pc@AST.Exp.Binary(left: AST.Exp.Result, _, right) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) =>
-                  substMap = substMap + right ~> left
-                case pc@AST.Exp.Binary(left, _, right: AST.Exp.Ident) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) && rwLocalSet.contains(right.attr.resOpt.get) =>
-                  substMap = substMap + left ~> right
-                case pc@AST.Exp.Binary(left, _, right: AST.Exp.Result) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) =>
-                  substMap = substMap + left ~> right
-                case _ =>
-              }
-            }
-            val es = AST.Util.ExpSubstitutor(substMap)
-            HashSSet ++ pcs ++ (for (pc <- pcs) yield es.transformExp(pc).getOrElseEager(pc))
-          } else {
-            HashSSet ++ pcs
+      val (pcs, concOpt, _) = Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s0.claims :+ conclusion, th, F, config.atRewrite)
+      val pcs2: HashSSet[AST.Exp] = if (rwLocals.nonEmpty) {
+        val rwLocalSet = HashSet ++ rwLocals
+        var substMap = HashMap.empty[AST.Exp, AST.Exp]
+        for (pc <- pcs) {
+          pc match {
+            case pc@AST.Exp.Binary(left: AST.Exp.Ident, _, right) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) && rwLocalSet.contains(left.attr.resOpt.get) =>
+              substMap = substMap + right ~> left
+            case pc@AST.Exp.Binary(left: AST.Exp.Result, _, right) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) =>
+              substMap = substMap + right ~> left
+            case pc@AST.Exp.Binary(left, _, right: AST.Exp.Ident) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) && rwLocalSet.contains(right.attr.resOpt.get) =>
+              substMap = substMap + left ~> right
+            case pc@AST.Exp.Binary(left, _, right: AST.Exp.Result) if Util.isEquivResOpt(th, pc.attr.resOpt, left.typedOpt.get) =>
+              substMap = substMap + left ~> right
+            case _ =>
           }
+        }
+        val es = AST.Util.ExpSubstitutor(substMap)
+        HashSSet ++ pcs ++ (for (pc <- pcs) yield es.transformExp(pc).getOrElseEager(pc))
+      } else {
+        HashSSet ++ pcs
+      }
+      concOpt match {
+        case Some(conc) =>
           val normPCs = HashSet ++ PathConditions(th, pcs2.elements).normalize
           val normConclusion = th.normalizeExp(conc)
           if (normPCs.contains(normConclusion)) {
@@ -3728,16 +3734,15 @@ import Util._
                   |{
                   |  ${(for (pc2 <- pcs2.elements) yield pc2.prettyST, ";\n")}
                   |}""".render)
-            return s0
-          } else {
-            reporter.error(posOpt, kind,
-              st"""The ${ops.StringOps(title).firstToLower} has not been proven yet in the path conditions:
-                  |{
-                  |  ${(for (pc2 <- pcs2.elements) yield pc2.prettyST, ";\n")}
-                  |}""".render)
+            return s0.addClaim(conclusion)
           }
         case _ =>
       }
+      reporter.error(posOpt, kind,
+        st"""The ${ops.StringOps(title).firstToLower} has not been proven yet in the path conditions:
+            |{
+            |  ${(for (pc2 <- pcs2.elements) yield pc2.prettyST, ";\n")}
+            |}""".render)
     } else {
       if (s0.ok) {
         val r = smt2.valid(context.methodName, config, cache, reportQuery,
@@ -4616,6 +4621,9 @@ import Util._
           case _ => step
         }
         for (plugin <- jescmPlugins._1 if plugin.canHandle(this, normStep.just)) {
+          if (!plugin.checkMode(this, normStep.just, reporter)) {
+            return (s0(status = State.Status.Error), m)
+          }
           val Plugin.Result(ok, nextFresh, claims) = plugin.handle(this, smt2, cache, m, s0, normStep, reporter)
           val nextState = s0(status = State.statusOf(ok), nextFresh = nextFresh).addClaims(claims)
           if (config.transitionCache && ok && !reporter.hasError) {

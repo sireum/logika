@@ -66,6 +66,10 @@ object PredNatDedPlugin {
     }
   }
 
+  override def checkMode(logika: Logika, just: AST.ProofAst.Step.Justification, reporter: Reporter): B = {
+    return T
+  }
+
   override def handle(logika: Logika,
                       smt2: Smt2,
                       cache: Logika.Cache,
