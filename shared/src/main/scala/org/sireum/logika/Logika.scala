@@ -1302,7 +1302,7 @@ import Util._
           val (s1, v) = nameIntro(pos, s0, name :+ id, t, Some(pos))
           return (s1, v)
         case res: AST.ResolvedInfo.LocalVar =>
-          if (res.context.isEmpty && context.methodName.nonEmpty) {
+          if (res.isVal && res.context.isEmpty && context.methodName.nonEmpty) {
             th.nameMap.get(ISZ(res.id)) match {
               case Some(info: Info.LocalVar) =>
                 AST.Util.constantInitOpt(info.initOpt, info.typedOpt) match {
