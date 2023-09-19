@@ -44,12 +44,6 @@ object OptionsCli {
     'Disabled
   }
 
-  @enum object LogikaMode {
-    'Symexe
-    'Manual
-    'Auto
-  }
-
   @enum object LogikaFPRoundingMode {
     'NearestTiesToEven
     'NearestTiesToAway
@@ -74,7 +68,7 @@ object OptionsCli {
     val help: String,
     val args: ISZ[String],
     val background: LogikaBackground.Type,
-    val mode: LogikaMode.Type,
+    val manual: B,
     val smt2Caching: B,
     val transitionCaching: B,
     val infoFlow: B,
@@ -142,26 +136,6 @@ import OptionsCli._
       return None()
     }
     val r = parseLogikaBackgroundH(args(i))
-    return r
-  }
-
-  def parseLogikaModeH(arg: String): Option[LogikaMode.Type] = {
-    arg.native match {
-      case "symexe" => return Some(LogikaMode.Symexe)
-      case "manual" => return Some(LogikaMode.Manual)
-      case "auto" => return Some(LogikaMode.Auto)
-      case s =>
-        reporter.error(None(), "OptionsCli", s"Expecting one of the following: { symexe, manual, auto }, but found '$s'.")
-        return None()
-    }
-  }
-
-  def parseLogikaMode(args: ISZ[String], i: Z): Option[LogikaMode.Type] = {
-    if (i >= args.size) {
-      reporter.error(None(), "OptionsCli", "Expecting one of the following: { symexe, manual, auto }, but none found.")
-      return None()
-    }
-    val r = parseLogikaModeH(args(i))
     return r
   }
 
@@ -236,8 +210,7 @@ import OptionsCli._
           |Available Options:
           |    --background         Background verification mode (expects one of { type,
           |                           save, disabled }; default: type)
-          |-m, --mode               Verification mode for Slang scripts (expects one of {
-          |                           symexe, manual, auto }; default: symexe)
+          |-m, --manual             Enable manual mode for Slang scripts
           |    --smt2-caching       Disable SMT2 query caching
           |    --transition-caching Disable transition caching
           |-h, --help               Display this information
@@ -334,7 +307,7 @@ import OptionsCli._
           |                           integer; min is 1; default is 2)""".render
 
     var background: LogikaBackground.Type = LogikaBackground.Type
-    var mode: LogikaMode.Type = LogikaMode.Symexe
+    var manual: B = false
     var smt2Caching: B = true
     var transitionCaching: B = true
     var infoFlow: B = false
@@ -392,10 +365,10 @@ import OptionsCli._
              case Some(v) => background = v
              case _ => return None()
            }
-         } else if (arg == "-m" || arg == "--mode") {
-           val o: Option[LogikaMode.Type] = parseLogikaMode(args, j + 1)
+         } else if (arg == "-m" || arg == "--manual") {
+           val o: Option[B] = { j = j - 1; Some(!manual) }
            o match {
-             case Some(v) => mode = v
+             case Some(v) => manual = v
              case _ => return None()
            }
          } else if (arg == "--smt2-caching") {
@@ -671,7 +644,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), background, mode, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout))
+    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

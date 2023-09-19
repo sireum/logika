@@ -93,7 +93,7 @@ object LogikaTest {
       pureFun = F,
       detailedInfo = F,
       satTimeout = F,
-      mode = Config.VerificationMode.SymExe,
+      isAuto = T,
       background = Config.BackgroundMode.Type,
       atRewrite = T
     )

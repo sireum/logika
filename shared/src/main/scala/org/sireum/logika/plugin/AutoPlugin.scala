@@ -360,7 +360,7 @@ object AutoPlugin {
 
     if (!just.hasWitness) {
       val (stat, nextFresh, premises, conclusion) =
-        logika(config = logika.config(mode = Config.VerificationMode.SymExe)).
+        logika(config = logika.config(isAuto = T)).
           evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
       return checkValid(smt2, stat, nextFresh, state.claims ++ premises, conclusion, premises :+ conclusion)
     } else {
@@ -390,7 +390,7 @@ object AutoPlugin {
       }
       val (s5, exp) = logika.rewriteAt(atMap, s1, step.claim, reporter)
       val (stat, nextFresh, premises, conclusion) =
-        logika(config = logika.config(mode = Config.VerificationMode.SymExe)).
+        logika(config = logika.config(isAuto = T)).
           evalRegularStepClaim(psmt2, cache, s5, exp, step.id.posOpt, reporter)
       val r = checkValid(psmt2, stat, nextFresh, s1.claims ++ premises, conclusion, premises :+ conclusion)
       smt2.combineWith(psmt2)

@@ -31,9 +31,9 @@ import org.sireum.cli.CliOpt._
 
 object cli {
 
-  val modeOpt: Opt = Opt(name = "mode", longKey = "mode", shortKey = Some('m'),
-    tpe = Type.Choice(name = "mode", sep = None(), elements = ISZ("symexe", "manual", "auto")),
-    description = "Verification mode for Slang scripts")
+  val modeOpt: Opt = Opt(name = "manual", longKey = "manual", shortKey = Some('m'),
+    tpe = Type.Flag(F),
+    description = "Set verification mode to manual for Slang scripts")
 
   val parOpt: Opt = Opt(name = "par", longKey = "par", shortKey = Some('p'),
     tpe = Type.NumFlag(100, Some(1), Some(100)),

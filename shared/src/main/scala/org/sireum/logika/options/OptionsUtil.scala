@@ -132,12 +132,6 @@ object OptionsUtil {
       case OptionsCli.LogikaBackground.Disabled => Config.BackgroundMode.Disabled
     }
 
-    val mode: Config.VerificationMode.Type = o.mode match {
-      case OptionsCli.LogikaMode.Symexe => Config.VerificationMode.SymExe
-      case OptionsCli.LogikaMode.Auto => Config.VerificationMode.Auto
-      case OptionsCli.LogikaMode.Manual => Config.VerificationMode.Manual
-    }
-
     val config = org.sireum.logika.Config(
       smt2Configs = smt2Configs,
       parCores = parCores,
@@ -176,7 +170,7 @@ object OptionsUtil {
       pureFun = o.pureFun,
       detailedInfo = defaultConfig.detailedInfo,
       satTimeout = o.satTimeout,
-      mode = mode,
+      isAuto = !o.manual,
       background = background,
       atRewrite = o.logAtRewrite
     )
@@ -208,12 +202,8 @@ object OptionsUtil {
     @strictpure def max(value1: Z, value2: Z): Z =
       if (value1 > value2) value1 else value2
 
-    if (ext == "sc") {
-      config.mode match {
-        case Config.VerificationMode.SymExe => r = r ++ ISZ[String]("--mode", "symexe")
-        case Config.VerificationMode.Auto => r = r ++ ISZ[String]("--mode", "auto")
-        case Config.VerificationMode.Manual => r = r ++ ISZ[String]("--mode", "manual")
-      }
+    if (ext == "sc" && !config.isAuto) {
+      r = r :+ "--manual"
     }
 
     if (ext != "logika") {

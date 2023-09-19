@@ -64,7 +64,7 @@ import org.sireum._
                        val pureFun: B,
                        val detailedInfo: B,
                        val satTimeout: B,
-                       val mode: Config.VerificationMode.Type,
+                       val isAuto: B,
                        val background: Config.BackgroundMode.Type,
                        val atRewrite: B) {
 
@@ -90,12 +90,6 @@ object Config {
     "Type"
     "Save"
     "Disabled"
-  }
-
-  @enum object VerificationMode {
-    "Manual"
-    "Auto"
-    "SymExe"
   }
 }
 

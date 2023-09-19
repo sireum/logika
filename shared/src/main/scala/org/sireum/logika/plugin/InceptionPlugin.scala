@@ -298,7 +298,7 @@ import InceptionPlugin._
         return emptyResult
       }
       val (status, nextFresh, claims, claim): (B, Z, ISZ[State.Claim], State.Claim) =
-        if (logika.isSymExe)
+        if (logika.isAuto)
           logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
         else logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
       if (status && logika.config.detailedInfo) {

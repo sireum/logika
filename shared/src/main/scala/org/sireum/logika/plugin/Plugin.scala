@@ -110,7 +110,7 @@ object Plugin {
 
   def checkMode(logika: Logika, just: AST.ProofAst.Step.Justification, reporter: Reporter): B = {
     if (logika.isManual) {
-      reporter.error(just.id.attr.posOpt, Logika.kind, s"${just.id.value} cannot be used in ${logika.config.mode} mode")
+      reporter.error(just.id.attr.posOpt, Logika.kind, s"${just.id.value} cannot be used in manual mode")
       return F
     }
     return T

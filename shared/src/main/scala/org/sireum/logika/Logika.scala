@@ -918,9 +918,8 @@ import Util._
     (jps, eps, sps, cps, mps)
   }
 
-  @strictpure def isSymExe: B = config.mode == Config.VerificationMode.SymExe
-  @strictpure def isAuto: B = config.mode == Config.VerificationMode.Auto
-  @strictpure def isManual: B = config.mode == Config.VerificationMode.Manual
+  @strictpure def isAuto: B = config.isAuto
+  @strictpure def isManual: B = !config.isAuto
 
   def zero(tipe: AST.Typed.Name, pos: Position): State.Value = {
     tipe match {
@@ -940,7 +939,7 @@ import Util._
       return s0
     }
     val pos = posOpt.get
-    if (!isSymExe) {
+    if (isManual) {
       val (s1, size) = s0.freshSym(AST.Typed.z, pos)
       val (s2, loCond) = s1.freshSym(AST.Typed.b, pos)
       val (s3, hiCond) = s2.freshSym(AST.Typed.b, pos)
@@ -1422,7 +1421,7 @@ import Util._
         if (!rtCheck || !s0.ok) {
           return s0
         }
-        if (!isSymExe) {
+        if (isManual) {
           val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
           val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
           val s2 = s1.addClaims(ISZ(
@@ -3701,7 +3700,7 @@ import Util._
                   posOpt: Option[Position], rwLocals: ISZ[AST.ResolvedInfo], reporter: Reporter): State = {
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
-    if (!isSymExe) {
+    if (isManual) {
       val (pcs, concOpt, _) = Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s0.claims :+ conclusion, th, F, config.atRewrite)
       val pcs2: HashSSet[AST.Exp] = if (rwLocals.nonEmpty) {
         val rwLocalSet = HashSet ++ rwLocals
@@ -5415,7 +5414,7 @@ import Util._
   def assumeExps(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, exps: ISZ[AST.Exp],
                  reporter: Reporter): ISZ[State] = {
     val thisL = this
-    val l = thisL(config = thisL.config(mode = Config.VerificationMode.SymExe))
+    val l = thisL(config = thisL.config(isAuto = T))
     var currents = ISZ(s0)
     var done = ISZ[State]()
     for (exp <- exps) {
