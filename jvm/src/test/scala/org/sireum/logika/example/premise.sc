@@ -118,7 +118,7 @@ def testNameString(): Unit = {
   Deduce(
     //@formatter:off
     At[Z]("addFooY.n", 0) == 0                                 by Premise,
-    Foo.y == In(Foo.y) + 0                                     by Premise
+    Foo.y == Old(Foo.y) + 0                                    by Premise
     //@formatter:on
   )
 
@@ -128,8 +128,8 @@ def testNameString(): Unit = {
     //@formatter:off
     At[Z]("addFooY.n", 0) == 0                                 by Premise,
     At[Z]("addFooY.n", 1) == 1                                 by Premise,
-    At(Foo.y, 0) + 0 == In(Foo.y) + 0                          by Premise,
-    Foo.y == In(Foo.y) + 0 + 1                                 by Premise
+    Old(Foo.y) == In(Foo.y) + 0                                by Premise,
+    Foo.y == Old(Foo.y) + 1                                    by Premise
     //@formatter:on
   )
 }

@@ -1428,7 +1428,7 @@ import Util._
             State.Claim.Let.Binary(cond, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe),
             State.Claim.Prop(T, cond)
           ))
-          Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s2.claims, th, F, T) match {
+          Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s2.claims, th, config.atLinesFresh, T) match {
             case (pcs, Some(condExp: AST.Exp.Binary), _) =>
               val normPCs = HashSet ++ PathConditions(th, pcs).normalize
               if (normPCs.contains(th.normalizeExp(condExp))) {
@@ -2423,7 +2423,9 @@ import Util._
               for (s4 <- s4s) {
                 assign._1 match {
                   case lhs: AST.Exp.This =>
-                    s5s = s5s :+ evalAssignLocalH(F, s4, context.methodName, "this", assign._2, lhs.posOpt, reporter)
+                    var (s5, thiz) = idIntro(lhs.posOpt.get, s4, context.methodName, "this", context.receiverTypeOpt.get, None())
+                    s5 = s5.addClaim(State.Claim.Old(T, F, context.methodName, "this", thiz, lhs.posOpt.get))
+                    s5s = s5s :+ evalAssignLocalH(F, s5, context.methodName, "this", assign._2, lhs.posOpt, reporter)
                   case lhs =>
                     s5s = s5s ++ assignRec(split, smt2, cache, rtCheck, s4, lhs, assign._2, reporter)
                 }
@@ -2439,7 +2441,7 @@ import Util._
 
       for (p <- stateMethods) {
         p._2 match {
-          case Either.Left(method) => evalMethod(p._1, method)
+          case Either.Left(method) => evalMethod(if (context.pathConditionsOpt.isEmpty) removeOld(p._1) else p._1, method)
           case Either.Right(v) => r = r :+ ((p._1, v))
         }
       }
@@ -2497,6 +2499,9 @@ import Util._
               info.sig.id.attr.posOpt.get)),
           this.context.compMethods :+ (res.owner :+ res.id)
         )
+        if (context.pathConditionsOpt.isEmpty) {
+          s1 = removeOld(s1)
+        }
         val mctx = l.context.methodOpt.get
         var objectVarInMap = mctx.objectVarInMap
         for (p <- mctx.modObjectVarMap(typeSubstMap).entries) {
@@ -2555,6 +2560,11 @@ import Util._
           var ms1 = ms0
           val modObjectVars = contract.modifiedObjectVars
           val mpos = mposOpt.get
+          for (p <- modObjectVars.entries) {
+            val (res, (t, pos)) = p
+            val (ms2, sym) = nameIntro(mpos, ms1, res.owner :+ res.id, t, None())
+            ms1 = ms2.addClaim(State.Claim.Old(F, res.isSpec, res.owner, res.id, sym, pos))
+          }
           ms1 = rewriteObjectVars(logikaComp, smt2, cache, rtCheck, ms1, modObjectVars, mpos, reporter)
           var oldIdMap = HashMap.empty[ISZ[String], State.Value.Sym]
           for (pair <- modLocals.entries) {
@@ -3701,7 +3711,7 @@ import Util._
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
     if (isManual) {
-      val (pcs, concOpt, _) = Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s0.claims :+ conclusion, th, F, config.atRewrite)
+      val (pcs, concOpt, _) = Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s0.claims :+ conclusion, th, config.atLinesFresh, T)
       val pcs2: HashSSet[AST.Exp] = if (rwLocals.nonEmpty) {
         val rwLocalSet = HashSet ++ rwLocals
         var substMap = HashMap.empty[AST.Exp, AST.Exp]
@@ -3928,13 +3938,19 @@ import Util._
                 reporter.error(lhs.posOpt, kind, s"Missing Modifies clause for ${res.id}")
               case _ =>
             }
-            return ISZ(evalAssignLocalH(F, s0, res.context, res.id, rhs, lhs.posOpt, reporter))
+            val (s1, sym) = idIntro(lhs.posOpt.get, s0, res.context, res.id, lhs.typedOpt.get, None())
+            val s2 = s1.addClaim(State.Claim.Old(T, res.isSpec, res.context, res.id, sym, lhs.posOpt.get))
+            return ISZ(evalAssignLocalH(F, s2, res.context, res.id, rhs, lhs.posOpt, reporter))
           case res: AST.ResolvedInfo.Var =>
             if (res.isInObject) {
-              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s0, res.owner :+ res.id, lhs.typedOpt.get, rhs,
+              val (s1, sym) = nameIntro(lhs.posOpt.get, s0, res.owner :+ res.id, lhs.typedOpt.get, None())
+              val s2 = s1.addClaim(State.Claim.Old(F, res.isSpec, res.owner, res.id, sym, lhs.posOpt.get))
+              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s2, res.owner :+ res.id, lhs.typedOpt.get, rhs,
                 lhs.posOpt, reporter))
             } else {
-              return ISZ(evalAssignThisVarH(s0, lhs.id.value, rhs, lhs.posOpt.get, reporter))
+              val (s1, sym) = idIntro(lhs.posOpt.get, s0, context.methodName, "this", context.receiverTypeOpt.get, None())
+              val s2 = s1.addClaim(State.Claim.Old(T, res.isSpec, context.methodName, "this", sym, lhs.posOpt.get))
+              return ISZ(evalAssignThisVarH(s2, lhs.id.value, rhs, lhs.posOpt.get, reporter))
             }
           case _ => halt(s"Infeasible: $lhs")
         }
@@ -3964,12 +3980,16 @@ import Util._
         lhs.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Var =>
             if (res.isInObject) {
-              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s0, res.owner :+ res.id, lhs.typedOpt.get, rhs,
+              val (s1, sym) = nameIntro(lhs.posOpt.get, s0, res.owner :+ res.id, lhs.typedOpt.get, None())
+              val s2 = s1.addClaim(State.Claim.Old(F, res.isSpec, res.owner, res.id, sym, lhs.posOpt.get))
+              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s2, res.owner :+ res.id, lhs.typedOpt.get, rhs,
                 lhs.posOpt, reporter))
             } else {
               lhs.receiverOpt match {
                 case Some(_: AST.Exp.This) =>
-                  return ISZ(evalAssignThisVarH(s0, lhs.id.value, rhs, lhs.posOpt.get, reporter))
+                  val (s1, sym) = idIntro(lhs.posOpt.get, s0, context.methodName, "this", context.receiverTypeOpt.get, None())
+                  val s2 = s1.addClaim(State.Claim.Old(T, res.isSpec, context.methodName, "this", sym, lhs.posOpt.get))
+                  return ISZ(evalAssignThisVarH(s2, lhs.id.value, rhs, lhs.posOpt.get, reporter))
                 case _ =>
               }
             }
@@ -4798,32 +4818,14 @@ import Util._
     }
 
     def evalAssign(s0: State, assignStmt: AST.Stmt.Assign): ISZ[State] = {
-      val s2: State = AST.Util.getLhsGroundExp(context.receiverTypeOpt, assignStmt.lhs) match {
-        case Some(oldGroundLhs) =>
-         val (s1, old) = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, oldGroundLhs, reporter)(0)
-         val oldClaim: State.Claim = oldGroundLhs match {
-            case prevAssignLhs: AST.Exp.This => State.Claim.Old(T, F, ISZ(), "this", old, prevAssignLhs.posOpt.get)
-            case prevAssignLhs: AST.Exp.Ref =>
-              prevAssignLhs.resOpt.get match {
-                case res: AST.ResolvedInfo.LocalVar =>
-                  State.Claim.Old(T, res.isSpec, res.context, res.id, old, prevAssignLhs.posOpt.get)
-                case res: AST.ResolvedInfo.Var =>
-                  State.Claim.Old(F, res.isSpec, res.owner, res.id, old, prevAssignLhs.posOpt.get)
-                case _ => halt("Infeasible")
-              }
-            case _ => halt("Infeasible")
-          }
-          s1.addClaim(oldClaim)
-        case _ => s0
-      }
       var r = ISZ[State]()
-      for (p <- evalAssignExpValue(split, smt2, cache, assignStmt.lhs.typedOpt.get, rtCheck, s2, assignStmt.rhs, reporter)) {
-        val (s3, init) = p
-        if (s3.ok) {
-          val (s4, sym) = value2Sym(s3, init, assignStmt.rhs.asStmt.posOpt.get)
-          r = r ++ assignRec(split, smt2, cache, rtCheck, s4, assignStmt.lhs, sym, reporter)
+      for (p <- evalAssignExpValue(split, smt2, cache, assignStmt.lhs.typedOpt.get, rtCheck, s0, assignStmt.rhs, reporter)) {
+        val (s1, init) = p
+        if (s1.ok) {
+          val (s2, sym) = value2Sym(s1, init, assignStmt.rhs.asStmt.posOpt.get)
+          r = r ++ assignRec(split, smt2, cache, rtCheck, s2, assignStmt.lhs, sym, reporter)
         } else {
-          r = r :+ s3
+          r = r :+ s1
         }
       }
       return r

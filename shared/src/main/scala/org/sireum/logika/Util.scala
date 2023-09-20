@@ -1346,9 +1346,14 @@ object Util {
                     case ti => halt(s"Infeasible: $ti")
                   }
                 case t: AST.Typed.Tuple =>
-                  return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-                    AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Tuple(t.args.size,
-                      org.sireum.Z(ops.StringOps(let.id).substring(1, let.id.size)).get)), Some(sym.tipe))))
+                  val n = org.sireum.Z(ops.StringOps(let.id).substring(1, let.id.size)).get
+                  o match {
+                    case o: AST.Exp.Tuple =>
+                      return Some(o.args(n - 1))
+                    case _ =>
+                      return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
+                        AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Tuple(t.args.size, n)), Some(sym.tipe))))
+                  }
                 case t: AST.Typed.TypeVar if t.isIndex =>
                   assert(let.id == "toZ")
                   return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
@@ -2841,29 +2846,24 @@ object Util {
     return StateTransformer(PrePostLocalRestorer(localMap)).transformState(F, s0).resultOpt.getOrElse(s0)
   }
 
-  @pure def removeOld(ss: ISZ[State]): ISZ[State] = {
-    var r = ISZ[State]()
-    for (s <- ss) {
-      if (s.ok) {
-        var cs = ISZ[State.Claim]()
-        var changed = F
-        for (c <- s.claims) {
-          c match {
-            case _: State.Claim.Old => changed = T
-            case _ => cs = cs :+ c
-          }
+  @pure def removeOld(s: State): State = {
+    if (s.ok) {
+      var cs = ISZ[State.Claim]()
+      var changed = F
+      for (c <- s.claims) {
+        c match {
+          case _: State.Claim.Old => changed = T
+          case _ => cs = cs :+ c
         }
-        if (changed) {
-          r = r :+ s(claims = cs)
-        } else {
-          r = r :+ s
-        }
-      } else {
-        r = r :+ s
+      }
+      if (changed) {
+        return s(claims = cs)
       }
     }
-    return r
+    return s
   }
+
+  @strictpure def removeOlds(ss: ISZ[State]): ISZ[State] = for (s <- ss) yield removeOld(s)
 
   def evalStmts(l: Logika, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym],
                 rtCheck: B, state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): ISZ[State] = {
@@ -2883,7 +2883,7 @@ object Util {
       val cs = currents
       currents = ISZ()
       val stmt = stmts(i)
-      for (current <- if (stmt.isInstanceOf[AST.Stmt.DeduceSteps] || stmt.isInstanceOf[AST.Stmt.DeduceSequent]) cs else removeOld(cs)) {
+      for (current <- if (stmt.isInstanceOf[AST.Stmt.DeduceSteps] || stmt.isInstanceOf[AST.Stmt.DeduceSequent] || context.pathConditionsOpt.nonEmpty) cs else removeOlds(cs)) {
         if (current.ok) {
           stmt match {
             case AST.Stmt.Expr(e: AST.Exp.Invoke) if e.attr.resOpt == TypeChecker.setOptionsResOpt =>
@@ -2985,7 +2985,7 @@ object Util {
            s <- logika.evalAssignExp(split, smt2, cache, rOpt, rtCheck, current, stmts(stmts.size - 1).asAssignExp, reporter))
       yield s) ++ done
     else currents ++ done
-    return (logika, r)
+    return (logika, if (context.pathConditionsOpt.nonEmpty) r else removeOlds(r))
   }
 
   def extractAssignExpOpt(mi: lang.symbol.Info.Method): Option[AST.AssignExp] = {
