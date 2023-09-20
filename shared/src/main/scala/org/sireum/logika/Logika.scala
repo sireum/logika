@@ -4798,10 +4798,10 @@ import Util._
     }
 
     def evalAssign(s0: State, assignStmt: AST.Stmt.Assign): ISZ[State] = {
-      val s2: State = assignStmt.deduceOldLhsOpt match {
-        case Some(deduceOldLhs) =>
-         val (s1, old) = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, deduceOldLhs, reporter)(0)
-          val oldClaim: State.Claim = deduceOldLhs match {
+      val s2: State = AST.Util.getLhsGroundExp(context.receiverTypeOpt, assignStmt.lhs) match {
+        case Some(oldGroundLhs) =>
+         val (s1, old) = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, oldGroundLhs, reporter)(0)
+         val oldClaim: State.Claim = oldGroundLhs match {
             case prevAssignLhs: AST.Exp.This => State.Claim.Old(T, F, ISZ(), "this", old, prevAssignLhs.posOpt.get)
             case prevAssignLhs: AST.Exp.Ref =>
               prevAssignLhs.resOpt.get match {
@@ -5205,20 +5205,6 @@ import Util._
     }
 
     def evalStmtH(): ISZ[State] = {
-      @pure def removeOld(ss: ISZ[State]): ISZ[State] = {
-        var r = ISZ[State]()
-        for (s <- ss) {
-          var cs = ISZ[State.Claim]()
-          for (c <- s.claims) {
-            c match {
-              case c: State.Claim.Old =>
-              case _ => cs = cs :+ c
-            }
-          }
-          r = r :+ s(claims = cs)
-        }
-        return r
-      }
       stmt match {
         case stmt: AST.Stmt.Expr =>
           stmt.exp match {
@@ -5266,9 +5252,9 @@ import Util._
           val s1 = evalInv(None(), F, "Invariant", smt2, cache, rtCheck, state, stmt, HashMap.empty, reporter)
           return ISZ(state(status = s1.status, nextFresh = s1.nextFresh))
         case stmt: AST.Stmt.DeduceSteps =>
-          return removeOld(evalDeduceSteps(state, stmt))
+          return evalDeduceSteps(state, stmt)
         case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty =>
-          return removeOld(evalDeduceSequent(state, stmt))
+          return evalDeduceSequent(state, stmt)
         case _: AST.Stmt.Object => return ISZ(state)
         case _: AST.Stmt.Import => return ISZ(state)
         case _: AST.Stmt.Method => return ISZ(state)

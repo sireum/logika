@@ -2841,10 +2841,35 @@ object Util {
     return StateTransformer(PrePostLocalRestorer(localMap)).transformState(F, s0).resultOpt.getOrElse(s0)
   }
 
+  @pure def removeOld(ss: ISZ[State]): ISZ[State] = {
+    var r = ISZ[State]()
+    for (s <- ss) {
+      if (s.ok) {
+        var cs = ISZ[State.Claim]()
+        var changed = F
+        for (c <- s.claims) {
+          c match {
+            case _: State.Claim.Old => changed = T
+            case _ => cs = cs :+ c
+          }
+        }
+        if (changed) {
+          r = r :+ s(claims = cs)
+        } else {
+          r = r :+ s
+        }
+      } else {
+        r = r :+ s
+      }
+    }
+    return r
+  }
+
   def evalStmts(l: Logika, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym],
                 rtCheck: B, state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): ISZ[State] = {
     return evalStmtsLogika(l, split, smt2, cache, rOpt, rtCheck, state, stmts, reporter)._2
   }
+
   def evalStmtsLogika(l: Logika, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym],
                       rtCheck: B, state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): (Logika, ISZ[State]) = {
     var logika = l
@@ -2857,9 +2882,9 @@ object Util {
     for (i <- 0 until size) {
       val cs = currents
       currents = ISZ()
-      for (current <- cs) {
+      val stmt = stmts(i)
+      for (current <- if (stmt.isInstanceOf[AST.Stmt.DeduceSteps] || stmt.isInstanceOf[AST.Stmt.DeduceSequent]) cs else removeOld(cs)) {
         if (current.ok) {
-          val stmt = stmts(i)
           stmt match {
             case AST.Stmt.Expr(e: AST.Exp.Invoke) if e.attr.resOpt == TypeChecker.setOptionsResOpt =>
               logika.logPc(current, reporter, stmt.posOpt)

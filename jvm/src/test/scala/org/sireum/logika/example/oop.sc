@@ -40,7 +40,7 @@ object B {
       a.y = a.y + a.x
       Deduce(
         Old(a) ≡ In(a)(x = In(a).x + B.inc) by Premise,
-        //FIXME evalConstructor: (a ≡ Old(a)(y = Old(a).y + Old(a).x)) by Premise
+        a ≡ Old(a)(y = Old(a).y + Old(a).x) by Premise
       )
     }
   }
