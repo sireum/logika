@@ -342,7 +342,7 @@ object AutoPlugin {
                     return Plugin.Result(stat, nextFresh, premises :+ conclusion)
                   case _ =>
                     reporter.error(posOpt, Logika.kind,
-                      st"""The stated claim has not been proven before nor is a premise in:
+                      st"""The stated claim has not been proven before nor is a premise in the path conditions:
                           |{
                           |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
                           |}""".render)
