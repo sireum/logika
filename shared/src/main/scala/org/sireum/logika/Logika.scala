@@ -958,29 +958,37 @@ import Util._
       val pcs = HashSSet ++ pcsOps.dropRight(3)
       val ISZ(loCondExp: AST.Exp.Binary, hiCondExp: AST.Exp.Binary, loHiCondExp: AST.Exp.Binary) = pcsOps.takeRight(3)
       val normPCs = HashSet ++ PathConditions(th, pcs.elements).normalize
-      def accept(): State = {
-        reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
-          st"""The sequence indexing accepted because it is in bound in the path conditions:
-              |{
-              |  ${(for (pc <- pcs.elements) yield pc.prettyST, ";\n")}
-              |}""".render)
+      def accept(w: ST, rel: String): State = {
+        if (config.detailedInfo) {
+          reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+            st"""The sequence indexing accepted because it is in bound in the path conditions, i.e.,
+                |$w $rel {
+                |  ${(for (pc <- pcs.elements) yield pc.prettyST, ";\n")}
+                |}""".render)
+        }
         return s0
       }
-      if (normPCs.contains(th.normalizeExp(loCondExp)) && normPCs.contains(hiCondExp) || normPCs.contains(loHiCondExp)) {
-        return accept()
+      if (normPCs.contains(loHiCondExp)) {
+        return accept(loHiCondExp.prettyST, "is in")
+      } else if (normPCs.contains(th.normalizeExp(loCondExp)) && normPCs.contains(hiCondExp)) {
+        return accept(st"{ ${loCondExp.prettyST}; ${hiCondExp.prettyST} }", "is a subset of")
       } else {
         val sizeCond = hiCondExp.right
         for (pc <- pcs.elements) {
           pc match {
             case pc@AST.Exp.Binary(`sizeCond`, _, right) if Util.isEquivResOpt(th, pc.attr.resOpt, AST.Typed.z) =>
-              val altLoHiCondExp = th.normalizeExp(loHiCondExp(right = hiCondExp(right = right)))
-              if (normPCs.contains(altLoHiCondExp)) {
-                return accept()
+              val altLoHiCondExp = loHiCondExp(right = hiCondExp(right = right))
+              if (normPCs.contains(th.normalizeExp(altLoHiCondExp))) {
+                return accept(st"[${right.prettyST} / ${sizeCond.prettyST}](${loHiCondExp.prettyST})", "is in")
+              } else if (normPCs.contains(th.normalizeExp(altLoHiCondExp.left)) && normPCs.contains(th.normalizeExp(altLoHiCondExp.right))) {
+                return accept(st"{ ${altLoHiCondExp.left.prettyST}; [${right.prettyST} / ${sizeCond.prettyST}](${loHiCondExp.prettyST} }", "is a subset of")
               }
             case pc@AST.Exp.Binary(left, _, `sizeCond`) if Util.isEquivResOpt(th, pc.attr.resOpt, AST.Typed.z) =>
-              val altLoHiCondExp = th.normalizeExp(loHiCondExp(right = hiCondExp(right = left)))
-              if (normPCs.contains(altLoHiCondExp)) {
-                return accept()
+              val altLoHiCondExp = loHiCondExp(right = hiCondExp(right = left))
+              if (normPCs.contains(th.normalizeExp(altLoHiCondExp))) {
+                return accept(st"[${left.prettyST} / ${sizeCond.prettyST}](${loHiCondExp.prettyST})", "is in")
+              } else if (normPCs.contains(th.normalizeExp(altLoHiCondExp.left)) && normPCs.contains(th.normalizeExp(altLoHiCondExp.right))) {
+                return accept(st"{ ${altLoHiCondExp.left.prettyST}; [${left.prettyST} / ${sizeCond.prettyST}](${loHiCondExp.prettyST} }", "is a subset of")
               }
             case _ =>
           }
@@ -1423,30 +1431,58 @@ import Util._
         }
         if (isManual) {
           val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
-          val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
-          val s2 = s1.addClaims(ISZ(
-            State.Claim.Let.Binary(cond, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe),
-            State.Claim.Prop(T, cond)
+          val (s1, neCond) = s0.freshSym(AST.Typed.b, pos)
+          val (s2, ltCond) = s1.freshSym(AST.Typed.b, pos)
+          val (s3, gtCond) = s2.freshSym(AST.Typed.b, pos)
+          val s4 = s3.addClaims(ISZ(
+            State.Claim.Let.Binary(neCond, value, AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe),
+            State.Claim.Prop(T, neCond),
+            State.Claim.Let.Binary(ltCond, value, AST.Exp.BinaryOp.Lt, zero(tipe, pos), tipe),
+            State.Claim.Prop(T, ltCond),
+            State.Claim.Let.Binary(gtCond, value, AST.Exp.BinaryOp.Gt, zero(tipe, pos), tipe),
+            State.Claim.Prop(T, gtCond)
           ))
-          Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s2.claims, th, config.atLinesFresh, T) match {
-            case (pcs, Some(condExp: AST.Exp.Binary), _) =>
-              val normPCs = HashSet ++ PathConditions(th, pcs).normalize
-              if (normPCs.contains(th.normalizeExp(condExp))) {
-                reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
-                  st"""Accepted because the right-hand-side operand is non-zero in the path conditions:
-                      |{
-                      |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
-                      |}""".render)
-                return s0
-              } else {
-                reporter.error(Some(pos), kind,
-                  st"""Could not find the fact that the right-hand-side operand is non-zero in the path conditions:
-                      |{
-                      |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
-                      |}""".render)
-                return s0(status = State.Status.Error)
-              }
-            case _ => halt("Infeasible")
+          val cs2es = createClaimsToExps(jescmPlugins._4, pos, context.methodName, s4.claims, th, config.atLinesFresh, T)
+          val expsOps = ops.ISZOps(cs2es.translate(s4.claims))
+          val pcs = expsOps.dropRight(3)
+          val ISZ(neExp, ltExp, gtExp) = expsOps.takeRight(3)
+          val normPCs = HashSet ++ PathConditions(th, pcs).normalize
+          if (normPCs.contains(th.normalizeExp(neExp))) {
+            if (config.detailedInfo) {
+              reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+                st"""Accepted because the right-hand-side operand is non-zero in the path conditions, i.e.,
+                    |${neExp.prettyST} is in {
+                    |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
+                    |}""".render)
+            }
+            return s0
+          } else if (normPCs.contains(th.normalizeExp(ltExp))) {
+            if (config.detailedInfo) {
+              reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+                st"""Accepted because the right-hand-side operand is less than zero in the path conditions, i.e.,
+                    |${ltExp.prettyST} is in {
+                    |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
+                    |}""".render)
+            }
+            return s0
+          } else if (normPCs.contains(th.normalizeExp(gtExp))) {
+            if (config.detailedInfo) {
+              reporter.inform(pos, Logika.Reporter.Info.Kind.Verified,
+                st"""Accepted because the right-hand-side operand is greater than zero in the path conditions, i.e.,
+                    |${gtExp.prettyST} is in {
+                    |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
+                    |}""".render)
+            }
+            return s0
+          } else {
+            if (config.detailedInfo) {
+              reporter.error(Some(pos), kind,
+                st"""Could not find the fact that the right-hand-side operand is non-zero in the path conditions:
+                    |{
+                    |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
+                    |}""".render)
+            }
+            return s0(status = State.Status.Error)
           }
         } else {
           val (s1, sym) = s0.freshSym(AST.Typed.b, pos)

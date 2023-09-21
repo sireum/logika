@@ -95,15 +95,19 @@ import org.sireum.ops.ISZOps
                 val subResult = s.transformExp(exp).getOrElseEager(exp)
                 if (logika.th.normalizeExp(subResult) != logika.th.normalizeExp(step.claim)) {
                   val msg =
-                    st"""Claim ${step.id} does not match the substituted expression of ${res.id} of $x for $y, i.e.,:
-                        |$subResult""".render
+                    st"""Claim ${step.id} does not match the substituted expression of ${res.id} of $x for $y, i.e.,
+                        |${subResult.prettyST} ≉ ${step.claim.prettyST}""".render
                   reporter.error(step.claim.posOpt, Logika.kind, msg)
                   return emptyResult
                 } else {
                   val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
                   val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
                   if (stat && logika.config.detailedInfo) {
-                    val msg = s"Accepted because the claim of step ${step.id} matches ${ySpc.exp} with $sub replaced by $repl"
+                    val msg =
+                      st"""Accepted because:
+                          |  [${repl.prettyST} / ${sub.prettyST}](${ySpc.exp.prettyST})
+                          |= ${subResult.prettyST}
+                          |≈ ${step.claim.prettyST}""".render
                     reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, msg)
                   }
                   return Plugin.Result(stat, nextFresh, claims)
