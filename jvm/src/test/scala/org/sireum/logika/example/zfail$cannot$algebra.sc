@@ -16,6 +16,6 @@ def disallowed(): Unit = {
     2 #> (a <= 42) by Algebra and 1,
     3 #> (b == 44) by Premise,
     4 #> (b >= 42) by Algebra and 3,
-    5 #> (a > 42 imply_: a != b) by Algebra and (1, 2)
+    5 #> (a > 42 __>: a != b) by Algebra and (1, 2)
   )
 }

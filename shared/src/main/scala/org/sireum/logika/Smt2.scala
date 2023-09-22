@@ -1730,7 +1730,7 @@ object Smt2 {
           |(define-fun |B.&| ((x B) (y B)) B (and x y))
           |(define-fun |B.│| ((x B) (y B)) B (or x y))
           |(define-fun |B.│^| ((x B) (y B)) B (xor x y))
-          |(define-fun |B.imply_:| ((x B) (y B)) B (=> x y))
+          |(define-fun |B.__>:| ((x B) (y B)) B (=> x y))
           |(define-fun |B.->:| ((x B) (y B)) B (=> x y))
           |
           |(declare-sort ADT 0)
