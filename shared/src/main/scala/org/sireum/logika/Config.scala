@@ -66,7 +66,8 @@ import org.sireum._
                        val satTimeout: B,
                        val isAuto: B,
                        val background: Config.BackgroundMode.Type,
-                       val atRewrite: B) {
+                       val atRewrite: B,
+                       val searchPc: B) {
 
   @memoize def fingerprint: U64 = {
     return ops.StringOps(string).sha3U64(T, T)

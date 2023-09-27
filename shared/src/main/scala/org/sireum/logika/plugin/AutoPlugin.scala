@@ -318,7 +318,7 @@ object AutoPlugin {
           return Plugin.Result(T, state.nextFresh, spc.claims)
         case _ =>
           logika.context.pathConditionsOpt match {
-            case Some(pcs@Logika.PathConditions(_, pathConditions)) =>
+            case Some(pcs@Logika.PathConditions(_, pathConditions)) if id == "Premise" || id == "Auto" =>
               val normPathConditions = HashSSet.empty[AST.Exp] ++ pcs.normalize
               if (normPathConditions.contains(claimNorm)) {
                 if (logika.config.detailedInfo) {

@@ -172,9 +172,10 @@ object Logika {
   val libraryDesc: String = "Library"
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
-  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), FoldUnfoldPlugin(), SameDiffPlugin(), Smt2Plugin(),
-    ValIntroElimPlugin(), ClaimOfPlugin(), LiftPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), InceptionPlugin(),
-    SubstitutionPlugin())
+  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), SubstitutionPlugin(),
+    ClaimOfPlugin(), FoldUnfoldPlugin(), SameDiffPlugin(), Smt2Plugin(), ValIntroElimPlugin(), LiftPlugin(),
+    AdmitPlugin(), InceptionPlugin()
+  )
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
     (F, AST.Typed.isName, "firstIndex"), (F, AST.Typed.msName, "firstIndex"),
@@ -939,7 +940,7 @@ import Util._
       return s0
     }
     val pos = posOpt.get
-    if (isManual) {
+    if (isManual || config.searchPc && i.tipe == AST.Typed.z) { // TODO: add support for non-Z index
       val (s1, size) = s0.freshSym(AST.Typed.z, pos)
       val (s2, loCond) = s1.freshSym(AST.Typed.b, pos)
       val (s3, hiCond) = s2.freshSym(AST.Typed.b, pos)
@@ -993,36 +994,37 @@ import Util._
             case _ =>
           }
         }
-        reporter.error(posOpt, kind,
-          st"""Sequence indexing has not been proven to be in bound in the path conditions:
-              |{
-              |  ${(for (pc <- pcs.elements) yield pc.prettyST, ";\n")}
-              |}""".render)
-        return s0(status = State.Status.Error)
-      }
-    } else {
-      val (s1, v) = s0.freshSym(AST.Typed.b, pos)
-      val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
-      val claim = State.Claim.Prop(T, v)
-      val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
-        context.implicitCheckTitlePosOpt match {
-          case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
-          case _ => (None(), posOpt, None())
-        }
-      if (s2.ok) {
-        val r = smt2.valid(context.methodName, config, cache, T,
-          st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
-          pos, s2.claims, claim, reporter)
-        r.kind match {
-          case Smt2Query.Result.Kind.Unsat => return s0
-          case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly out of bound sequence indexing$suffixOpt".render, reporter)
-          case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce that the sequence indexing is in bound$suffixOpt".render, reporter)
-          case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
-          case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+        if (!config.searchPc) {
+          reporter.error(posOpt, kind,
+            st"""Sequence indexing has not been proven to be in bound in the path conditions:
+                |{
+                |  ${(for (pc <- pcs.elements) yield pc.prettyST, ";\n")}
+                |}""".render)
+          return s0(status = State.Status.Error)
         }
       }
-      return s2(status = State.Status.Error)
     }
+    val (s1, v) = s0.freshSym(AST.Typed.b, pos)
+    val s2 = s1.addClaim(State.Claim.Let.SeqInBound(v, seq, i))
+    val claim = State.Claim.Prop(T, v)
+    val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
+      context.implicitCheckTitlePosOpt match {
+        case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
+        case _ => (None(), posOpt, None())
+      }
+    if (s2.ok) {
+      val r = smt2.valid(context.methodName, config, cache, T,
+        st"${implicitCheckOpt}Implicit Indexing Assertion at [${pos.beginLine}, ${pos.beginColumn}]".render,
+        pos, s2.claims, claim, reporter)
+      r.kind match {
+        case Smt2Query.Result.Kind.Unsat => return s0
+        case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly out of bound sequence indexing$suffixOpt".render, reporter)
+        case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce that the sequence indexing is in bound$suffixOpt".render, reporter)
+        case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+        case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing that the sequence indexing is in bound$suffixOpt".render, reporter)
+      }
+    }
+    return s2(status = State.Status.Error)
   }
 
   def evalLit(smt2: Smt2, lit: AST.Lit, reporter: Reporter): State.Value = {
@@ -1429,7 +1431,7 @@ import Util._
         if (!rtCheck || !s0.ok) {
           return s0
         }
-        if (isManual) {
+        if (isManual || config.searchPc) {
           val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
           val (s1, neCond) = s0.freshSym(AST.Typed.b, pos)
           val (s2, ltCond) = s1.freshSym(AST.Typed.b, pos)
@@ -1474,7 +1476,7 @@ import Util._
                     |}""".render)
             }
             return s0
-          } else {
+          } else if (!config.searchPc) {
             if (config.detailedInfo) {
               reporter.error(Some(pos), kind,
                 st"""Could not find the fact that the right-hand-side operand is non-zero in the path conditions:
@@ -1484,29 +1486,28 @@ import Util._
             }
             return s0(status = State.Status.Error)
           }
-        } else {
-          val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
-          val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
-          val claim = State.Claim.Let.Binary(sym, value,
-            if (AST.Typed.floatingPointTypes.contains(tipe)) AST.Exp.BinaryOp.FpNe
-            else AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
-          val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
-            context.implicitCheckTitlePosOpt match {
-              case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
-              case _ => (None(), Some(pos), None())
-            }
-          val r = smt2.valid(context.methodName, config, cache, T,
-            st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
-            pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
-          r.kind match {
-            case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
-            case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly zero second operand for ${exp.op}$suffixOpt".render, reporter)
-            case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
-            case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
-            case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}$suffixOpt\n${r.info}".render, reporter)
-          }
-          return s1(status = State.Status.Error)
         }
+        val (s1, sym) = s0.freshSym(AST.Typed.b, pos)
+        val tipe = value.tipe.asInstanceOf[AST.Typed.Name]
+        val claim = State.Claim.Let.Binary(sym, value,
+          if (AST.Typed.floatingPointTypes.contains(tipe)) AST.Exp.BinaryOp.FpNe
+          else AST.Exp.BinaryOp.Ne, zero(tipe, pos), tipe)
+        val (implicitCheckOpt, implicitPosOpt, suffixOpt): (Option[String], Option[Position], Option[String]) =
+          context.implicitCheckTitlePosOpt match {
+            case Some((t, p)) => (Some(t), Some(p), Some(s" at [${pos.beginLine}, ${pos.beginColumn}]"))
+            case _ => (None(), Some(pos), None())
+          }
+        val r = smt2.valid(context.methodName, config, cache, T,
+          st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
+          pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
+        r.kind match {
+          case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
+          case Smt2Query.Result.Kind.Sat => error(implicitPosOpt, st"${implicitCheckOpt}Possibly zero second operand for ${exp.op}$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Unknown => error(implicitPosOpt, st"${implicitCheckOpt}Could not deduce non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Timeout => error(implicitPosOpt, st"${implicitCheckOpt}Timed out when deducing non-zero second operand for ${exp.op}$suffixOpt".render, reporter)
+          case Smt2Query.Result.Kind.Error => error(implicitPosOpt, st"${implicitCheckOpt}Error encountered when deducing non-zero second operand for ${exp.op}$suffixOpt\n${r.info}".render, reporter)
+        }
+        return s1(status = State.Status.Error)
       }
 
       def evalBasic(s0: State, kind: AST.ResolvedInfo.BuiltIn.Kind.Type, v1: State.Value): ISZ[(State, State.Value)] = {
@@ -3746,7 +3747,7 @@ import Util._
                   posOpt: Option[Position], rwLocals: ISZ[AST.ResolvedInfo], reporter: Reporter): State = {
     val conclusion = State.Claim.Prop(T, sym)
     val pos = posOpt.get
-    if (isManual) {
+    if (isManual || config.searchPc) {
       val (pcs, concOpt, _) = Util.claimsToExpsLastOpt(jescmPlugins._4, pos, context.methodName, s0.claims :+ conclusion, th, config.atLinesFresh, T)
       val pcs2: HashSSet[AST.Exp] = if (rwLocals.nonEmpty) {
         val rwLocalSet = HashSet ++ rwLocals
@@ -3783,22 +3784,24 @@ import Util._
           }
         case _ =>
       }
-      reporter.error(posOpt, kind,
-        st"""The ${ops.StringOps(title).firstToLower} has not been proven yet in the path conditions:
-            |{
-            |  ${(for (pc2 <- pcs2.elements) yield pc2.prettyST, ";\n")}
-            |}""".render)
-    } else {
-      if (s0.ok) {
-        val r = smt2.valid(context.methodName, config, cache, reportQuery,
-          s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s0.claims, conclusion, reporter)
-        r.kind match {
-          case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
-          case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
-          case Smt2Query.Result.Kind.Unknown => error(posOpt, s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
-          case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower} holds", reporter)
-          case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower} holds\n${r.info}", reporter)
-        }
+      if (!config.searchPc) {
+        reporter.error(posOpt, kind,
+          st"""The ${ops.StringOps(title).firstToLower} has not been proven yet in the path conditions:
+              |{
+              |  ${(for (pc2 <- pcs2.elements) yield pc2.prettyST, ";\n")}
+              |}""".render)
+        return s0(status = State.Status.Error)
+      }
+    }
+    if (s0.ok) {
+      val r = smt2.valid(context.methodName, config, cache, reportQuery,
+        s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s0.claims, conclusion, reporter)
+      r.kind match {
+        case Smt2Query.Result.Kind.Unsat => return s0.addClaim(conclusion)
+        case Smt2Query.Result.Kind.Sat => error(Some(pos), s"Invalid ${ops.StringOps(title).firstToLower}", reporter)
+        case Smt2Query.Result.Kind.Unknown => error(posOpt, s"Could not deduce that the ${ops.StringOps(title).firstToLower} holds", reporter)
+        case Smt2Query.Result.Kind.Timeout => error(Some(pos), s"Timed out when deducing that the ${ops.StringOps(title).firstToLower} holds", reporter)
+        case Smt2Query.Result.Kind.Error => error(Some(pos), s"Error encountered when deducing that the ${ops.StringOps(title).firstToLower} holds\n${r.info}", reporter)
       }
     }
     return s0(status = State.Status.Error)

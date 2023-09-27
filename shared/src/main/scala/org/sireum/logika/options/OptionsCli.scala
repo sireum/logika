@@ -111,7 +111,8 @@ object OptionsCli {
     val smt2SatConfigs: Option[String],
     val smt2ValidConfigs: Option[String],
     val satTimeout: B,
-    val timeout: Z
+    val timeout: Z,
+    val searchPC: B
   ) extends LogikaTopOption
 }
 
@@ -210,7 +211,7 @@ import OptionsCli._
           |Available Options:
           |    --background         Background verification mode (expects one of { type,
           |                           save, disabled }; default: type)
-          |-m, --manual             Enable manual mode for Slang scripts
+          |-m, --manual             Set verification mode to manual for Slang scripts
           |    --smt2-caching       Disable SMT2 query caching
           |    --transition-caching Disable transition caching
           |-h, --help               Display this information
@@ -304,7 +305,9 @@ import OptionsCli._
           |    --sat-timeout        Use validity checking timeout for satisfiability
           |                           checking (otherwise: 500ms)
           |-t, --timeout            Timeout (seconds) for validity checking (expects an
-          |                           integer; min is 1; default is 2)""".render
+          |                           integer; min is 1; default is 2)
+          |    --search-pc          Search path conditions first before employing SMT2
+          |                           solvers when discharging VCs""".render
 
     var background: LogikaBackground.Type = LogikaBackground.Type
     var manual: B = false
@@ -351,6 +354,7 @@ import OptionsCli._
     var smt2ValidConfigs: Option[String] = Some("cvc4,--full-saturate-quant; z3; cvc5,--full-saturate-quant")
     var satTimeout: B = false
     var timeout: Z = 2
+    var searchPC: B = false
     var j = i
     var isOption = T
     while (j < args.size && isOption) {
@@ -635,6 +639,12 @@ import OptionsCli._
              case Some(v) => timeout = v
              case _ => return None()
            }
+         } else if (arg == "--search-pc") {
+           val o: Option[B] = { j = j - 1; Some(!searchPC) }
+           o match {
+             case Some(v) => searchPC = v
+             case _ => return None()
+           }
          } else {
           reporter.error(None(), "OptionsCli", s"Unrecognized option '$arg'.")
           return None()
@@ -644,7 +654,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout))
+    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

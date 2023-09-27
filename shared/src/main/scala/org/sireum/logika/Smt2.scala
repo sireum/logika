@@ -179,7 +179,7 @@ object Smt2 {
   val rlimit: Z = 2000000
 
   val solverArgsMap: HashMap[String, ISZ[String]] = HashMap.empty[String, ISZ[String]] +
-    "alt-ergo" ~> ISZ[String]("-i", "smtlib2", "--use-fpa") +
+    "alt-ergo" ~> ISZ[String]("-i", "smtlib2") +
     "alt-ergo-open" ~> ISZ[String]("-default-lang", "smt2", "-use-fpa") +
     "cvc4" ~> ISZ[String]("--lang=smt2.6") +
     "cvc5" ~> ISZ[String]("--lang=smt2.6") +

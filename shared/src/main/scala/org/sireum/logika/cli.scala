@@ -194,7 +194,10 @@ object cli {
         Opt(name = "timeout", longKey = "timeout", shortKey = Some('t'),
           tpe = Type.Num(sep = None(), default = 2, min = Some(1), max = None()),
           description = "Timeout (seconds) for validity checking"
-        )
+        ),
+        Opt(name = "searchPC", longKey = "search-pc", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Search path conditions first before employing SMT2 solvers when discharging VCs")
       ))
     )
   )

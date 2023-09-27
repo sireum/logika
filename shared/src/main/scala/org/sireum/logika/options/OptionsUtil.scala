@@ -172,7 +172,8 @@ object OptionsUtil {
       satTimeout = o.satTimeout,
       isAuto = !o.manual,
       background = background,
-      atRewrite = o.logAtRewrite
+      atRewrite = o.logAtRewrite,
+      searchPc = o.searchPC
     )
     return Either.Left(config)
   }
@@ -326,6 +327,9 @@ object OptionsUtil {
       }
       if (config.pureFun != defaultConfig.pureFun) {
         r = r :+ "--pure-proof-fun"
+      }
+      if (config.searchPc != defaultConfig.searchPc) {
+        r = r :+ "--search-pc"
       }
     }
     config.background match {
