@@ -26,11 +26,10 @@
 
 package org.sireum.logika.plugin
 
+import org.sireum._
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Reporter
-import org.sireum.logika.plugin.SubstitutionPlugin.resolveOp
 import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
-import org.sireum.{B, HashSMap, _}
 
 @datatype class AdmitPlugin extends JustificationPlugin {
 
