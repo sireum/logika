@@ -1,4 +1,5 @@
 // #Sireum #Logika
+//@Logika: --background save
 import org.sireum._
 
 def swap[@index I, T](s: MS[I, T], i: I, j: I): Unit = {

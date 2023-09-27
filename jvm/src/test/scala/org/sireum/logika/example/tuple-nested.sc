@@ -1,5 +1,5 @@
 // #Sireum #Logika
-
+//@Logika: --background save
 import org.sireum._
 
 type Matrix = ((Z, Z), (Z, Z))

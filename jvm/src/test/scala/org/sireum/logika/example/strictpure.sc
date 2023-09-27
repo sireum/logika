@@ -1,5 +1,5 @@
 // #Sireum #Logika
-
+//@Logika: --background save
 import org.sireum._
 
 @strictpure def add(x: Z, y: Z): Z = x + y

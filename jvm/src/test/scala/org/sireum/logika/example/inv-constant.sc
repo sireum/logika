@@ -1,4 +1,5 @@
 // #Sireum #Logika
+//@Logika: --background save
 import org.sireum._
 
 val Z_CONST: Z = 1

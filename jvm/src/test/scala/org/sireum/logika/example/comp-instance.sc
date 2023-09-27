@@ -1,5 +1,5 @@
 // #Sireum #Logika
-
+//@Logika: --background save
 import org.sireum._
 
 @record class Foo[A](var a: A) {

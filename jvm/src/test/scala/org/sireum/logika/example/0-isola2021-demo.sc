@@ -1,5 +1,5 @@
 // #Sireum #Logika
-
+//@Logika: --background type
 import org.sireum._
 
 

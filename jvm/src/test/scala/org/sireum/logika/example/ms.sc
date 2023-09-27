@@ -1,4 +1,5 @@
 // #Sireum #Logika
+//@Logika: --background save
 import org.sireum._
 
 def update(s: MSZ[Z], i: Z, v: Z): Unit = {

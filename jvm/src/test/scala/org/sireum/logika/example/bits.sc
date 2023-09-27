@@ -1,4 +1,5 @@
 // #Sireum #Logika
+//@Logika: --background save
 import org.sireum._
 import org.sireum.S8._
 import org.sireum.S16._

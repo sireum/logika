@@ -1,5 +1,5 @@
 // #Sireum #Logika
-//@Logika: --sat --par --par-branch --interprocedural --interprocedural-contracts
+//@Logika: --background save --sat --par --par-branch --interprocedural --interprocedural-contracts
 import org.sireum._
 
 val m = Z.random

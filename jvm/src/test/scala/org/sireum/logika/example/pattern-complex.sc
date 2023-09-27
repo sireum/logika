@@ -1,5 +1,5 @@
 // #Sireum #Logika
-
+//@Logika: --background save
 import org.sireum._
 
 @datatype class Tuple[K,E](used: B, elem: E){}

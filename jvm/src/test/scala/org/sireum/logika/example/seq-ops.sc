@@ -1,4 +1,5 @@
 // #Sireum #Logika
+//@Logika: --background save
 import org.sireum._
 
 assert(ISZ(1, 2) :+ 3 == ISZ(1, 2, 3))
