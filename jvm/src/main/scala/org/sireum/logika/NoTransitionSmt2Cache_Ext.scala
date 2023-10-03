@@ -28,6 +28,7 @@ import org.sireum._
 import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Cache
+import org.sireum.U64._
 
 object NoTransitionSmt2Cache_Ext {
   def create: Logika.Cache = new NoTransitionSmt2CacheImpl()
