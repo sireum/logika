@@ -465,6 +465,7 @@ object Smt2 {
     val (decl, declClaim) = pureFuns.get(pf).get
 
     var ecs = ISZ[ST]()
+    val nlc = NonLocalIdCollector(pf.context :+ pf.id, HashSSet.empty)
     for (sv <- svs if sv._1.ok) {
       val (s0, v) = sv
       var s1 = s0
@@ -481,6 +482,7 @@ object Smt2 {
         State.Claim.And(ops.ISZOps(s1.claims).slice(statePrefix, s1.claims.size)),
         State.Claim.Let.Def(v, v3)
       ))
+      nlc.transformStateClaim(claims)
       ecs = ecs :+ embeddedClaims(config, T, T, ISZ(claims), ISZ(), None(), HashSMap.empty, reporter)
     }
     val ec: ST = if (ecs.isEmpty) {
@@ -495,10 +497,10 @@ object Smt2 {
       st"""(and
           |  ${(ecs, "\n")})"""
     }
-    val claim: ST = if (paramIdTypes.nonEmpty) {
+    val claim: ST = if (paramIdTypes.nonEmpty || nlc.nonLocals.nonEmpty) {
       val (decls, ec2) = addTypeConstraints(T, for (t <- paramIdTypes) yield (t._2, t._3), ec)
       st"""$declClaim
-          |(assert (forall (${(decls, " ")})
+          |(assert (forall (${(decls ++ (for (id <- nlc.nonLocals.elements) yield st"(${localId(id)} ${typeId(id.sym.tipe)})"), " ")})
           |  $ec2))"""
     } else {
       st"""$declClaim

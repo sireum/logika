@@ -2428,8 +2428,8 @@ import Util._
           } else {
             var s3 = s2(status = State.Status.Normal)
             var assigns = ISZ[(AST.Exp, State.Value.Sym)]()
+            val ids = Util.collectLocals(s3, ctx)
             if (minfo.ast.purity == AST.Purity.Impure) {
-              val ids = Util.collectLocals(s3, ctx)
               receiverOpt match {
                 case Some(receiver) =>
                   val t = receiver.tipe
@@ -2451,6 +2451,8 @@ import Util._
                   s3 = s4
                 }
               }
+              s3 = rewriteLocals(s3, F, ctx, ids)._1
+            } else {
               s3 = rewriteLocals(s3, F, ctx, ids)._1
             }
             s3 = restoreLocals(s3, callerLocalMap)

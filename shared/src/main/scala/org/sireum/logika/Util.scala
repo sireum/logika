@@ -519,6 +519,15 @@ object Util {
     }
   }
 
+  @record class NonLocalIdCollector(val context: ISZ[String], var nonLocals: HashSSet[State.Claim.Let.Id]) extends MStateTransformer {
+    override def postStateClaimLetId(o: State.Claim.Let.Id): MOption[State.Claim.Let] = {
+      if (o.context != context) {
+        nonLocals = nonLocals + o
+      }
+      return MNone()
+    }
+  }
+
   object ClaimsToExps {
     type AtPossKey = (ISZ[String], String, AST.Typed)
     type AtKey = (ISZ[String], String, AST.Typed, Z)
