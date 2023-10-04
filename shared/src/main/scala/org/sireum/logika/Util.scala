@@ -2943,7 +2943,8 @@ object Util {
                     if (stmt.isInstruction) {
                       logika.logPc(current, reporter, stmt.posOpt)
                     }
-                    val ss = logika.evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+                    val (l2, ss) = logika.evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+                    logika = l2
                     if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
                       val cached = cache.setTransition(logika.th, logika.config, transition, current, ss, smt2)
                       if (stmt.isInstruction) {
@@ -2970,7 +2971,9 @@ object Util {
                 if (stmt.isInstruction) {
                   logika.logPc(current, reporter, stmt.posOpt)
                 }
-                logika.evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+                val (l2, ss) = logika.evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+                logika = l2
+                ss
               }
               currents = currents ++ nextStates
           }

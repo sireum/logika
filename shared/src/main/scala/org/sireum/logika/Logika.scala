@@ -3848,7 +3848,7 @@ import Util._
       case ae: AST.Stmt.Block => return evalBlock(split, smt2, cache, rOpt, rtCheck, s0, ae, reporter)
       case ae: AST.Stmt.If => return evalIf(split, smt2, cache, rOpt, rtCheck, s0, ae, reporter)
       case ae: AST.Stmt.Match => return evalMatch(split, smt2, cache, rOpt, rtCheck, s0, ae, reporter)
-      case ae: AST.Stmt.Return => return evalStmt(split, smt2, cache, rtCheck, s0, ae, reporter)
+      case ae: AST.Stmt.Return => return evalStmt(split, smt2, cache, rtCheck, s0, ae, reporter)._2
     }
   }
 
@@ -3973,8 +3973,11 @@ import Util._
         lhs.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar =>
             context.methodOpt match {
-              case Some(mctx) if !config.interp && mctx.paramIds.contains(res.id) && !mctx.modLocalIds.contains(res.id) && res.context == mctx.name =>
-                reporter.error(lhs.posOpt, kind, s"Missing Modifies clause for ${res.id}")
+              case Some(mctx) if !config.interp && res.context == mctx.name =>
+                val isParam = mctx.paramIds.contains(res.id)
+                if (isParam && !mctx.modLocalIds.contains(res.id) || !isParam && !(HashSet ++ context.modifiableIds).contains(res.id)) {
+                  reporter.error(lhs.posOpt, kind, s"Missing Modifies clause for ${res.id}")
+                }
               case _ =>
             }
             val (s1, sym) = idIntro(lhs.posOpt.get, s0, res.context, res.id, lhs.typedOpt.get, None())
@@ -4829,14 +4832,15 @@ import Util._
     return s1
   }
 
-  def evalStmt(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, stmt: AST.Stmt, reporter: Reporter): ISZ[State] = {
+  def evalStmt(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, stmt: AST.Stmt,
+               reporter: Reporter): (Logika, ISZ[State]) = {
     if (!state.ok) {
-      return ISZ(state)
+      return (this, ISZ(state))
     }
     val sPlugins = jescmPlugins._3
     if (sPlugins.nonEmpty) {
       for (p <- sPlugins if p.canHandle(this, stmt)) {
-        return p.handle(this, split, smt2, cache, rtCheck, state, stmt, reporter)
+        return (this, p.handle(this, split, smt2, cache, rtCheck, state, stmt, reporter))
       }
     }
 
@@ -4988,9 +4992,18 @@ import Util._
               val thenClaims = s3.claims :+ prop
               val thenSat = smt2.sat(context.methodName, config, cache, T,
                 s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
+              var thisL = this
+              var modifiableIds = ISZ[String]()
+              for (m <- whileStmt.modifies) {
+                m.resOpt match {
+                  case Some(res: AST.ResolvedInfo.LocalVar) => modifiableIds = modifiableIds :+ res.id
+                  case _ =>
+                }
+              }
+              thisL = thisL(context = context(modifiableIds = modifiableIds))
               if (thenSat) {
                 for (s4 <- assumeExps(split, smt2, cache, rtCheck, s3(claims = thenClaims), whileStmt.invariants, reporter);
-                     s5 <- evalStmts(this, split, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
+                     s5 <- evalStmts(thisL, split, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
                   if (s5.ok) {
                     checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop", s5,
                       whileStmt.invariants, reporter)
@@ -5214,15 +5227,19 @@ import Util._
       return ISZ(s1(status = st0.status, nextFresh = st0.nextFresh))
     }
 
-    def evalVarPattern(varPattern: AST.Stmt.VarPattern): ISZ[State] = {
+    def evalVarPattern(varPattern: AST.Stmt.VarPattern): (Logika, ISZ[State]) = {
       var r = ISZ[State]()
       var nextFresh = state.nextFresh
+      var modIds = ISZ[String]()
       for (p <- evalAssignExpValue(split, smt2, cache, varPattern.pattern.typedOpt.get, rtCheck, state, varPattern.init,
         reporter)) {
         val (s1, init) = p
         val s9: State = if (s1.ok) {
           val (s2, sym) = value2Sym(s1, init, varPattern.init.asStmt.posOpt.get)
           val (s3, cond, m) = evalPattern(smt2, cache, rtCheck, s2, sym, varPattern.pattern, reporter)
+          if (modIds.isEmpty) {
+            modIds = m.keys
+          }
           var s4 = s3
           for (p <- m.entries) {
             val (id, (v, _, pos)) = p
@@ -5242,80 +5259,95 @@ import Util._
         }
 
       }
-      return for (s <- r) yield s(nextFresh = nextFresh)
+      val ss: ISZ[State] = for (s <- r) yield s(nextFresh = nextFresh)
+      if (context.methodOpt.isEmpty || modIds.isEmpty) {
+        return (this, ss)
+      } else {
+        var thisL = this
+        thisL = thisL(context = context(modifiableIds = modIds))
+        return (thisL, ss)
+      }
     }
 
-    def evalStmtH(): ISZ[State] = {
+    def evalStmtH(): (Logika, ISZ[State]) = {
       stmt match {
         case stmt: AST.Stmt.Expr =>
           stmt.exp match {
             case e: AST.Exp.Invoke =>
-              return for (p <- evalExprInvoke(split, smt2, cache, rtCheck, state, stmt, e, reporter)) yield p._1
+              return (this, for (p <- evalExprInvoke(split, smt2, cache, rtCheck, state, stmt, e, reporter)) yield p._1)
             case e =>
-              return for (p <- evalExp(split, smt2, cache, rtCheck, state, e, reporter)) yield p._1
+              return (this, for (p <- evalExp(split, smt2, cache, rtCheck, state, e, reporter)) yield p._1)
           }
         case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
           stmt.attr.resOpt.get match {
             case res: AST.ResolvedInfo.LocalVar =>
-              return evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.attr.typedOpt.get,
+              val ss = evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.attr.typedOpt.get,
                 stmt.id.attr.posOpt)
+              if (context.methodOpt.isEmpty) {
+                return (this, ss)
+              }
+              var thisL = this
+              val mctx = context.methodOpt.get
+              thisL = thisL(context = context(modifiableIds = context.modifiableIds :+ res.id))
+              return (thisL, ss)
             case _ =>
               reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
-              return ISZ(state(status = State.Status.Error))
+              return (this, ISZ(state(status = State.Status.Error)))
           }
         case stmt: AST.Stmt.VarPattern =>
           return evalVarPattern(stmt)
         case stmt: AST.Stmt.Assign =>
-          return evalAssign(state, stmt)
+          return (this, evalAssign(state, stmt))
         case stmt: AST.Stmt.If =>
-          return evalIf(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
+          return (this, evalIf(split, smt2, cache, None(), rtCheck, state, stmt, reporter))
         case stmt: AST.Stmt.While =>
           if (config.interp) {
-            return evalWhileUnroll(split, state, stmt)
+            return (this, evalWhileUnroll(split, state, stmt))
           } else {
-            return evalWhile(state, stmt)
+            return (this, evalWhile(state, stmt))
           }
         case stmt: AST.Stmt.For =>
           if (stmt.modifies.isEmpty) {
             reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
-            return ISZ(state(status = State.Status.Error))
+            return (this, ISZ(state(status = State.Status.Error)))
           }
-          return evalFor(state, stmt)
+          return (this, evalFor(state, stmt))
         case stmt: AST.Stmt.Return =>
-          return evalReturn(state, stmt)
+          return (this, evalReturn(state, stmt))
         case stmt: AST.Stmt.Block =>
-          return evalBlock(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
+          return (this, evalBlock(split, smt2, cache, None(), rtCheck, state, stmt, reporter))
         case stmt: AST.Stmt.SpecBlock =>
-          return evalSpecBlock(split, state, stmt)
+          return (this, evalSpecBlock(split, state, stmt))
         case stmt: AST.Stmt.Match =>
-          return evalMatch(split, smt2, cache, None(), rtCheck, state, stmt, reporter)
+          return (this, evalMatch(split, smt2, cache, None(), rtCheck, state, stmt, reporter))
         case stmt: AST.Stmt.Inv =>
           val s1 = evalInv(None(), F, "Invariant", smt2, cache, rtCheck, state, stmt, HashMap.empty, reporter)
-          return ISZ(state(status = s1.status, nextFresh = s1.nextFresh))
+          return (this, ISZ(state(status = s1.status, nextFresh = s1.nextFresh)))
         case stmt: AST.Stmt.DeduceSteps =>
-          return evalDeduceSteps(state, stmt)
+          return (this, evalDeduceSteps(state, stmt))
         case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty =>
-          return evalDeduceSequent(state, stmt)
-        case _: AST.Stmt.Object => return ISZ(state)
-        case _: AST.Stmt.Import => return ISZ(state)
-        case _: AST.Stmt.Method => return ISZ(state)
-        case _: AST.Stmt.SpecMethod => return ISZ(state)
-        case stmt: AST.Stmt.Var if stmt.isSpec => return ISZ(state)
-        case _: AST.Stmt.SpecVar => return ISZ(state)
-        case _: AST.Stmt.Enum => return ISZ(state)
-        case _: AST.Stmt.Adt => return ISZ(state)
-        case _: AST.Stmt.Sig => return ISZ(state)
-        case _: AST.Stmt.TypeAlias => return ISZ(state)
-        case _: AST.Stmt.Fact => return ISZ(state)
-        case _: AST.Stmt.Theorem => return ISZ(state)
+          return (this, evalDeduceSequent(state, stmt))
+        case _: AST.Stmt.Object => return (this, ISZ(state))
+        case _: AST.Stmt.Import => return (this, ISZ(state))
+        case _: AST.Stmt.Method => return (this, ISZ(state))
+        case _: AST.Stmt.SpecMethod => return (this, ISZ(state))
+        case stmt: AST.Stmt.Var if stmt.isSpec => return (this, ISZ(state))
+        case _: AST.Stmt.SpecVar => return (this, ISZ(state))
+        case _: AST.Stmt.Enum => return (this, ISZ(state))
+        case _: AST.Stmt.Adt => return (this, ISZ(state))
+        case _: AST.Stmt.Sig => return (this, ISZ(state))
+        case _: AST.Stmt.TypeAlias => return (this, ISZ(state))
+        case _: AST.Stmt.Fact => return (this, ISZ(state))
+        case _: AST.Stmt.Theorem => return (this, ISZ(state))
         case _ =>
           reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
-          return ISZ(state(status = State.Status.Error))
+          return (this, ISZ(state(status = State.Status.Error)))
       }
     }
 
-    def checkSplits(): ISZ[State] = {
-      val ss = evalStmtH()
+    def checkSplits(): (Logika, ISZ[State]) = {
+      val p = evalStmtH()
+      val ss = p._2
       def check(): B = {
         if (!(ss.size > 0)) {
           return F
@@ -5333,7 +5365,7 @@ import Util._
       if (stmt.isInstruction) {
         reporter.coverage(F, zeroU64, stmt.posOpt.get)
       }
-      return ss
+      return p
     }
 
     return extension.Cancel.cancellable(checkSplits _)

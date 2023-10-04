@@ -143,7 +143,7 @@ object Context {
 
   @strictpure def empty(nameExePathMap: HashMap[String, String], maxCores: Z,
                         fileOptions: LibUtil.FileOptionMap): Context =
-    Context(nameExePathMap, maxCores, fileOptions, ISZ(), None(), ISZ(), None(), ISZ(), HashMap.empty, None())
+    Context(nameExePathMap, maxCores, fileOptions, ISZ(), None(), ISZ(), None(), ISZ(), HashMap.empty, None(), ISZ())
 }
 
 @datatype class Context(val nameExePathMap: HashMap[String, String],
@@ -155,7 +155,8 @@ object Context {
                         val implicitCheckTitlePosOpt: Option[(String, Position)],
                         val compMethods: ISZ[ISZ[String]],
                         val storage: HashMap[String, Context.Value],
-                        val pathConditionsOpt: Option[Logika.PathConditions]) {
+                        val pathConditionsOpt: Option[Logika.PathConditions],
+                        val modifiableIds: ISZ[String]) {
 
   @strictpure def isHelper: B = methodOpt match {
     case Some(m) => m.isHelper
