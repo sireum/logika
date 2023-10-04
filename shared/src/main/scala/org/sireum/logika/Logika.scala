@@ -3975,7 +3975,7 @@ import Util._
             context.methodOpt match {
               case Some(mctx) if !config.interp && res.context == mctx.name =>
                 val isParam = mctx.paramIds.contains(res.id)
-                if (isParam && !mctx.modLocalIds.contains(res.id) || !isParam && !(HashSet ++ context.modifiableIds).contains(res.id)) {
+                if (isParam && !mctx.modLocalIds.contains(res.id) || !isParam && !context.modifiableIds.contains(res.id)) {
                   reporter.error(lhs.posOpt, kind, s"Missing Modifies clause for ${res.id}")
                 }
               case _ =>
@@ -4993,10 +4993,10 @@ import Util._
               val thenSat = smt2.sat(context.methodName, config, cache, T,
                 s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
               var thisL = this
-              var modifiableIds = ISZ[String]()
+              var modifiableIds = HashSet.empty[String]
               for (m <- whileStmt.modifies) {
                 m.resOpt match {
-                  case Some(res: AST.ResolvedInfo.LocalVar) => modifiableIds = modifiableIds :+ res.id
+                  case Some(res: AST.ResolvedInfo.LocalVar) => modifiableIds = modifiableIds + res.id
                   case _ =>
                 }
               }
@@ -5230,7 +5230,7 @@ import Util._
     def evalVarPattern(varPattern: AST.Stmt.VarPattern): (Logika, ISZ[State]) = {
       var r = ISZ[State]()
       var nextFresh = state.nextFresh
-      var modIds = ISZ[String]()
+      var modIds = HashSet.empty[String]
       for (p <- evalAssignExpValue(split, smt2, cache, varPattern.pattern.typedOpt.get, rtCheck, state, varPattern.init,
         reporter)) {
         val (s1, init) = p
@@ -5238,7 +5238,12 @@ import Util._
           val (s2, sym) = value2Sym(s1, init, varPattern.init.asStmt.posOpt.get)
           val (s3, cond, m) = evalPattern(smt2, cache, rtCheck, s2, sym, varPattern.pattern, reporter)
           if (modIds.isEmpty) {
-            modIds = m.keys
+            for (e <- m.entries) {
+              val (id, (_, t, _)) = e
+              if (!varPattern.isVal || th.isModifiable(t)) {
+                modIds = modIds + id
+              }
+            }
           }
           var s4 = s3
           for (p <- m.entries) {
@@ -5281,14 +5286,14 @@ import Util._
         case stmt: AST.Stmt.Var if stmt.initOpt.nonEmpty =>
           stmt.attr.resOpt.get match {
             case res: AST.ResolvedInfo.LocalVar =>
+              val t = stmt.attr.typedOpt.get
               val ss = evalAssignLocal(T, state, res.context, res.id, stmt.initOpt.get, stmt.attr.typedOpt.get,
                 stmt.id.attr.posOpt)
-              if (context.methodOpt.isEmpty) {
+              if (stmt.isVal && !th.isModifiable(t)) {
                 return (this, ss)
               }
               var thisL = this
-              val mctx = context.methodOpt.get
-              thisL = thisL(context = context(modifiableIds = context.modifiableIds :+ res.id))
+              thisL = thisL(context = context(modifiableIds = context.modifiableIds + res.id))
               return (thisL, ss)
             case _ =>
               reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
