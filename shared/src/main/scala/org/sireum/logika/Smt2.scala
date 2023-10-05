@@ -728,16 +728,16 @@ object Smt2 {
     def addTypeH(tipe: AST.Typed): Unit = {
       def addS(t: AST.Typed.Name): Unit = {
         val it = t.args(0)
-        val itInt: B = if (it == AST.Typed.z) {
-          T
+        val (itInt, capOpt): (B, Option[Z]) = if (it == AST.Typed.z) {
+          (T, None())
         } else {
           it match {
             case it: AST.Typed.Name =>
               typeHierarchy.typeMap.get(it.ids) match {
-                case Some(info: TypeInfo.SubZ) => !info.ast.isBitVector
-                case _ => F
+                case Some(info: TypeInfo.SubZ) => (!info.ast.isBitVector, info.ast.capacityOpt)
+                case _ => (F, None())
               }
-            case _ => F
+            case _ => (F, None())
           }
         }
         addTypeH(it)
@@ -795,6 +795,10 @@ object Smt2 {
 
         addSTypeDecl(t, st"(declare-fun $sizeId ($tId) Z)")
         addSTypeDecl(t, st"(assert (forall ((x $tId)) ($zGeId ($sizeId x) $zZero)))")
+        capOpt match {
+          case Some(capacity) => addSTypeDecl(t, st"(assert (forall ((x $tId)) ($zGeId $capacity ($sizeId x))))")
+          case _ =>
+        }
         addSTypeDecl(t, st"(declare-fun $firstIndexId ($tId) $itId)")
         addSTypeDecl(t, st"(declare-fun $lastIndexId ($tId) $itId)")
         val (_, itOne): (ST, ST) = it match {
@@ -1378,7 +1382,7 @@ object Smt2 {
           addSort(t, st"(define-sort $tid () Z)")
           val t2zId = typeOpId(t, "toZ")
           val oneId = typeOpId(t, "1")
-          val minId = typeOpId(t, "Min")
+          val minId = currentNameIdString(ISZ(t.id, "Min"))
           val leId = typeOpId(t, "<=")
           val eqId = typeOpId(t, "==")
           val neId = typeOpId(t, "!=")
