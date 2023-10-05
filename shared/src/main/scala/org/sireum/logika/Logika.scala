@@ -1735,7 +1735,8 @@ import Util._
           return evalTupleProjection(res)
         case AST.ResolvedInfo.BuiltIn(kind) if (kind == AST.ResolvedInfo.BuiltIn.Kind.Min ||
           kind == AST.ResolvedInfo.BuiltIn.Kind.Max) && receiverOpt.get.typedOpt.get.isInstanceOf[AST.Typed.Object] =>
-          return ISZ(nameIntro(pos, state, receiverOpt.get.typedOpt.get.asInstanceOf[AST.Typed.Object].name, tipe, None()))
+          val (s0, sym) = nameIntro(pos, state, receiverOpt.get.typedOpt.get.asInstanceOf[AST.Typed.Object].name, tipe, None())
+          return ISZ((s0, sym))
         case AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Apply) =>
           assert(receiverOpt.nonEmpty)
           return evalExp(split, smt2, cache, rtCheck, state, receiverOpt.get, reporter)
