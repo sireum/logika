@@ -1774,11 +1774,25 @@ import Util._
       var r = ISZ[(State, State.Value)]()
 
       def evalSConstructor(): Unit = {
+        val it = t.args(0).asInstanceOf[AST.Typed.Name]
+        if (it != AST.Typed.z) {
+          val size: Z = eargs match {
+            case Either.Left(s) => s.size
+            case Either.Right(s) => s.size
+          }
+          val subz = th.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ]
+          subz.ast.capacityOpt match {
+            case Some(capacity) if size > capacity =>
+              reporter.error(e.posOpt, Logika.kind, s"Expecting a maximum of $capacity elements, but found $size.")
+              r = r :+ (state(status = State.Status.Error), State.errorValue)
+              return
+            case _ =>
+          }
+        }
         val (s0, sym) = state.freshSym(t, attr.posOpt.get)
         for (p <- evalArgs(sp, smt2, cache, rtCheck, s0, -1, eargs, reporter)) {
           val (s1, args) = p
           if (s1.ok) {
-            val it = t.args(0).asInstanceOf[AST.Typed.Name]
             var indices = ISZ[State.Value]()
             if (it == AST.Typed.z) {
               indices = for (i <- 0 until args.size) yield State.Value.Z(i, args(i).get.pos)
