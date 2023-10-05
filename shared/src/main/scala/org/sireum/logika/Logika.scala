@@ -1733,6 +1733,9 @@ import Util._
         case res: AST.ResolvedInfo.Tuple =>
           assert(receiverOpt.nonEmpty)
           return evalTupleProjection(res)
+        case AST.ResolvedInfo.BuiltIn(kind) if (kind == AST.ResolvedInfo.BuiltIn.Kind.Min ||
+          kind == AST.ResolvedInfo.BuiltIn.Kind.Max) && receiverOpt.get.typedOpt.get.isInstanceOf[AST.Typed.Object] =>
+          return ISZ(nameIntro(pos, state, receiverOpt.get.typedOpt.get.asInstanceOf[AST.Typed.Object].name, tipe, None()))
         case AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Apply) =>
           assert(receiverOpt.nonEmpty)
           return evalExp(split, smt2, cache, rtCheck, state, receiverOpt.get, reporter)
@@ -5346,6 +5349,7 @@ import Util._
         case _: AST.Stmt.TypeAlias => return (this, ISZ(state))
         case _: AST.Stmt.Fact => return (this, ISZ(state))
         case _: AST.Stmt.Theorem => return (this, ISZ(state))
+        case _: AST.Stmt.SubZ => return (this, ISZ(state))
         case _ =>
           reporter.warn(stmt.posOpt, kind, s"Not currently supported: $stmt")
           return (this, ISZ(state(status = State.Status.Error)))

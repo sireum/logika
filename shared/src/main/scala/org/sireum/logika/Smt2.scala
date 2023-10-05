@@ -807,14 +807,14 @@ object Smt2 {
               (min, toVal(config, it, 1))
             } else {
               val ti = typeHierarchy.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ]
-              val min: ST = if (ti.ast.isZeroIndex) toVal(config, it, 0) else typeOpId(it, "Min")
+              val min: ST = if (ti.ast.isZeroIndex) toVal(config, it, 0) else currentNameIdString(it.ids :+ "Min")
               addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
               addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
               addSTypeDecl(t, st"(declare-fun $atZId ($tId $itId) $etId)")
               (min, toVal(config, it, 1))
             }
           case it: AST.Typed.TypeVar =>
-            val min = typeOpId(it, "Min")
+            val min = currentNameIdString(ISZ(it.id, "Min"))
             addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($firstIndexId x) $min))))")
             addSTypeDecl(t, st"(assert (forall ((x $tId)) (=> (not ($zEqId ($sizeId x) $zZero)) (= ($it2zId ($lastIndexId x)) ($zSubId ($sizeId x) $zOne)))))")
             addSTypeDecl(t, st"(declare-fun $atZId ($tId $itId) $etId)")
@@ -1253,10 +1253,10 @@ object Smt2 {
         val tRandomSeedBetweenId = typeOpId(t, st"randomSeedBetween(Z, $tId, $tId)".render)
         val t2ZId = typeOpId(t, "toZ")
         val tMaxOpt: Option[ST] =
-          if (ti.ast.hasMax) Some(st"(define-const ${typeOpId(t, "MAX")} $tId ${toVal(config, t, ti.ast.max)})")
+          if (ti.ast.hasMax) Some(st"(define-const ${currentNameIdString(t.ids :+ "Max")} $tId ${toVal(config, t, ti.ast.max)})")
           else None()
         val tMinOpt: Option[ST] =
-          if (ti.ast.hasMax) Some(st"(define-const ${typeOpId(t, "MIN")}  $tId ${toVal(config, t, ti.ast.min)})")
+          if (ti.ast.hasMin) Some(st"(define-const ${currentNameIdString(t.ids :+ "Min")}  $tId ${toVal(config, t, ti.ast.min)})")
           else None()
         (ti.ast.isSigned, ti.ast.isBitVector) match {
           case (T, T) =>
