@@ -2892,8 +2892,10 @@ object Util {
       val cs = currents
       currents = ISZ()
       val stmt = stmts(i)
-      for (current <- if (stmt.isInstanceOf[AST.Stmt.DeduceSteps] || stmt.isInstanceOf[AST.Stmt.DeduceSequent] || context.pathConditionsOpt.nonEmpty) cs else removeOlds(cs)) {
-        if (current.ok) {
+      for (current <- cs) {
+        val currentNoOld: State = if (stmt.isInstanceOf[AST.Stmt.DeduceSteps] || stmt.isInstanceOf[AST.Stmt.DeduceSequent]
+          || context.pathConditionsOpt.nonEmpty) current else if (stmt.isInstruction) removeOld(current) else current
+        if (currentNoOld.ok) {
           stmt match {
             case AST.Stmt.Expr(e: AST.Exp.Invoke) if e.attr.resOpt == TypeChecker.setOptionsResOpt =>
               logika.logPc(current, reporter, stmt.posOpt)
@@ -2908,12 +2910,12 @@ object Util {
                   case Either.Left(c) =>
                     logika = logika(config = c)
                     reporter.coverage(F, org.sireum.U64.fromZ(0), stmt.posOpt.get)
-                    currents = currents :+ current
+                    currents = currents :+ currentNoOld
                   case Either.Right(msgs) =>
                     for (msg <- msgs) {
                       reporter.error(e.args(1).posOpt, Logika.kind, msg)
                     }
-                    currents = currents :+ current(status = State.Status.Error)
+                    currents = currents :+ currentNoOld(status = State.Status.Error)
                 }
               } else {
                 var changed = F
@@ -2929,7 +2931,7 @@ object Util {
                 if (changed) {
                   logika = logika(plugins = newPlugins)
                 }
-                currents = currents :+ current
+                currents = currents :+ currentNoOld
               }
             case _ =>
               val nextStates: ISZ[State] = if (logika.config.transitionCache) {
@@ -2937,7 +2939,7 @@ object Util {
                 val transition: Logika.Cache.Transition = if (stmt.hasReturnMemoized && ensures.nonEmpty)
                   Logika.Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures)
                 else Logika.Cache.Transition.Stmt(stmt)
-                cache.getTransitionAndUpdateSmt2(logika.th, logika.config, transition, current, smt2) match {
+                cache.getTransitionAndUpdateSmt2(logika.th, logika.config, transition, currentNoOld, smt2) match {
                   case Some((ss, cached)) =>
                     if (stmt.isInstruction) {
                       reporter.coverage(F, cached, stmt.posOpt.get)
@@ -2952,10 +2954,10 @@ object Util {
                     if (stmt.isInstruction) {
                       logika.logPc(current, reporter, stmt.posOpt)
                     }
-                    val (l2, ss) = logika.evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+                    val (l2, ss) = logika.evalStmt(split, smt2, cache, rtCheck, currentNoOld, stmts(i), reporter)
                     logika = l2
                     if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
-                      val cached = cache.setTransition(logika.th, logika.config, transition, current, ss, smt2)
+                      val cached = cache.setTransition(logika.th, logika.config, transition, currentNoOld, ss, smt2)
                       if (stmt.isInstruction) {
                         reporter.coverage(T, cached, stmt.posOpt.get)
                         if (stmt.isInstanceOf[AST.Stmt.Return]) {
@@ -2980,14 +2982,14 @@ object Util {
                 if (stmt.isInstruction) {
                   logika.logPc(current, reporter, stmt.posOpt)
                 }
-                val (l2, ss) = logika.evalStmt(split, smt2, cache, rtCheck, current, stmts(i), reporter)
+                val (l2, ss) = logika.evalStmt(split, smt2, cache, rtCheck, currentNoOld, stmts(i), reporter)
                 logika = l2
                 ss
               }
               currents = currents ++ nextStates
           }
         } else {
-          done = done :+ current
+          done = done :+ currentNoOld
         }
       }
     }
