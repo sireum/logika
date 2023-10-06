@@ -1873,14 +1873,14 @@ object Util {
   }
 
   def logikaMethod(nameExePathMap: HashMap[String, String], maxCores: Z, fileOptions: LibUtil.FileOptionMap,
-                   th: TypeHierarchy, config: Config, isHelper: B, owner: ISZ[String], id: String,
+                   th: TypeHierarchy, config: Config, isHelper: B, hasInline: B, owner: ISZ[String], id: String,
                    receiverTypeOpt: Option[AST.Typed], params: ISZ[(AST.Id, AST.Typed)], retType: AST.Typed,
                    posOpt: Option[Position], reads: ISZ[AST.Exp.Ref], requires: ISZ[AST.Exp],
                    modifies: ISZ[AST.Exp.Ref], ensures: ISZ[AST.Exp], caseLabels: ISZ[AST.Exp.LitString],
                    plugins: ISZ[plugin.Plugin], implicitContext: Option[(String, Position)],
                    compMethods: ISZ[ISZ[String]]): Logika = {
-    val mctx = Context.Method(isHelper, owner, id, receiverTypeOpt, params, retType, reads, requires, modifies, ensures,
-      HashMap.empty, HashMap.empty, HashMap.empty, posOpt, HashMap.empty)
+    val mctx = Context.Method(isHelper, hasInline, owner, id, receiverTypeOpt, params, retType, reads, requires,
+      modifies, ensures, HashMap.empty, HashMap.empty, HashMap.empty, posOpt, HashMap.empty)
     val ctx = Context.empty(nameExePathMap, maxCores, fileOptions)(methodOpt = Some(mctx),
       caseLabels = caseLabels, implicitCheckTitlePosOpt = implicitContext, compMethods = compMethods)
     return Logika(th, config, ctx, plugins)
@@ -2074,9 +2074,10 @@ object Util {
           }
         }
         val p = updateInVarMaps(logikaMethod(nameExePathMap, maxCores, fileOptions, th, mconfig, method.isHelper,
-          res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes, method.sig.returnType.typedOpt.get,
-          methodPosOpt, reads, requires, modifies, ensures, if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins,
-          None(), ISZ()), method.isHelper, smt2, cache, state, reporter)
+          method.hasInline, res.owner, method.sig.id.value, receiverTypeOpt, method.sig.paramIdTypes,
+          method.sig.returnType.typedOpt.get, methodPosOpt, reads, requires, modifies, ensures,
+          if (labelOpt.isEmpty) ISZ() else ISZ(labelOpt.get), plugins, None(), ISZ()), method.isHelper, smt2, cache,
+          state, reporter)
         state = p._2
         p._1
       }
@@ -2149,7 +2150,7 @@ object Util {
   def rewriteLocal(logika: Logika, s0: State, inScope: B, lcontext: ISZ[String], id: String, posOpt: Option[Position],
                    reporter: Reporter): State = {
     val poss = collectLocalPoss(s0, lcontext, id)
-    if (poss.isEmpty && !logika.config.interp) {
+    if (poss.isEmpty && !logika.config.interp && !logika.context.hasInline) {
       reporter.error(posOpt, Logika.kind, s"Missing Modifies clause for $id")
       return s0(status = State.Status.Error)
     }
@@ -2188,7 +2189,7 @@ object Util {
     for (l <- localVars) {
       val poss = StateTransformer(CurrentIdPossCollector(l.context, l.id)).
         transformState(Set.empty, current).ctx.elements
-      if (poss.isEmpty && !logika.config.interp) {
+      if (poss.isEmpty && !logika.config.interp && !logika.context.hasInline) {
         reporter.error(posOpt, Logika.kind, s"Missing Modifies clause for ${l.id}")
         return state(status = State.Status.Error)
       }
@@ -2215,7 +2216,7 @@ object Util {
       val ids = l.owner :+ l.id
       val poss = StateTransformer(CurrentNamePossCollector(ids)).
         transformState(ISZ(), current).ctx
-      if (poss.isEmpty && !logika.config.interp) {
+      if (poss.isEmpty && !logika.config.interp && !logika.context.hasInline) {
         reporter.error(Some(pos), Logika.kind, st"Missing Modifies clause for ${(ids, ".")}".render)
         return state(status = State.Status.Error)
       }
@@ -2292,8 +2293,8 @@ object Util {
       val pos = posOpt.get
       val (svs, maxFresh, ok): (ISZ[(State, State.Value.Sym)], Z, B) = {
         val context = pf.context :+ pf.id
-        val logika: Logika = logikaMethod(nameExePathMap, maxCores, fileOptions, th, config, isHelper, pf.context, pf.id,
-          pf.receiverTypeOpt, ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(),
+        val logika: Logika = logikaMethod(nameExePathMap, maxCores, fileOptions, th, config, isHelper, F, pf.context,
+          pf.id, pf.receiverTypeOpt, ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(),
           ISZ(), ISZ(), plugins, implicitContextOpt, ISZ())
         var s0 = state(claims = ISZ())
         val (s1, res) = idIntro(posOpt.get, s0, context, "Res", pf.returnType, posOpt)
@@ -2482,6 +2483,7 @@ object Util {
                    reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
     val l = logika(context = logika.context(methodOpt = Some(Context.Method(
       isHelper = F,
+      hasInline = F,
       owner = name,
       id = "<init>",
       receiverTypeOpt = None(),
@@ -2510,7 +2512,7 @@ object Util {
 
   def assumeObjectInv(logika: Logika, smt2: Smt2, cache: Logika.Cache, name: ISZ[String], state: State, pos: Position,
                       reporter: Reporter): State = {
-    if (logika.config.interp) {
+    if (logika.config.interp || logika.context.hasInline) {
       return state
     }
     val (s0, conds) = addObjectInv(logika, smt2, cache, name, state, pos, reporter)
@@ -2519,7 +2521,7 @@ object Util {
 
   def addValueInv(logika: Logika, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
                   pos: Position, reporter: Reporter): (State, ISZ[State.Value.Sym]) = {
-    if (logika.config.interp) {
+    if (logika.config.interp || logika.context.hasInline) {
       return (state, ISZ())
     }
     def addTupleInv(s0: State, t: AST.Typed.Tuple): (State, ISZ[State.Value.Sym]) = {
@@ -2602,7 +2604,7 @@ object Util {
 
   def assumeValueInv(logika: Logika, smt2: Smt2, cache: Logika.Cache, rtCheck: B, state: State, receiver: State.Value.Sym,
                      pos: Position, reporter: Reporter): State = {
-    if (logika.config.interp) {
+    if (logika.config.interp || logika.context.hasInline) {
       return state
     }
     val (s0, conds) = addValueInv(logika, smt2, cache, rtCheck, state, receiver, pos, reporter)
@@ -2634,7 +2636,7 @@ object Util {
   def checkInvs(logika: Logika, posOpt: Option[Position], isAssume: B, title: String, smt2: Smt2, cache: Logika.Cache,
                 rtCheck: B, s0: State, receiverTypeOpt: Option[AST.Typed], receiverOpt: Option[State.Value.Sym],
                 invs: ISZ[Info.Inv], substMap: HashMap[String, AST.Typed], reporter: Reporter): State = {
-    if (logika.config.interp) {
+    if (logika.config.interp || logika.context.hasInline) {
       return s0
     }
     if (logika.config.transitionCache) {

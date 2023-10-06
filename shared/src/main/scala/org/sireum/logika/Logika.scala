@@ -2338,13 +2338,13 @@ import Util._
       if (isInObject) {
         th.nameMap.get(owner :+ id) match {
           case Some(mi: lang.symbol.Info.Method) =>
-            return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.sig, mi.ast.contract,
+            return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.hasInline, mi.ast.sig, mi.ast.contract,
               extractResolvedInfo(mi.ast.attr), mi.ast.bodyOpt.nonEmpty, extractAssignExpOpt(mi))
           case Some(mi: lang.symbol.Info.ExtMethod) =>
-            return Context.InvokeMethodInfo(T, mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), F, None())
+            return Context.InvokeMethodInfo (T, F, mi.ast.sig, mi.ast.contract, extractResolvedInfo(mi.ast.attr), F, None())
           case Some(mi: lang.symbol.Info.SpecMethod) =>
             val typedAttr = AST.TypedAttr(mi.ast.sig.id.attr.posOpt, mi.ast.sig.returnType.typedOpt)
-            return Context.InvokeMethodInfo(T, mi.ast.sig, AST.MethodContract.Simple.empty,
+            return Context.InvokeMethodInfo(T, F, mi.ast.sig, AST.MethodContract.Simple.empty,
               extractResolvedInfo(mi.ast.attr), F, Some(AST.Stmt.Expr(
                 AST.Exp.Result(None(), typedAttr), typedAttr)))
           case info => halt(s"Infeasible: $owner.$id => $info")
@@ -2354,12 +2354,12 @@ import Util._
           case Some(info: lang.symbol.TypeInfo.Adt) =>
             info.methods.get(id) match {
               case Some(mi) =>
-                return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.sig, mi.ast.contract,
+                return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.hasInline, mi.ast.sig, mi.ast.contract,
                   extractResolvedInfo(mi.ast.attr), mi.ast.bodyOpt.nonEmpty, extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
-                    return Context.InvokeMethodInfo(T, mi.ast.sig, AST.MethodContract.Simple.empty,
+                    return Context.InvokeMethodInfo(T, F, mi.ast.sig, AST.MethodContract.Simple.empty,
                       extractResolvedInfo(mi.ast.attr), F, None())
                   case _ => halt("Infeasible")
                 }
@@ -2367,12 +2367,12 @@ import Util._
           case Some(info: lang.symbol.TypeInfo.Sig) =>
             info.methods.get(id) match {
               case Some(mi) =>
-                return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.sig, mi.ast.contract,
+                return Context.InvokeMethodInfo(mi.ast.isHelper, mi.ast.hasInline, mi.ast.sig, mi.ast.contract,
                   extractResolvedInfo(mi.ast.attr), mi.ast.bodyOpt.nonEmpty, extractAssignExpOpt(mi))
               case _ =>
                 info.specMethods.get(id) match {
                   case Some(mi) =>
-                    return Context.InvokeMethodInfo(T, mi.ast.sig, AST.MethodContract.Simple.empty,
+                    return Context.InvokeMethodInfo(T, F, mi.ast.sig, AST.MethodContract.Simple.empty,
                       extractResolvedInfo(mi.ast.attr), F, None())
                   case _ => halt("Infeasible")
                 }
@@ -2490,7 +2490,7 @@ import Util._
 
       def evalMethod(s1: State, minfo: Info.Method): Unit = {
         val l = logikaMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config,
-          minfo.ast.isHelper, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
+          minfo.ast.isHelper, minfo.ast.hasInline, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
           info.sig.returnType.typedOpt.get, receiverPosOpt, ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
@@ -2623,8 +2623,9 @@ import Util._
 
       val lComp: Logika = {
         val l = logikaMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config, info.isHelper,
-          res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes, info.sig.returnType.typedOpt.get,
-          receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(), plugins, Some(
+          info.hasInline, res.owner, res.id, receiverOpt.map(t => t.tipe), info.sig.paramIdTypes,
+          info.sig.returnType.typedOpt.get, receiverPosOpt, contract.reads, ISZ(), contract.modifies, ISZ(), ISZ(),
+          plugins, Some(
             (s"(${if (res.owner.isEmpty) "" else res.owner(res.owner.size - 1)}${if (res.isInObject) '.' else '#'}${res.id}) ",
               info.sig.id.attr.posOpt.get)),
           this.context.compMethods :+ (res.owner :+ res.id)
@@ -3389,9 +3390,10 @@ import Util._
                 typeSubstMap = typeSubstMap ++ sm.entries
                 val retType = info.res.tpeOpt.get.ret.subst(typeSubstMap)
                 val isStrictPure = info.strictPureBodyOpt.nonEmpty
-                if ((if (isStrictPure) config.interp && config.strictPureMode != Config.StrictPureMode.Flip ||
+                if (info.hasInline || ((if (isStrictPure) config.interp &&
+                  config.strictPureMode != Config.StrictPureMode.Flip ||
                   !config.interp && config.strictPureMode == Config.StrictPureMode.Flip else config.interp) &&
-                  !(config.interpContracts && info.contract.nonEmpty) && info.hasBody) {
+                  !(config.interpContracts && info.contract.nonEmpty) && info.hasBody)) {
                   r = r ++ interprocedural(posOpt, info, s1, typeSubstMap, retType, invokeReceiverOpt, receiverOpt,
                     paramArgs)
                 } else if (isStrictPure &&
@@ -3981,7 +3983,7 @@ import Util._
   def evalAssignObjectVarH(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, ids: ISZ[String], t: AST.Typed,
                            rhs: State.Value.Sym, namePosOpt: Option[Position], reporter: Reporter): State = {
     val poss = StateTransformer(CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
-    if (poss.isEmpty && !config.interp) {
+    if (poss.isEmpty && !config.interp && !context.hasInline) {
       reporter.error(namePosOpt, Logika.kind, st"Missing Modifies clause for ${(ids, ".")}.".render)
       return s0(status = State.Status.Error)
     }
@@ -4066,7 +4068,7 @@ import Util._
         lhs.attr.resOpt.get match {
           case res: AST.ResolvedInfo.LocalVar =>
             context.methodOpt match {
-              case Some(mctx) if !config.interp && res.context == mctx.name =>
+              case Some(mctx) if !config.interp && !context.hasInline && res.context == mctx.name =>
                 val isParam = mctx.paramIds.contains(res.id)
                 if (isParam && !mctx.modLocalIds.contains(res.id) || !isParam && !context.modifiableIds.contains(res.id)) {
                   reporter.error(lhs.posOpt, kind, s"Missing Modifies clause for ${res.id}")
@@ -4365,7 +4367,7 @@ import Util._
           return (nextFresh, Some((cond, claims)))
         }
       } else {
-        if (isMatch && config.checkInfeasiblePatternMatch && !config.interp && !shouldSplit) {
+        if (isMatch && config.checkInfeasiblePatternMatch && !config.interp && !context.hasInline && !shouldSplit) {
           warn(posOpt, "Infeasible pattern matching case", reporter)
         }
       }
@@ -4416,7 +4418,7 @@ import Util._
             case Some((cond, claimss)) =>
               val gap = outputs(i)._2 - s0.nextFresh
               assert(gap >= 0)
-              if ((!allReturns || config.interp) && gap > 0) {
+              if ((!allReturns || config.interp || context.hasInline) && gap > 0) {
                 val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap, jescmPlugins._4)
                 val newCond = rw.transformStateClaim(cond).getOrElseEager(cond)
                 var newClaimss = ISZ[(State.Status.Type, ISZ[State.Claim])]()
@@ -4575,7 +4577,7 @@ import Util._
           branches = branches :+ Branch("match case pattern", sym, c.body, m, bidMap)
         }
         val stmtPos = stmt.posOpt.get
-        if (!config.interp && config.patternExhaustive &&
+        if (!config.interp && !context.hasInline && config.patternExhaustive &&
           smt2.satResult(context.methodName, config, cache, config.timeoutInMs, T,
             s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]",
             stmtPos, s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)), reporter).
@@ -5189,7 +5191,7 @@ import Util._
           case _ => return ISZ(state)
         }
       }
-      val ss: ISZ[State] = if (config.interp) {
+      val ss: ISZ[State] = if (config.interp || context.hasInline) {
         evalReturnH()
       } else {
         val mcontext = context.methodOpt.get
@@ -5399,7 +5401,7 @@ import Util._
         case stmt: AST.Stmt.If =>
           return (this, evalIf(split, smt2, cache, None(), rtCheck, state, stmt, reporter))
         case stmt: AST.Stmt.While =>
-          if (config.interp) {
+          if (config.interp || context.hasInline) {
             return (this, evalWhileUnroll(split, state, stmt))
           } else {
             return (this, evalWhile(state, stmt))

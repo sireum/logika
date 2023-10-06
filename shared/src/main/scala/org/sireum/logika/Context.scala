@@ -35,6 +35,7 @@ object Context {
   @sig trait Value
 
   @datatype class Method(val isHelper: B,
+                         val hasInline: B,
                          val owner: ISZ[String],
                          val id: String,
                          val receiverTypeOpt: Option[AST.Typed],
@@ -127,6 +128,7 @@ object Context {
   }
 
   @datatype class InvokeMethodInfo(val isHelper: B,
+                                   val hasInline: B,
                                    val sig: AST.MethodSig,
                                    val contract: AST.MethodContract,
                                    val res: AST.ResolvedInfo.Method,
@@ -160,6 +162,11 @@ object Context {
 
   @strictpure def isHelper: B = methodOpt match {
     case Some(m) => m.isHelper
+    case _ => F
+  }
+
+  @strictpure def hasInline: B = methodOpt match {
+    case Some(m) => m.hasInline
     case _ => F
   }
 
