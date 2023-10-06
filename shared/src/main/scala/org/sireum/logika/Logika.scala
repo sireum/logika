@@ -934,9 +934,28 @@ import Util._
     }
   }
 
+  def valid(searchPc: B, smt2: Smt2, cache: Logika.Cache, title: String, pos: message.Position,
+            premises: ISZ[State.Claim], conclusionOrs: ISZ[State.Claim], smt2Conclusion: State.Claim,
+            reporter: Reporter): Either[AST.Exp, Smt2Query.Result] = {
+    if (searchPc) {
+      val claims = premises ++ conclusionOrs
+      val cs2es = createClaimsToExps(jescmPlugins._4, pos, context.methodName, claims, th, F, T)
+      val pcsOps = ops.ISZOps(cs2es.translate(claims))
+      val pcs = HashSSet ++ pcsOps.dropRight(conclusionOrs.size)
+      val normPCs = HashSet ++ PathConditions(th, pcs.elements).normalize
+      val concOrs = pcsOps.takeRight(conclusionOrs.size)
+      for (i <- 0 until conclusionOrs.size) {
+        if (normPCs.contains(th.normalizeExp(concOrs(i)))) {
+          return Either.Left(concOrs(i))
+        }
+      }
+    }
+    return Either.Right(smt2.valid(context.methodName, config, cache, T, title, pos, premises, smt2Conclusion, reporter))
+  }
+
   def checkSeqIndexing(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, seq: State.Value, i: State.Value,
                        posOpt: Option[Position], reporter: Reporter): State = {
-    if (!rtCheck) {
+    if (!rtCheck || !s0.ok) {
       return s0
     }
     val pos = posOpt.get
@@ -1560,15 +1579,72 @@ import Util._
       }
 
       def evalSeq(s0: State, m: AST.ResolvedInfo.Method): ISZ[(State, State.Value)] = {
+        @pure def capacityOpt(v: State.Value): Option[Z] = {
+          val t = v.tipe.asInstanceOf[AST.Typed.Name]
+          if (t.ids != AST.Typed.isName && t.ids != AST.Typed.msName) {
+            return None()
+          }
+          val it = t.args(0).asInstanceOf[AST.Typed.Name]
+          if (it != AST.Typed.z) {
+            return th.typeMap.get(it.ids).get.asInstanceOf[TypeInfo.SubZ].ast.capacityOpt
+          } else {
+            return None()
+          }
+        }
         var r = ISZ[(State, State.Value)]()
+        val pos = e.posOpt.get
         for (p1 <- evalExp(split, smt2, cache, rtCheck, s0, exp.left, reporter)) {
           val (s1, v1) = p1
+          if (exp.op == AST.Exp.BinaryOp.Append) {
+            capacityOpt(v1) match {
+              case Some(capacity) =>
+                val (s2, size) = s1.freshSym(AST.Typed.z, pos)
+                val (s3, cond) = s2.freshSym(AST.Typed.b, pos)
+                val s4 = s3.addClaims(ISZ(
+                  State.Claim.Let.FieldLookup(size, v1, "size"),
+                  State.Claim.Let.Binary(cond, size, AST.Exp.BinaryOp.Lt, State.Value.Z(capacity, pos), AST.Typed.z)
+                ))
+                evalAssertH(T, smt2, cache, "Sequence append capacity check", s4, cond, e.posOpt, ISZ(), reporter)
+              case _ =>
+            }
+          }
           if (s1.ok) {
             for (p2 <- evalExp(split, smt2, cache, rtCheck, s1, exp.right, reporter)) {
               val (s2, v2) = p2
+              exp.op match {
+                case AST.Exp.BinaryOp.Prepend =>
+                  capacityOpt(v2) match {
+                    case Some(capacity) =>
+                      val (s3, size) = s2.freshSym(AST.Typed.z, pos)
+                      val (s4, cond) = s3.freshSym(AST.Typed.b, pos)
+                      val s5 = s4.addClaims(ISZ(
+                        State.Claim.Let.FieldLookup(size, v2, "size"),
+                        State.Claim.Let.Binary(cond, size, AST.Exp.BinaryOp.Lt, State.Value.Z(capacity, pos), AST.Typed.z)
+                      ))
+                      evalAssertH(T, smt2, cache, "Sequence prepend capacity check", s5, cond, e.posOpt, ISZ(), reporter)
+                    case _ =>
+                  }
+                case AST.Exp.BinaryOp.AppendAll =>
+                  capacityOpt(v1) match {
+                    case Some(capacity) =>
+                      val (s3, size1) = s2.freshSym(AST.Typed.z, pos)
+                      val (s4, size2) = s3.freshSym(AST.Typed.z, pos)
+                      val (s5, newSize) = s4.freshSym(AST.Typed.z, pos)
+                      val (s6, cond) = s5.freshSym(AST.Typed.b, pos)
+                      val s7 = s6.addClaims(ISZ(
+                        State.Claim.Let.FieldLookup(size1, v1, "size"),
+                        State.Claim.Let.FieldLookup(size2, v2, "size"),
+                        State.Claim.Let.Binary(newSize, size1, AST.Exp.BinaryOp.Add, size2, AST.Typed.z),
+                        State.Claim.Let.Binary(cond, newSize, AST.Exp.BinaryOp.Le, State.Value.Z(capacity, pos), AST.Typed.z)
+                      ))
+                      evalAssertH(T, smt2, cache,  "Sequence append-all capacity check", s7, cond, e.posOpt, ISZ(), reporter)
+                    case _ =>
+                  }
+                case _ =>
+              }
               if (s2.ok) {
                 val rTipe = e.typedOpt.get
-                val (s3, rExp) = s2.freshSym(rTipe, e.posOpt.get)
+                val (s3, rExp) = s2.freshSym(rTipe, pos)
                 val s4 = s3.addClaim(State.Claim.Let.Binary(rExp, v1, exp.op, v2,
                   if (ops.StringOps(m.id).endsWith(":")) v2.tipe else v1.tipe))
                 r = r :+ ((s4, rExp))
@@ -1673,14 +1749,11 @@ import Util._
             o.tipe match {
               case tipe: AST.Typed.Name =>
                 if (indexingFields.contains(id) && (tipe.ids == AST.Typed.isName || tipe.ids == AST.Typed.msName)) {
-                  if (!rtCheck) {
-                    // skip
-                  } else {
-                    val (s1, size) = s0.freshSym(AST.Typed.z, pos)
-                    val (s2, cond) = s1.addClaim(State.Claim.Let.FieldLookup(size, o, "size")).freshSym(AST.Typed.b, pos)
-                    val s3 = s2.addClaim(State.Claim.Let.Binary(cond, size, AST.Exp.BinaryOp.Gt, State.Value.Z(0, pos), AST.Typed.z))
-                    s0 = evalAssertH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), ISZ(), reporter)
-                  }
+                  val (s1, size) = s0.freshSym(AST.Typed.z, pos)
+                  val (s2, cond) = s1.addClaim(State.Claim.Let.FieldLookup(size, o, "size")).freshSym(AST.Typed.b, pos)
+                  val s3 = s2.addClaim(State.Claim.Let.Binary(cond, size, AST.Exp.BinaryOp.Gt, State.Value.Z(0, pos), AST.Typed.z))
+                  s0 = if (rtCheck) evalAssertH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), ISZ(), reporter)
+                  else s3.addClaim(State.Claim.Prop(T, cond))
                 } else {
                   evalConstantVarInstance(smt2, cache, rtCheck, s0, tipe.ids, id, reporter) match {
                     case Some((s1, v)) => return value2Sym(s1, v, pos)
