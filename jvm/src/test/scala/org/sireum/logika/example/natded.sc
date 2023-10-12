@@ -215,7 +215,7 @@ import org.sireum.justification.natded.pred._
       3 #> SubProof(
         4 #> Assume(p),
         5 #> F            by negE(p) and (4, 2),
-        6 #> q            by BottomE(5)
+        6 #> q            by bottomE(q) and 5
       ),
       7 #> SubProof(
         8 #> Assume(q)
@@ -235,7 +235,7 @@ import org.sireum.justification.natded.pred._
       2 #> SubProof(
         3 #> Assume(p),
         4 #> F             by negE(p) and (3, 1),
-        5 #> q             by BottomE(4)
+        5 #> q             by bottomE(q) and 4
       ),
       6 #> (p ->: q)       by ImplyI(2),
     )
