@@ -1055,6 +1055,7 @@ import Util._
       case e: AST.Exp.LitR => return State.Value.R(e.value, e.posOpt.get)
       case e: AST.Exp.LitString => return State.Value.String(e.value, e.posOpt.get)
       case e: AST.Exp.LitZ => return State.Value.Z(e.value, e.posOpt.get)
+      case e: AST.ProofAst.StepId => halt("Infeasible")
     }
   }
 
@@ -4758,7 +4759,8 @@ import Util._
                         for (arg <- j.invoke.args) {
                           arg match {
                             case arg: AST.Exp.LitZ => witnesses = witnesses :+ AST.ProofAst.StepId.Num(arg.value, arg.attr)
-                            case arg: AST.Exp.LitString => witnesses :+ AST.ProofAst.StepId.Str(F, arg.value, arg.attr)
+                            case arg: AST.Exp.LitString => witnesses = witnesses :+ AST.ProofAst.StepId.Str(F, arg.value, arg.attr)
+                            case arg: AST.ProofAst.StepId => witnesses = witnesses :+ arg
                             case _ =>
                               reporter.error(arg.posOpt, Logika.kind, "Invalid witness reference (has to be either a number or a string)")
                           }
