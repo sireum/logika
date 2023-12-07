@@ -52,7 +52,7 @@ object Smt2 {
 
   val builtInCurrentNames: HashSet[ISZ[String]] = HashSet.empty[ISZ[String]] ++ ISZ[ISZ[String]](
     AST.Typed.f32Name :+ "NaN", AST.Typed.f32Name :+ "PInf", AST.Typed.f32Name :+ "NInf",
-    AST.Typed.f64Name :+ "NaN", AST.Typed.f64Name :+ "PInf", AST.Typed.f64Name :+ "NInf",
+    AST.Typed.f64Name :+ "NaN", AST.Typed.f64Name :+ "PInf", AST.Typed.f64Name :+ "NInf"
   )
 
   val imsOps: HashSet[String] =
@@ -61,7 +61,7 @@ object Smt2 {
         AST.Exp.BinaryOp.Append,
         AST.Exp.BinaryOp.AppendAll,
         AST.Exp.BinaryOp.Prepend,
-        AST.Exp.BinaryOp.RemoveAll,
+        AST.Exp.BinaryOp.RemoveAll
       )
 
   val stTrue: ST = st"true"
@@ -903,22 +903,22 @@ object Smt2 {
                 |    ($isInBoundId x i)
                 |    (= ($atId x i) v)
                 |    ${etThidSubtypeOpt("v")})))
-                |(assert (forall ((x $tId) (y $tId) (i $itId) (j $itId))
+                |(assert (forall ((x $tId) (y $tId) (i $itId))
                 |  (=>
                 |    ${thidTypeOpt("x")}
                 |    ${thidTypeOpt("y")}
                 |    (= ($sizeId x) ($sizeId y))
                 |    (not ($isInBoundId x i))
-                |    (not ($isInBoundId y j))
-                |    (= ($atId x i) ($atId y j)))))""")
+                |    (not ($isInBoundId y i))
+                |    (= ($atId x i) ($atId y i)))))""")
         } else {
           addTypeDecl(t,
-            st"""(assert (forall ((x $tId) (y $tId) (i $itId) (j $itId))
+            st"""(assert (forall ((x $tId) (y $tId) (i $itId))
                 |  (=>
                 |    (= ($sizeId x) ($sizeId y))
                 |    (not ($isInBoundId x i))
-                |    (not ($isInBoundId y j))
-                |    (= ($atId x i) ($atId y j)))))""")
+                |    (not ($isInBoundId y i))
+                |    (= ($atId x i) ($atId y i)))))""")
         }
       }
 
