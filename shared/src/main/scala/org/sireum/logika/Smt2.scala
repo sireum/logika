@@ -164,10 +164,6 @@ object Smt2 {
 
   val altErgoDefaultSatOpts: String = "alt-ergo"
 
-  val altErgoOpenDefaultValidOpts: String = "alt-ergo-open"
-
-  val altErgoOpenDefaultSatOpts: String = "alt-ergo-open"
-
   val defaultValidOpts: String = s"$cvc4DefaultValidOpts; $z3DefaultValidOpts; $cvc5DefaultValidOpts"
 
   val defaultSatOpts: String = s"$z3DefaultSatOpts"
@@ -180,7 +176,6 @@ object Smt2 {
 
   val solverArgsMap: HashMap[String, ISZ[String]] = HashMap.empty[String, ISZ[String]] +
     "alt-ergo" ~> ISZ[String]("-i", "smtlib2") +
-    "alt-ergo-open" ~> ISZ[String]("-default-lang", "smt2", "-use-fpa") +
     "cvc4" ~> ISZ[String]("--lang=smt2.6") +
     "cvc5" ~> ISZ[String]("--lang=smt2.6") +
     "z3" ~> ISZ("-smt2", "-in")
@@ -193,12 +188,6 @@ object Smt2 {
           timeoutInS = timeoutInS + 1
         }
         return Some(solverArgsMap.get(name).get ++ ISZ("--steps-bound", rlimit.string, "--timelimit", timeoutInS.string))
-      case string"alt-ergo-open" =>
-        var timeoutInS: Z = timeoutInMs / 1000
-        if (timeoutInMs % 1000 != 0) {
-          timeoutInS = timeoutInS + 1
-        }
-        return Some(solverArgsMap.get(name).get ++ ISZ("-steps-bound", rlimit.string, "-timelimit", timeoutInS.string))
       case string"cvc4" => return Some(solverArgsMap.get(name).get ++ ISZ(s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
       case string"cvc5" => return Some(solverArgsMap.get(name).get ++ ISZ(s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
       case string"z3" => return Some(solverArgsMap.get(name).get ++ ISZ(s"rlimit=$rlimit", s"-t:$timeoutInMs"))

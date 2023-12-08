@@ -37,8 +37,6 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            bin/linux/alt-ergo-open
-            bin/linux/.alt-ergo-open.ver
             bin/linux/cvc
             bin/linux/.cvc.ver
             bin/linux/cvc5
@@ -84,8 +82,6 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            bin/mac/alt-ergo-open
-            bin/mac/.alt-ergo-open.ver
             bin/mac/cvc
             bin/mac/.cvc.ver
             bin/mac/cvc5

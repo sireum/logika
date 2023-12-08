@@ -51,14 +51,12 @@ object Smt2Invoke {
       case _ => halt("Unsupported platform")
     }
     val platformHome = sireumHome / "bin" / platform
-    val altErgoOpen = platformHome / "alt-ergo-open"
     return HashMap.empty[String, String] ++ ISZ[(String, String)](
       "cvc4" ~> (platformHome / "cvc").string,
       "cvc5" ~> (platformHome / "cvc5").string,
       "z3" ~> (platformHome / "z3" / "bin" / "z3").string
-    ) ++ (if (altErgoOpen.exists) ISZ(altErgoOpen.name ~> altErgoOpen.string) else ISZ[(String, String)]()) ++
-      (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
-        "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
+    ) ++ (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
+      "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
   }
 
   @pure def queryDefault(sireumHome: Os.Path,
@@ -95,14 +93,12 @@ object Smt2Invoke {
             val poutOps = ops.StringOps(pout)
             poutOps.contains("Array theory solver does not yet support write-chains connecting two different constant arrays")
           case string"alt-ergo" => T
-          case string"alt-ergo-open" => T
           case _ => F
         }
       } else if (pr.exitCode == 2) {
         val poutOps = ops.StringOps(pout)
         config.name match {
           case string"alt-ergo" if poutOps.contains("exception Psmt2Frontend__Smtlib_parser.MenhirBasics.Error") => T
-          case string"alt-ergo-open" if poutOps.contains("exception Psmt2Frontend__Smtlib_parser.MenhirBasics.Error") => T
           case _ => F
         }
       } else {
