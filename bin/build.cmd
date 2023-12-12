@@ -103,11 +103,6 @@ def installCVC(kind: Os.Kind.Type): Unit = {
 }
 
 
-def installAltErgoOpen(kind: Os.Kind.Type): Unit = {
-  Init(home, kind, versions).installAltErgoOpen()
-}
-
-
 def getBranch(path: Os.Path): String = {
   return ops.StringOps(proc"git rev-parse --abbrev-ref HEAD".at(path).runCheck().out).trim
 }
@@ -170,7 +165,6 @@ def testJs(): Unit = {
 downloadMill()
 installZ3(Os.kind)
 installCVC(Os.kind)
-installAltErgoOpen(Os.kind)
 
 for (m <- ISZ("runtime", "slang")) {
   clone(m)
