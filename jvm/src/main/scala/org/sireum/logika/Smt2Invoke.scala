@@ -47,6 +47,7 @@ object Smt2Invoke {
     val platform: String = Os.kind match {
       case Os.Kind.Mac => "mac"
       case Os.Kind.Linux => "linux"
+      case Os.Kind.LinuxArm => "linux/arm"
       case Os.Kind.Win => "win"
       case _ => halt("Unsupported platform")
     }

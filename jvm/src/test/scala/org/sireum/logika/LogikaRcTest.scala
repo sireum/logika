@@ -35,18 +35,26 @@ object LogikaRcTest {
   val failDemoSuffix: Predef.String = "-demo-fail.sc"
   val simplifiedSuffix: Predef.String = " (simplified)"
 
+  val ignoreOnLinuxArm: HashSet[String] = HashSet ++ ISZ[String]( // due to lack of cvc5 on aarch64
+    "collection.sc", "count.sc", "count2.sc", "opsem-alt.sc", "opsem.sc", "realfloats.sc"
+  )
+
 }
 
 import LogikaRcTest._
 
 class LogikaRcTest extends SireumRcSpec {
 
-  def shouldIgnore(name: Predef.String, isSimplified: Boolean): Boolean = name match {
+  def shouldIgnore(name: Predef.String, isSimplified: Boolean): Boolean = if (Os.kind == Os.Kind.LinuxArm) {
+    ignoreOnLinuxArm.contains(name)
+  } else {
+    name match {
     case "opsem.sc" | "opsem-alt.sc" => Os.isMac && isInGithubAction
     case "conformance-swap.sc" => isSimplified
     case "strictpure.sc" => Os.isWin && isInGithubAction && !isSimplified
     case _ => false
   }
+}
 
   def textResources: scala.collection.SortedMap[scala.Vector[Predef.String], Predef.String] = {
     val m = $internal.RC.text(Vector("example")) { (p, f) => p.last.endsWith(".sc") && !p.last.startsWith("wip-") }
