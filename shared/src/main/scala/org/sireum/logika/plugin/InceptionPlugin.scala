@@ -51,6 +51,21 @@ object InceptionPlugin {
         case _ => r = r + id ~> exp
       }
     }
+    def recInvoke(fe: AST.Exp.Invoke, te: AST.Exp.Invoke): Unit = {
+      ok = fe.receiverOpt.isEmpty == te.receiverOpt.isEmpty && fe.args.size == te.args.size
+      if (!ok) {
+        return
+      }
+      (fe.receiverOpt, te.receiverOpt) match {
+        case (Some(fre), Some(tre)) => rec(fre, tre)
+        case (_, _) =>
+      }
+      rec(fe.ident, te.ident)
+      for (p <- ops.ISZOps(fe.args).zip(te.args) if ok) {
+        val (farg, targ) = p
+        rec(farg, targ)
+      }
+    }
     def rec(fe: AST.Exp, te: AST.Exp): Unit = {
       def recAssignExp(fae: AST.AssignExp, tae: AST.AssignExp): Unit = {
         (fae, tae) match {
@@ -135,24 +150,14 @@ object InceptionPlugin {
             case Some(AST.Exp.Fun(_, _, e: AST.Stmt.Expr)) =>
               val paramRefArgMap = HashMap ++ (for (p <- argParamRefMap.entries) yield (p._2, p._1))
               val e2 = AST.Util.ExpSubstitutor(paramRefArgMap).transformExp(e.exp).getOrElseEager(e.exp)
-              rec(e2, te)
+              (e2, te) match {
+                case (e2: AST.Exp.Invoke, te: AST.Exp.Invoke) => recInvoke(e2, te)
+                case _ => rec(e2, te)
+              }
               ok = T
             case _ =>
           }
-        case (fe: AST.Exp.Invoke, te: AST.Exp.Invoke) =>
-          ok = fe.receiverOpt.isEmpty == te.receiverOpt.isEmpty && fe.args.size == te.args.size
-          if (!ok) {
-            return
-          }
-          (fe.receiverOpt, te.receiverOpt) match {
-            case (Some(fre), Some(tre)) => rec(fre, tre)
-            case (_, _) =>
-          }
-          rec(fe.ident, te.ident)
-          for (p <- ops.ISZOps(fe.args).zip(te.args) if ok) {
-            val (farg, targ) = p
-            rec(farg, targ)
-          }
+        case (fe: AST.Exp.Invoke, te: AST.Exp.Invoke) => recInvoke(fe, te)
         case (_, _) => ok = F
       }
     }
