@@ -36,7 +36,7 @@ import org.sireum.logika.Logika.Reporter
 object InceptionPlugin {
 
   def extractIdExpMapping(th: TypeHierarchy, from: AST.Exp, to: AST.Exp, init: HashSMap[String, AST.Exp],
-                          context: ISZ[String], ids: HashSet[String], sm: HashMap[String, AST.Typed]): Option[HashSMap[String, AST.Exp]] = {
+                          context: ISZ[String], ids: HashSSet[String], sm: HashMap[String, AST.Typed]): Option[HashSMap[String, AST.Exp]] = {
     @pure def shouldExtract(resOpt: Option[AST.ResolvedInfo]): B = {
       resOpt match {
         case Some(res: AST.ResolvedInfo.LocalVar) => return res.context == context && ids.contains(res.id)
@@ -330,7 +330,7 @@ import InceptionPlugin._
       }
       var ok = T
       var idExpMap = HashSMap.empty[String, AST.Exp]
-      val paramIds = HashSet ++ paramNames
+      val paramIds = HashSSet ++ paramNames
       var fromToStepIdChecks = ISZ[(AST.Exp, AST.Exp, AST.ProofAst.StepId, B)]()
       for (p <- ops.ISZOps(just.witnesses).zip(requires)) {
         val (w, r) = p
@@ -376,6 +376,31 @@ import InceptionPlugin._
             ok = F
         }
       }
+
+      /* Uncomment to test CoreExp unification algorithm
+      {
+        var patterns = ISZ[AST.CoreExp]()
+        var exps = ISZ[AST.CoreExp]()
+        for (q <- fromToStepIdChecks) {
+          val (from, to, _, _) = q
+          patterns = patterns :+ lang.tipe.CoreExpUtil.translate(logika.th, from, sm)
+          exps = exps :+ lang.tipe.CoreExpUtil.translate(logika.th, to, HashMap.empty)
+        }
+        val localPatternSet = HashSSet ++ (for (id <- paramIds.elements) yield (context, id))
+        lang.tipe.CoreExpUtil.unify(localPatternSet, patterns, exps) match {
+          case Either.Left(m) if !ok =>
+            reporter.error(posOpt, Logika.kind,
+              st"""Diff result: {
+                  |  ${(for (p <- m.entries) yield st"${p._1._2} ~> ${p._2.prettyST}", ",\n")}
+                  |}""".render)
+          case Either.Right(ms) if ok =>
+            reporter.error(posOpt, Logika.kind,
+              st"""Unexpected unification error(s):
+                  |${(ms, "\n")}""".render)
+          case _ =>
+        }
+      }
+      */
 
       if (ok) {
         return handleH(conc, sm, name, context, paramNames, args, requires, ensures, posOpt, ISZ(
