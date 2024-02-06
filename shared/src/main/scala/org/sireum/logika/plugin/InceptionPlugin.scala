@@ -382,7 +382,8 @@ import InceptionPlugin._
         }
       }
 
-      /* Uncomment to test CoreExp unification algorithm
+      // Uncomment to test CoreExp unification algorithm
+      /*
       {
         var patterns = ISZ[AST.CoreExp]()
         var exps = ISZ[AST.CoreExp]()
@@ -392,7 +393,7 @@ import InceptionPlugin._
           exps = exps :+ lang.tipe.CoreExpUtil.translate(logika.th, to, HashMap.empty)
         }
         val localPatternSet = HashSSet ++ (for (id <- paramIds.elements) yield (context, id))
-        lang.tipe.CoreExpUtil.unify(localPatternSet, patterns, exps) match {
+        lang.tipe.CoreExpUtil.unify(logika.th, localPatternSet, patterns, exps) match {
           case Either.Left(m) if !ok =>
             reporter.error(posOpt, Logika.kind,
               st"""Diff result: {
