@@ -2084,7 +2084,7 @@ object Util {
       val invs: ISZ[Info.Inv] = if (method.isHelper) ISZ[Info.Inv]() else logika.retrieveInvs(res.owner, res.isInObject)
       state = checkMethodPre(logika, smt2, cache, reporter, state, methodPosOpt, invs, requires)
       val stmts = method.bodyOpt.get.stmts
-      val (l, ss): (Logika, ISZ[State]) = if (method.purity == AST.Purity.StrictPure) {
+      val (l, ss): (Logika, ISZ[State]) = if (method.isStrictPure) {
         val stmt = stmts(0).asInstanceOf[AST.Stmt.Var]
         val spBody = stmt.initOpt.get
         val pos = spBody.asStmt.posOpt.get
