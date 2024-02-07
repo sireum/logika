@@ -90,14 +90,19 @@ object Task {
   }
 
   @datatype class Theorem(val th: TypeHierarchy,
-                       val config: Config,
-                       val theorem: AST.Stmt.Theorem,
-                       val plugins: ISZ[Plugin]) extends Task {
+                          val config: Config,
+                          val theorem: AST.Stmt.Theorem,
+                          val plugins: ISZ[Plugin]) extends Task {
     override def compute(nameExePathMap: HashMap[String, String], maxCores: Z, fileOptions: LibUtil.FileOptionMap,
                          smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
       val logika = Logika(th, config, Context.empty(nameExePathMap, maxCores, fileOptions), plugins)
       for (tp <- theorem.typeParams) {
         smt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
+      }
+      if (theorem.proof.steps.isEmpty) {
+        logika.evalAssert(smt2, cache, T, theorem.id.value, State.create, theorem.claim, theorem.claim.posOpt, ISZ(),
+          reporter)
+        return reporter.messages
       }
       var p = (State.create, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
       for (step <- theorem.proof.steps if p._1.ok) {
