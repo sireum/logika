@@ -30,7 +30,7 @@ import org.sireum.message.Position
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.symbol.Info
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
-import org.sireum.logika.{Config, Logika, Smt2, State, StepProofContext}
+import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
 object InceptionPlugin {
@@ -382,18 +382,18 @@ import InceptionPlugin._
         }
       }
 
-      // Uncomment to test CoreExp unification algorithm
+      // Uncomment to test RewritingSystem unification algorithm
       /*
       {
         var patterns = ISZ[AST.CoreExp]()
         var exps = ISZ[AST.CoreExp]()
         for (q <- fromToStepIdChecks) {
           val (from, to, _, _) = q
-          patterns = patterns :+ lang.tipe.CoreExpUtil.translate(logika.th, from, sm)
-          exps = exps :+ lang.tipe.CoreExpUtil.translate(logika.th, to, HashMap.empty)
+          patterns = patterns :+ org.sireum.logika.RewritingSystem.translate(logika.th, from, sm)
+          exps = exps :+ org.sireum.logika.RewritingSystem.translate(logika.th, to, HashMap.empty)
         }
         val localPatternSet = HashSSet ++ (for (id <- paramIds.elements) yield (context, id))
-        lang.tipe.CoreExpUtil.unify(logika.th, localPatternSet, patterns, exps) match {
+        org.sireum.logika.RewritingSystem.unify(logika.th, localPatternSet, patterns, exps) match {
           case Either.Left(m) if !ok =>
             reporter.error(posOpt, Logika.kind,
               st"""Diff result: {
