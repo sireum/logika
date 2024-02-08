@@ -393,7 +393,7 @@ import InceptionPlugin._
           exps = exps :+ org.sireum.logika.RewritingSystem.translate(logika.th, to, HashMap.empty)
         }
         val localPatternSet = HashSSet ++ (for (id <- paramIds.elements) yield (context, id))
-        org.sireum.logika.RewritingSystem.unify(logika.th, localPatternSet, patterns, exps) match {
+        org.sireum.logika.RewritingSystem.unify(F, logika.th, localPatternSet, patterns, exps) match {
           case Either.Left(m) if !ok =>
             reporter.error(posOpt, Logika.kind,
               st"""Diff result: {

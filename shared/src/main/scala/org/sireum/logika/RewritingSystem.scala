@@ -127,14 +127,8 @@ object RewritingSystem {
             case _ => halt(s"Infeasible: expected typed expression")
           }
         case e: AST.Exp.Tuple =>
-          if (e.args.size == 1) {
-            return rec(e.args(0), funStack, localMap)
-          } else {
-            val t = e.typedOpt.get
-            return AST.CoreExp.Apply(
-              AST.CoreExp.ObjectVarRef(AST.CoreExp.tupleOwner, e.args.size.string, t),
-              for (arg <- e.args) yield rec(arg, funStack, localMap), t)
-          }
+          return if (e.args.size == 1) rec(e.args(0), funStack, localMap)
+          else AST.CoreExp.Tuple(for (arg <- e.args) yield rec(arg, funStack, localMap))
         case e: AST.Exp.Ident =>
           e.resOpt.get match {
             case res: AST.ResolvedInfo.LocalVar =>
@@ -157,11 +151,8 @@ object RewritingSystem {
             case _ => halt(s"Infeasible: $e")
           }
         case e: AST.Exp.Unary =>
-          val t = e.typedOpt.get.subst(sm)
-          return AST.CoreExp.Apply(AST.CoreExp.ObjectVarRef(AST.CoreExp.unaryOwner, e.opString, t),
-            ISZ(rec(e.exp, funStack, localMap)), t)
+          return AST.CoreExp.Unary(e.op, rec(e.exp, funStack, localMap))
         case e: AST.Exp.Binary =>
-          val t = e.typedOpt.get.subst(sm)
           e.attr.resOpt.get match {
             case res: AST.ResolvedInfo.BuiltIn =>
               val left = rec(e.left, funStack, localMap)
@@ -175,8 +166,7 @@ object RewritingSystem {
                   return AST.CoreExp.If(left, right, AST.CoreExp.LitB(T), AST.Typed.b)
                 case _ =>
               }
-              return AST.CoreExp.Apply(AST.CoreExp.ObjectVarRef(AST.CoreExp.binaryOwner, e.op, t),
-                ISZ(left, right), t)
+              return AST.CoreExp.Binary(left, e.op, right)
             case _ => halt(s"TODO: $e")
           }
         case e: AST.Exp.If =>
@@ -246,7 +236,10 @@ object RewritingSystem {
     return rec(exp, Stack.empty, HashSMap.empty)
   }
 
-  @pure def unifyExp(localPatterns: LocalPatternSet, pattern: AST.CoreExp, exp: AST.CoreExp,
+  @pure def unifyExp(silent: B,
+                     localPatterns: LocalPatternSet,
+                     pattern: AST.CoreExp,
+                     exp: AST.CoreExp,
                      init: UnificationMap,
                      pendingApplications: MBox[PendingApplications],
                      errorMessages: MBox[UnificationErrorMessages]): UnificationMap = {
@@ -261,15 +254,24 @@ object RewritingSystem {
     }
     var map = init
     def err(p: AST.CoreExp, e: AST.CoreExp): Unit = {
-      errorMessages.value = errorMessages.value :+
-        st"""Could not unify '${p.prettyST}' with '${e.prettyST}' in
-            |${pattern.prettyST}, and
-            |${exp.prettyST}""".render
+      if (silent) {
+        if (errorMessages.value.isEmpty) {
+          errorMessages.value = errorMessages.value :+ ""
+        }
+      } else {
+        errorMessages.value = errorMessages.value :+
+          st"Could not unify '${p.prettyST}' with '${e.prettyST}' in '${pattern.prettyST}' and '${exp.prettyST}'".render
+      }
     }
     def err2(id: String, e1: AST.CoreExp, e2: AST.CoreExp): Unit = {
-      errorMessages.value = errorMessages.value :+
-        st"""Could not unify local pattern '$id' with multiple expressions:
-            |* ${(ISZ(e1.prettyST, e2.prettyST), "\n* ")}""".render
+      if (silent) {
+        if (errorMessages.value.isEmpty) {
+          errorMessages.value = errorMessages.value :+ ""
+        }
+      } else {
+        errorMessages.value = errorMessages.value :+
+          st"Could not unify local pattern '$id' with both '${e1.prettyST}' and '${e2.prettyST}'".render
+      }
     }
     def matchPatternLocals(p: AST.CoreExp, e: AST.CoreExp): Unit = {
       if (errorMessages.value.nonEmpty) {
@@ -301,12 +303,47 @@ object RewritingSystem {
           if (!(p.id == e.id && p.owner == e.owner)) {
             err(p, e)
           }
+        case (p: AST.CoreExp.Binary, e: AST.CoreExp.Binary) =>
+          if (p.op != e.op) {
+            err(p, e)
+          } else {
+            matchPatternLocals(p.left, e.left)
+            matchPatternLocals(p.right, e.right)
+          }
+        case (p: AST.CoreExp.Unary, e: AST.CoreExp.Unary) =>
+          if (p.op != e.op) {
+            err(p, e)
+          } else {
+            matchPatternLocals(p.exp, e.exp)
+          }
+        case (p: AST.CoreExp.Tuple, e: AST.CoreExp.Tuple) =>
+          if (p.args.size != e.args.size) {
+            err(p, e)
+          } else {
+            for (i <- 0 until p.args.size) {
+              matchPatternLocals(p.args(i), e.args(i))
+            }
+          }
         case (p: AST.CoreExp.Select, e: AST.CoreExp.Select) =>
           if (p.id != e.id) {
             err(p, e)
           } else {
             matchPatternLocals(p.exp, e.exp)
           }
+        case (p: AST.CoreExp.Update, e: AST.CoreExp.Update) =>
+          if (p.id != e.id) {
+            err(p, e)
+          } else {
+            matchPatternLocals(p.exp, e.exp)
+            matchPatternLocals(p.arg, e.arg)
+          }
+        case (p: AST.CoreExp.Indexing, e: AST.CoreExp.Indexing) =>
+          matchPatternLocals(p.exp, e.exp)
+          matchPatternLocals(p.index, e.index)
+        case (p: AST.CoreExp.IndexingUpdate, e: AST.CoreExp.IndexingUpdate) =>
+          matchPatternLocals(p.exp, e.exp)
+          matchPatternLocals(p.index, e.index)
+          matchPatternLocals(p.arg, e.arg)
         case (p: AST.CoreExp.If, e: AST.CoreExp.If) =>
           matchPatternLocals(p.cond, e.cond)
           matchPatternLocals(p.tExp, e.tExp)
@@ -381,18 +418,18 @@ object RewritingSystem {
     return map
   }
 
-  @pure def unify(th: TypeHierarchy, localPatterns: LocalPatternSet, patterns: ISZ[AST.CoreExp], exps: ISZ[AST.CoreExp]): UnificationResult = {
+  @pure def unify(silent: B, th: TypeHierarchy, localPatterns: LocalPatternSet, patterns: ISZ[AST.CoreExp], exps: ISZ[AST.CoreExp]): UnificationResult = {
     val errorMessages: MBox[UnificationErrorMessages] = MBox(ISZ())
     val pendingApplications: MBox[PendingApplications] = MBox(ISZ())
     var m: UnificationMap = HashSMap.empty
     for (i <- 0 until patterns.size) {
-      m = unifyExp(localPatterns, patterns(i), exps(i), m, pendingApplications, errorMessages)
+      m = unifyExp(silent, localPatterns, patterns(i), exps(i), m, pendingApplications, errorMessages)
       if (errorMessages.value.nonEmpty) {
         return Either.Right(errorMessages.value)
       }
     }
 
-    while (pendingApplications.value.nonEmpty) {
+    /* while (pendingApplications.value.nonEmpty) */ {
       val pas = pendingApplications.value
       pendingApplications.value = ISZ()
       for (pa <- pas) {
@@ -400,9 +437,16 @@ object RewritingSystem {
         m.get((context, id)) match {
           case Some(f: AST.CoreExp.Fun) =>
             simplify(th, SimplicationConfig.funApplicationOnly, AST.CoreExp.Apply(f, args, e.tipe)) match {
-              case Some(pattern) => m = unifyExp(localPatterns, pattern, e, m, pendingApplications, errorMessages)
-              case _ => errorMessages.value = errorMessages.value :+
-                st"Could not reduce '$f(${(for (arg <- args) yield arg.prettyST, ", ")})'".render
+              case Some(pattern) => m = unifyExp(silent, localPatterns, pattern, e, m, pendingApplications, errorMessages)
+              case _ =>
+                if (silent) {
+                  if (errorMessages.value.isEmpty) {
+                    errorMessages.value = errorMessages.value :+ ""
+                  }
+                } else {
+                  errorMessages.value = errorMessages.value :+
+                    st"Could not reduce '$f(${(for (arg <- args) yield arg.prettyST, ", ")})'".render
+                }
             }
           case Some(f) => errorMessages.value = errorMessages.value :+ s"Expecting to infer a function, but found '$f'"
           case _ =>
@@ -414,7 +458,13 @@ object RewritingSystem {
     }
 
     for (localPattern <- localPatterns.elements if !m.contains(localPattern)) {
-      errorMessages.value = errorMessages.value :+ s"Could not find any matching expression for '${localPattern._2}'"
+      if (silent) {
+        if (errorMessages.value.isEmpty) {
+          errorMessages.value = errorMessages.value :+ ""
+        }
+      } else {
+        errorMessages.value = errorMessages.value :+ s"Could not find any matching expression for '${localPattern._2}'"
+      }
     }
     return if (errorMessages.value.nonEmpty) Either.Right(errorMessages.value)
     else Either.Left(m)
@@ -552,44 +602,44 @@ object RewritingSystem {
       case lit1 => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
     }
 
-  @strictpure def evalUnary(op: String, lit: AST.CoreExp.Lit): AST.CoreExp.Lit =
+  @strictpure def evalUnary(op: AST.Exp.UnaryOp.Type, lit: AST.CoreExp.Lit): AST.CoreExp.Lit =
     lit match {
       case lit: AST.CoreExp.LitB =>
         op match {
-          case "!" => AST.CoreExp.LitB(!lit.value)
-          case "~" => AST.CoreExp.LitB(~lit.value)
+          case AST.Exp.UnaryOp.Not => AST.CoreExp.LitB(!lit.value)
+          case AST.Exp.UnaryOp.Complement => AST.CoreExp.LitB(~lit.value)
           case _ => halt(s"Infeasible $op on B")
         }
       case lit: AST.CoreExp.LitZ =>
         op match {
-          case "+" => AST.CoreExp.LitZ(lit.value)
-          case "-" => AST.CoreExp.LitZ(-lit.value)
+          case AST.Exp.UnaryOp.Plus => AST.CoreExp.LitZ(lit.value)
+          case AST.Exp.UnaryOp.Minus => AST.CoreExp.LitZ(-lit.value)
           case _ => halt(s"Infeasible $op on Z")
         }
       case lit: AST.CoreExp.LitC =>
         op match {
-          case "~" => AST.CoreExp.LitC(~lit.value)
+          case AST.Exp.UnaryOp.Complement => AST.CoreExp.LitC(~lit.value)
           case _ => halt(s"Infeasible $op on C")
         }
       case lit: AST.CoreExp.LitF32 =>
         op match {
-          case "+" => AST.CoreExp.LitF32(lit.value)
-          case "-" => AST.CoreExp.LitF32(lit.value)
+          case AST.Exp.UnaryOp.Plus => AST.CoreExp.LitF32(lit.value)
+          case AST.Exp.UnaryOp.Minus => AST.CoreExp.LitF32(lit.value)
           case _ => halt(s"Infeasible $op on F32")
         }
       case lit: AST.CoreExp.LitF64 =>
         op match {
-          case "+" => AST.CoreExp.LitF64(lit.value)
-          case "-" => AST.CoreExp.LitF64(-lit.value)
+          case AST.Exp.UnaryOp.Plus => AST.CoreExp.LitF64(lit.value)
+          case AST.Exp.UnaryOp.Minus => AST.CoreExp.LitF64(-lit.value)
           case _ => halt(s"Infeasible $op on F64")
         }
       case lit: AST.CoreExp.LitR =>
         op match {
-          case "+" => AST.CoreExp.LitR(lit.value)
-          case "-" => AST.CoreExp.LitR(-lit.value)
+          case AST.Exp.UnaryOp.Plus => AST.CoreExp.LitR(lit.value)
+          case AST.Exp.UnaryOp.Minus => AST.CoreExp.LitR(-lit.value)
           case _ => halt(s"Infeasible $op on R")
         }
-      case lit =>  halt(st"TODO: $op ${lit.prettyST}".render)
+      case lit => halt(st"TODO: $op ${lit.prettyST}".render)
     }
 
   @pure def simplify(th: TypeHierarchy, config: SimplicationConfig, exp: AST.CoreExp): Option[AST.CoreExp] = {
@@ -605,11 +655,111 @@ object RewritingSystem {
             case _ => return None()
           }
         case _: AST.CoreExp.ObjectVarRef => return None()
+        case e: AST.CoreExp.Binary =>
+          var changed = F
+          val left: AST.CoreExp = rec(deBruijnMap, e.left) match {
+            case Some(l) =>
+              changed = T
+              l
+            case _ => e.left
+          }
+          val right: AST.CoreExp = rec(deBruijnMap, e.right) match {
+            case Some(r) =>
+              changed = T
+              r
+            case _ => e.right
+          }
+          if (config.constantPropagation) {
+            (left, right) match {
+              case (left: AST.CoreExp.Lit, right: AST.CoreExp.Lit) => return Some(evalBinary(left, e.op, right))
+              case _ =>
+            }
+          }
+          return if (changed) Some(e(left = left, right = right)) else None()
+        case e: AST.CoreExp.Unary =>
+          var changed = F
+          val ue: AST.CoreExp = rec(deBruijnMap, e.exp) match {
+            case Some(exp2) =>
+              changed = T
+              exp2
+            case _ => e.exp
+          }
+          if (config.constantPropagation) {
+            ue match {
+              case exp: AST.CoreExp.Lit => return Some(evalUnary(e.op, exp))
+              case _ =>
+            }
+          }
+          return if (changed) Some(e(exp = ue)) else None()
         case e: AST.CoreExp.Select =>
           rec(deBruijnMap, e.exp) match {
             case Some(receiver) => return Some(e(exp = receiver))
             case _ => return None()
           }
+        case e: AST.CoreExp.Update =>
+          var changed = F
+          val receiver: AST.CoreExp = rec(deBruijnMap, e.exp) match {
+            case Some(exp2) =>
+              changed = T
+              exp2
+            case _ => e.exp
+          }
+          val arg: AST.CoreExp = rec(deBruijnMap, e.arg) match {
+            case Some(arg2) =>
+              changed = T
+              arg2
+            case _ => e.arg
+          }
+          return if (changed) Some(e(exp = receiver, arg = arg)) else None()
+        case e: AST.CoreExp.Indexing =>
+          var changed = F
+          val receiver: AST.CoreExp = rec(deBruijnMap, e.exp) match {
+            case Some(exp2) =>
+              changed = T
+              exp2
+            case _ => e.exp
+          }
+          val index: AST.CoreExp = rec(deBruijnMap, e.index) match {
+            case Some(index2) =>
+              changed = T
+              index2
+            case _ => e.index
+          }
+          return if (changed) Some(e(exp = receiver, index = index)) else None()
+        case e: AST.CoreExp.IndexingUpdate =>
+          var changed = F
+          val receiver: AST.CoreExp = rec(deBruijnMap, e.exp) match {
+            case Some(exp2) =>
+              changed = T
+              exp2
+            case _ => e.exp
+          }
+          val index: AST.CoreExp = rec(deBruijnMap, e.index) match {
+            case Some(index2) =>
+              changed = T
+              index2
+            case _ => e.index
+          }
+          val arg: AST.CoreExp = rec(deBruijnMap, e.arg) match {
+            case Some(arg2) =>
+              changed = T
+              arg2
+            case _ => e.arg
+          }
+          return if (changed) Some(e(exp = receiver, index = index, arg = arg)) else None()
+        case e: AST.CoreExp.Tuple =>
+          var changed = F
+          var args = ISZ[AST.CoreExp]()
+          for (arg <- e.args) {
+            rec(deBruijnMap, arg) match {
+              case Some(arg2) =>
+                args = args :+ arg2
+                changed = T
+              case _ =>
+                args = args :+ arg
+            }
+          }
+          return if (changed) Some(e(args = args)) else None()
         case e: AST.CoreExp.If =>
           var changed = F
           var cond = e.cond
@@ -656,22 +806,6 @@ object RewritingSystem {
             }
           }
           op match {
-            case op: AST.CoreExp.ObjectVarRef =>
-              if (config.constantPropagation) {
-                op.owner match {
-                  case AST.CoreExp.binaryOwner =>
-                    args match {
-                      case ISZ(lit1: AST.CoreExp.Lit, lit2: AST.CoreExp.Lit) => return Some(evalBinary(lit1, op.id, lit2))
-                      case _ =>
-                    }
-                  case AST.CoreExp.unaryOwner =>
-                    args match {
-                      case ISZ(lit: AST.CoreExp.Lit) => return Some(evalUnary(op.id, lit))
-                      case _ =>
-                    }
-                  case _ =>
-                }
-              }
             case f: AST.CoreExp.Fun if config.funApplication =>
               var params = ISZ[(String, AST.Typed)]()
               def recParams(fe: AST.CoreExp): AST.CoreExp = {
