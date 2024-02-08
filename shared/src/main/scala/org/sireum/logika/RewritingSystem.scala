@@ -408,6 +408,15 @@ object RewritingSystem {
           } else {
             matchPatternLocals(p.exp, e.exp)
           }
+        case (p: AST.CoreExp.InstanceOfExp, e: AST.CoreExp.InstanceOfExp) =>
+          if (p.isTest != e.isTest || p.tipe != e.tipe) {
+            err(p, e)
+          } else {
+            matchPatternLocals(p.exp, e.exp)
+          }
+        case (p: AST.CoreExp.Arrow, e: AST.CoreExp.Arrow) =>
+          matchPatternLocals(p.exp1, e.exp1)
+          matchPatternLocals(p.exp2, e.exp2)
         case (_, _) =>
           err(p, e)
       }
@@ -762,30 +771,15 @@ object RewritingSystem {
           return if (changed) Some(e(args = args)) else None()
         case e: AST.CoreExp.If =>
           var changed = F
-          var cond = e.cond
-          var tExp = e.tExp
-          var fExp = e.fExp
-          rec(deBruijnMap, cond) match {
+          val cond: AST.CoreExp = rec(deBruijnMap, e.cond) match {
             case Some(AST.CoreExp.LitB(b)) if config.constantPropagation =>
-              return if (b) rec(deBruijnMap, tExp) else rec(deBruijnMap, fExp)
+              return if (b) rec(deBruijnMap, e.tExp) else rec(deBruijnMap, e.fExp)
             case Some(c) =>
-              cond = c
               changed = T
-            case _ =>
+              c
+            case _ => e.cond
           }
-          rec(deBruijnMap, tExp) match {
-            case Some(tExp2) =>
-              tExp = tExp2
-              changed = T
-            case _ =>
-          }
-          rec(deBruijnMap, fExp) match {
-            case Some(fExp2) =>
-              fExp = fExp2
-              changed = T
-            case _ =>
-          }
-          return if (changed) Some(e(cond = cond, tExp = tExp, fExp = fExp)) else None()
+          return if (changed) Some(e(cond = cond)) else None()
         case e: AST.CoreExp.Apply =>
           var op = e.exp
           var changed = F
@@ -834,16 +828,8 @@ object RewritingSystem {
             case _ =>
           }
           return if (changed) Some(e(exp = op, args = args)) else None()
-        case e: AST.CoreExp.Fun =>
-          rec(incDeBruijnMap(deBruijnMap, 1), e.exp) match {
-            case Some(body) => return Some(e(exp = body))
-            case _ => return None()
-          }
-        case e: AST.CoreExp.Quant =>
-          rec(incDeBruijnMap(deBruijnMap, 1), e.exp) match {
-            case Some(body) => return Some(e(exp = body))
-            case _ => return None()
-          }
+        case _: AST.CoreExp.Fun => return None()
+        case _: AST.CoreExp.Quant => return None()
         case e: AST.CoreExp.InstanceOfExp =>
           var receiver = e.exp
           var changed = F
@@ -854,8 +840,31 @@ object RewritingSystem {
             case _ =>
           }
           return if (changed) Some(e(exp = receiver)) else None()
+        case e: AST.CoreExp.Arrow =>
+          var changed = F
+          val exp1: AST.CoreExp = rec(deBruijnMap, e.exp1) match {
+            case Some(e1) =>
+              changed = T
+              e1
+            case _ => e.exp1
+          }
+          val exp2: AST.CoreExp = rec(deBruijnMap, e.exp2) match {
+            case Some(e2) =>
+              changed = T
+              e2
+            case _ => e.exp2
+          }
+          return if (changed) Some(e(exp1 = exp1, exp2 = exp2)) else None()
       }
     }
     return rec(HashMap.empty, exp)
   }
+
+  /*
+   !P                  |->  P ≡ False
+   P __>: Q               |->  P ==> Q
+   P & Q               |->  P, Q
+   ∀{(x: T) P(x) }     |->  P(?x)
+   if P then Q else R  |->  P ==> Q, !P ==> R
+   */
 }
