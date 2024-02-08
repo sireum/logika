@@ -51,6 +51,7 @@ object RewritingSystem {
     val all: SimplicationConfig = SimplicationConfig(T, T, T, T, T, T, T)
     val none: SimplicationConfig = SimplicationConfig(F, F, F, F, F, F, F)
     val funApplicationOnly: SimplicationConfig = none(funApplication = T)
+    val quantApplicationOnly: SimplicationConfig = none(quantApplication = T)
   }
 
   @record class Substitutor(val map: HashMap[AST.CoreExp, AST.CoreExp.ParamVarRef]) extends AST.MCoreExpTransformer {
@@ -70,6 +71,8 @@ object RewritingSystem {
       return AST.MCoreExpTransformer.PostResultCoreExpLocalVarRef
     }
   }
+
+  @strictpure def paramId(n: String): String = s"_$n"
 
   @pure def translate(th: TypeHierarchy, exp: AST.Exp, sm: HashMap[String, AST.Typed]): AST.CoreExp = {
     @pure def recBody(body: AST.Body, funStack: FunStack, localMap: LocalMap): AST.CoreExp = {
@@ -157,16 +160,20 @@ object RewritingSystem {
             case res: AST.ResolvedInfo.BuiltIn =>
               val left = rec(e.left, funStack, localMap)
               val right = rec(e.right, funStack, localMap)
-              res.kind match {
+              val op: String = res.kind match {
                 case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
                   return AST.CoreExp.If(left, right, AST.CoreExp.LitB(F), AST.Typed.b)
                 case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr =>
                   return AST.CoreExp.If(left, AST.CoreExp.LitB(T), right, AST.Typed.b)
                 case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply =>
                   return AST.CoreExp.If(left, right, AST.CoreExp.LitB(T), AST.Typed.b)
-                case _ =>
+                case AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv => AST.Exp.BinaryOp.EquivUni
+                case AST.ResolvedInfo.BuiltIn.Kind.BinaryEq if th.isSubstitutableWithoutSpecVars(left.tipe) => AST.Exp.BinaryOp.EquivUni
+                case AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv => AST.Exp.BinaryOp.InequivUni
+                case AST.ResolvedInfo.BuiltIn.Kind.BinaryNe if th.isSubstitutableWithoutSpecVars(left.tipe) => AST.Exp.BinaryOp.InequivUni
+                case _ => e.op
               }
-              return AST.CoreExp.Binary(left, e.op, right)
+              return AST.CoreExp.Binary(left, op, right)
             case _ => halt(s"TODO: $e")
           }
         case e: AST.Exp.If =>
@@ -355,7 +362,6 @@ object RewritingSystem {
                 case f: AST.Typed.Fun => getArgTypes(f.ret, acc :+ f.args(0))
                 case _ => acc
               }
-              @strictpure def paramId(n: Z): String = s"_$n"
               val argTypes = getArgTypes(f.curried, ISZ())
               if (args.size == argTypes.size) {
                 @pure def hasLocalPatternInArgs: B = {
@@ -371,12 +377,12 @@ object RewritingSystem {
                   var substMap = HashMap.empty[AST.CoreExp, AST.CoreExp.ParamVarRef]
                   for (i <- 0 until args.size) {
                     val n = args.size - i
-                    substMap = substMap + args(i) ~> AST.CoreExp.ParamVarRef(n, paramId(n), argTypes(i))
+                    substMap = substMap + args(i) ~> AST.CoreExp.ParamVarRef(n, paramId(n.string), argTypes(i))
                   }
                   val se = Substitutor(substMap).transformCoreExp(e).getOrElse(e)
-                  var r: AST.CoreExp = AST.CoreExp.Fun(AST.CoreExp.Param(paramId(1), argTypes(args.size - 1)), se)
+                  var r: AST.CoreExp = AST.CoreExp.Fun(AST.CoreExp.Param(paramId(1.string), argTypes(args.size - 1)), se)
                   for (i <- args.size - 2 to 0 by -1) {
-                    r = AST.CoreExp.Fun(AST.CoreExp.Param(paramId(args.size - i), argTypes(i)), r)
+                    r = AST.CoreExp.Fun(AST.CoreExp.Param(paramId((args.size - i).string), argTypes(i)), r)
                   }
                   val key = (context, id)
                   map.get(key) match {
@@ -489,11 +495,7 @@ object RewritingSystem {
           case AST.Exp.BinaryOp.Or => AST.CoreExp.LitB(left | right)
           case AST.Exp.BinaryOp.Xor => AST.CoreExp.LitB(left |^ right)
           case AST.Exp.BinaryOp.Imply => AST.CoreExp.LitB(left __>: right)
-          case AST.Exp.BinaryOp.Eq => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Equiv => AST.CoreExp.LitB(left ≡ right)
           case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Ne => AST.CoreExp.LitB(left ≢ right)
-          case AST.Exp.BinaryOp.Inequiv => AST.CoreExp.LitB(left ≢ right)
           case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
           case _ => halt(s"Infeasible: $op on B")
         }
@@ -510,11 +512,7 @@ object RewritingSystem {
           case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
           case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
           case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
-          case AST.Exp.BinaryOp.Eq => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Equiv => AST.CoreExp.LitB(left ≡ right)
           case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Ne => AST.CoreExp.LitB(left ≢ right)
-          case AST.Exp.BinaryOp.Inequiv => AST.CoreExp.LitB(left ≢ right)
           case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
           case _ => halt(s"Infeasible: $op on Z")
         }
@@ -531,11 +529,7 @@ object RewritingSystem {
           case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
           case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
           case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
-          case AST.Exp.BinaryOp.Eq => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Equiv => AST.CoreExp.LitB(left ≡ right)
           case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Ne => AST.CoreExp.LitB(left ≢ right)
-          case AST.Exp.BinaryOp.Inequiv => AST.CoreExp.LitB(left ≢ right)
           case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
           case AST.Exp.BinaryOp.Shl => AST.CoreExp.LitC(left << right)
           case AST.Exp.BinaryOp.Shr => AST.CoreExp.LitC(left >> right)
@@ -555,12 +549,8 @@ object RewritingSystem {
           case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
           case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
           case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
-          case AST.Exp.BinaryOp.Eq => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Equiv => AST.CoreExp.LitB(left ≡ right)
           case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
           case AST.Exp.BinaryOp.FpEq => AST.CoreExp.LitB(left ~~ right)
-          case AST.Exp.BinaryOp.Ne => AST.CoreExp.LitB(left ≢ right)
-          case AST.Exp.BinaryOp.Inequiv => AST.CoreExp.LitB(left ≢ right)
           case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
           case AST.Exp.BinaryOp.FpNe => AST.CoreExp.LitB(left !~ right)
           case _ => halt(s"Infeasible: $op on F32")
@@ -579,11 +569,7 @@ object RewritingSystem {
           case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
           case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
           case AST.Exp.BinaryOp.Eq => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Equiv => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
           case AST.Exp.BinaryOp.FpEq => AST.CoreExp.LitB(left ~~ right)
-          case AST.Exp.BinaryOp.Ne => AST.CoreExp.LitB(left ≢ right)
-          case AST.Exp.BinaryOp.Inequiv => AST.CoreExp.LitB(left ≢ right)
           case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
           case AST.Exp.BinaryOp.FpNe => AST.CoreExp.LitB(left !~ right)
           case _ => halt(s"Infeasible: $op on F64")
@@ -600,11 +586,7 @@ object RewritingSystem {
           case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left < right)
           case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
           case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
-          case AST.Exp.BinaryOp.Eq => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Equiv => AST.CoreExp.LitB(left ≡ right)
           case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.Ne => AST.CoreExp.LitB(left ≢ right)
-          case AST.Exp.BinaryOp.Inequiv => AST.CoreExp.LitB(left ≢ right)
           case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
           case _ => halt(s"Infeasible: $op on R")
         }
@@ -860,11 +842,42 @@ object RewritingSystem {
     return rec(HashMap.empty, exp)
   }
 
-  /*
-   !P                  |->  P ≡ False
-   P __>: Q               |->  P ==> Q
-   P & Q               |->  P, Q
-   ∀{(x: T) P(x) }     |->  P(?x)
-   if P then Q else R  |->  P ==> Q, !P ==> R
-   */
+  @pure def toCondEquiv(th: TypeHierarchy, exp: AST.CoreExp): ISZ[AST.CoreExp] = {
+    var done = ISZ[AST.CoreExp]()
+    var r = ISZ[AST.CoreExp]()
+    exp match {
+      case exp: AST.CoreExp.Unary if exp.op == AST.Exp.UnaryOp.Not =>
+      case exp: AST.CoreExp.Binary =>
+        exp.op match {
+          case AST.Exp.BinaryOp.Arrow => done = done :+ exp
+          case AST.Exp.BinaryOp.EquivUni => done = done :+ exp
+          case AST.Exp.BinaryOp.Imply => done = done :+ AST.CoreExp.Arrow(exp.left, exp.right)
+          case AST.Exp.BinaryOp.And => r = r ++ ISZ[AST.CoreExp](exp.left, exp.right)
+          case _ => r = r :+ exp
+        }
+      case exp: AST.CoreExp.Quant if exp.kind == AST.CoreExp.Quant.Kind.ForAll =>
+        r = r :+ simplify(th, SimplicationConfig.quantApplicationOnly,
+          AST.CoreExp.Apply(
+            exp,
+            ISZ(AST.CoreExp.LocalVarRef(ISZ(), paramId(exp.param.id), exp.param.tipe)),
+            AST.Typed.b)).get
+      case exp: AST.CoreExp.If => done = done ++ ISZ[AST.CoreExp](
+        AST.CoreExp.Arrow(exp.cond, exp.tExp),
+        AST.CoreExp.Arrow(AST.CoreExp.Unary(AST.Exp.UnaryOp.Not, exp.cond), exp.fExp)
+      )
+      case _ => r = r :+ exp
+    }
+    for (e <- r) {
+      e match {
+        case e: AST.CoreExp.Arrow => done = done :+ e
+        case e: AST.CoreExp.Binary =>
+          e.op match {
+            case AST.Exp.BinaryOp.EquivUni => done = done :+ e
+            case _ => done = done :+ AST.CoreExp.Binary(e, AST.Exp.BinaryOp.EquivUni, AST.CoreExp.LitB(T))
+          }
+        case _ => done = done :+ AST.CoreExp.Binary(e, AST.Exp.BinaryOp.EquivUni, AST.CoreExp.LitB(T))
+      }
+    }
+    return done
+  }
 }
