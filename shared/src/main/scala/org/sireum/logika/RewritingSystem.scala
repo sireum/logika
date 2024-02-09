@@ -39,19 +39,19 @@ object RewritingSystem {
   type UnificationErrorMessages = ISZ[String]
   type UnificationResult = Either[UnificationMap, UnificationErrorMessages]
 
-  @datatype class SimplicationConfig(val constantPropagation: B,
-                                     val funApplication: B,
-                                     val quantApplication: B,
-                                     val tupleProjection: B,
-                                     val seqIndexing: B,
-                                     val fieldAccess: B,
-                                     val instanceOf: B)
+  @datatype class EvalConfig(val constantPropagation: B,
+                             val funApplication: B,
+                             val quantApplication: B,
+                             val tupleProjection: B,
+                             val seqIndexing: B,
+                             val fieldAccess: B,
+                             val instanceOf: B)
 
-  object SimplicationConfig {
-    val all: SimplicationConfig = SimplicationConfig(T, T, T, T, T, T, T)
-    val none: SimplicationConfig = SimplicationConfig(F, F, F, F, F, F, F)
-    val funApplicationOnly: SimplicationConfig = none(funApplication = T)
-    val quantApplicationOnly: SimplicationConfig = none(quantApplication = T)
+  object EvalConfig {
+    val all: EvalConfig = EvalConfig(T, T, T, T, T, T, T)
+    val none: EvalConfig = EvalConfig(F, F, F, F, F, F, F)
+    val funApplicationOnly: EvalConfig = none(funApplication = T)
+    val quantApplicationOnly: EvalConfig = none(quantApplication = T)
   }
 
   @record class Substitutor(val map: HashMap[AST.CoreExp, AST.CoreExp.ParamVarRef]) extends AST.MCoreExpTransformer {
@@ -70,6 +70,58 @@ object RewritingSystem {
       }
       return AST.MCoreExpTransformer.PostResultCoreExpLocalVarRef
     }
+  }
+
+  @record class LocalSubstitutor(val map: UnificationMap) extends AST.MCoreExpTransformer {
+    override def postCoreExpLocalVarRef(o: AST.CoreExp.LocalVarRef): MOption[AST.CoreExp] = {
+      map.get((o.context, o.id)) match {
+        case Some(e) => return MSome(e)
+        case _ => return MNone()
+      }
+    }
+  }
+
+  @record class Rewriter(val th: TypeHierarchy,
+                         val patterns: ISZ[Rewriter.Pattern],
+                         var trace: ISZ[(ISZ[String], B)]) extends AST.MCoreExpTransformer {
+    override def preCoreExpIf(o: AST.CoreExp.If): AST.MCoreExpTransformer.PreResult[AST.CoreExp] = {
+      o.cond match {
+        case cond: AST.CoreExp.LitB => return AST.MCoreExpTransformer.PreResult(T, if (cond.value) MSome(o.tExp) else MSome(o.fExp))
+        case _ => return AST.MCoreExpTransformer.PreResult(F, MNone())
+      }
+    }
+
+    override def postCoreExp(o: AST.CoreExp): MOption[AST.CoreExp] = {
+      var newO = o
+      var done = F
+      var i = 0
+      while (!done && i < patterns.size) {
+        val pattern = patterns(i)
+        unify(T, th, pattern.localPatternSet, ISZ(pattern.exp), ISZ(newO)) match {
+          case Either.Left(m) =>
+            trace = trace :+ (pattern.name, pattern.rightToLeft)
+            newO = eval(th, EvalConfig.all, LocalSubstitutor(m).transformCoreExp(o).getOrElse(o)).getOrElse(o)
+            done = T
+          case _ =>
+        }
+        i = i + 1
+      }
+      return super.postCoreExp(newO)
+    }
+
+    override def postCoreExpIf(o: AST.CoreExp.If): MOption[AST.CoreExp] = {
+      o.cond match {
+        case cond: AST.CoreExp.LitB => return if (cond.value) MSome(o.tExp) else MSome(o.fExp)
+        case _ => return MNone()
+      }
+    }
+  }
+
+  object Rewriter {
+    @datatype class Pattern(val name: ISZ[String],
+                            val rightToLeft: B,
+                            val localPatternSet: LocalPatternSet,
+                            val exp: AST.CoreExp)
   }
 
   @strictpure def paramId(n: String): String = s"_$n"
@@ -451,7 +503,7 @@ object RewritingSystem {
         val (context, id, args, e) = pa
         m.get((context, id)) match {
           case Some(f: AST.CoreExp.Fun) =>
-            simplify(th, SimplicationConfig.funApplicationOnly, AST.CoreExp.Apply(f, args, e.tipe)) match {
+            eval(th, EvalConfig.funApplicationOnly, AST.CoreExp.Apply(f, args, e.tipe)) match {
               case Some(pattern) => m = unifyExp(silent, localPatterns, pattern, e, m, pendingApplications, errorMessages)
               case _ =>
                 if (silent) {
@@ -633,7 +685,7 @@ object RewritingSystem {
       case lit => halt(st"TODO: $op ${lit.prettyST}".render)
     }
 
-  @pure def simplify(th: TypeHierarchy, config: SimplicationConfig, exp: AST.CoreExp): Option[AST.CoreExp] = {
+  @pure def eval(th: TypeHierarchy, config: EvalConfig, exp: AST.CoreExp): Option[AST.CoreExp] = {
     @strictpure def incDeBruijnMap(deBruijnMap: HashMap[Z, AST.CoreExp], inc: Z): HashMap[Z, AST.CoreExp] =
       HashMap ++ (for (p <- deBruijnMap.entries) yield (p._1 + inc, p._2))
     @pure def rec(deBruijnMap: HashMap[Z, AST.CoreExp], e: AST.CoreExp): Option[AST.CoreExp] = {
@@ -856,7 +908,7 @@ object RewritingSystem {
           case _ => r = r :+ exp
         }
       case exp: AST.CoreExp.Quant if exp.kind == AST.CoreExp.Quant.Kind.ForAll =>
-        r = r :+ simplify(th, SimplicationConfig.quantApplicationOnly,
+        r = r :+ eval(th, EvalConfig.quantApplicationOnly,
           AST.CoreExp.Apply(
             exp,
             ISZ(AST.CoreExp.LocalVarRef(ISZ(), paramId(exp.param.id), exp.param.tipe)),
