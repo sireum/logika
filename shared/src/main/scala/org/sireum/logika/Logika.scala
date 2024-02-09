@@ -3693,7 +3693,7 @@ import Util._
                 case _ =>
               }
             case res: AST.ResolvedInfo.LocalVar =>
-              e.attr.typedOpt.get match {
+              e.ident.attr.typedOpt.get match {
                 case t: AST.Typed.Fun if t.isPureFun => return evalApplyFun(e.posOpt.get, T, res.context, res.id, t, e.args)
                 case _ =>
               }
