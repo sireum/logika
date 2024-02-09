@@ -389,8 +389,8 @@ import InceptionPlugin._
         var exps = ISZ[AST.CoreExp]()
         for (q <- fromToStepIdChecks) {
           val (from, to, _, _) = q
-          patterns = patterns :+ org.sireum.logika.RewritingSystem.translate(logika.th, from, sm)
-          exps = exps :+ org.sireum.logika.RewritingSystem.translate(logika.th, to, HashMap.empty)
+          patterns = patterns :+ org.sireum.logika.RewritingSystem.translate(logika.th, from)
+          exps = exps :+ org.sireum.logika.RewritingSystem.translate(logika.th, to)
         }
         val localPatternSet = HashSSet ++ (for (id <- paramIds.elements) yield (context, id))
         org.sireum.logika.RewritingSystem.unify(F, logika.th, localPatternSet, patterns, exps) match {
