@@ -107,9 +107,23 @@ object RewritingSystem {
     }
   }
 
+  @datatype class TraceElement(val name: ISZ[String],
+                               val rightToLeft: B,
+                               val original: AST.CoreExp,
+                               val rewritten: AST.CoreExp,
+                               val evaluated: AST.CoreExp,
+                               val done: AST.CoreExp) {
+    @strictpure def toST: ST =
+      st"""by ${(name, ".")}:
+          |     ${original.prettyST}
+          |   ${if (rightToLeft) "<" else ">"} ${rewritten.prettyST}
+          |   ≡ ${evaluated.prettyST}
+          |   ∴ ${done.prettyST}"""
+  }
+
   @record class Rewriter(val th: TypeHierarchy,
                          val patterns: ISZ[Rewriter.Pattern],
-                         var trace: ISZ[(ISZ[String], B, AST.CoreExp, AST.CoreExp)]) extends AST.MCoreExpTransformer {
+                         var trace: ISZ[TraceElement]) extends AST.MCoreExpTransformer {
     override def preCoreExpIf(o: AST.CoreExp.If): AST.MCoreExpTransformer.PreResult[AST.CoreExp] = {
       o.cond match {
         case cond: AST.CoreExp.LitB => return AST.MCoreExpTransformer.PreResult(T, if (cond.value) MSome(o.tExp) else MSome(o.fExp))
@@ -118,27 +132,26 @@ object RewritingSystem {
     }
 
     override def postCoreExp(o: AST.CoreExp): MOption[AST.CoreExp] = {
-      var newO = o
-      var done = F
+      var rOpt = MOption.none[AST.CoreExp]()
       var i = 0
-      while (!done && i < patterns.size) {
+      while (rOpt.isEmpty && i < patterns.size) {
         val pattern = patterns(i)
         val (from, to): (AST.CoreExp, AST.CoreExp) = pattern.exp match {
           case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right) =>
             if (pattern.rightToLeft) (right, left) else (left, right)
           case _ => halt("TODO")
         }
-        unify(T, th, pattern.localPatternSet, ISZ(from), ISZ(newO)) match {
+        unify(T, th, pattern.localPatternSet, ISZ(from), ISZ(o)) match {
           case Either.Left(m) =>
             val o2 = LocalSubstitutor(m).transformCoreExp(to).getOrElse(o)
-            newO = eval(th, EvalConfig.all, o2).getOrElse(o)
-            trace = trace :+ (pattern.name, pattern.rightToLeft, o2, newO)
-            done = T
+            val o3 = eval(th, EvalConfig.all, o2).getOrElse(o)
+            trace = trace :+ TraceElement(pattern.name, pattern.rightToLeft, o, o2, o3, o3)
+            rOpt = MSome(o3)
           case _ =>
         }
         i = i + 1
       }
-      return if (done) MSome(newO) else MNone()
+      return rOpt
     }
 
     override def postCoreExpIf(o: AST.CoreExp.If): MOption[AST.CoreExp] = {

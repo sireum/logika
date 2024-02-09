@@ -40,6 +40,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
+  val maxIt: Z = 100
+
   override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Apply =>
@@ -137,12 +139,24 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     }
     val rw = Rewriter(logika.th, patterns, ISZ())
     val fromCoreClaim = RewritingSystem.translate(logika.th, fromClaim)
-    val rwClaim = rw.transformCoreExp(fromCoreClaim).getOrElse(fromCoreClaim)
-    val stepClaim = RewritingSystem.translate(logika.th, step.claim)
-    @pure def traceElementST(q: (ISZ[String], B, AST.CoreExp, AST.CoreExp)): ST = {
-      return st"""* ${if (q._2) "~" else ""}${(q._1, ".")}: ${q._3.prettyST}
-                 |  = ${q._4}"""
+    var done = F
+    var rwClaim = fromCoreClaim
+    var i = 0
+    while (!done && i < maxIt) {
+      rwClaim = rw.transformCoreExp(rwClaim) match {
+        case MSome(c) =>
+          if (rw.trace.nonEmpty) {
+            val last = rw.trace.size - 1
+            rw.trace = rw.trace(last ~> rw.trace(last)(done = c))
+          }
+          c
+        case _ =>
+          done = T
+          rwClaim
+      }
+      i = i + 1
     }
+    val stepClaim = RewritingSystem.translate(logika.th, step.claim)
     if (rwClaim == stepClaim) {
       reporter.inform(just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
         st"""Matched:
@@ -152,7 +166,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |  ${fromCoreClaim.prettyST}
             |
             |Rewriting trace:
-            |${(for (q <- rw.trace) yield traceElementST(q), "\n")}
+            |
+            |${(for (te <- rw.trace) yield te.toST, "\n\n")}
             |""".render)
       val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
       val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
@@ -166,7 +181,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |  ${rwClaim.prettyST}
             |
             |Rewriting trace:
-            |${(for (q <- rw.trace) yield traceElementST(q), "\n")}
+            |
+            |${(for (te <- rw.trace) yield te.toST, "\n\n")}
             |""".render)
       return emptyResult
     }
