@@ -109,7 +109,7 @@ object RewritingSystem {
 
   @record class Rewriter(val th: TypeHierarchy,
                          val patterns: ISZ[Rewriter.Pattern],
-                         var trace: ISZ[(ISZ[String], B)]) extends AST.MCoreExpTransformer {
+                         var trace: ISZ[(ISZ[String], B, AST.CoreExp, AST.CoreExp)]) extends AST.MCoreExpTransformer {
     override def preCoreExpIf(o: AST.CoreExp.If): AST.MCoreExpTransformer.PreResult[AST.CoreExp] = {
       o.cond match {
         case cond: AST.CoreExp.LitB => return AST.MCoreExpTransformer.PreResult(T, if (cond.value) MSome(o.tExp) else MSome(o.fExp))
@@ -123,16 +123,22 @@ object RewritingSystem {
       var i = 0
       while (!done && i < patterns.size) {
         val pattern = patterns(i)
-        unify(T, th, pattern.localPatternSet, ISZ(pattern.exp), ISZ(newO)) match {
+        val (from, to): (AST.CoreExp, AST.CoreExp) = pattern.exp match {
+          case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right) =>
+            if (pattern.rightToLeft) (right, left) else (left, right)
+          case _ => halt("TODO")
+        }
+        unify(T, th, pattern.localPatternSet, ISZ(from), ISZ(newO)) match {
           case Either.Left(m) =>
-            trace = trace :+ (pattern.name, pattern.rightToLeft)
-            newO = eval(th, EvalConfig.all, LocalSubstitutor(m).transformCoreExp(o).getOrElse(o)).getOrElse(o)
+            val o2 = LocalSubstitutor(m).transformCoreExp(to).getOrElse(o)
+            newO = eval(th, EvalConfig.all, o2).getOrElse(o)
+            trace = trace :+ (pattern.name, pattern.rightToLeft, o2, newO)
             done = T
           case _ =>
         }
         i = i + 1
       }
-      return super.postCoreExp(newO)
+      return if (done) MSome(newO) else MNone()
     }
 
     override def postCoreExpIf(o: AST.CoreExp.If): MOption[AST.CoreExp] = {

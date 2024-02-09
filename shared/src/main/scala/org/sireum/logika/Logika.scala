@@ -172,9 +172,9 @@ object Logika {
   val libraryDesc: String = "Library"
   val typeCheckingDesc: String = "Type Checking"
   val verifyingDesc: String = "Verifying"
-  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), PropNatDedPlugin(), PredNatDedPlugin(), SubstitutionPlugin(),
-    ClaimOfPlugin(), FoldUnfoldPlugin(), SameDiffPlugin(), Smt2Plugin(), ValIntroElimPlugin(), LiftPlugin(),
-    AdmitPlugin(), InceptionPlugin()
+  val defaultPlugins: ISZ[Plugin] = ISZ(AutoPlugin(), RewritePlugin(), PropNatDedPlugin(), PredNatDedPlugin(),
+    SubstitutionPlugin(), ClaimOfPlugin(), FoldUnfoldPlugin(), SameDiffPlugin(), Smt2Plugin(), ValIntroElimPlugin(),
+    LiftPlugin(), AdmitPlugin(), InceptionPlugin()
   )
   val builtInByNameMethods: HashSet[(B, QName, String)] = HashSet ++ ISZ(
     (F, AST.Typed.isName, "size"), (F, AST.Typed.msName, "size"),
