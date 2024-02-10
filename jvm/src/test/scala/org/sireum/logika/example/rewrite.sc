@@ -8,7 +8,7 @@ object Rules {
     (x * z) + (y * z) == (x + y) * z
   )
 
-  @rw val myRewriteSet: RS = RS(zDistribute _)
+  @rw val myRewriteSet = RS(zDistribute _)
 
   @pure def zDistributeTest(c: Z, d: Z): Unit = {
     Deduce(

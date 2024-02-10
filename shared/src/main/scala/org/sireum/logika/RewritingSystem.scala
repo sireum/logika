@@ -26,6 +26,7 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.lang.symbol.Info
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 
@@ -109,12 +110,13 @@ object RewritingSystem {
 
   @datatype class TraceElement(val name: ISZ[String],
                                val rightToLeft: B,
+                               val pattern: AST.CoreExp,
                                val original: AST.CoreExp,
                                val rewritten: AST.CoreExp,
                                val evaluated: AST.CoreExp,
                                val done: AST.CoreExp) {
     @strictpure def toST: ST =
-      st"""by ${(name, ".")}:
+      st"""by ${(name, ".")}: ${pattern.prettyPatternST}
           |     ${original.prettyST}
           |   ${if (rightToLeft) "<" else ">"} ${rewritten.prettyST}
           |   ≡ ${evaluated.prettyST}
@@ -145,7 +147,7 @@ object RewritingSystem {
           case Either.Left(m) =>
             val o2 = LocalSubstitutor(m).transformCoreExp(to).getOrElse(o)
             val o3 = eval(th, EvalConfig.all, o2).getOrElse(o)
-            trace = trace :+ TraceElement(pattern.name, pattern.rightToLeft, o, o2, o3, o3)
+            trace = trace :+ TraceElement(pattern.name, pattern.rightToLeft, pattern.exp, o, o2, o3, o3)
             rOpt = MSome(o3)
           case _ =>
         }
@@ -1047,5 +1049,89 @@ object RewritingSystem {
       }
     }
     return done
+  }
+
+  def patternsOf(th: TypeHierarchy, cache: Logika.Cache, name: ISZ[String], rightToLeft: B): ISZ[Rewriter.Pattern] = {
+    cache.getPatterns(th, name) match {
+      case Some(r) => return if (rightToLeft) for (e <- r) yield e(rightToLeft = rightToLeft) else r
+      case _ =>
+    }
+    var r = ISZ[Rewriter.Pattern]()
+    th.nameMap.get(name).get match {
+      case info: Info.Theorem =>
+        var localPatternSet: RewritingSystem.LocalPatternSet = HashSSet.empty
+        val claim: AST.CoreExp = info.ast.claim match {
+          case AST.Exp.QuantType(true, AST.Exp.Fun(_, params, AST.Stmt.Expr(c))) =>
+            for (p <- params) {
+              localPatternSet = localPatternSet + (info.name, p.idOpt.get.value)
+            }
+            RewritingSystem.translate(th, c)
+          case c => RewritingSystem.translate(th, c)
+        }
+        for (c <- RewritingSystem.toCondEquiv(th, claim)) {
+          r = r :+ Rewriter.Pattern(name, F, localPatternSet, c)
+        }
+      case info: Info.Fact =>
+        var localPatternSet: RewritingSystem.LocalPatternSet = HashSSet.empty
+        for (factClaim <- info.ast.claims) {
+          val claim: AST.CoreExp = factClaim match {
+            case AST.Exp.QuantType(true, AST.Exp.Fun(_, params, AST.Stmt.Expr(c))) =>
+              for (p <- params) {
+                localPatternSet = localPatternSet + (info.name, p.idOpt.get.value)
+              }
+              RewritingSystem.translate(th, c)
+            case c => RewritingSystem.translate(th, c)
+          }
+          for (c <- RewritingSystem.toCondEquiv(th, claim)) {
+            r = r :+ Rewriter.Pattern(name, F, localPatternSet, c)
+          }
+        }
+      case info: Info.RsVal => r = r ++ retrievePatterns(th, cache, info.ast.init)
+      case info: Info.Method => halt("TODO")
+      case _ => halt("Infeasible")
+    }
+    cache.setPatterns(th, name, r)
+    return if (rightToLeft) for (e <- r) yield e(rightToLeft = rightToLeft) else r
+  }
+
+  def retrievePatterns(th: TypeHierarchy, cache: Logika.Cache, exp: AST.Exp): ISZ[Rewriter.Pattern] = {
+    def rec(rightToLeft: B, e: AST.Exp): HashSMap[ISZ[String], ISZ[Rewriter.Pattern]] = {
+      var r = HashSMap.empty[ISZ[String], ISZ[Rewriter.Pattern]]
+      e match {
+        case e: AST.Exp.Ref =>
+          e.resOpt.get match {
+            case res: AST.ResolvedInfo.Theorem =>
+              return r + res.name ~> patternsOf(th, cache, res.name, rightToLeft)
+            case res: AST.ResolvedInfo.Fact =>
+              return r + res.name ~> patternsOf(th, cache, res.name, rightToLeft)
+            case res: AST.ResolvedInfo.Method =>
+              val name = res.owner :+ res.id
+              return r + name ~> patternsOf(th, cache, name, rightToLeft)
+            case res: AST.ResolvedInfo.Var =>
+              val name = res.owner :+ res.id
+              return r + name ~> patternsOf(th, cache, name, rightToLeft)
+            case _ => halt("Infeasible")
+          }
+        case e: AST.Exp.Binary =>
+          r = rec(rightToLeft, e.left)
+          if (e.op == "++") {
+            r = r ++ rec(rightToLeft, e.right).entries
+          } else {
+            r = r -- rec(rightToLeft, e.right).keys
+          }
+          return r
+        case e: AST.Exp.RS =>
+          for (ref <- e.refs) {
+            r = r ++ rec(e.rightToLeft, ref.asExp).entries
+          }
+          return r
+        case _ => halt("Infeasible")
+      }
+    }
+    var r = ISZ[Rewriter.Pattern]()
+    for (patterns <- rec(F, exp).values) {
+      r = r ++ patterns
+    }
+    return r
   }
 }

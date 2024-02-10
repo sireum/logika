@@ -27,8 +27,6 @@
 package org.sireum.logika.plugin
 
 import org.sireum._
-import org.sireum.lang.symbol.Info
-import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Reporter
 import org.sireum.logika.RewritingSystem.Rewriter
@@ -58,75 +56,12 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     return T
   }
 
-  def getPatterns(th: TypeHierarchy, exp: AST.Exp): ISZ[Rewriter.Pattern] = {
-    def rec(rightToLeft: B, e: AST.Exp): HashSMap[ISZ[String], B] = {
-      e match {
-        case e: AST.Exp.Ref =>
-          e.resOpt.get match {
-            case res: AST.ResolvedInfo.Theorem =>
-              return HashSMap.empty[ISZ[String], B] + res.name ~> rightToLeft
-            case res: AST.ResolvedInfo.Fact =>
-              return HashSMap.empty[ISZ[String], B] + res.name ~> rightToLeft
-            case res: AST.ResolvedInfo.Method =>
-              th.nameMap.get(res.owner :+ res.id).get match {
-                case info: Info.Method =>
-                  return HashSMap.empty[ISZ[String], B] + info.name ~> rightToLeft
-                case _ => halt("Infeasible")
-              }
-            case res: AST.ResolvedInfo.Var =>
-              th.nameMap.get(res.owner :+ res.id).get match {
-                case info: Info.RsVal =>
-                  return rec(F, info.ast.init)
-                case _ => halt("Infeasible")
-              }
-            case _ => halt("Infeasible")
-          }
-        case e: AST.Exp.Binary =>
-          var r = rec(rightToLeft, e.left)
-          if (e.op == "++") {
-            r = r ++ rec(rightToLeft, e.right).entries
-          } else {
-            r = r -- rec(rightToLeft, e.right).keys
-          }
-          return r
-        case e: AST.Exp.RS =>
-          var r = HashSMap.empty[ISZ[String], B]
-          for (ref <- e.refs) {
-            r = r ++ rec(e.rightToLeft, ref.asExp).entries
-          }
-          return r
-        case _ => halt("Infeasible")
-      }
-    }
-    var r = ISZ[Rewriter.Pattern]()
-    for (p <- rec(F, exp).entries) {
-      val (name, rightToLeft) = p
-      th.nameMap.get(name).get match {
-        case info: Info.Theorem =>
-          var localPatternSet: RewritingSystem.LocalPatternSet = HashSSet.empty
-          val claim: AST.CoreExp = info.ast.claim match {
-            case AST.Exp.QuantType(true, AST.Exp.Fun(_, params, AST.Stmt.Expr(c))) =>
-              for (p <- params) {
-                localPatternSet = localPatternSet + (info.name, p.idOpt.get.value)
-              }
-              RewritingSystem.translate(th, c)
-            case c => RewritingSystem.translate(th, c)
-          }
-          r = r :+ Rewriter.Pattern(name, rightToLeft, localPatternSet, claim)
-        case info: Info.Fact => halt("TODO")
-        case info: Info.Method => halt("TODO")
-        case _ => halt("Infeasible")
-      }
-    }
-    return r
-  }
-
   override def handle(logika: Logika, smt2: Smt2, cache: Logika.Cache,
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext], state: State,
                       step: AST.ProofAst.Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-    val patterns = getPatterns(logika.th, just.args(0))
+    val patterns = RewritingSystem.retrievePatterns(logika.th, cache, just.args(0))
     val from: AST.ProofAst.StepId = AST.Util.toStepIds(ISZ(just.args(1)), Logika.kind, reporter) match {
       case Some(s) => s(0)
       case _ => return emptyResult

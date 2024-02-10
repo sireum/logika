@@ -112,6 +112,10 @@ final class NoTransitionSmt2CacheImpl(val persistentCache: java.util.concurrent.
 
   def setSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim], result: Smt2Query.Result): Unit = {}
 
+  def getPatterns(th: TypeHierarchy, name: ISZ[String]): Option[ISZ[RewritingSystem.Rewriter.Pattern]] = None()
+
+  def setPatterns(th: TypeHierarchy, name: ISZ[String], patterns: ISZ[RewritingSystem.Rewriter.Pattern]): Unit = {}
+
   def clearTaskCache(): Unit = {}
 
   override def $clonable: Boolean = false
