@@ -26,6 +26,7 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 
 @datatype trait StepProofContext {
@@ -35,10 +36,14 @@ import org.sireum.lang.{ast => AST}
 
 object StepProofContext {
 
-  @datatype class Regular(val stepNo: AST.ProofAst.StepId,
+  @datatype class Regular(val th: TypeHierarchy,
+                          val stepNo: AST.ProofAst.StepId,
                           val exp: AST.Exp,
                           val claims: ISZ[State.Claim]) extends StepProofContext {
     @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${exp.prettyST}, ${(for (claim <- claims) yield claim.toRawST, ", ")})"
+    @memoize def coreExpClaim: AST.CoreExp.Base = {
+      return RewritingSystem.translate(th, F, exp)
+    }
   }
 
   @datatype class SubProof(val stepNo: AST.ProofAst.StepId,

@@ -15,8 +15,8 @@ object Rules {
       (2 * c + 3 * c == d) |- (5 * c == d) Proof(
         //@formatter:off
         1  (2 * c + 3 * c == d)  by Premise,
-        2  (5 * c == d)          by Rewrite(RS(zDistribute _), 1),
-        3  (5 * c == d)          by Rewrite(myRewriteSet, 1)
+        2  (5 * c == d)          by Rewrite(RS(zDistribute _), 1) T,
+        3  (5 * c == d)          by Rewrite(myRewriteSet, 1) T
         //@formatter:on
       )
     )

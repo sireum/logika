@@ -156,9 +156,9 @@ object PredNatDedPlugin {
         }
         val ISZ(existsP, subProofNo) = argsOpt.get
         val quant: AST.Exp.QuantType = spcMap.get(existsP) match {
-          case Some(StepProofContext.Regular(_, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) =>
+          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) =>
             logika.th.normalizeQuantType(q).asInstanceOf[AST.Exp.QuantType]
-          case Some(StepProofContext.Regular(_, q@AST.Exp.QuantRange(F, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) =>
+          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantRange(F, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) =>
             logika.th.normalizeQuantType(q).asInstanceOf[AST.Exp.QuantType]
           case _ =>
             reporter.error(existsP.posOpt, Logika.kind, "Expecting a simple existential quantified type/range claim")

@@ -29,7 +29,7 @@ package org.sireum.logika.plugin
 import org.sireum._
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Reporter
-import org.sireum.logika.RewritingSystem.Rewriter
+import org.sireum.logika.RewritingSystem.{Rewriter, toCondEquiv}
 import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext}
 
 @datatype class RewritePlugin extends JustificationPlugin {
@@ -60,8 +60,13 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext], state: State,
                       step: AST.ProofAst.Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+    @strictpure def checkRightMostLit(exp: AST.CoreExp): B = exp match {
+      case exp: AST.CoreExp.Arrow => checkRightMostLit(exp.right)
+      case _: AST.CoreExp.Lit => T
+      case _ => F
+    }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-    val patterns = RewritingSystem.retrievePatterns(logika.th, cache, just.args(0))
+    var patterns = RewritingSystem.retrievePatterns(logika.th, cache, just.args(0))
     val from: AST.ProofAst.StepId = AST.Util.toStepIds(ISZ(just.args(1)), Logika.kind, reporter) match {
       case Some(s) => s(0)
       case _ => return emptyResult
@@ -72,17 +77,36 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         reporter.error(from.posOpt, Logika.kind, s"Expecting a regular proof step")
         return emptyResult
     }
-    val rw = Rewriter(logika.th, patterns, ISZ())
-    val fromCoreClaim = RewritingSystem.translate(logika.th, fromClaim)
+    var provenClaims = HashSSet.empty[AST.CoreExp.Base]
+    if (just.hasWitness) {
+      for (w <- just.witnesses) {
+        spcMap.get(w) match {
+          case Some(spc: StepProofContext.Regular) =>
+            provenClaims = provenClaims + spc.coreExpClaim
+          case _ =>
+            reporter.error(from.posOpt, Logika.kind, s"Expecting a regular proof step for $w")
+        }
+      }
+    } else {
+      for (spc <- spcMap.values) {
+        spc match {
+          case spc: StepProofContext.Regular =>
+            provenClaims = provenClaims + spc.coreExpClaim
+          case _ =>
+        }
+      }
+    }
+    val rwPc = Rewriter(logika.th, provenClaims, patterns, ISZ())
+    val fromCoreClaim = RewritingSystem.translate(logika.th, F, fromClaim)
     var done = F
     var rwClaim = fromCoreClaim
     var i = 0
     while (!done && i < maxIt) {
-      rwClaim = rw.transformCoreExp(rwClaim) match {
+      rwClaim = rwPc.transformCoreExpBase(rwClaim) match {
         case MSome(c) =>
-          if (rw.trace.nonEmpty) {
-            val last = rw.trace.size - 1
-            rw.trace = rw.trace(last ~> rw.trace(last)(done = c))
+          if (rwPc.trace.nonEmpty) {
+            val last = rwPc.trace.size - 1
+            rwPc.trace = rwPc.trace(last ~> rwPc.trace(last)(done = c))
           }
           c
         case _ =>
@@ -91,7 +115,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       }
       i = i + 1
     }
-    val stepClaim = RewritingSystem.translate(logika.th, step.claim)
+    val stepClaim = RewritingSystem.translate(logika.th, F, step.claim)
     if (rwClaim == stepClaim) {
       reporter.inform(just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
         st"""Matched:
@@ -102,7 +126,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |
             |Rewriting trace:
             |
-            |${(for (te <- rw.trace) yield te.toST, "\n\n")}
+            |${(for (te <- rwPc.trace) yield te.toST, "\n\n")}
             |""".render)
       val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
       val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
@@ -117,7 +141,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |
             |Rewriting trace:
             |
-            |${(for (te <- rw.trace) yield te.toST, "\n\n")}
+            |${(for (te <- rwPc.trace) yield te.toST, "\n\n")}
             |""".render)
       return emptyResult
     }

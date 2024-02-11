@@ -4736,7 +4736,7 @@ import Util._
           cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.ProofStep(step, m.values), s0, smt2) match {
             case Some((ISZ(nextState), cached)) =>
               reporter.coverage(F, cached, pos)
-              return (nextState, m + stepNo ~> StepProofContext.Regular(stepNo, step.claim,
+              return (nextState, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim,
                 ops.ISZOps(nextState.claims).slice(s0.claims.size, nextState.claims.size)))
             case _ =>
           }
@@ -4794,7 +4794,7 @@ import Util._
           } else {
             reporter.coverage(F, zeroU64, pos)
           }
-          return (nextState, m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims))
+          return (nextState, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim, claims))
         }
         reporter.error(step.just.posOpt, Logika.kind, "Could not recognize justification form")
         return (s0(status = State.Status.Error), m)
@@ -4802,7 +4802,7 @@ import Util._
         val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
         return (s0(status = State.statusOf(ok), nextFresh = nextFresh,
           claims = (s0.claims ++ claims) :+ claim),
-          m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
+          m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.SubProof =>
         for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
@@ -4840,7 +4840,7 @@ import Util._
         val (ok, nextFresh, claims, claim) = evalRegularStepClaimRtCheck(smt2, cache, F, s0, step.claim, step.id.posOpt, reporter)
         return (s0(status = State.statusOf(ok), nextFresh = nextFresh,
           claims = (s0.claims ++ claims) :+ claim),
-          m + stepNo ~> StepProofContext.Regular(stepNo, step.claim, claims :+ claim))
+          m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim, claims :+ claim))
       case step: AST.ProofAst.Step.Let =>
         for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
@@ -5250,7 +5250,7 @@ import Util._
         var st0 = st
         for (premise <- sequent.premises if st0.ok) {
           val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, st0, premise, premise.posOpt, reporter)
-          r = r + id ~> StepProofContext.Regular(id(attr = AST.Attr(premise.posOpt)), premise, claims :+ claim)
+          r = r + id ~> StepProofContext.Regular(th, id(attr = AST.Attr(premise.posOpt)), premise, claims :+ claim)
           id = id(no = id.no - 1)
           st0 = st0(status = State.statusOf(ok), nextFresh = nextFresh,
             claims = (st0.claims ++ claims) :+ claim)

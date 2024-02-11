@@ -385,12 +385,12 @@ import InceptionPlugin._
       // Uncomment to test RewritingSystem unification algorithm
       /*
       {
-        var patterns = ISZ[AST.CoreExp]()
-        var exps = ISZ[AST.CoreExp]()
+        var patterns = ISZ[AST.CoreExp.Base]()
+        var exps = ISZ[AST.CoreExp.Base]()
         for (q <- fromToStepIdChecks) {
           val (from, to, _, _) = q
-          patterns = patterns :+ org.sireum.logika.RewritingSystem.translate(logika.th, from)
-          exps = exps :+ org.sireum.logika.RewritingSystem.translate(logika.th, to)
+          patterns = patterns :+ org.sireum.logika.RewritingSystem.translate(logika.th, T, from)
+          exps = exps :+ org.sireum.logika.RewritingSystem.translate(logika.th, F, to)
         }
         val localPatternSet = HashSSet ++ (for (id <- paramIds.elements) yield (context, id))
         org.sireum.logika.RewritingSystem.unify(F, logika.th, localPatternSet, patterns, exps) match {
