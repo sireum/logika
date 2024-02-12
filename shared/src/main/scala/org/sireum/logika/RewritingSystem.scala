@@ -119,7 +119,7 @@ object RewritingSystem {
                                val assumptions: ISZ[(AST.CoreExp.Base, (AST.ProofAst.StepId, AST.CoreExp.Base))]) {
     @strictpure def toST: ST = {
       val assumptionsOpt: Option[ST] = if (assumptions.isEmpty) None() else Some(
-        st"""using assumptions
+        st"""using assumptions:
             |${(for (a <- assumptions) yield st"* ${a._2._2.prettyST} (${a._2._1}) for: ${a._1.prettyPatternST}", "\n")}
             |"""
       )
