@@ -96,7 +96,9 @@ object LogikaTest {
       isAuto = T,
       background = Config.BackgroundMode.Type,
       atRewrite = T,
-      searchPc = T
+      searchPc = T,
+      rwTrace = T,
+      rwMax = 100
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty

@@ -173,7 +173,9 @@ object OptionsUtil {
       isAuto = !o.manual,
       background = background,
       atRewrite = o.logAtRewrite,
-      searchPc = o.searchPC
+      searchPc = o.searchPC,
+      rwTrace = o.rwTrace,
+      rwMax = o.rwMax
     )
     return Either.Left(config)
   }
@@ -330,6 +332,12 @@ object OptionsUtil {
       }
       if (config.searchPc != defaultConfig.searchPc) {
         r = r :+ "--search-pc"
+      }
+      if (config.rwTrace != defaultConfig.rwTrace) {
+        r = r :+ "--rw-trace"
+      }
+      if (config.rwMax != defaultConfig.rwMax) {
+        r = r ++ ISZ[String]("--rw-max", config.rwMax.string)
       }
     }
     config.background match {

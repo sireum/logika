@@ -38,8 +38,6 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
 
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
-  val maxIt: Z = 100
-
   override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Apply =>
@@ -96,12 +94,12 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
       }
     }
-    val rwPc = Rewriter(logika.th, provenClaims, patterns, ISZ())
+    val rwPc = Rewriter(logika.th, provenClaims, patterns, logika.config.rwTrace, ISZ())
     val fromCoreClaim = RewritingSystem.translate(logika.th, F, fromClaim)
     var done = F
     var rwClaim = fromCoreClaim
     var i = 0
-    while (!done && i < maxIt) {
+    while (!done && i < logika.config.rwMax) {
       rwClaim = rwPc.transformCoreExpBase(rwClaim) match {
         case MSome(c) =>
           if (rwPc.trace.nonEmpty) {
@@ -116,6 +114,14 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       i = i + 1
     }
     val stepClaim = RewritingSystem.translate(logika.th, F, step.claim)
+    val traceOpt: Option[ST] = if (logika.config.rwTrace) {
+      Some(
+        st"""Rewriting trace:
+            |
+            |${(for (te <- rwPc.trace) yield te.toST, "\n\n")}""")
+    } else {
+      None()
+    }
     if (rwClaim == stepClaim) {
       reporter.inform(just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
         st"""Matched:
@@ -124,10 +130,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |After rewriting $from:
             |  ${fromCoreClaim.prettyST}
             |
-            |Rewriting trace:
-            |
-            |${(for (te <- rwPc.trace) yield te.toST, "\n\n")}
-            |""".render)
+            |$traceOpt""".render)
       val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
       val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
       return Plugin.Result(stat, nextFresh, claims)
@@ -139,10 +142,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |After rewriting $from to:
             |  ${rwClaim.prettyST}
             |
-            |Rewriting trace:
-            |
-            |${(for (te <- rwPc.trace) yield te.toST, "\n\n")}
-            |""".render)
+            |$traceOpt""".render)
       return emptyResult
     }
   }

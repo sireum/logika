@@ -134,6 +134,7 @@ object RewritingSystem {
   @record class Rewriter(val th: TypeHierarchy,
                          val provenClaims: HashSSet[AST.CoreExp.Base],
                          val rwPatterns: ISZ[Rewriter.Pattern],
+                         val shouldTrace: B,
                          var trace: ISZ[TraceElement]) extends AST.MCoreExpTransformer {
     override def preCoreExpIf(o: AST.CoreExp.If): AST.MCoreExpTransformer.PreResult[AST.CoreExp.Base] = {
       o.cond match {
@@ -172,7 +173,9 @@ object RewritingSystem {
             } else if (pattern.isPermutative && o < o3) {
               // skip
             } else {
-              trace = trace :+ TraceElement(pattern.name, pattern.rightToLeft, pattern.exp, o, o2, o3Opt, o3)
+              if (shouldTrace) {
+                trace = trace :+ TraceElement(pattern.name, pattern.rightToLeft, pattern.exp, o, o2, o3Opt, o3)
+              }
               rOpt = MSome(o3)
             }
           }

@@ -160,6 +160,14 @@ object cli {
           tpe = Type.Flag(F),
           description = "Split on match expressions and statements")
       )),
+      OptGroup(name = "Rewriting", opts = ISZ(
+        Opt(name = "rwTrace", longKey = "rw-trace", shortKey = None(),
+          tpe = Type.Flag(T),
+          description = "Disable rewriting trace"),
+        Opt(name = "rwMax", longKey = "rw-max", shortKey = None(),
+          tpe = Type.Num(None(), 100, Some(1), None()),
+          description = "Maximum number of rewriting")
+      )),
       OptGroup(name = "SMT2", opts = ISZ(
         Opt(name = "elideEncoding", longKey = "elide-encoding", shortKey = None(),
           tpe = Type.Flag(F),

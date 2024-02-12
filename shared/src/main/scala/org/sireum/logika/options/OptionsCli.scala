@@ -103,6 +103,8 @@ object OptionsCli {
     val splitContract: B,
     val splitIf: B,
     val splitMatch: B,
+    val rwTrace: B,
+    val rwMax: Z,
     val elideEncoding: B,
     val rawInscription: B,
     val rlimit: Z,
@@ -290,6 +292,11 @@ import OptionsCli._
           |    --split-if           Split on if-conditional expressions and statements
           |    --split-match        Split on match expressions and statements
           |
+          |Rewriting Options:
+          |    --rw-trace           Disable rewriting trace
+          |    --rw-max             Maximum number of rewriting (expects an integer; min
+          |                           is 1; default is 100)
+          |
           |SMT2 Options:
           |    --elide-encoding     Strip out SMT2 encoding in feedback
           |    --raw-inscription    Use raw sequent/sat preamble inscription
@@ -345,6 +352,8 @@ import OptionsCli._
     var splitContract: B = false
     var splitIf: B = false
     var splitMatch: B = false
+    var rwTrace: B = true
+    var rwMax: Z = 100
     var elideEncoding: B = false
     var rawInscription: B = false
     var rlimit: Z = 2000000
@@ -585,6 +594,18 @@ import OptionsCli._
              case Some(v) => splitMatch = v
              case _ => return None()
            }
+         } else if (arg == "--rw-trace") {
+           val o: Option[B] = { j = j - 1; Some(!rwTrace) }
+           o match {
+             case Some(v) => rwTrace = v
+             case _ => return None()
+           }
+         } else if (arg == "--rw-max") {
+           val o: Option[Z] = parseNum(args, j + 1, Some(1), None())
+           o match {
+             case Some(v) => rwMax = v
+             case _ => return None()
+           }
          } else if (arg == "--elide-encoding") {
            val o: Option[B] = { j = j - 1; Some(!elideEncoding) }
            o match {
@@ -654,7 +675,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
+    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, rwTrace, rwMax, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {
