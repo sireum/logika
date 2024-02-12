@@ -627,12 +627,17 @@ object Smt2 {
   def satResult(context: ISZ[String], config: Config, cache: Logika.Cache, timeoutInMs: Z, reportQuery: B,
                 title: String, pos: message.Position, claims: ISZ[State.Claim], reporter: Reporter): (B, Smt2Query.Result) = {
     var cached = F
+    def header(smt2res: Smt2Query.Result): String = {
+      return st"""; Satisfiability check for $title
+                 |${smt2res.info}
+                 |; Time: ${formatTime(smt2res.timeMillis)}""".render
+    }
     var smt2res = Smt2Query.Result.empty
     if (config.smt2Caching) {
       cache.getSmt2(T, typeHierarchy, config, timeoutInMs, claims) match {
         case Some(res) =>
           cached = T
-          smt2res = res
+          smt2res = res(info = header(smt2res))
         case _ =>
       }
     }
@@ -652,14 +657,9 @@ object Smt2 {
       }
       return (r, smt2res)
     }
-    val header =
-      st"""; Satisfiability check for $title
-          |${smt2res.info}
-          |; Time: ${formatTime(smt2res.timeMillis)}"""
     val queryOpt: Option[String] = if (config.elideEncoding && r) None() else Some(smt2res.query)
-    val res = smt2res(info = header.render, query =
-      st"""$header
-          |${if (config.rawInscription) toClaimST(F, claims, pos) else toExpST(config, F, context, claims, pos)}
+    val res = smt2res(info = header(smt2res), query =
+      st"""${if (config.rawInscription) toClaimST(F, claims, pos) else toExpST(config, F, context, claims, pos)}
           |$queryOpt""".render
     )
     if (reportQuery || config.logVc) {
@@ -1659,6 +1659,11 @@ object Smt2 {
 
   def valid(context: ISZ[String], config: Config, cache: Logika.Cache, reportQuery: B, title: String,
             pos: message.Position, premises: ISZ[State.Claim], conclusion: State.Claim, reporter: Reporter): Smt2Query.Result = {
+    def header(smt2res: Smt2Query.Result): String = {
+      return st"""; Validity Check for $title
+                 |${smt2res.info}
+                 |; Time: ${formatTime(smt2res.timeMillis)}""".render
+    }
     if (config.smt2Caching) {
       val claims = premises :+ conclusion
       cache.getSmt2(F, typeHierarchy, config, config.timeoutInMs, claims) match {
@@ -1667,21 +1672,16 @@ object Smt2 {
           if (reportQuery || forceReport) {
             reporter.query(pos, title, F, res.timeMillis, forceReport, config.elideEncoding, res)
           }
-          return res
+          return res(info = header(res))
         case _ =>
       }
     }
     val smt2res = checkUnsat(config, config.timeoutInMs, satQuery(config, premises, Some(conclusion), reporter).render)
-    val header =
-      st"""; Validity Check for $title
-          |${smt2res.info}
-          |; Time: ${formatTime(smt2res.timeMillis)}"""
     val queryOpt: Option[String] =
       if (config.elideEncoding && smt2res.kind == Smt2Query.Result.Kind.Unsat) None() else Some(smt2res.query)
     val claims = premises :+ conclusion
-    val res = smt2res(info = header.render, query =
-      st"""$header
-          |${if (config.rawInscription) toClaimST(T, claims, pos) else toExpST(config, T, context, claims, pos)}
+    val res = smt2res(info = header(smt2res), query =
+      st"""${if (config.rawInscription) toClaimST(T, claims, pos) else toExpST(config, T, context, claims, pos)}
           |$queryOpt""".render
     )
     val forceReport = smt2res.kind != Smt2Query.Result.Kind.Unsat
