@@ -199,7 +199,7 @@ object RewritingSystem {
                     case Either.Left(m2) =>
                       for (k <- 0 until apcs.size) {
                         for (apc <- toCondEquiv(th, apcs(k))) {
-                          patterns = patterns :+ Rewriter.Pattern(pattern.name :+ s"Assumption$k", F,
+                          patterns = patterns :+ Rewriter.Pattern(pattern.name :+ s"Assumption$k", pattern.rightToLeft,
                             isPermutative(apc), HashSSet.empty, apc)
                         }
                       }
@@ -326,6 +326,13 @@ object RewritingSystem {
               }
               return AST.CoreExp.LocalVarRef(isPattern, res.context, id, e.typedOpt.get)
             case res: AST.ResolvedInfo.Var if res.isInObject =>
+              if (res.owner == AST.Typed.sireumName) {
+                res.id match {
+                  case "T" => return AST.CoreExp.LitB(T)
+                  case "F" => return AST.CoreExp.LitB(F)
+                  case _ =>
+                }
+              }
               return AST.CoreExp.ObjectVarRef(res.owner, res.id, e.typedOpt.get)
             case res: AST.ResolvedInfo.Method => halt(s"TODO: $e")
             case _ => halt(s"Infeasible: $e")

@@ -66,7 +66,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       case _ => F
     }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-    var patterns = RewritingSystem.retrievePatterns(logika.th, cache, just.args(0))
+    val patterns = RewritingSystem.retrievePatterns(logika.th, cache, just.args(0))
     val from: AST.ProofAst.StepId = AST.Util.toStepIds(ISZ(just.args(1)), Logika.kind, reporter) match {
       case Some(s) => s(0)
       case _ => return emptyResult
