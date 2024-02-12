@@ -46,19 +46,37 @@ object Task {
                        val plugins: ISZ[Plugin]) extends Task {
     override def compute(nameExePathMap: HashMap[String, String], maxCores: Z, fileOptions: LibUtil.FileOptionMap,
                          smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
-      val logika = Logika(th, config, Context.empty(nameExePathMap, maxCores, fileOptions), plugins)
+      val context = Context.empty(nameExePathMap, maxCores, fileOptions)(methodOpt = Some(Context.Method(
+        isHelper = F,
+        hasInline = F,
+        owner = ops.ISZOps(fact.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Fact].name).dropRight(1),
+        id = fact.id.value,
+        receiverTypeOpt = None(),
+        params = ISZ(),
+        retType = AST.Typed.b,
+        reads = ISZ(),
+        requires = ISZ(),
+        modifies = ISZ(),
+        ensures = ISZ(),
+        objectVarInMap = HashMap.empty,
+        fieldVarInMap = HashMap.empty,
+        localInMap = HashMap.empty,
+        posOpt = fact.posOpt,
+        storage = HashMap.empty
+      )))
+      val logika = Logika(th, config, context, plugins)
       for (tp <- fact.typeParams) {
         smt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
       var s0 = State.create
-      var context = logika.context.methodName
+      var ctx = logika.context.methodName
       val claims: ISZ[AST.Exp] = if (fact.isFun) {
         val first = fact.claims(0).asInstanceOf[AST.Exp.Quant]
-        context = first.fun.context
+        ctx = first.fun.context
         for (p <- first.fun.params) {
           val id = p.idOpt.get
           val pos = id.attr.posOpt.get
-          val s1 = Util.idIntro(pos, s0, context, id.value, p.typedOpt.get, Some(pos))._1
+          val s1 = Util.idIntro(pos, s0, ctx, id.value, p.typedOpt.get, Some(pos))._1
           s0 = s1
         }
         for (c <- fact.claims) yield c.asInstanceOf[AST.Exp.Quant].fun.exp.asInstanceOf[AST.Stmt.Expr].exp
@@ -72,7 +90,7 @@ object Task {
         if (s1.ok) {
           val (s2, sym) = logika.value2Sym(s1, v, pos)
           val s3 = s2.addClaim(State.Claim.Prop(T, sym))
-          val r = smt2.satResult(context, config, cache, Smt2.satTimeoutInMs, T,
+          val r = smt2.satResult(ctx, config, cache, Smt2.satTimeoutInMs, T,
             s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos, s3.claims, reporter)
           if (r._2.kind ==Smt2Query.Result.Kind.Unsat) {
             reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
@@ -95,7 +113,25 @@ object Task {
                           val plugins: ISZ[Plugin]) extends Task {
     override def compute(nameExePathMap: HashMap[String, String], maxCores: Z, fileOptions: LibUtil.FileOptionMap,
                          smt2: Smt2, cache: Logika.Cache, reporter: Reporter): ISZ[Message] = {
-      val logika = Logika(th, config, Context.empty(nameExePathMap, maxCores, fileOptions), plugins)
+      val context = Context.empty(nameExePathMap, maxCores, fileOptions)(methodOpt = Some(Context.Method(
+        isHelper = F,
+        hasInline = F,
+        owner = ops.ISZOps(theorem.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Theorem].name).dropRight(1),
+        id = theorem.id.value,
+        receiverTypeOpt = None(),
+        params = ISZ(),
+        retType = AST.Typed.b,
+        reads = ISZ(),
+        requires = ISZ(),
+        modifies = ISZ(),
+        ensures = ISZ(),
+        objectVarInMap = HashMap.empty,
+        fieldVarInMap = HashMap.empty,
+        localInMap = HashMap.empty,
+        posOpt = theorem.posOpt,
+        storage = HashMap.empty
+      )))
+      val logika = Logika(th, config, context, plugins)
       for (tp <- theorem.typeParams) {
         smt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
