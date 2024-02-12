@@ -115,25 +115,35 @@ object RewritingSystem {
                                val original: AST.CoreExp.Base,
                                val rewritten: AST.CoreExp.Base,
                                val evaluatedOpt: Option[AST.CoreExp.Base],
-                               val done: AST.CoreExp.Base) {
-    @strictpure def toST: ST = evaluatedOpt match {
-      case Some(evaluated) =>
-        st"""by ${(name, ".")}: ${pattern.prettyPatternST}
-            |     ${original.prettyST}
-            |   ${if (rightToLeft) "<" else ">"} ${rewritten.prettyST}
-            |   ≡ ${evaluated.prettyST}
-            |   ∴ ${done.prettyST}"""
-      case _ =>
-        st"""by ${(name, ".")}: ${pattern.prettyPatternST}
-            |     ${original.prettyST}
-            |   ${if (rightToLeft) "<" else ">"} ${rewritten.prettyST}
-            |   ∴ ${done.prettyST}"""
+                               val done: AST.CoreExp.Base,
+                               val assumptions: ISZ[(AST.CoreExp.Base, (AST.ProofAst.StepId, AST.CoreExp.Base))]) {
+    @strictpure def toST: ST = {
+      val assumptionsOpt: Option[ST] = if (assumptions.isEmpty) None() else Some(
+        st"""using assumptions
+            |${(for (a <- assumptions) yield st"* ${a._2._2.prettyST} (${a._2._1}) for: ${a._1.prettyPatternST}", "\n")}
+            |"""
+      )
+      evaluatedOpt match {
+        case Some(evaluated) =>
+          st"""by ${(name, ".")}: ${pattern.prettyPatternST}
+              |   $assumptionsOpt
+              |   on ${original.prettyST}
+              |   ${if (rightToLeft) "<" else ">"}  ${rewritten.prettyST}
+              |   ≡  ${evaluated.prettyST}
+              |   ∴  ${done.prettyST}"""
+        case _ =>
+          st"""by ${(name, ".")}: ${pattern.prettyPatternST}
+              |   $assumptionsOpt
+              |   on ${original.prettyST}
+              |   ${if (rightToLeft) "<" else ">"}  ${rewritten.prettyST}
+              |   ∴  ${done.prettyST}"""
+      }
     }
   }
 
   @record class Rewriter(val th: TypeHierarchy,
-                         val provenClaims: HashSSet[AST.CoreExp.Base],
-                         val rwPatterns: ISZ[Rewriter.Pattern],
+                         val provenClaims: HashSMap[AST.ProofAst.StepId ,AST.CoreExp.Base],
+                         val patterns: ISZ[Rewriter.Pattern],
                          val shouldTrace: B,
                          var trace: ISZ[TraceElement]) extends AST.MCoreExpTransformer {
     override def preCoreExpIf(o: AST.CoreExp.If): AST.MCoreExpTransformer.PreResult[AST.CoreExp.Base] = {
@@ -146,7 +156,6 @@ object RewritingSystem {
     override def postCoreExpBase(o: AST.CoreExp.Base): MOption[AST.CoreExp.Base] = {
       var rOpt = MOption.none[AST.CoreExp.Base]()
       var i = 0
-      var patterns = rwPatterns
       while (rOpt.isEmpty && i < patterns.size) {
         val pattern = patterns(i)
         var assumptions = ISZ[AST.CoreExp.Base]()
@@ -164,8 +173,20 @@ object RewritingSystem {
               if (pattern.rightToLeft) (right, left) else (left, right)
             case _ => halt("Infeasible")
           }
-          def last(m: UnificationMap): Unit = {
-            val o2 = LocalSubstitutor(m).transformCoreExpBase(to).getOrElse(o)
+          def last(m: UnificationMap, patterns2: ISZ[Rewriter.Pattern], apcs: ISZ[(AST.ProofAst.StepId, AST.CoreExp.Base)]): Unit = {
+            val o2: AST.CoreExp.Base = if (m.isEmpty) {
+              to
+            } else {
+              LocalSubstitutor(m).transformCoreExpBase(to) match {
+                case MSome(to2) => to2
+                case _ =>
+                  if (patterns2.isEmpty) {
+                    o
+                  } else {
+                    Rewriter(th, HashSMap.empty, patterns2, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
+                  }
+              }
+            }
             val o3Opt = evalBase(th, EvalConfig.all, o2)
             val o3 = o3Opt.getOrElse(o2)
             if (o == o3) {
@@ -174,39 +195,38 @@ object RewritingSystem {
               // skip
             } else {
               if (shouldTrace) {
-                trace = trace :+ TraceElement(pattern.name, pattern.rightToLeft, pattern.exp, o, o2, o3Opt, o3)
+                trace = trace :+ TraceElement(pattern.name, pattern.rightToLeft, pattern.exp, o, o2, o3Opt, o3,
+                  ops.ISZOps(assumptions).zip(apcs))
               }
               rOpt = MSome(o3)
             }
           }
           if (assumptions.isEmpty) {
             unify(T, th, pattern.localPatternSet, ISZ(from), ISZ(o)) match {
-              case Either.Left(m) => last(m)
+              case Either.Left(m) => last(m, ISZ(), ISZ())
               case _ =>
             }
           } else {
             var done = F
-            val pces = provenClaims.elements
+            val pces = provenClaims.entries
             def recAssumption(pendingApplications: PendingApplications,
                               substMap: HashMap[String, AST.Typed],
-                              apcs: ISZ[AST.CoreExp.Base],
+                              apcs: ISZ[(AST.ProofAst.StepId, AST.CoreExp.Base)],
                               map: UnificationMap,
                               j: Z): Unit = {
               if (j >= assumptions.size) {
                 val ems: MBox[UnificationErrorMessages] = MBox(ISZ())
                 val pas = MBox(pendingApplications)
                 val sm = MBox(substMap)
-                val m = unifyExp(T, th, pattern.localPatternSet, from, o, map, pas, sm, ems)
+                val patterns2: ISZ[Rewriter.Pattern] = for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
+                  Rewriter.Pattern(pattern.name :+ s"Assumption$k", pattern.rightToLeft,
+                    isPermutative(apc), HashSSet.empty, apc)
+                val o2 = Rewriter(th, HashSMap.empty, patterns2, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
+                val m = unifyExp(T, th, pattern.localPatternSet, from, o2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
                   unifyPendingApplications(T, th, pattern.localPatternSet, m, pas, sm, ems) match {
                     case Either.Left(m2) =>
-                      for (k <- 0 until apcs.size) {
-                        for (apc <- toCondEquiv(th, apcs(k))) {
-                          patterns = patterns :+ Rewriter.Pattern(pattern.name :+ s"Assumption$k", pattern.rightToLeft,
-                            isPermutative(apc), HashSSet.empty, apc)
-                        }
-                      }
-                      last(m2)
+                      last(m2, patterns2, apcs)
                       done = T
                     case _ =>
                   }
@@ -220,7 +240,7 @@ object RewritingSystem {
                 val pas = MBox(pendingApplications)
                 val sm = MBox(substMap)
                 val pc = pces(k)
-                val m = unifyExp(T, th, pattern.localPatternSet, assumption, pc, map, pas, sm, ems)
+                val m = unifyExp(T, th, pattern.localPatternSet, assumption, pc._2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
                   recAssumption(pas.value, sm.value, apcs :+ pc, m, j + 1)
                 }
@@ -439,16 +459,18 @@ object RewritingSystem {
                      pendingApplications: MBox[PendingApplications],
                      substMap: MBox[HashMap[String, AST.Typed]],
                      errorMessages: MBox[UnificationErrorMessages]): UnificationMap = {
+    var map = init
     @pure def rootLocalPatternOpt(e: AST.CoreExp.Base, args: ISZ[AST.CoreExp.Base]): Option[(ISZ[String], String, AST.Typed, ISZ[AST.CoreExp.Base])] = {
       e match {
         case e: AST.CoreExp.LocalVarRef =>
           val p = (e.context, e.id)
-          return if (localPatterns.contains(p)) Some((p._1, p._2, e.tipe, args)) else None()
+          val ls = LocalSubstitutor(map)
+          return if (localPatterns.contains(p)) Some((p._1, p._2, e.tipe,
+            for (arg <- args) yield ls.transformCoreExpBase(arg).getOrElse(arg))) else None()
         case e: AST.CoreExp.Apply => return rootLocalPatternOpt(e.exp, e.args ++ args)
         case _ => return None()
       }
     }
-    var map = init
     def err(p: AST.CoreExp, e: AST.CoreExp): Unit = {
       if (silent) {
         if (errorMessages.value.isEmpty) {
@@ -482,8 +504,9 @@ object RewritingSystem {
         case (t1: AST.Typed.TypeVar, t2) =>
           substMap.value.get(t1.id) match {
             case Some(prevType) =>
-              if (t1 != prevType) {
-                errType(t1, prevType)
+              th.lub(ISZ(prevType, t2)) match {
+                case Some(t3) => substMap.value = substMap.value + t1.id ~> t3
+                case _ => errType(t2, prevType)
               }
             case _ => substMap.value = substMap.value + t1.id ~> t2
           }
@@ -600,6 +623,13 @@ object RewritingSystem {
           matchPatternLocals(p.tExp, e.tExp)
           matchPatternLocals(p.fExp, e.fExp)
         case (p: AST.CoreExp.Apply, e) =>
+          @pure def hasLocalPatternInArgs(args: ISZ[AST.CoreExp.Base]): B = {
+            val lpd = LocalPatternDetector(localPatterns, F)
+            for (arg <- args) {
+              lpd.transformCoreExpBase(arg)
+            }
+            return lpd.hasLocalPattern
+          }
           rootLocalPatternOpt(p, ISZ()) match {
             case Some((context, id, f: AST.Typed.Fun, args)) =>
               @strictpure def getArgTypes(t: AST.Typed, acc: ISZ[AST.Typed]): ISZ[AST.Typed] = t match {
@@ -608,14 +638,7 @@ object RewritingSystem {
               }
               val argTypes = getArgTypes(f.curried, ISZ())
               if (args.size == argTypes.size) {
-                @pure def hasLocalPatternInArgs: B = {
-                  val lpd = LocalPatternDetector(localPatterns, F)
-                  for (arg <- args) {
-                    lpd.transformCoreExp(arg)
-                  }
-                  return lpd.hasLocalPattern
-                }
-                if (hasLocalPatternInArgs) {
+                if (hasLocalPatternInArgs(args)) {
                   pendingApplications.value = pendingApplications.value :+ (context, id, args, e)
                 } else {
                   var substitutions = HashMap.empty[AST.CoreExp, AST.CoreExp.ParamVarRef]
@@ -624,13 +647,13 @@ object RewritingSystem {
                     substitutions = substitutions + args(i) ~> AST.CoreExp.ParamVarRef(n, paramId(n.string), argTypes(i))
                   }
                   val se = Substitutor(substitutions).transformCoreExpBase(e).getOrElse(e)
-                  var r: AST.CoreExp.Base = AST.CoreExp.Fun(AST.CoreExp.Param(paramId(1.string), argTypes(args.size - 1)), se)
+                  var r: AST.CoreExp.Base = AST.CoreExp.Fun(AST.CoreExp.Param(paramId(1.string), argTypes(args.size - 1).subst(substMap.value)), se)
                   for (i <- args.size - 2 to 0 by -1) {
                     r = AST.CoreExp.Fun(AST.CoreExp.Param(paramId((args.size - i).string), argTypes(i)), r)
                   }
                   val key = (context, id)
                   map.get(key) match {
-                    case Some(f) => err2(id, f, r)
+                    case Some(f) if f != r => err2(id, f, r)
                     case _ => map = map + key ~> r
                   }
                 }

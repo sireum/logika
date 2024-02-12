@@ -75,12 +75,12 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         reporter.error(from.posOpt, Logika.kind, s"Expecting a regular proof step")
         return emptyResult
     }
-    var provenClaims = HashSSet.empty[AST.CoreExp.Base]
+    var provenClaims = HashSMap.empty[AST.ProofAst.StepId, AST.CoreExp.Base]
     if (just.hasWitness) {
       for (w <- just.witnesses) {
         spcMap.get(w) match {
           case Some(spc: StepProofContext.Regular) =>
-            provenClaims = provenClaims + spc.coreExpClaim
+            provenClaims = provenClaims + w ~> spc.coreExpClaim
           case _ =>
             reporter.error(from.posOpt, Logika.kind, s"Expecting a regular proof step for $w")
         }
@@ -89,7 +89,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       for (spc <- spcMap.values) {
         spc match {
           case spc: StepProofContext.Regular =>
-            provenClaims = provenClaims + spc.coreExpClaim
+            provenClaims = provenClaims + spc.stepNo ~> spc.coreExpClaim
           case _ =>
         }
       }
