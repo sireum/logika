@@ -28,11 +28,11 @@ object Rules {
 
   @pure def substTest(c: Z, d: Z): Unit = {
     Deduce(
-      (c === d, c + 1 === 3) |- (d + 1 === 3) Proof(
+      (c ≡ d, (c + 1) ≡ 3) |- ((d + 1) ≡ 3) Proof(
         //@formatter:off
-        1  (c == d)  by Premise,
-        2  (c + 1 == 3) by Premise,
-        3  (d + 1 == 3) by Rewrite(RS(subst _), 2) and (1, 2)
+        1  (c ≡ d)              by Premise,
+        2  ((c + 1) ≡ 3)        by Premise,
+        3  ((d + 1) ≡ 3)        by Rewrite(RS(subst _), 2)
         //@formatter:on
       )
     )
