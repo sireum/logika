@@ -120,24 +120,19 @@ object RewritingSystem {
     @strictpure def toST: ST = {
       val assumptionsOpt: Option[ST] = if (assumptions.isEmpty) None() else Some(
         st"""using assumptions:
-            |${(for (a <- assumptions) yield st"${a._2._1}) ${a._2._2.prettyST} (for ${a._1.prettyPatternST})", "\n")}
+            |${(for (a <- assumptions) yield st"${a._2._1}) ${a._2._2.prettyST}", "\n")}
             |"""
       )
-      evaluatedOpt match {
-        case Some(evaluated) =>
-          st"""by ${(name, ".")}: ${pattern.prettyPatternST}
-              |   $assumptionsOpt
-              |   on ${original.prettyST}
-              |   ${if (rightToLeft) "<" else ">"}  ${rewritten.prettyST}
-              |   ≡  ${evaluated.prettyST}
-              |   ∴  ${done.prettyST}"""
-        case _ =>
-          st"""by ${(name, ".")}: ${pattern.prettyPatternST}
-              |   $assumptionsOpt
-              |   on ${original.prettyST}
-              |   ${if (rightToLeft) "<" else ">"}  ${rewritten.prettyST}
-              |   ∴  ${done.prettyST}"""
+      val evOpt: Option[ST] = evaluatedOpt match {
+        case Some(evaluated) => Some(st"≡  ${evaluated.prettyST}")
+        case _ => None()
       }
+      st"""by ${if (rightToLeft) "~" else ""}${(name, ".")}: ${pattern.prettyPatternST}
+          |   $assumptionsOpt
+          |   on ${original.prettyST}
+          |   ${if (rightToLeft) "<" else ">"}  ${rewritten.prettyST}
+          |   $evOpt
+          |   ∴  ${done.prettyST}"""
     }
   }
 
