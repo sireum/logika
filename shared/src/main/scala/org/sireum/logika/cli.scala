@@ -136,12 +136,12 @@ object cli {
       )),
       OptGroup(name = "Optimizations", opts = ISZ(
         parOpt,
-        Opt(name = "branchParMode", longKey = "par-branch-mode", shortKey = None(),
+        Opt(name = "branchPar", longKey = "par-branch", shortKey = None(),
           tpe = Type.Choice("branchPar", None(), ISZ("all", "returns", "disabled")),
           description = "Branch parallelization mode"),
-        Opt(name = "branchPar", longKey = "par-branch", shortKey = None(),
-          tpe = Type.NumFlag(100, Some(1), Some(100)),
-          description = "Enable parallelization (with CPU cores percentage to use)")
+        Opt(name = "rwPar", longKey = "par-rw", shortKey = None(),
+          tpe = Type.Flag(T),
+          description = "Enable rewriting parallelization")
       )),
       OptGroup(name = "Path Splitting", opts = ISZ(
         Opt(name = "dontSplitFunQuant", longKey = "dont-split-pfq", shortKey = None(),
@@ -161,12 +161,12 @@ object cli {
           description = "Split on match expressions and statements")
       )),
       OptGroup(name = "Rewriting", opts = ISZ(
-        Opt(name = "rwTrace", longKey = "rw-trace", shortKey = None(),
-          tpe = Type.Flag(T),
-          description = "Disable rewriting trace"),
         Opt(name = "rwMax", longKey = "rw-max", shortKey = None(),
           tpe = Type.Num(None(), 100, Some(1), None()),
-          description = "Maximum number of rewriting")
+          description = "Maximum number of rewriting"),
+        Opt(name = "rwTrace", longKey = "rw-trace", shortKey = None(),
+          tpe = Type.Flag(T),
+          description = "Disable rewriting trace")
       )),
       OptGroup(name = "SMT2", opts = ISZ(
         Opt(name = "elideEncoding", longKey = "elide-encoding", shortKey = None(),

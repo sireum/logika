@@ -96,15 +96,15 @@ object OptionsCli {
     val logAtRewrite: B,
     val stats: B,
     val par: Option[Z],
-    val branchParMode: LogikaBranchPar.Type,
-    val branchPar: Option[Z],
+    val branchPar: LogikaBranchPar.Type,
+    val rwPar: B,
     val dontSplitFunQuant: B,
     val splitAll: B,
     val splitContract: B,
     val splitIf: B,
     val splitMatch: B,
-    val rwTrace: B,
     val rwMax: Z,
+    val rwTrace: B,
     val elideEncoding: B,
     val rawInscription: B,
     val rlimit: Z,
@@ -278,11 +278,9 @@ import OptionsCli._
           |-p, --par                Enable parallelization (with CPU cores percentage to
           |                           use) (accepts an optional integer; min is 1; max is
           |                           100; default is 100)
-          |    --par-branch-mode    Branch parallelization mode (expects one of { all,
+          |    --par-branch         Branch parallelization mode (expects one of { all,
           |                           returns, disabled }; default: all)
-          |    --par-branch         Enable parallelization (with CPU cores percentage to
-          |                           use) (accepts an optional integer; min is 1; max is
-          |                           100; default is 100)
+          |    --par-rw             Enable rewriting parallelization
           |
           |Path Splitting Options:
           |    --dont-split-pfq     Do not force splitting in quantifiers and proof
@@ -293,9 +291,9 @@ import OptionsCli._
           |    --split-match        Split on match expressions and statements
           |
           |Rewriting Options:
-          |    --rw-trace           Disable rewriting trace
           |    --rw-max             Maximum number of rewriting (expects an integer; min
           |                           is 1; default is 100)
+          |    --rw-trace           Disable rewriting trace
           |
           |SMT2 Options:
           |    --elide-encoding     Strip out SMT2 encoding in feedback
@@ -345,15 +343,15 @@ import OptionsCli._
     var logAtRewrite: B = true
     var stats: B = false
     var par: Option[Z] = None()
-    var branchParMode: LogikaBranchPar.Type = LogikaBranchPar.All
-    var branchPar: Option[Z] = None()
+    var branchPar: LogikaBranchPar.Type = LogikaBranchPar.All
+    var rwPar: B = true
     var dontSplitFunQuant: B = false
     var splitAll: B = false
     var splitContract: B = false
     var splitIf: B = false
     var splitMatch: B = false
-    var rwTrace: B = true
     var rwMax: Z = 100
+    var rwTrace: B = true
     var elideEncoding: B = false
     var rawInscription: B = false
     var rlimit: Z = 2000000
@@ -549,19 +547,16 @@ import OptionsCli._
              case Some(v) => par = v
              case _ => return None()
            }
-         } else if (arg == "--par-branch-mode") {
+         } else if (arg == "--par-branch") {
            val o: Option[LogikaBranchPar.Type] = parseLogikaBranchPar(args, j + 1)
            o match {
-             case Some(v) => branchParMode = v
+             case Some(v) => branchPar = v
              case _ => return None()
            }
-         } else if (arg == "--par-branch") {
-           val o: Option[Option[Z]] = parseNumFlag(args, j + 1, Some(1), Some(100)) match {
-             case o@Some(None()) => j = j - 1; Some(Some(100))
-             case o => o
-           }
+         } else if (arg == "--par-rw") {
+           val o: Option[B] = { j = j - 1; Some(!rwPar) }
            o match {
-             case Some(v) => branchPar = v
+             case Some(v) => rwPar = v
              case _ => return None()
            }
          } else if (arg == "--dont-split-pfq") {
@@ -594,16 +589,16 @@ import OptionsCli._
              case Some(v) => splitMatch = v
              case _ => return None()
            }
-         } else if (arg == "--rw-trace") {
-           val o: Option[B] = { j = j - 1; Some(!rwTrace) }
-           o match {
-             case Some(v) => rwTrace = v
-             case _ => return None()
-           }
          } else if (arg == "--rw-max") {
            val o: Option[Z] = parseNum(args, j + 1, Some(1), None())
            o match {
              case Some(v) => rwMax = v
+             case _ => return None()
+           }
+         } else if (arg == "--rw-trace") {
+           val o: Option[B] = { j = j - 1; Some(!rwTrace) }
+           o match {
+             case Some(v) => rwTrace = v
              case _ => return None()
            }
          } else if (arg == "--elide-encoding") {
@@ -675,7 +670,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchParMode, branchPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, rwTrace, rwMax, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
+    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchPar, rwPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, rwMax, rwTrace, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

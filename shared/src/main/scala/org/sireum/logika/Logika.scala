@@ -4404,7 +4404,7 @@ import Util._
 
       if (!(branches.size == 2 && (branches(1).body.stmts.isEmpty || branches(0).body.stmts.isEmpty))) {
         var first: Z = -1
-        val outputs = ops.MSZOps(inputs.toMS).mParMapCores(computeBranch _, config.branchParCores)
+        val outputs = ops.MSZOps(inputs.toMS).mParMapCores(computeBranch _, config.parCores)
         for (i <- 0 until outputs.size) {
           smt2.combineWith(outputs(i)._3)
         }

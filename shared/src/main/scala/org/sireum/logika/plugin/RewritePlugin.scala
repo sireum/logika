@@ -89,7 +89,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
       }
     }
-    val rwPc = Rewriter(logika.th, provenClaims, patterns, logika.config.rwTrace, F, ISZ())
+    val rwPc = Rewriter(if (logika.config.rwPar) logika.config.parCores else 1,
+      logika.th, provenClaims, patterns, logika.config.rwTrace, F, ISZ())
     val fromCoreClaim = RewritingSystem.translate(logika.th, F, fromClaim)
     var done = F
     var rwClaim = fromCoreClaim

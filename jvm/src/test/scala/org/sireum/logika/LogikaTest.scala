@@ -79,7 +79,6 @@ object LogikaTest {
       smt2Caching = F,
       smt2Seq = F,
       branchPar = Config.BranchPar.All,
-      branchParCores = Runtime.getRuntime.availableProcessors,
       atLinesFresh = T,
       interp = F,
       loopBound = 3,
@@ -98,7 +97,8 @@ object LogikaTest {
       atRewrite = T,
       searchPc = T,
       rwTrace = T,
-      rwMax = 100
+      rwMax = 100,
+      rwPar = T
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty

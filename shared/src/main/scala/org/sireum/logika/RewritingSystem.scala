@@ -136,7 +136,8 @@ object RewritingSystem {
     }
   }
 
-  @record class Rewriter(val th: TypeHierarchy,
+  @record class Rewriter(val maxCores: Z,
+                         val th: TypeHierarchy,
                          val provenClaims: HashSMap[AST.ProofAst.StepId ,AST.CoreExp.Base],
                          val patterns: ISZ[Rewriter.Pattern],
                          val shouldTrace: B,
@@ -181,7 +182,7 @@ object RewritingSystem {
                   if (patterns2.isEmpty) {
                     o
                   } else {
-                    Rewriter(th, HashSMap.empty, patterns2, F, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
+                    Rewriter(maxCores, th, HashSMap.empty, patterns2, F, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
                   }
               }
             }
@@ -207,6 +208,7 @@ object RewritingSystem {
             }
           } else {
             val pces = provenClaims.entries
+            val par = maxCores > 1 && assumptions.size > 2 && pces.size > 2
             def recAssumption(pendingApplications: PendingApplications,
                               substMap: HashMap[String, AST.Typed],
                               apcs: ISZ[(AST.ProofAst.StepId, AST.CoreExp.Base)],
@@ -225,7 +227,7 @@ object RewritingSystem {
                 val patterns2: ISZ[Rewriter.Pattern] =
                   for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
                     r2l(Rewriter.Pattern(pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))
-                val o2 = Rewriter(th, HashSMap.empty, patterns2, F, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
+                val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, F, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
                 val m = unifyExp(T, th, pattern.localPatternSet, from, o2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
                   unifyPendingApplications(T, th, pattern.localPatternSet, m, pas, sm, ems) match {
@@ -237,17 +239,26 @@ object RewritingSystem {
                 return
               }
               val assumption = assumptions(j)
-              var k = 0
-              while (k < pces.size && !done) {
+              def tryAssumption(pc: (AST.ProofAst.StepId, AST.CoreExp.Base)): Unit = {
+                if (done) {
+                  return
+                }
                 val ems: MBox[UnificationErrorMessages] = MBox(ISZ())
                 val pas = MBox(pendingApplications)
                 val sm = MBox(substMap)
-                val pc = pces(k)
                 val m = unifyExp(T, th, pattern.localPatternSet, assumption, pc._2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
                   recAssumption(pas.value, sm.value, apcs :+ pc, m, j + 1)
                 }
-                k = k + 1
+              }
+              if (par) {
+                ops.ISZOps(pces).mParMap(tryAssumption _)
+              } else {
+                var k = 0
+                while (!done && k < pces.size) {
+                  tryAssumption(pces(k))
+                  k = k + 1
+                }
               }
             }
             recAssumption(ISZ(), HashMap.empty, ISZ(), HashSMap.empty, 0)

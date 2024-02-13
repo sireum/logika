@@ -114,8 +114,7 @@ object OptionsUtil {
       case OptionsCli.LogikaFPRoundingMode.TowardZero => "RTZ"
     }
     val parCores = LibUtil.parCoresOpt(maxCores, o.par)
-    val branchParCores = LibUtil.parCoresOpt(maxCores, o.branchPar)
-    val branchParMode: org.sireum.logika.Config.BranchPar.Type = o.branchParMode match {
+    val branchPar: org.sireum.logika.Config.BranchPar.Type = o.branchPar match {
       case OptionsCli.LogikaBranchPar.All => org.sireum.logika.Config.BranchPar.All
       case OptionsCli.LogikaBranchPar.Returns => org.sireum.logika.Config.BranchPar.OnlyAllReturns
       case OptionsCli.LogikaBranchPar.Disabled => org.sireum.logika.Config.BranchPar.Disabled
@@ -155,8 +154,7 @@ object OptionsUtil {
       fpRoundingMode = fpRoundingMode,
       smt2Caching = defaultConfig.smt2Caching,
       smt2Seq = o.sequential,
-      branchPar = branchParMode,
-      branchParCores = branchParCores,
+      branchPar = branchPar,
       atLinesFresh = o.logPcLines,
       interp = o.interprocedural,
       loopBound = o.loopBound,
@@ -175,7 +173,8 @@ object OptionsUtil {
       atRewrite = o.logAtRewrite,
       searchPc = o.searchPC,
       rwTrace = o.rwTrace,
-      rwMax = o.rwMax
+      rwMax = o.rwMax,
+      rwPar = o.rwPar
     )
     return Either.Left(config)
   }
@@ -224,21 +223,13 @@ object OptionsUtil {
           r = r ++ ISZ[String]("--par", value.string)
         }
       }
-      if (config.branchParCores > 1) {
-        val value = config.branchParCores * 100 / maxCores
-        if (value == 100) {
-          r = r :+ "--par-branch"
-        } else {
-          r = r ++ ISZ[String]("--par-branch", value.string)
-        }
-      }
       if (config.branchPar != defaultConfig.branchPar) {
         val value: String = config.branchPar match {
           case Config.BranchPar.All => "all"
           case Config.BranchPar.OnlyAllReturns => "returns"
           case Config.BranchPar.Disabled => "disabled"
         }
-        r = r ++ ISZ[String]("--par-branch-mode", value)
+        r = r ++ ISZ[String]("--par-branch", value)
       }
       if (config.sat != defaultConfig.sat) {
         r = r :+ "--sat"
@@ -333,11 +324,14 @@ object OptionsUtil {
       if (config.searchPc != defaultConfig.searchPc) {
         r = r :+ "--search-pc"
       }
-      if (config.rwTrace != defaultConfig.rwTrace) {
-        r = r :+ "--rw-trace"
-      }
       if (config.rwMax != defaultConfig.rwMax) {
         r = r ++ ISZ[String]("--rw-max", config.rwMax.string)
+      }
+      if (config.rwPar != defaultConfig.rwPar) {
+        r = r :+ "--rw-par"
+      }
+      if (config.rwTrace != defaultConfig.rwTrace) {
+        r = r :+ "--rw-trace"
       }
     }
     config.background match {

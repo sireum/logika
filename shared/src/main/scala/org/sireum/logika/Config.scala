@@ -50,7 +50,6 @@ import org.sireum._
                        val smt2Caching: B,
                        val smt2Seq: B,
                        val branchPar: Config.BranchPar.Type,
-                       val branchParCores: Z,
                        val atLinesFresh: B,
                        val interp: B,
                        val loopBound: Z,
@@ -69,7 +68,8 @@ import org.sireum._
                        val atRewrite: B,
                        val searchPc: B,
                        val rwTrace: B,
-                       val rwMax: Z) {
+                       val rwMax: Z,
+                       val rwPar: B) {
 
   @memoize def fingerprint: U64 = {
     return ops.StringOps(string).sha3U64(T, T)
