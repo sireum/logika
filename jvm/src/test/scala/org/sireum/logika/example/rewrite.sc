@@ -32,7 +32,8 @@ object Rules {
         //@formatter:off
         1  (c ≡ d)              by Premise,
         2  ((c + 1) ≡ 3)        by Premise,
-        3  ((d + 1) ≡ 3)        by Rewrite(RS(subst _), 2)
+        3  ((d + 1) ≡ 3)        by Rewrite(RS(subst _), 2),
+        4  ((c + 1) ≡ 3)        by Rewrite(~RS(subst _), 3) and (1, 3) // and (...) is optional but it makes the search faster
         //@formatter:on
       )
     )

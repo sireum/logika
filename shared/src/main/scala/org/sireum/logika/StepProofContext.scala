@@ -32,6 +32,9 @@ import org.sireum.lang.{ast => AST}
 @datatype trait StepProofContext {
   @pure def stepNo: AST.ProofAst.StepId
   @strictpure def prettyST: ST
+  override def string: String = {
+    return prettyST.render
+  }
 }
 
 object StepProofContext {

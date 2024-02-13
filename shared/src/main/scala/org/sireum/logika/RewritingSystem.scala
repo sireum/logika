@@ -120,7 +120,7 @@ object RewritingSystem {
     @strictpure def toST: ST = {
       val assumptionsOpt: Option[ST] = if (assumptions.isEmpty) None() else Some(
         st"""using assumptions:
-            |${(for (a <- assumptions) yield st"* ${a._2._2.prettyST} (${a._2._1}) for: ${a._1.prettyPatternST}", "\n")}
+            |${(for (a <- assumptions) yield st"${a._2._1}) ${a._2._2.prettyST} (for ${a._1.prettyPatternST})", "\n")}
             |"""
       )
       evaluatedOpt match {
@@ -145,6 +145,7 @@ object RewritingSystem {
                          val provenClaims: HashSMap[AST.ProofAst.StepId ,AST.CoreExp.Base],
                          val patterns: ISZ[Rewriter.Pattern],
                          val shouldTrace: B,
+                         var done: B,
                          var trace: ISZ[TraceElement]) extends AST.MCoreExpTransformer {
     override def preCoreExpIf(o: AST.CoreExp.If): AST.MCoreExpTransformer.PreResult[AST.CoreExp.Base] = {
       o.cond match {
@@ -156,7 +157,7 @@ object RewritingSystem {
     override def postCoreExpBase(o: AST.CoreExp.Base): MOption[AST.CoreExp.Base] = {
       var rOpt = MOption.none[AST.CoreExp.Base]()
       var i = 0
-      while (rOpt.isEmpty && i < patterns.size) {
+      while (!done && rOpt.isEmpty && i < patterns.size) {
         val pattern = patterns(i)
         var assumptions = ISZ[AST.CoreExp.Base]()
         def arrowRec(e: AST.CoreExp): AST.CoreExp = {
@@ -168,9 +169,11 @@ object RewritingSystem {
           }
         }
         def tryPattern(): Unit = {
+          if (done) {
+            return
+          }
           val (from, to): (AST.CoreExp.Base, AST.CoreExp.Base) = arrowRec(pattern.exp) match {
-            case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right) =>
-              if (pattern.rightToLeft) (right, left) else (left, right)
+            case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right) => (left, right)
             case _ => halt("Infeasible")
           }
           def last(m: UnificationMap, patterns2: ISZ[Rewriter.Pattern], apcs: ISZ[(AST.ProofAst.StepId, AST.CoreExp.Base)]): Unit = {
@@ -183,7 +186,7 @@ object RewritingSystem {
                   if (patterns2.isEmpty) {
                     o
                   } else {
-                    Rewriter(th, HashSMap.empty, patterns2, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
+                    Rewriter(th, HashSMap.empty, patterns2, F, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
                   }
               }
             }
@@ -199,6 +202,7 @@ object RewritingSystem {
                   ops.ISZOps(assumptions).zip(apcs))
               }
               rOpt = MSome(o3)
+              done = T
             }
           }
           if (assumptions.isEmpty) {
@@ -207,27 +211,31 @@ object RewritingSystem {
               case _ =>
             }
           } else {
-            var done = F
             val pces = provenClaims.entries
             def recAssumption(pendingApplications: PendingApplications,
                               substMap: HashMap[String, AST.Typed],
                               apcs: ISZ[(AST.ProofAst.StepId, AST.CoreExp.Base)],
                               map: UnificationMap,
                               j: Z): Unit = {
+              if (done) {
+                return
+              }
               if (j >= assumptions.size) {
                 val ems: MBox[UnificationErrorMessages] = MBox(ISZ())
                 val pas = MBox(pendingApplications)
                 val sm = MBox(substMap)
-                val patterns2: ISZ[Rewriter.Pattern] = for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
-                  Rewriter.Pattern(pattern.name :+ s"Assumption$k", pattern.rightToLeft,
-                    isPermutative(apc), HashSSet.empty, apc)
-                val o2 = Rewriter(th, HashSMap.empty, patterns2, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
+                def r2l(p: Rewriter.Pattern): Rewriter.Pattern = {
+                  return if (pattern.rightToLeft) p.toRightToLeft else p
+                }
+                val patterns2: ISZ[Rewriter.Pattern] =
+                  for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
+                    r2l(Rewriter.Pattern(pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))
+                val o2 = Rewriter(th, HashSMap.empty, patterns2, F, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
                 val m = unifyExp(T, th, pattern.localPatternSet, from, o2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
                   unifyPendingApplications(T, th, pattern.localPatternSet, m, pas, sm, ems) match {
                     case Either.Left(m2) =>
                       last(m2, patterns2, apcs)
-                      done = T
                     case _ =>
                   }
                 }
@@ -269,7 +277,21 @@ object RewritingSystem {
                             val rightToLeft: B,
                             val isPermutative: B,
                             val localPatternSet: LocalPatternSet,
-                            val exp: AST.CoreExp)
+                            val exp: AST.CoreExp) {
+      @pure def toRightToLeft: Rewriter.Pattern = {
+        @pure def rec(e: AST.CoreExp): AST.CoreExp = {
+          e match {
+            case e: AST.CoreExp.Arrow =>
+              return e(left = rec(e.left).asInstanceOf[AST.CoreExp.Base], right = rec(e.right))
+            case e: AST.CoreExp.Binary if e.isEquiv && !e.right.isInstanceOf[AST.CoreExp.LitB] =>
+              return e(left = e.right, right = e.left)
+            case _ => return e
+          }
+        }
+        val thiz = this
+        return thiz(rightToLeft = !rightToLeft, exp = rec(exp))
+      }
+    }
   }
 
   @strictpure def paramId(n: String): String = s"_$n"
@@ -1200,7 +1222,7 @@ object RewritingSystem {
 
   def patternsOf(th: TypeHierarchy, cache: Logika.Cache, name: ISZ[String], rightToLeft: B): ISZ[Rewriter.Pattern] = {
     cache.getPatterns(th, name) match {
-      case Some(r) => return if (rightToLeft) for (e <- r) yield e(rightToLeft = rightToLeft) else r
+      case Some(r) => return if (rightToLeft) for (e <- r) yield e.toRightToLeft else r
       case _ =>
     }
     var r = ISZ[Rewriter.Pattern]()
@@ -1238,7 +1260,7 @@ object RewritingSystem {
       case _ => halt("Infeasible")
     }
     cache.setPatterns(th, name, r)
-    return if (rightToLeft) for (e <- r) yield e(rightToLeft = rightToLeft) else r
+    return if (rightToLeft) for (e <- r) yield e.toRightToLeft else r
   }
 
   def retrievePatterns(th: TypeHierarchy, cache: Logika.Cache, exp: AST.Exp): ISZ[Rewriter.Pattern] = {
@@ -1282,11 +1304,13 @@ object RewritingSystem {
     return r
   }
 
-  @strictpure def isPermutative(exp: AST.CoreExp): B =
+  @tailrec @pure def isPermutative(exp: AST.CoreExp): B = {
     exp match {
-      case exp: AST.CoreExp.Arrow => isPermutative(exp.right)
-      case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right) =>
-        left.numberPattern(0)._2 == right.numberPattern(0)._2
-      case _ => F
+      case exp: AST.CoreExp.Arrow => return isPermutative(exp.right)
+      case exp: AST.CoreExp.Binary if exp.isEquiv =>
+        val numMap = MBox(HashMap.empty[(ISZ[String], String), Z])
+        return exp.left.numberPattern(numMap) == exp.right.numberPattern(numMap)
+      case _ => return F
     }
+  }
 }

@@ -58,11 +58,6 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext], state: State,
                       step: AST.ProofAst.Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
-    @strictpure def checkRightMostLit(exp: AST.CoreExp): B = exp match {
-      case exp: AST.CoreExp.Arrow => checkRightMostLit(exp.right)
-      case _: AST.CoreExp.Lit => T
-      case _ => F
-    }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val patterns = RewritingSystem.retrievePatterns(logika.th, cache, just.args(0))
     val from: AST.ProofAst.StepId = AST.Util.toStepIds(ISZ(just.args(1)), Logika.kind, reporter) match {
@@ -88,18 +83,20 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     } else {
       for (spc <- spcMap.values) {
         spc match {
-          case spc: StepProofContext.Regular =>
+          case spc: StepProofContext.Regular if !spc.stepNo.isPremise =>
             provenClaims = provenClaims + spc.stepNo ~> spc.coreExpClaim
           case _ =>
         }
       }
     }
-    val rwPc = Rewriter(logika.th, provenClaims, patterns, logika.config.rwTrace, ISZ())
+    val rwPc = Rewriter(logika.th, provenClaims, patterns, logika.config.rwTrace, F, ISZ())
     val fromCoreClaim = RewritingSystem.translate(logika.th, F, fromClaim)
     var done = F
     var rwClaim = fromCoreClaim
     var i = 0
-    while (!done && i < logika.config.rwMax) {
+    val stepClaim = RewritingSystem.translate(logika.th, F, step.claim)
+    while (!done && i < logika.config.rwMax && rwClaim != stepClaim) {
+      rwPc.done = F
       rwClaim = rwPc.transformCoreExpBase(rwClaim) match {
         case MSome(c) =>
           if (rwPc.trace.nonEmpty) {
@@ -113,7 +110,6 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       }
       i = i + 1
     }
-    val stepClaim = RewritingSystem.translate(logika.th, F, step.claim)
     val traceOpt: Option[ST] = if (logika.config.rwTrace) {
       Some(
         st"""Rewriting trace:
