@@ -1920,6 +1920,7 @@ import Util._
         val (s1, sym) = s0.freshSym(t, attr.posOpt.get)
         val ti = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
         val params = ti.ast.params
+        val sm = TypeChecker.buildTypeSubstMap(ti.name, e.posOpt, ti.ast.typeParams, t.args, message.Reporter.create).get
         for (p <- evalArgs(sp, smt2, cache, rtCheck, s1, params.size, eargs, reporter)) {
           val s2 = p._1
           val args = p._2.toMS
@@ -1931,7 +1932,7 @@ import Util._
                   if (args(i).isEmpty) {
                     val receiver = receiverOpt.get
                     val param = params(i)
-                    val pt = param.tipe.typedOpt.get
+                    val pt = param.tipe.typedOpt.get.subst(sm)
                     val (s4, sym) = s3.freshSym(pt, param.id.attr.posOpt.get)
                     s3 = s4.addClaim(State.Claim.Let.FieldLookup(sym, receiver, param.id.value))
                     args(i) = Some(sym)

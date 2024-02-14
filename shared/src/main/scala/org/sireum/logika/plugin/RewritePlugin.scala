@@ -42,7 +42,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     just match {
       case just: AST.ProofAst.Step.Justification.Apply =>
         just.invoke.ident.attr.resOpt match {
-          case Some(res: AST.ResolvedInfo.Method) if res.id == "Rewrite" && res.owner == justificationName => return T
+          case Some(res: AST.ResolvedInfo.Method) if (res.id == "Rewrite" || res.id == "Eval") && res.owner == justificationName => return T
           case _ =>
         }
       case _ =>
@@ -59,11 +59,15 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
                       step: AST.ProofAst.Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-    val patterns = RewritingSystem.retrievePatterns(logika.th, cache, just.args(0))
-    val from: AST.ProofAst.StepId = AST.Util.toStepIds(ISZ(just.args(1)), Logika.kind, reporter) match {
-      case Some(s) => s(0)
-      case _ => return emptyResult
-    }
+    val isEval = just.id.value == "Eval"
+    val patterns: ISZ[Rewriter.Pattern] =
+      if (isEval) ISZ()
+      else RewritingSystem.retrievePatterns(logika.th, cache, just.args(0))
+    val from: AST.ProofAst.StepId =
+      AST.Util.toStepIds(ISZ(just.args(if (isEval) 0 else 1)), Logika.kind, reporter) match {
+        case Some(s) => s(0)
+        case _ => return emptyResult
+      }
     val fromClaim: AST.Exp = spcMap.get(from) match {
       case Some(spc: StepProofContext.Regular) => spc.exp
       case _ =>
@@ -92,26 +96,31 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     val rwPc = Rewriter(if (logika.config.rwPar) logika.config.parCores else 1,
       logika.th, provenClaims, patterns, logika.config.rwTrace, F, ISZ())
     val fromCoreClaim = RewritingSystem.translate(logika.th, F, fromClaim)
-    var done = F
     var rwClaim = fromCoreClaim
-    var i = 0
     val stepClaim = RewritingSystem.translate(logika.th, F, step.claim)
-    while (!done && i < logika.config.rwMax && rwClaim != stepClaim) {
-      rwPc.done = F
-      rwClaim = rwPc.transformCoreExpBase(rwClaim) match {
-        case MSome(c) =>
-          if (rwPc.trace.nonEmpty) {
-            val last = rwPc.trace.size - 1
-            rwPc.trace = rwPc.trace(last ~> rwPc.trace(last)(done = c))
-          }
-          c
-        case _ =>
-          done = T
-          rwClaim
+    if (isEval) {
+      rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all,
+        provenClaims.valueSet, rwClaim).getOrElse(rwClaim)
+    } else {
+      var done = F
+      var i = 0
+      while (!done && i < logika.config.rwMax && rwClaim != stepClaim) {
+        rwPc.done = F
+        rwClaim = rwPc.transformCoreExpBase(rwClaim) match {
+          case MSome(c) =>
+            if (rwPc.trace.nonEmpty) {
+              val last = rwPc.trace.size - 1
+              rwPc.trace = rwPc.trace(last ~> rwPc.trace(last)(done = c))
+            }
+            c
+          case _ =>
+            done = T
+            rwClaim
+        }
+        i = i + 1
       }
-      i = i + 1
     }
-    val traceOpt: Option[ST] = if (logika.config.rwTrace) {
+    val traceOpt: Option[ST] = if (!isEval && logika.config.rwTrace) {
       Some(
         st"""Rewriting trace:
             |
@@ -124,7 +133,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         st"""Matched:
             |  ${stepClaim.prettyST}
             |
-            |After rewriting $from:
+            |After ${if (isEval) "evaluating" else "rewriting"} $from:
             |  ${fromCoreClaim.prettyST}
             |
             |$traceOpt""".render)
@@ -136,7 +145,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         st"""Could not match:
             |  ${stepClaim.prettyST}
             |
-            |After rewriting $from to:
+            |After ${if (isEval) "evaluating" else "rewriting"} $from to:
             |  ${rwClaim.prettyST}
             |
             |$traceOpt""".render)

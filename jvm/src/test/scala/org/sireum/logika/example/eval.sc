@@ -1,0 +1,40 @@
+// #Sireum #Logika
+import org.sireum._
+import org.sireum.justification._
+
+@datatype class EvalFoo[X, Y](val x: X, val y: Y)
+
+@pure def binaryConstantPropagation(): Unit = {
+  Deduce(
+    //@formatter:off
+    1  (1 + 2 == 3)  by Auto,
+    2  (T)           by Eval(1)
+    //@formatter:on
+  )
+}
+
+@pure def unaryConstantPropagation(): Unit = {
+  Deduce(
+    //@formatter:off
+    1  (-(-1) == 1)  by Auto,
+    2  (T)           by Eval(1)
+    //@formatter:on
+  )
+}
+
+@pure def fieldAccess(o: EvalFoo[Z, Z]): Unit = {
+  Deduce(
+    //@formatter:off
+    1  (EvalFoo(x = 4, y = 5).x == 4)   by Auto,
+    2  (T)                              by Eval(1),
+    3  (o(x = 4, y = 5).x == 4)         by Auto,
+    4  (T)                              by Eval(3),
+    5  (o(x = 4, y = 5).y == 5)         by Auto,
+    6  (T)                              by Eval(5),
+    7  (o(x = 4)(y = 1)(x = 5).x == 5)  by Auto,
+    8  (T)                              by Eval(7),
+    9  (o(x = 4)(x = 5).y == o.y)       by Auto,
+    10 (T)                              by Eval(9)
+  //@formatter:on
+  )
+}
