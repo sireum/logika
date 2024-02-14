@@ -172,7 +172,7 @@ object RewritingSystem {
             return
           }
           val (from, to): (AST.CoreExp.Base, AST.CoreExp.Base) = arrowRec(pattern.exp) match {
-            case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right) => (left, right)
+            case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, _) => (left, right)
             case _ => halt("Infeasible")
           }
           def last(m: UnificationMap, patterns2: ISZ[Rewriter.Pattern], apcs: ISZ[(AST.ProofAst.StepId, AST.CoreExp.Base)]): Unit = {
@@ -411,7 +411,7 @@ object RewritingSystem {
                 case AST.ResolvedInfo.BuiltIn.Kind.BinaryNe if th.isSubstitutableWithoutSpecVars(left.tipe) => AST.Exp.BinaryOp.InequivUni
                 case _ => e.op
               }
-              return AST.CoreExp.Binary(left, op, right)
+              return AST.CoreExp.Binary(left, op, right, e.typedOpt.get)
             case _ => halt(s"TODO: $e")
           }
         case e: AST.Exp.Select =>
@@ -855,113 +855,118 @@ object RewritingSystem {
     return unifyPendingApplications(silent, th, localPatterns, m, pendingApplications, substMap, errorMessages)
   }
 
-  @strictpure def evalBinaryLit(lit1: AST.CoreExp.Lit, op: String, lit2: AST.CoreExp.Lit): AST.CoreExp.Lit =
-    lit1 match {
-      case lit1: AST.CoreExp.LitB =>
-        val left = lit1.value
-        val right = lit2.asInstanceOf[AST.CoreExp.LitB].value
-        op match {
-          case AST.Exp.BinaryOp.And => AST.CoreExp.LitB(left & right)
-          case AST.Exp.BinaryOp.Or => AST.CoreExp.LitB(left | right)
-          case AST.Exp.BinaryOp.Xor => AST.CoreExp.LitB(left |^ right)
-          case AST.Exp.BinaryOp.Imply => AST.CoreExp.LitB(left __>: right)
-          case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
-          case _ => halt(s"Infeasible: $op on B")
-        }
-      case lit1: AST.CoreExp.LitZ =>
-        val left = lit1.value
-        val right = lit2.asInstanceOf[AST.CoreExp.LitZ].value
-        op match {
-          case AST.Exp.BinaryOp.Add => AST.CoreExp.LitZ(left + right)
-          case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitZ(left - right)
-          case AST.Exp.BinaryOp.Mul => AST.CoreExp.LitZ(left * right)
-          case AST.Exp.BinaryOp.Div => AST.CoreExp.LitZ(left / right)
-          case AST.Exp.BinaryOp.Rem => AST.CoreExp.LitZ(left % right)
-          case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
-          case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
-          case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
-          case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
-          case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
-          case _ => halt(s"Infeasible: $op on Z")
-        }
-      case lit1: AST.CoreExp.LitC =>
-        val left = lit1.value
-        val right = lit2.asInstanceOf[AST.CoreExp.LitC].value
-        op match {
-          case AST.Exp.BinaryOp.And => AST.CoreExp.LitC(left & right)
-          case AST.Exp.BinaryOp.Or => AST.CoreExp.LitC(left | right)
-          case AST.Exp.BinaryOp.Xor => AST.CoreExp.LitC(left |^ right)
-          case AST.Exp.BinaryOp.Add => AST.CoreExp.LitC(left + right)
-          case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitC(left - right)
-          case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
-          case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
-          case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
-          case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
-          case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
-          case AST.Exp.BinaryOp.Shl => AST.CoreExp.LitC(left << right)
-          case AST.Exp.BinaryOp.Shr => AST.CoreExp.LitC(left >> right)
-          case AST.Exp.BinaryOp.Ushr => AST.CoreExp.LitC(left >>> right)
-          case _ => halt(s"Infeasible: $op on C")
-        }
-      case lit1: AST.CoreExp.LitF32 =>
-        val left = lit1.value
-        val right = lit2.asInstanceOf[AST.CoreExp.LitF32].value
-        op match {
-          case AST.Exp.BinaryOp.Add => AST.CoreExp.LitF32(left + right)
-          case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitF32(left - right)
-          case AST.Exp.BinaryOp.Mul => AST.CoreExp.LitF32(left * right)
-          case AST.Exp.BinaryOp.Div => AST.CoreExp.LitF32(left / right)
-          case AST.Exp.BinaryOp.Rem => AST.CoreExp.LitF32(left % right)
-          case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
-          case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
-          case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
-          case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
-          case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.FpEq => AST.CoreExp.LitB(left ~~ right)
-          case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
-          case AST.Exp.BinaryOp.FpNe => AST.CoreExp.LitB(left !~ right)
-          case _ => halt(s"Infeasible: $op on F32")
-        }
-      case lit1: AST.CoreExp.LitF64 =>
-        val left = lit1.value
-        val right = lit2.asInstanceOf[AST.CoreExp.LitF64].value
-        op match {
-          case AST.Exp.BinaryOp.Add => AST.CoreExp.LitF64(left + right)
-          case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitF64(left - right)
-          case AST.Exp.BinaryOp.Mul => AST.CoreExp.LitF64(left * right)
-          case AST.Exp.BinaryOp.Div => AST.CoreExp.LitF64(left / right)
-          case AST.Exp.BinaryOp.Rem => AST.CoreExp.LitF64(left % right)
-          case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
-          case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
-          case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
-          case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
-          case AST.Exp.BinaryOp.Eq => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.FpEq => AST.CoreExp.LitB(left ~~ right)
-          case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
-          case AST.Exp.BinaryOp.FpNe => AST.CoreExp.LitB(left !~ right)
-          case _ => halt(s"Infeasible: $op on F64")
-        }
-      case lit1: AST.CoreExp.LitR =>
-        val left = lit1.value
-        val right = lit2.asInstanceOf[AST.CoreExp.LitR].value
-        op match {
-          case AST.Exp.BinaryOp.Add => AST.CoreExp.LitR(left + right)
-          case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitR(left - right)
-          case AST.Exp.BinaryOp.Mul => AST.CoreExp.LitR(left * right)
-          case AST.Exp.BinaryOp.Div => AST.CoreExp.LitR(left / right)
-          case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
-          case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left < right)
-          case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
-          case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
-          case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
-          case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
-          case _ => halt(s"Infeasible: $op on R")
-        }
-      case lit1 => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
+  @strictpure def evalBinaryLit(lit1: AST.CoreExp.Lit, op: String, lit2: AST.CoreExp.Lit): AST.CoreExp.Base = {
+    if (op == AST.Exp.BinaryOp.MapsTo) {
+      AST.CoreExp.Constructor(AST.Typed.Tuple(ISZ(lit1.tipe, lit2.tipe)), ISZ(lit1, lit2))
+    } else {
+      lit1 match {
+        case lit1: AST.CoreExp.LitB =>
+          val left = lit1.value
+          val right = lit2.asInstanceOf[AST.CoreExp.LitB].value
+          op match {
+            case AST.Exp.BinaryOp.And => AST.CoreExp.LitB(left & right)
+            case AST.Exp.BinaryOp.Or => AST.CoreExp.LitB(left | right)
+            case AST.Exp.BinaryOp.Xor => AST.CoreExp.LitB(left |^ right)
+            case AST.Exp.BinaryOp.Imply => AST.CoreExp.LitB(left __>: right)
+            case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
+            case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
+            case _ => halt(s"Infeasible: $op on B")
+          }
+        case lit1: AST.CoreExp.LitZ =>
+          val left = lit1.value
+          val right = lit2.asInstanceOf[AST.CoreExp.LitZ].value
+          op match {
+            case AST.Exp.BinaryOp.Add => AST.CoreExp.LitZ(left + right)
+            case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitZ(left - right)
+            case AST.Exp.BinaryOp.Mul => AST.CoreExp.LitZ(left * right)
+            case AST.Exp.BinaryOp.Div => AST.CoreExp.LitZ(left / right)
+            case AST.Exp.BinaryOp.Rem => AST.CoreExp.LitZ(left % right)
+            case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
+            case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
+            case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
+            case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
+            case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
+            case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
+            case _ => halt(s"Infeasible: $op on Z")
+          }
+        case lit1: AST.CoreExp.LitC =>
+          val left = lit1.value
+          val right = lit2.asInstanceOf[AST.CoreExp.LitC].value
+          op match {
+            case AST.Exp.BinaryOp.And => AST.CoreExp.LitC(left & right)
+            case AST.Exp.BinaryOp.Or => AST.CoreExp.LitC(left | right)
+            case AST.Exp.BinaryOp.Xor => AST.CoreExp.LitC(left |^ right)
+            case AST.Exp.BinaryOp.Add => AST.CoreExp.LitC(left + right)
+            case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitC(left - right)
+            case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
+            case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
+            case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
+            case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
+            case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
+            case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
+            case AST.Exp.BinaryOp.Shl => AST.CoreExp.LitC(left << right)
+            case AST.Exp.BinaryOp.Shr => AST.CoreExp.LitC(left >> right)
+            case AST.Exp.BinaryOp.Ushr => AST.CoreExp.LitC(left >>> right)
+            case _ => halt(s"Infeasible: $op on C")
+          }
+        case lit1: AST.CoreExp.LitF32 =>
+          val left = lit1.value
+          val right = lit2.asInstanceOf[AST.CoreExp.LitF32].value
+          op match {
+            case AST.Exp.BinaryOp.Add => AST.CoreExp.LitF32(left + right)
+            case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitF32(left - right)
+            case AST.Exp.BinaryOp.Mul => AST.CoreExp.LitF32(left * right)
+            case AST.Exp.BinaryOp.Div => AST.CoreExp.LitF32(left / right)
+            case AST.Exp.BinaryOp.Rem => AST.CoreExp.LitF32(left % right)
+            case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
+            case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
+            case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
+            case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
+            case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
+            case AST.Exp.BinaryOp.FpEq => AST.CoreExp.LitB(left ~~ right)
+            case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
+            case AST.Exp.BinaryOp.FpNe => AST.CoreExp.LitB(left !~ right)
+            case _ => halt(s"Infeasible: $op on F32")
+          }
+        case lit1: AST.CoreExp.LitF64 =>
+          val left = lit1.value
+          val right = lit2.asInstanceOf[AST.CoreExp.LitF64].value
+          op match {
+            case AST.Exp.BinaryOp.Add => AST.CoreExp.LitF64(left + right)
+            case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitF64(left - right)
+            case AST.Exp.BinaryOp.Mul => AST.CoreExp.LitF64(left * right)
+            case AST.Exp.BinaryOp.Div => AST.CoreExp.LitF64(left / right)
+            case AST.Exp.BinaryOp.Rem => AST.CoreExp.LitF64(left % right)
+            case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
+            case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left <= right)
+            case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
+            case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
+            case AST.Exp.BinaryOp.Eq => AST.CoreExp.LitB(left ≡ right)
+            case AST.Exp.BinaryOp.FpEq => AST.CoreExp.LitB(left ~~ right)
+            case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
+            case AST.Exp.BinaryOp.FpNe => AST.CoreExp.LitB(left !~ right)
+            case _ => halt(s"Infeasible: $op on F64")
+          }
+        case lit1: AST.CoreExp.LitR =>
+          val left = lit1.value
+          val right = lit2.asInstanceOf[AST.CoreExp.LitR].value
+          op match {
+            case AST.Exp.BinaryOp.Add => AST.CoreExp.LitR(left + right)
+            case AST.Exp.BinaryOp.Sub => AST.CoreExp.LitR(left - right)
+            case AST.Exp.BinaryOp.Mul => AST.CoreExp.LitR(left * right)
+            case AST.Exp.BinaryOp.Div => AST.CoreExp.LitR(left / right)
+            case AST.Exp.BinaryOp.Lt => AST.CoreExp.LitB(left < right)
+            case AST.Exp.BinaryOp.Le => AST.CoreExp.LitB(left < right)
+            case AST.Exp.BinaryOp.Gt => AST.CoreExp.LitB(left > right)
+            case AST.Exp.BinaryOp.Ge => AST.CoreExp.LitB(left >= right)
+            case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left ≡ right)
+            case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
+            case _ => halt(s"Infeasible: $op on R")
+          }
+        case lit1 => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
+      }
     }
+  }
 
   @strictpure def evalUnaryLit(op: AST.Exp.UnaryOp.Type, lit: AST.CoreExp.Lit): AST.CoreExp.Lit =
     lit match {
@@ -1035,9 +1040,9 @@ object RewritingSystem {
                      provenClaims: HashSSet[AST.CoreExp.Base],
                      exp: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
     @strictpure def equiv(left: AST.CoreExp.Base, right: AST.CoreExp.Base): AST.CoreExp.Binary =
-      AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right)
+      AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b)
     @strictpure def inequiv(left: AST.CoreExp.Base, right: AST.CoreExp.Base): AST.CoreExp.Binary =
-      AST.CoreExp.Binary(left, AST.Exp.BinaryOp.InequivUni, right)
+      AST.CoreExp.Binary(left, AST.Exp.BinaryOp.InequivUni, right, AST.Typed.b)
     @strictpure def incDeBruijnMap(deBruijnMap: HashMap[Z, AST.CoreExp.Base], inc: Z): HashMap[Z, AST.CoreExp.Base] =
       HashMap ++ (for (p <- deBruijnMap.entries) yield (p._1 + inc, p._2))
     @pure def rec(deBruijnMap: HashMap[Z, AST.CoreExp.Base], e: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
@@ -1126,19 +1131,19 @@ object RewritingSystem {
             }
           }
           if (config.fieldAccess) {
-            val rt = receiver.tipe.asInstanceOf[AST.Typed.Name]
             receiver match {
               case receiver: AST.CoreExp.Update =>
                 if (receiver.id == e.id) {
                   return Some(receiver.arg)
                 } else {
                   val r = e(exp = receiver.exp)
-                  return Some(evalBase(th, config, provenClaims, r).getOrElse(r))
+                  return Some(rec(deBruijnMap, r).getOrElse(r))
                 }
               case receiver: AST.CoreExp.IndexingUpdate =>
                 val r = e(exp = receiver.exp)
-                return Some(evalBase(th, config, provenClaims, r).getOrElse(r))
+                return Some(rec(deBruijnMap, r).getOrElse(r))
               case receiver: AST.CoreExp.Constructor =>
+                val rt = receiver.tipe.asInstanceOf[AST.Typed.Name]
                 if (e.id == "size" && (rt.ids == AST.Typed.isName || rt.ids == AST.Typed.msName)) {
                   return Some(AST.CoreExp.LitZ(receiver.args.size))
                 } else {
@@ -1152,23 +1157,27 @@ object RewritingSystem {
                 }
               case _ =>
             }
-            th.typeMap.get(rt.ids).get match {
-              case info: TypeInfo.SubZ =>
-                e.id match {
-                  case "Name" => return Some(AST.CoreExp.LitString(st"${(rt.ids, ".")}".render))
-                  case "isBitVector" => return Some(AST.CoreExp.LitB(info.ast.isBitVector))
-                  case "hasMin" => return Some(AST.CoreExp.LitB(info.ast.hasMin))
-                  case "hasMax" => return Some(AST.CoreExp.LitB(info.ast.hasMax))
-                  case "BitWidth" if info.ast.isBitVector => return Some(AST.CoreExp.LitZ(info.ast.bitWidth))
-                  case "Min" if info.ast.hasMin => return Some(AST.CoreExp.LitZ(info.ast.min))
-                  case "Max" if info.ast.hasMax => return Some(AST.CoreExp.LitZ(info.ast.max))
-                  case "isIndex" => return Some(AST.CoreExp.LitB(info.ast.isIndex))
-                  case "Index" => return Some(AST.CoreExp.LitZ(info.ast.index))
-                  case "isSigned" => return Some(AST.CoreExp.LitB(info.ast.isSigned))
-                  case "isZeroIndex" => return Some(AST.CoreExp.LitB(info.ast.isZeroIndex))
-                  case _ => halt(s"Infeasible: ${e.id}")
+            receiver.tipe match {
+              case rt: AST.Typed.Name =>
+                th.typeMap.get(rt.ids).get match {
+                  case info: TypeInfo.SubZ =>
+                    e.id match {
+                      case "Name" => return Some(AST.CoreExp.LitString(st"${(rt.ids, ".")}".render))
+                      case "isBitVector" => return Some(AST.CoreExp.LitB(info.ast.isBitVector))
+                      case "hasMin" => return Some(AST.CoreExp.LitB(info.ast.hasMin))
+                      case "hasMax" => return Some(AST.CoreExp.LitB(info.ast.hasMax))
+                      case "BitWidth" if info.ast.isBitVector => return Some(AST.CoreExp.LitZ(info.ast.bitWidth))
+                      case "Min" if info.ast.hasMin => return Some(AST.CoreExp.LitZ(info.ast.min))
+                      case "Max" if info.ast.hasMax => return Some(AST.CoreExp.LitZ(info.ast.max))
+                      case "isIndex" => return Some(AST.CoreExp.LitB(info.ast.isIndex))
+                      case "Index" => return Some(AST.CoreExp.LitZ(info.ast.index))
+                      case "isSigned" => return Some(AST.CoreExp.LitB(info.ast.isSigned))
+                      case "isZeroIndex" => return Some(AST.CoreExp.LitB(info.ast.isZeroIndex))
+                      case _ => halt(s"Infeasible: ${e.id}")
+                    }
+                  case info: TypeInfo.Enum => halt("TODO")
+                  case _ =>
                 }
-              case info: TypeInfo.Enum => halt("TODO")
               case _ =>
             }
           }
@@ -1386,14 +1395,14 @@ object RewritingSystem {
   @pure def toCondEquiv(th: TypeHierarchy, exp: AST.CoreExp): ISZ[AST.CoreExp] = {
     @pure def toEquiv(e: AST.CoreExp.Base): AST.CoreExp.Base = {
       e match {
-        case AST.CoreExp.Binary(_, AST.Exp.BinaryOp.EquivUni, _) => return e
-        case _ => return AST.CoreExp.Binary(e, AST.Exp.BinaryOp.EquivUni, AST.CoreExp.LitB(T))
+        case AST.CoreExp.Binary(_, AST.Exp.BinaryOp.EquivUni, _, _) => return e
+        case _ => return AST.CoreExp.Binary(e, AST.Exp.BinaryOp.EquivUni, AST.CoreExp.LitB(T), AST.Typed.b)
       }
     }
     @pure def toCondEquivH(e: AST.CoreExp.Base): ISZ[AST.CoreExp] = {
       e match {
         case e: AST.CoreExp.Unary if e.op == AST.Exp.UnaryOp.Not =>
-          return ISZ(AST.CoreExp.Binary(e.exp, AST.Exp.BinaryOp.EquivUni, AST.CoreExp.LitB(F)))
+          return ISZ(AST.CoreExp.Binary(e.exp, AST.Exp.BinaryOp.EquivUni, AST.CoreExp.LitB(F), AST.Typed.b))
         case e: AST.CoreExp.Binary =>
           e.op match {
             case AST.Exp.BinaryOp.EquivUni => return ISZ(e)
