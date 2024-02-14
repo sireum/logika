@@ -137,8 +137,11 @@ object cli {
       OptGroup(name = "Optimizations", opts = ISZ(
         parOpt,
         Opt(name = "branchPar", longKey = "par-branch", shortKey = None(),
-          tpe = Type.Choice("branchPar", None(), ISZ("all", "returns", "disabled")),
-          description = "Branch parallelization mode"),
+          tpe = Type.Flag(F),
+          description = "Enable branch parallelization"),
+        Opt(name = "branchParReturn", longKey = "par-branch-return", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Only use branch parallelization if all branches return"),
         Opt(name = "rwPar", longKey = "par-rw", shortKey = None(),
           tpe = Type.Flag(T),
           description = "Enable rewriting parallelization")

@@ -58,12 +58,6 @@ object OptionsCli {
     'Uninterpreted
   }
 
-  @enum object LogikaBranchPar {
-    'All
-    'Returns
-    'Disabled
-  }
-
   @datatype class LogikaOption(
     val help: String,
     val args: ISZ[String],
@@ -96,7 +90,8 @@ object OptionsCli {
     val logAtRewrite: B,
     val stats: B,
     val par: Option[Z],
-    val branchPar: LogikaBranchPar.Type,
+    val branchPar: B,
+    val branchParReturn: B,
     val rwPar: B,
     val dontSplitFunQuant: B,
     val splitAll: B,
@@ -184,26 +179,6 @@ import OptionsCli._
     return r
   }
 
-  def parseLogikaBranchParH(arg: String): Option[LogikaBranchPar.Type] = {
-    arg.native match {
-      case "all" => return Some(LogikaBranchPar.All)
-      case "returns" => return Some(LogikaBranchPar.Returns)
-      case "disabled" => return Some(LogikaBranchPar.Disabled)
-      case s =>
-        reporter.error(None(), "OptionsCli", s"Expecting one of the following: { all, returns, disabled }, but found '$s'.")
-        return None()
-    }
-  }
-
-  def parseLogikaBranchPar(args: ISZ[String], i: Z): Option[LogikaBranchPar.Type] = {
-    if (i >= args.size) {
-      reporter.error(None(), "OptionsCli", "Expecting one of the following: { all, returns, disabled }, but none found.")
-      return None()
-    }
-    val r = parseLogikaBranchParH(args(i))
-    return r
-  }
-
   def parseLogika(args: ISZ[String], i: Z): Option[LogikaTopOption] = {
     val help =
       st"""Logika Verifier Options
@@ -278,8 +253,8 @@ import OptionsCli._
           |-p, --par                Enable parallelization (with CPU cores percentage to
           |                           use) (accepts an optional integer; min is 1; max is
           |                           100; default is 100)
-          |    --par-branch         Branch parallelization mode (expects one of { all,
-          |                           returns, disabled }; default: all)
+          |    --par-branch         Enable branch parallelization
+          |    --par-branch-return  Only use branch parallelization if all branches return
           |    --par-rw             Enable rewriting parallelization
           |
           |Path Splitting Options:
@@ -343,7 +318,8 @@ import OptionsCli._
     var logAtRewrite: B = true
     var stats: B = false
     var par: Option[Z] = None()
-    var branchPar: LogikaBranchPar.Type = LogikaBranchPar.All
+    var branchPar: B = false
+    var branchParReturn: B = false
     var rwPar: B = true
     var dontSplitFunQuant: B = false
     var splitAll: B = false
@@ -548,9 +524,15 @@ import OptionsCli._
              case _ => return None()
            }
          } else if (arg == "--par-branch") {
-           val o: Option[LogikaBranchPar.Type] = parseLogikaBranchPar(args, j + 1)
+           val o: Option[B] = { j = j - 1; Some(!branchPar) }
            o match {
              case Some(v) => branchPar = v
+             case _ => return None()
+           }
+         } else if (arg == "--par-branch-return") {
+           val o: Option[B] = { j = j - 1; Some(!branchParReturn) }
+           o match {
+             case Some(v) => branchParReturn = v
              case _ => return None()
            }
          } else if (arg == "--par-rw") {
@@ -670,7 +652,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchPar, rwPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, rwMax, rwTrace, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
+    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchPar, branchParReturn, rwPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, rwMax, rwTrace, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

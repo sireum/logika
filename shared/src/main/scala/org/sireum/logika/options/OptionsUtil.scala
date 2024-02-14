@@ -114,10 +114,11 @@ object OptionsUtil {
       case OptionsCli.LogikaFPRoundingMode.TowardZero => "RTZ"
     }
     val parCores = LibUtil.parCoresOpt(maxCores, o.par)
-    val branchPar: org.sireum.logika.Config.BranchPar.Type = o.branchPar match {
-      case OptionsCli.LogikaBranchPar.All => org.sireum.logika.Config.BranchPar.All
-      case OptionsCli.LogikaBranchPar.Returns => org.sireum.logika.Config.BranchPar.OnlyAllReturns
-      case OptionsCli.LogikaBranchPar.Disabled => org.sireum.logika.Config.BranchPar.Disabled
+    val branchPar: org.sireum.logika.Config.BranchPar.Type = (o.branchPar, o.branchParReturn) match {
+      case (T, F) => org.sireum.logika.Config.BranchPar.All
+      case (T, T) => org.sireum.logika.Config.BranchPar.OnlyAllReturns
+      case (F, F) => org.sireum.logika.Config.BranchPar.Disabled
+      case (F, T) => org.sireum.logika.Config.BranchPar.Disabled
     }
     val spMode: Config.StrictPureMode.Type = o.strictPureMode match {
       case OptionsCli.LogikaStrictPureMode.Default => Config.StrictPureMode.Default
@@ -224,12 +225,11 @@ object OptionsUtil {
         }
       }
       if (config.branchPar != defaultConfig.branchPar) {
-        val value: String = config.branchPar match {
-          case Config.BranchPar.All => "all"
-          case Config.BranchPar.OnlyAllReturns => "returns"
-          case Config.BranchPar.Disabled => "disabled"
+        config.branchPar match {
+          case Config.BranchPar.All => r = r :+ "--par-branch"
+          case Config.BranchPar.OnlyAllReturns => r = r ++ ISZ[String]("--par-branch", "--par-branch-return")
+          case Config.BranchPar.Disabled =>
         }
-        r = r ++ ISZ[String]("--par-branch", value)
       }
       if (config.sat != defaultConfig.sat) {
         r = r :+ "--sat"
