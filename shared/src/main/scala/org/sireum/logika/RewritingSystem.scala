@@ -26,7 +26,7 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.lang.symbol.Info
+import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 
@@ -359,7 +359,7 @@ object RewritingSystem {
           }
         case e: AST.Exp.Tuple =>
           return if (e.args.size == 1) rec(e.args(0), funStack, localMap)
-          else AST.CoreExp.Tuple(for (arg <- e.args) yield rec(arg, funStack, localMap))
+          else AST.CoreExp.Constructor(e.typedOpt.get, for (arg <- e.args) yield rec(arg, funStack, localMap))
         case e: AST.Exp.Ident =>
           e.resOpt.get match {
             case res: AST.ResolvedInfo.LocalVar =>
@@ -450,27 +450,86 @@ object RewritingSystem {
           return recStmt(e.block, funStack, localMap)._1.get
         case e: AST.Exp.Invoke =>
           val args: ISZ[AST.CoreExp.Base] = for (arg <- e.args) yield rec(arg, funStack, localMap)
+          e.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
+              res.mode match {
+                case AST.MethodMode.Spec =>
+                case AST.MethodMode.Method =>
+                case AST.MethodMode.Constructor =>
+                  return AST.CoreExp.Constructor(e.typedOpt.get, args)
+                case AST.MethodMode.Select =>
+                  e.receiverOpt match {
+                    case Some(receiver) => return AST.CoreExp.Indexing(rec(receiver, funStack, localMap),
+                      rec(e.args(0), funStack, localMap), e.typedOpt.get)
+                    case _ => return AST.CoreExp.Indexing(rec(e.ident, funStack, localMap),
+                      rec(e.args(0), funStack, localMap), e.typedOpt.get)
+                  }
+                case AST.MethodMode.Store =>
+                  val ie = rec(e.args(0), funStack, localMap)
+                  val tuple = ie.tipe.asInstanceOf[AST.Typed.Tuple]
+                  val index = AST.CoreExp.Select(ie, "_1", tuple.args(0))
+                  val value = AST.CoreExp.Select(ie, "_2", tuple.args(1))
+                  e.receiverOpt match {
+                    case Some(receiver) => return AST.CoreExp.IndexingUpdate(rec(receiver, funStack, localMap),
+                      index, value, e.typedOpt.get)
+                    case _ => return AST.CoreExp.IndexingUpdate(rec(e.ident, funStack, localMap),
+                      index, value, e.typedOpt.get)
+                  }
+                case AST.MethodMode.Extractor => halt("TODO")
+                case AST.MethodMode.Ext => halt("TODO")
+                case AST.MethodMode.ObjectConstructor => halt("TODO")
+                case AST.MethodMode.Just => halt("Infeasible")
+                case AST.MethodMode.Copy => halt("Infeasible")
+              }
+            case _ =>
+          }
           e.receiverOpt match {
             case Some(receiver) =>
-              return AST.CoreExp.Apply(
-                AST.CoreExp.Select(rec(receiver, funStack, localMap), e.ident.id.value,
-                  e.ident.typedOpt.get), args, e.typedOpt.get)
-            case _ => return AST.CoreExp.Apply(rec(e.ident, funStack, localMap),
+              return AST.CoreExp.Apply(T, rec(e.ident, funStack, localMap),
+                rec(receiver, funStack, localMap) +: args, e.typedOpt.get)
+            case _ => return AST.CoreExp.Apply(F, rec(e.ident, funStack, localMap),
               args, e.typedOpt.get)
           }
         case e: AST.Exp.InvokeNamed =>
-          val args = MS.create[Z, AST.CoreExp.Base](e.args.size, AST.CoreExp.LitB(F))
-          for (arg <- e.args) {
-            args(arg.index) = rec(arg.arg, funStack, localMap)
+          def getArgs: ISZ[AST.CoreExp.Base] = {
+            val args = MS.create[Z, AST.CoreExp.Base](e.args.size, AST.CoreExp.LitB(F))
+            for (arg <- e.args) {
+              args(arg.index) = rec(arg.arg, funStack, localMap)
+            }
+            return args.toISZ
+          }
+          e.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Method if res.mode == AST.MethodMode.Constructor =>
+              res.mode match {
+                case AST.MethodMode.Constructor =>
+                  return AST.CoreExp.Constructor(e.typedOpt.get, getArgs)
+                case AST.MethodMode.Spec =>
+                case AST.MethodMode.Method =>
+                case AST.MethodMode.Copy =>
+                  var r: AST.CoreExp.Base = e.receiverOpt match {
+                    case Some(receiver) => rec(receiver, funStack, localMap)
+                    case _ => rec(e.ident, funStack, localMap)
+                  }
+                  val t = e.typedOpt.get
+                  for (arg <- e.args) {
+                    r = AST.CoreExp.Update(r, arg.id.value, r, t)
+                  }
+                  return r
+                case AST.MethodMode.Ext => halt("TODO")
+                case AST.MethodMode.Extractor => halt("TODO")
+                case AST.MethodMode.ObjectConstructor => halt("TODO")
+                case AST.MethodMode.Just => halt("Infeasible")
+                case AST.MethodMode.Select => halt("Infeasible")
+                case AST.MethodMode.Store => halt("Infeasible")
+              }
+            case _ =>
           }
           e.receiverOpt match {
             case Some(receiver) =>
-              return AST.CoreExp.Apply(
-                AST.CoreExp.Select(rec(receiver, funStack, localMap), e.ident.id.value,
-                  e.ident.typedOpt.get),
-                args.toISZ, e.typedOpt.get)
-            case _ => return AST.CoreExp.Apply(rec(e.ident, funStack, localMap),
-              args.toISZ, e.typedOpt.get)
+              return AST.CoreExp.Apply(T, rec(e.ident, funStack, localMap),
+                rec(receiver, funStack, localMap) +: getArgs, e.typedOpt.get)
+            case _ => return AST.CoreExp.Apply(F, rec(e.ident, funStack, localMap),
+              getArgs, e.typedOpt.get)
           }
         case e => halt(s"TODO: $e")
       }
@@ -618,8 +677,8 @@ object RewritingSystem {
           } else {
             matchPatternLocals(p.exp, e.exp)
           }
-        case (p: AST.CoreExp.Tuple, e: AST.CoreExp.Tuple) =>
-          if (p.args.size != e.args.size) {
+        case (p: AST.CoreExp.Constructor, e: AST.CoreExp.Constructor) =>
+          if (p.args.size != e.args.size || p.tipe != e.tipe) {
             err(p, e)
           } else {
             for (i <- 0 until p.args.size) {
@@ -691,7 +750,7 @@ object RewritingSystem {
           }
           e match {
             case e: AST.CoreExp.Apply =>
-              if (p.args.size != e.args.size) {
+              if (p.hasReceiver != e.hasReceiver || p.args.size != e.args.size) {
                 err(p, e)
               } else {
                 matchPatternLocals(p.exp, e.exp)
@@ -740,7 +799,7 @@ object RewritingSystem {
       val (context, id, args, e) = pa
       m.get((context, id)) match {
         case Some(f: AST.CoreExp.Fun) =>
-          evalBase(th, EvalConfig.funApplicationOnly, AST.CoreExp.Apply(f, args, e.tipe)) match {
+          evalBase(th, EvalConfig.funApplicationOnly, AST.CoreExp.Apply(F, f, args, e.tipe)) match {
             case Some(pattern) =>
               m = unifyExp(silent, th, localPatterns, pattern, e, m, pendingApplications, substMap, errorMessages)
             case _ =>
@@ -1025,10 +1084,66 @@ object RewritingSystem {
           }
           return if (changed) Some(e(exp = ue)) else None()
         case e: AST.CoreExp.Select =>
-          rec(deBruijnMap, e.exp) match {
-            case Some(receiver) => return Some(e(exp = receiver))
-            case _ => return None()
+          var changed = F
+          val receiver: AST.CoreExp.Base = rec(deBruijnMap, e.exp) match {
+            case Some(exp2) =>
+              changed = T
+              exp2
+            case _ => e.exp
           }
+          if (config.tupleProjection && receiver.tipe.isInstanceOf[AST.Typed.Tuple]) {
+            receiver match {
+              case receiver: AST.CoreExp.Constructor =>
+                val n = Z(ops.StringOps(e.id).substring(1, e.id.size)).get - 1
+                return Some(receiver.args(n))
+              case _ =>
+            }
+          }
+          if (config.fieldAccess) {
+            val rt = receiver.tipe.asInstanceOf[AST.Typed.Name]
+            receiver match {
+              case receiver: AST.CoreExp.Update =>
+                if (receiver.id == e.id) {
+                  return Some(receiver.arg)
+                } else {
+                  return evalBase(th, config, e(exp = receiver))
+                }
+              case receiver: AST.CoreExp.IndexingUpdate => return evalBase(th, config, e(exp = receiver.exp))
+              case receiver: AST.CoreExp.Constructor =>
+                if (e.id == "size" && (rt.ids == AST.Typed.isName || rt.ids == AST.Typed.msName)) {
+                  return Some(AST.CoreExp.LitZ(receiver.args.size))
+                } else {
+                  val info = th.typeMap.get(rt.ids).get.asInstanceOf[TypeInfo.Adt]
+                  val paramIndexMap = HashMap.empty[String, Z] ++ (for (i <- 0 until info.ast.params.size) yield
+                    (info.ast.params(i).id.value, i))
+                  paramIndexMap.get(e.id) match {
+                    case Some(i) => return Some(receiver.args(i))
+                    case _ =>
+                  }
+                }
+              case _ =>
+            }
+            th.typeMap.get(rt.ids).get match {
+              case info: TypeInfo.SubZ =>
+                e.id match {
+                  case "Name" => return Some(AST.CoreExp.LitString(st"${(rt.ids, ".")}".render))
+                  case "isBitVector" => return Some(AST.CoreExp.LitB(info.ast.isBitVector))
+                  case "hasMin" => return Some(AST.CoreExp.LitB(info.ast.hasMin))
+                  case "hasMax" => return Some(AST.CoreExp.LitB(info.ast.hasMax))
+                  case "BitWidth" if info.ast.isBitVector => return Some(AST.CoreExp.LitZ(info.ast.bitWidth))
+                  case "Min" if info.ast.hasMin => return Some(AST.CoreExp.LitZ(info.ast.min))
+                  case "Max" if info.ast.hasMax => return Some(AST.CoreExp.LitZ(info.ast.max))
+                  case "isIndex" => return Some(AST.CoreExp.LitB(info.ast.isIndex))
+                  case "Index" => return Some(AST.CoreExp.LitZ(info.ast.index))
+                  case "isSigned" => return Some(AST.CoreExp.LitB(info.ast.isSigned))
+                  case "isZeroIndex" => return Some(AST.CoreExp.LitB(info.ast.isZeroIndex))
+                  case _ => halt(s"Infeasible: ${e.id}")
+                }
+              case info: TypeInfo.Enum => halt("TODO")
+              case _ =>
+            }
+          }
+          return if (changed) Some(e(exp = receiver)) else None()
         case e: AST.CoreExp.Update =>
           var changed = F
           val receiver: AST.CoreExp.Base = rec(deBruijnMap, e.exp) match {
@@ -1042,6 +1157,13 @@ object RewritingSystem {
               changed = T
               arg2
             case _ => e.arg
+          }
+          if (config.fieldAccess) {
+            receiver match {
+              case receiver: AST.CoreExp.Update if receiver.id == e.id =>
+                return Some(e(exp = receiver.exp, arg = arg))
+              case _ =>
+            }
           }
           return if (changed) Some(e(exp = receiver, arg = arg)) else None()
         case e: AST.CoreExp.Indexing =>
@@ -1057,6 +1179,13 @@ object RewritingSystem {
               changed = T
               index2
             case _ => e.index
+          }
+          if (config.seqIndexing) {
+            receiver match {
+              case receiver: AST.CoreExp.IndexingUpdate if index == receiver.index =>
+                return Some(receiver.arg)
+              case _ =>
+            }
           }
           return if (changed) Some(e(exp = receiver, index = index)) else None()
         case e: AST.CoreExp.IndexingUpdate =>
@@ -1079,8 +1208,15 @@ object RewritingSystem {
               arg2
             case _ => e.arg
           }
+          if (config.seqIndexing) {
+            receiver match {
+              case receiver: AST.CoreExp.IndexingUpdate if index == receiver.index =>
+                return Some(e(exp = receiver.exp, index = index, arg = arg))
+              case _ =>
+            }
+          }
           return if (changed) Some(e(exp = receiver, index = index, arg = arg)) else None()
-        case e: AST.CoreExp.Tuple =>
+        case e: AST.CoreExp.Constructor =>
           var changed = F
           var args = ISZ[AST.CoreExp.Base]()
           for (arg <- e.args) {
@@ -1207,8 +1343,7 @@ object RewritingSystem {
           }
         case e: AST.CoreExp.Quant if e.kind == AST.CoreExp.Quant.Kind.ForAll =>
           return toCondEquivH(evalBase(th, EvalConfig.quantApplicationOnly,
-            AST.CoreExp.Apply(
-              e,
+            AST.CoreExp.Apply(F, e,
               ISZ(AST.CoreExp.LocalVarRef(T, ISZ(), paramId(e.param.id), e.param.tipe)),
               AST.Typed.b)).get)
         case e: AST.CoreExp.If =>
