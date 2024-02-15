@@ -1523,7 +1523,7 @@ object RewritingSystem {
                   }
                 case _ =>
               }
-            case q: AST.CoreExp.Quant if config.quantApplication =>
+            case q: AST.CoreExp.Quant if config.quantApplication && q.kind == AST.CoreExp.Quant.Kind.ForAll =>
               var params = ISZ[(String, AST.Typed)]()
               @tailrec def recParamsQuqnt(fe: AST.CoreExp.Base): AST.CoreExp.Base = {
                 fe match {
@@ -1540,21 +1540,16 @@ object RewritingSystem {
               }
               evalBaseH(map, body) match {
                 case Some(body2) =>
-                  val quant: String = q.kind match {
-                    case AST.CoreExp.Quant.Kind.ForAll => "∀"
-                    case AST.CoreExp.Quant.Kind.Exists => "∃"
-                    case AST.CoreExp.Quant.Kind.Fresh => "Λ"
-                  }
                   if (args.size > params.size) {
                     val r = e(exp = body2, args = ops.ISZOps(args).slice(params.size, args.size))
                     if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"$quant-instantiation ${q.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, params.size)) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
+                      trace = trace :+ Trace.Eval(st"∀-instantiation ${q.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, params.size)) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
                     }
                     return Some(r)
                   } else {
                     val r = body2
                     if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"$quant-instantiation ${q.prettyST}(${(for (arg <- args) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
+                      trace = trace :+ Trace.Eval(st"∀-instantiation ${q.prettyST}(${(for (arg <- args) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
                     }
                     return Some(r)
                   }
