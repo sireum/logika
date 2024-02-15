@@ -99,19 +99,27 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     var rwClaim = fromCoreClaim
     val stepClaim = RewritingSystem.translate(logika.th, F, step.claim)
     if (isEval) {
+      if (logika.config.rwTrace) {
+        rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("evaluating", rwClaim)
+      }
       rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all,
-        provenClaims.valueSet, rwClaim).getOrElse(rwClaim)
+        rwPc.provenClaimStepIdMap, rwClaim, logika.config.rwTrace) match {
+        case Some((e, t)) =>
+          rwPc.trace = t :+ RewritingSystem.Trace.Done(rwClaim, e)
+          e
+        case _ => rwClaim
+      }
     } else {
       var done = F
       var i = 0
       while (!done && i < logika.config.rwMax && rwClaim != stepClaim) {
         rwPc.done = F
+        if (logika.config.rwTrace) {
+          rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("rewriting", rwClaim)
+        }
         rwClaim = rwPc.transformCoreExpBase(rwClaim) match {
           case MSome(c) =>
-            if (rwPc.trace.nonEmpty) {
-              val last = rwPc.trace.size - 1
-              rwPc.trace = rwPc.trace(last ~> rwPc.trace(last)(done = c))
-            }
+            rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Done(rwClaim, c)
             c
           case _ =>
             done = T
@@ -120,9 +128,9 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         i = i + 1
       }
     }
-    val traceOpt: Option[ST] = if (!isEval && logika.config.rwTrace) {
+    val traceOpt: Option[ST] = if (logika.config.rwTrace) {
       Some(
-        st"""Rewriting trace:
+        st"""Trace:
             |
             |${(for (te <- rwPc.trace) yield te.toST, "\n\n")}""")
     } else {
