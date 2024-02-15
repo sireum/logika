@@ -1543,13 +1543,13 @@ object RewritingSystem {
                   if (args.size > params.size) {
                     val r = e(exp = body2, args = ops.ISZOps(args).slice(params.size, args.size))
                     if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"∀-instantiation ${q.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, params.size)) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
+                      trace = trace :+ Trace.Eval(st"∀-elimination ${q.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, params.size)) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
                     }
                     return Some(r)
                   } else {
                     val r = body2
                     if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"∀-instantiation ${q.prettyST}(${(for (arg <- args) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
+                      trace = trace :+ Trace.Eval(st"∀-elimination ${q.prettyST}(${(for (arg <- args) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
                     }
                     return Some(r)
                   }
