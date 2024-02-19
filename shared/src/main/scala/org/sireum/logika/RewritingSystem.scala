@@ -40,7 +40,7 @@ object RewritingSystem {
   type UnificationErrorMessages = ISZ[String]
   type UnificationResult = Either[UnificationMap, UnificationErrorMessages]
 
-  @datatype class EvalConfig(val constantPropagation: B,
+  @datatype class EvalConfig(val constant: B,
                              val unary: B,
                              val funApplication: B,
                              val quantApplication: B,
@@ -173,7 +173,60 @@ object RewritingSystem {
                          var done: B,
                          var trace: ISZ[Trace]) extends AST.MCoreExpTransformer {
     @memoize def provenClaimStepIdMap: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId] = {
-      return HashSMap ++ (for (p <- provenClaims.entries) yield (p._2, p._1))
+      @strictpure def conjuncts(e: AST.CoreExp.Base): ISZ[AST.CoreExp.Base] = {
+        e match {
+          case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.And, right, _) => ISZ(e) ++ conjuncts(left) ++ conjuncts(right)
+          case _ => ISZ(e)
+        }
+      }
+      var r = HashSMap.empty[AST.CoreExp.Base, AST.ProofAst.StepId]
+      for (p <- provenClaims.entries) {
+        val (stepId, claim) = p
+        claim match {
+          case claim: AST.CoreExp.Binary =>
+            claim.op match {
+              case AST.Exp.BinaryOp.Lt =>
+                r = r + claim ~> stepId
+                r = r + claim(left = claim.right, op = AST.Exp.BinaryOp.Gt, right = claim.left) ~> stepId
+                if (claim.right < claim.left) {
+                  r = r + claim(left = claim.right, op = AST.Exp.BinaryOp.InequivUni, right = claim.left) ~> stepId
+                } else {
+                  r = r + claim(op = AST.Exp.BinaryOp.InequivUni) ~> stepId
+                }
+              case AST.Exp.BinaryOp.Le =>
+                r = r + claim ~> stepId
+                r = r + claim(left = claim.right, op = AST.Exp.BinaryOp.Ge, right = claim.left) ~> stepId
+              case AST.Exp.BinaryOp.Gt =>
+                r = r + claim ~> stepId
+                r = r + claim(left = claim.right, op = AST.Exp.BinaryOp.Lt, right = claim.left) ~> stepId
+                if (claim.right < claim.left) {
+                  r = r + claim(left = claim.right, op = AST.Exp.BinaryOp.InequivUni, right = claim.left) ~> stepId
+                } else {
+                  r = r + claim(op = AST.Exp.BinaryOp.InequivUni) ~> stepId
+                }
+              case AST.Exp.BinaryOp.Ge =>
+                r = r + claim ~> stepId
+                r = r + claim(left = claim.right, op = AST.Exp.BinaryOp.Le, right = claim.left) ~> stepId
+              case AST.Exp.BinaryOp.And =>
+                r = r + claim ~> stepId
+                for (c <- conjuncts(claim)) {
+                  r = r + c ~> stepId
+                }
+              case _ =>
+                if (claim.op == AST.Exp.BinaryOp.EquivUni || claim.op == AST.Exp.BinaryOp.InequivUni) {
+                  if (claim.right < claim.left) {
+                    r = r + claim(left = claim.right, right = claim.left) ~> stepId
+                  } else {
+                    r = r + claim ~> stepId
+                  }
+                } else {
+                  r = r + claim ~> stepId
+                }
+            }
+          case _ => r = r + claim ~> stepId
+        }
+      }
+      return r
     }
 
     override def preCoreExpIf(o: AST.CoreExp.If): AST.MCoreExpTransformer.PreResult[AST.CoreExp.Base] = {
@@ -425,7 +478,9 @@ object RewritingSystem {
             case _ => halt(s"Infeasible: $e")
           }
         case e: AST.Exp.Unary =>
-          return AST.CoreExp.Unary(e.op, rec(e.exp, funStack, localMap))
+          val op: AST.Exp.UnaryOp.Type = if (e.typedOpt.get == AST.Typed.b && e.op == AST.Exp.UnaryOp.Complement)
+            AST.Exp.UnaryOp.Not else e.op
+          return AST.CoreExp.Unary(op, rec(e.exp, funStack, localMap))
         case e: AST.Exp.Binary =>
           e.attr.resOpt.get match {
             case res: AST.ResolvedInfo.BuiltIn =>
@@ -1078,9 +1133,11 @@ object RewritingSystem {
                      exp: AST.CoreExp.Base,
                      shouldTrace: B): Option[(AST.CoreExp.Base, ISZ[Trace])] = {
     @strictpure def equiv(left: AST.CoreExp.Base, right: AST.CoreExp.Base): AST.CoreExp.Binary =
-      AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b)
+      if (right < left) AST.CoreExp.Binary(right, AST.Exp.BinaryOp.EquivUni, left, AST.Typed.b)
+      else AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b)
     @strictpure def inequiv(left: AST.CoreExp.Base, right: AST.CoreExp.Base): AST.CoreExp.Binary =
-      AST.CoreExp.Binary(left, AST.Exp.BinaryOp.InequivUni, right, AST.Typed.b)
+      if (right < left) AST.CoreExp.Binary(right, AST.Exp.BinaryOp.InequivUni, left, AST.Typed.b)
+      else AST.CoreExp.Binary(left, AST.Exp.BinaryOp.InequivUni, right, AST.Typed.b)
     @strictpure def incDeBruijnMap(deBruijnMap: HashMap[Z, AST.CoreExp.Base], inc: Z): HashMap[Z, AST.CoreExp.Base] =
       HashMap ++ (for (p <- deBruijnMap.entries) yield (p._1 + inc, p._2))
     val eqMap: HashMap[AST.CoreExp.Base, (AST.CoreExp.Base, AST.ProofAst.StepId)] = if (config.equivSubst) {
@@ -1112,6 +1169,17 @@ object RewritingSystem {
     }
     var trace = ISZ[Trace]()
     def evalBaseH(deBruijnMap: HashMap[Z, AST.CoreExp.Base], e: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
+      if (e.tipe == AST.Typed.b) {
+        provenClaims.get(e) match {
+          case Some(stepId) =>
+            val r = AST.CoreExp.LitB(T)
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"using $stepId", e, r)
+            }
+            return Some(r)
+          case _ =>
+        }
+      }
       if (config.equivSubst) {
         val r = eqMap.get(e)
         r match {
@@ -1156,8 +1224,110 @@ object RewritingSystem {
             }
             return Some(r)
           }
+          if (config.constant) {
+            (left, right) match {
+              case (left: AST.CoreExp.Lit, right: AST.CoreExp.Lit) =>
+                val r = evalBinaryLit(left, e.op, right)
+                if (shouldTrace) {
+                  trace = trace :+ Trace.Eval(st"constant binop ${equiv(AST.CoreExp.Binary(left, e.op, right, r.tipe), r)}", e, r)
+                }
+                return Some(r)
+              case _ =>
+            }
+          }
+          e.op match {
+            case AST.Exp.BinaryOp.And =>
+              provenClaims.get(e.left) match {
+                case Some(leftStepId) => provenClaims.get(e.right) match {
+                  case Some(rightStepId) =>
+                    val r = AST.CoreExp.LitB(T)
+                    if (shouldTrace) {
+                      trace = trace :+ Trace.Eval(st"& using $leftStepId and $rightStepId", e, r)
+                    }
+                    return Some(r)
+                  case _ =>
+                }
+                case _ =>
+              }
+            case AST.Exp.BinaryOp.Or =>
+              provenClaims.get(e.left) match {
+                case Some(leftStepId) =>
+                  val r = AST.CoreExp.LitB(T)
+                  if (shouldTrace) {
+                    trace = trace :+ Trace.Eval(st"| using $leftStepId", e, r)
+                  }
+                  return Some(r)
+                case _ =>
+              }
+              provenClaims.get(e.right) match {
+                case Some(rightStepId) =>
+                  val r = AST.CoreExp.LitB(T)
+                  if (shouldTrace) {
+                    trace = trace :+ Trace.Eval(st"| using $rightStepId", e, r)
+                  }
+                  return Some(r)
+                case _ =>
+              }
+            case AST.Exp.BinaryOp.Imply =>
+              provenClaims.get(AST.CoreExp.Unary(AST.Exp.UnaryOp.Not, e.left)) match {
+                case Some(leftStepId) =>
+                  val r = AST.CoreExp.LitB(T)
+                  if (shouldTrace) {
+                    trace = trace :+ Trace.Eval(st"__>: using $leftStepId", e, r)
+                  }
+                  return Some(r)
+                case _ =>
+              }
+              provenClaims.get(e.right) match {
+                case Some(rightStepId) =>
+                  val r = AST.CoreExp.LitB(T)
+                  if (shouldTrace) {
+                    trace = trace :+ Trace.Eval(st"__>: using $rightStepId", e, r)
+                  }
+                  return Some(r)
+                case _ =>
+              }
+            case AST.Exp.BinaryOp.Xor =>
+              provenClaims.get(left) match {
+                case Some(leftStepId) => provenClaims.get(AST.CoreExp.Unary(AST.Exp.UnaryOp.Not, right)) match {
+                  case Some(rightStepId) =>
+                    val r = AST.CoreExp.LitB(T)
+                    if (shouldTrace) {
+                      trace = trace :+ Trace.Eval(st"|^ using $leftStepId and $rightStepId", e, r)
+                    }
+                    return Some(r)
+                  case _ =>
+                }
+                case _ =>
+              }
+              provenClaims.get(AST.CoreExp.Unary(AST.Exp.UnaryOp.Not, left)) match {
+                case Some(leftStepId) => provenClaims.get(right) match {
+                  case Some(rightStepId) =>
+                    val r = AST.CoreExp.LitB(T)
+                    if (shouldTrace) {
+                      trace = trace :+ Trace.Eval(st"|^ using $leftStepId and $rightStepId", e, r)
+                    }
+                    return Some(r)
+                  case _ =>
+                }
+                case _ =>
+              }
+            case _ =>
+          }
           if (config.equality) {
+            var eq = F
+            var stepIdOpt = Option.none[ST]()
             if (left == right) {
+              eq = T
+            } else {
+              provenClaims.get(equiv(left, right)) match {
+                case Some(stepId) =>
+                  stepIdOpt = Some(st" ($stepId)")
+                  eq = T
+                case _ =>
+              }
+            }
+            if (eq) {
               val rOpt: Option[AST.CoreExp.Base] = e.op match {
                 case AST.Exp.BinaryOp.EquivUni => Some(AST.CoreExp.LitB(T))
                 case AST.Exp.BinaryOp.InequivUni => Some(AST.CoreExp.LitB(F))
@@ -1172,21 +1342,29 @@ object RewritingSystem {
               rOpt match {
                 case Some(r) =>
                   if (shouldTrace) {
-                    trace = trace :+ Trace.Eval(st"equivalence ${equiv(left, right).prettyST}", e, r)
+                    trace = trace :+ Trace.Eval(st"equivalence$stepIdOpt ${equiv(left, right).prettyST}", e, r)
                   }
                   return rOpt
                 case _ =>
               }
             }
-          }
-          if (config.constantPropagation) {
-            (left, right) match {
-              case (left: AST.CoreExp.Lit, right: AST.CoreExp.Lit) =>
-                val r = evalBinaryLit(left, e.op, right)
-                if (shouldTrace) {
-                  trace = trace :+ Trace.Eval(st"constant binop ${equiv(AST.CoreExp.Binary(left, e.op, right, r.tipe), r)}", e, r)
+            provenClaims.get(inequiv(left, right)) match {
+              case Some(stepId) =>
+                val rOpt: Option[AST.CoreExp.Base] = e.op match {
+                  case AST.Exp.BinaryOp.EquivUni => Some(AST.CoreExp.LitB(F))
+                  case AST.Exp.BinaryOp.InequivUni => Some(AST.CoreExp.LitB(T))
+                  case AST.Exp.BinaryOp.Eq => Some(AST.CoreExp.LitB(F))
+                  case AST.Exp.BinaryOp.Ne => Some(AST.CoreExp.LitB(T))
+                  case _ => None()
                 }
-                return Some(r)
+                rOpt match {
+                  case Some(r) =>
+                    if (shouldTrace) {
+                      trace = trace :+ Trace.Eval(st"inequivalence ($stepId) ${inequiv(left, right).prettyST}", e, r)
+                    }
+                    return rOpt
+                  case _ =>
+                }
               case _ =>
             }
           }
@@ -1200,12 +1378,23 @@ object RewritingSystem {
               exp2
             case _ => e.exp
           }
-          if (config.constantPropagation) {
+          if (config.constant) {
             ue match {
               case exp: AST.CoreExp.Lit =>
                 val r = evalUnaryLit(e.op, exp)
                 if (shouldTrace) {
                   trace = trace :+ Trace.Eval(st"constant unop ${equiv(AST.CoreExp.Unary(e.op, exp), r).prettyST}", e, r)
+                }
+                return Some(r)
+              case _ =>
+            }
+          }
+          if (e.tipe == AST.Typed.b && e.op == AST.Exp.UnaryOp.Not) {
+            provenClaims.get(e) match {
+              case Some(stepId) =>
+                val r = AST.CoreExp.LitB(T)
+                if (shouldTrace) {
+                  trace = trace :+ Trace.Eval(st"! using $stepId", e, r)
                 }
                 return Some(r)
               case _ =>
@@ -1381,42 +1570,24 @@ object RewritingSystem {
                   return Some(r)
                 }
 
-                {
-                  val stepIdOpt: Option[AST.ProofAst.StepId] = provenClaims.get(equiv(index, receiver.index)) match {
-                    case rOpt@Some(_) => rOpt
-                    case _ => provenClaims.get(equiv(receiver.index, index)) match {
-                      case rOpt@Some(_) => rOpt
-                      case _ => None()
+                provenClaims.get(equiv(index, receiver.index)) match {
+                  case Some(stepId) =>
+                    val r = receiver.arg
+                    if (shouldTrace) {
+                      trace = trace :+ Trace.Eval(st"indexing with $stepId (${equiv(index, receiver.index).prettyST}) ${equiv(AST.CoreExp.Indexing(receiver, index, r.tipe), r).prettyST}", e, r)
                     }
-                  }
-                  stepIdOpt match {
-                    case Some(stepId) =>
-                      val r = receiver.arg
-                      if (shouldTrace) {
-                        trace = trace :+ Trace.Eval(st"indexing with $stepId (${equiv(index, receiver.index).prettyST}) ${equiv(AST.CoreExp.Indexing(receiver, index, r.tipe), r).prettyST}", e, r)
-                      }
-                      return Some(r)
-                    case _ =>
-                  }
+                    return Some(r)
+                  case _ =>
                 }
 
-                {
-                  val stepIdOpt: Option[AST.ProofAst.StepId] = provenClaims.get(inequiv(index, receiver.index)) match {
-                    case rOpt@Some(_) => rOpt
-                    case _ => provenClaims.get(inequiv(receiver.index, index)) match {
-                      case rOpt@Some(_) => rOpt
-                      case _ => None()
+                provenClaims.get(inequiv(index, receiver.index)) match {
+                  case Some(stepId) =>
+                    val r = e(exp = receiver.exp, index = index)
+                    if (shouldTrace) {
+                      trace = trace :+ Trace.Eval(st"indexing with $stepId (${inequiv(index, receiver.index).prettyST}) ${equiv(AST.CoreExp.Indexing(receiver, index, r.tipe), r).prettyST}", e, r)
                     }
-                  }
-                  stepIdOpt match {
-                    case Some(stepId) =>
-                      val r = e(exp = receiver.exp, index = index)
-                      if (shouldTrace) {
-                        trace = trace :+ Trace.Eval(st"indexing with $stepId (${inequiv(index, receiver.index).prettyST}) ${equiv(AST.CoreExp.Indexing(receiver, index, r.tipe), r).prettyST}", e, r)
-                      }
-                      return Some(evalBaseH(deBruijnMap,r).getOrElse(r))
-                    case _ =>
-                  }
+                    return Some(evalBaseH(deBruijnMap,r).getOrElse(r))
+                  case _ =>
                 }
               case _ =>
             }
@@ -1452,14 +1623,7 @@ object RewritingSystem {
                   }
                   return Some(evalBaseH(deBruijnMap, r).getOrElse(r))
                 }
-                val stepIdOpt: Option[AST.ProofAst.StepId] = provenClaims.get(equiv(index, receiver.index)) match {
-                  case rOpt@Some(_) => rOpt
-                  case _ => provenClaims.get(equiv(receiver.index, index)) match {
-                    case rOpt@Some(_) => rOpt
-                    case _ => None()
-                  }
-                }
-                stepIdOpt match {
+                provenClaims.get(equiv(index, receiver.index)) match {
                   case Some(stepId) =>
                     val r = e(exp = receiver.exp, index = index, arg = arg)
                     if (shouldTrace) {
@@ -1488,7 +1652,7 @@ object RewritingSystem {
         case e: AST.CoreExp.If =>
           var changed = F
           val cond: AST.CoreExp.Base = evalBaseH(deBruijnMap, e.cond) match {
-            case Some(c@AST.CoreExp.LitB(b)) if config.constantPropagation =>
+            case Some(c@AST.CoreExp.LitB(b)) if config.constant =>
               val r: AST.CoreExp.Base = if (b) e.tExp else e.fExp
               if (shouldTrace) {
                 trace = trace :+ Trace.Eval(st"constant condition ${equiv(e.cond, c).prettyST}", e, r)
