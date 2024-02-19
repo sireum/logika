@@ -449,6 +449,8 @@ object RewritingSystem {
         case e: AST.Exp.Tuple =>
           return if (e.args.size == 1) rec(e.args(0), funStack, localMap)
           else AST.CoreExp.Constructor(e.typedOpt.get, for (arg <- e.args) yield rec(arg, funStack, localMap))
+        case e: AST.Exp.This =>
+          return AST.CoreExp.LocalVarRef(F, e.owner, "this", e.typedOpt.get)
         case e: AST.Exp.Ident =>
           e.resOpt.get match {
             case res: AST.ResolvedInfo.LocalVar =>
@@ -474,7 +476,8 @@ object RewritingSystem {
                 }
               }
               return AST.CoreExp.ObjectVarRef(res.owner, res.id, e.typedOpt.get)
-            case res: AST.ResolvedInfo.Method => halt(s"TODO: $e")
+            case res: AST.ResolvedInfo.Method =>
+              return AST.CoreExp.ObjectVarRef(res.owner, res.id, e.typedOpt.get)
             case _ => halt(s"Infeasible: $e")
           }
         case e: AST.Exp.Unary =>
@@ -583,8 +586,9 @@ object RewritingSystem {
             case Some(receiver) =>
               return AST.CoreExp.Apply(T, rec(e.ident, funStack, localMap),
                 rec(receiver, funStack, localMap) +: args, e.typedOpt.get)
-            case _ => return AST.CoreExp.Apply(F, rec(e.ident, funStack, localMap),
-              args, e.typedOpt.get)
+            case _ =>
+              return AST.CoreExp.Apply(F, rec(e.ident, funStack, localMap),
+                args, e.typedOpt.get)
           }
         case e: AST.Exp.InvokeNamed =>
           def getArgs: ISZ[AST.CoreExp.Base] = {

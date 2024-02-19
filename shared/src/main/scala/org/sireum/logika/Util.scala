@@ -1637,7 +1637,7 @@ object Util {
         val tOpt = Option.some(value.tipe)
         val exp: AST.Exp = if (isLocal) {
           if (id == "this") {
-            AST.Exp.This(AST.TypedAttr(posOpt, tOpt))
+            AST.Exp.This(owner, AST.TypedAttr(posOpt, tOpt))
           } else {
             AST.Exp.Ident(AST.Id(id, AST.Attr(posOpt)), AST.ResolvedAttr(posOpt,
               Some(AST.ResolvedInfo.LocalVar(owner, AST.ResolvedInfo.LocalVar.Scope.Current, isSpec, F, id)), tOpt))
@@ -2398,7 +2398,7 @@ object Util {
             s0 = s0.addClaim(State.Claim.Let.CurrentId(T, receiver, logika.context.methodName, "this", None()))
             args = args :+ receiver
           case _ =>
-            val e = AST.Exp.This(AST.TypedAttr(posOpt, receiverTypeOpt))
+            val e = AST.Exp.This(logika.context.methodName, AST.TypedAttr(posOpt, receiverTypeOpt))
             val ISZ((s1, arg)) = logika.evalExp(Split.Disabled, smt2, cache, T, s0, e, reporter)
             s0 = s1
             args = args :+ arg

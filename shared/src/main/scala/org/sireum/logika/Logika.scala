@@ -1992,7 +1992,7 @@ import Util._
           if (isInObject) {
             return ISZ()
           } else {
-            return ISZ(evalThis(AST.Exp.This(AST.TypedAttr(ident.posOpt, context.methodOpt.get.receiverTypeOpt))))
+            return ISZ(evalThis(AST.Exp.This(context.methodName, AST.TypedAttr(ident.posOpt, context.methodOpt.get.receiverTypeOpt))))
           }
       }
     }
@@ -2534,7 +2534,7 @@ import Util._
                     val (s4, sym) = idIntro(pos, s3, ctx, "this", t, None())
                     invokeReceiverOpt match {
                       case Some(invokeReceiver) => assigns = assigns :+ ((invokeReceiver, sym))
-                      case _ => assigns = assigns :+ ((AST.Exp.This(AST.TypedAttr(posOpt, Some(t))), sym))
+                      case _ => assigns = assigns :+ ((AST.Exp.This(ctx, AST.TypedAttr(posOpt, Some(t))), sym))
                     }
                     s3 = s4
                   }
@@ -5077,7 +5077,7 @@ import Util._
             }
             if (receiverModified) {
               val srw6 = evalAssignReceiver(whileStmt.contract.modifies, this, this, smt2, cache, rtCheck, srw,
-                Some(AST.Exp.This(AST.TypedAttr(whileStmt.posOpt, Some(receiverOpt.get.tipe)))), receiverOpt,
+                Some(AST.Exp.This(context.methodName, AST.TypedAttr(whileStmt.posOpt, Some(receiverOpt.get.tipe)))), receiverOpt,
                 HashMap.empty, reporter)
               val (srw7, sym) = idIntro(whileStmt.posOpt.get, srw6, context.methodName, "this",
                 context.receiverLocalTypeOpt.get._2, None())
