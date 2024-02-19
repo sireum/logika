@@ -175,7 +175,8 @@ object OptionsUtil {
       searchPc = o.searchPC,
       rwTrace = o.rwTrace,
       rwMax = o.rwMax,
-      rwPar = o.rwPar
+      rwPar = o.rwPar,
+      rwEvalTrace = o.rwEvalTrace
     )
     return Either.Left(config)
   }
@@ -332,6 +333,9 @@ object OptionsUtil {
       }
       if (config.rwTrace != defaultConfig.rwTrace) {
         r = r :+ "--rw-trace"
+      }
+      if (config.rwEvalTrace != defaultConfig.rwEvalTrace) {
+        r = r :+ "--rw-eval-trace"
       }
     }
     config.background match {

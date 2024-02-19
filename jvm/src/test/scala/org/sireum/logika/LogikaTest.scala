@@ -98,7 +98,8 @@ object LogikaTest {
       searchPc = T,
       rwTrace = T,
       rwMax = 100,
-      rwPar = T
+      rwPar = T,
+      rwEvalTrace = T
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty

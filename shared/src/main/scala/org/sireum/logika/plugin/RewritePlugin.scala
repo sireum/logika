@@ -44,7 +44,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         return just.id.value == "Simpl" && just.isOwnedBy(justificationName)
       case just: AST.ProofAst.Step.Justification.Apply =>
         just.invoke.ident.attr.resOpt match {
-          case Some(res: AST.ResolvedInfo.Method) if res.id == "Rewrite" && res.owner == justificationName => return T
+          case Some(res: AST.ResolvedInfo.Method) if (res.id == "Rewrite" || res.id == "Eval") && res.owner == justificationName => return T
           case _ =>
         }
       case _ =>
@@ -62,8 +62,9 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     @strictpure def justArgs: ISZ[AST.Exp] = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply].args
     val isSimpl = step.just.id.value == "Simpl"
+    val isEval = step.just.id.value == "Eval"
     val patterns: ISZ[Rewriter.Pattern] =
-      if (isSimpl) ISZ()
+      if (isEval || isSimpl) ISZ()
       else RewritingSystem.retrievePatterns(logika.th, cache, justArgs(0))
     var provenClaims = HashSMap.empty[AST.ProofAst.StepId, AST.CoreExp.Base]
     if (step.just.hasWitness) {
@@ -86,31 +87,29 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
       }
     }
-    @strictpure def traceOpt(trace: ISZ[RewritingSystem.Trace]): Option[ST] = if (logika.config.rwTrace) {
-      Some(
-        st"""Trace:
+    @strictpure def traceOpt(trace: ISZ[RewritingSystem.Trace]): Option[ST] =
+      if (trace.nonEmpty && (logika.config.rwTrace || logika.config.rwEvalTrace))
+        Some(st"""Trace:
             |
             |${(for (te <- trace) yield te.toST, "\n\n")}""")
-    } else {
-      None()
-    }
+      else None()
     val rwPc = Rewriter(if (logika.config.rwPar) logika.config.parCores else 1,
-      logika.th, provenClaims, patterns, logika.config.rwTrace, F, ISZ())
+      logika.th, provenClaims, patterns, logika.config.rwTrace, logika.config.rwEvalTrace, F, ISZ())
     val stepClaim = RewritingSystem.translate(logika.th, F, step.claim)
 
-    if (logika.config.rwTrace) {
+    if (logika.config.rwEvalTrace) {
       rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("simplifying", stepClaim)
     }
 
     val stepClaimEv: AST.CoreExp.Base = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all,
-      rwPc.provenClaimStepIdMap, stepClaim, logika.config.rwTrace) match {
+      rwPc.provenClaimStepIdMap, stepClaim, logika.config.rwEvalTrace) match {
       case Some((e, t)) =>
         rwPc.trace = t
         e
       case _ => stepClaim
     }
 
-    if (logika.config.rwTrace) {
+    if (logika.config.rwEvalTrace) {
       rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Done(stepClaim, stepClaimEv)
     }
 
@@ -140,7 +139,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     val simplTrace = rwPc.trace
     rwPc.trace = ISZ()
     val from: AST.ProofAst.StepId =
-      AST.Util.toStepIds(ISZ(justArgs(1)), Logika.kind, reporter) match {
+      AST.Util.toStepIds(ISZ(justArgs(if (isEval) 0 else 1)), Logika.kind, reporter) match {
         case Some(s) => s(0)
         case _ => return emptyResult
       }
@@ -151,46 +150,60 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         return emptyResult
     }
     val fromCoreClaim = RewritingSystem.translate(logika.th, F, fromClaim)
-    var rwClaim = fromCoreClaim
-    var done = F
-    var i = 0
-    while (!done && i < logika.config.rwMax && rwClaim != stepClaim) {
-      rwPc.done = F
-      if (logika.config.rwTrace) {
-        rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("rewriting", rwClaim)
-      }
-      rwClaim = rwPc.transformCoreExpBase(rwClaim) match {
-        case MSome(c) =>
-          rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Done(rwClaim, c)
-          c
-        case _ =>
-          done = T
-          rwClaim
-      }
-      i = i + 1
-    }
     @strictpure def simplTraceOpt: Option[ST] = if (stepClaim == stepClaimEv) None() else Some(
       st"""and/or after simplifying the step claim to:
           |  ${stepClaimEv.prettyST}"""
     )
+
+    var rwClaim = fromCoreClaim
+    if (isEval) {
+      if (logika.config.rwEvalTrace) {
+        rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("evaluating", fromCoreClaim)
+      }
+      rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all,
+        rwPc.provenClaimStepIdMap, rwClaim, logika.config.rwEvalTrace) match {
+        case Some((c, t)) =>
+          rwPc.trace = rwPc.trace ++ t
+          c
+        case _ => fromCoreClaim
+      }
+      if (logika.config.rwEvalTrace) {
+        rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Done(fromCoreClaim, rwClaim)
+      }
+    } else {
+      var done = F
+      var i = 0
+      while (!done && i < logika.config.rwMax && rwClaim != stepClaim) {
+        rwPc.done = F
+        if (logika.config.rwTrace) {
+          rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("rewriting", rwClaim)
+        }
+        rwClaim = rwPc.transformCoreExpBase(rwClaim) match {
+          case MSome(c) =>
+            rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Done(rwClaim, c)
+            c
+          case _ =>
+            done = T
+            rwClaim
+        }
+        i = i + 1
+      }
+    }
     if (rwClaim == stepClaim) {
       reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
         st"""Matched:
             |  ${stepClaim.prettyST}
             |
-            |After rewriting $from:
+            |After ${if (isEval) "evaluating" else "rewriting"} $from:
             |  ${fromCoreClaim.prettyST}
             |
             |${traceOpt(rwPc.trace)}""".render)
-      val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-      val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
-      return Plugin.Result(stat, nextFresh, claims)
     } else if (rwClaim == stepClaimEv) {
       reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
         st"""Matched:
             |  ${stepClaim.prettyST}
             |
-            |After rewriting $from:
+            |After ${if (isEval) "evaluating" else "rewriting"} $from:
             |  ${fromCoreClaim.prettyST}
             |
             |$simplTraceOpt
@@ -199,19 +212,19 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |
             |${traceOpt(simplTrace)}""".render)
     } else {
-        reporter.error(step.just.id.attr.posOpt, Logika.kind,
-          st"""Could not match:
-              |  ${stepClaim.prettyST}
-              |
-              |After rewriting $from to:
-              |  ${rwClaim.prettyST}
-              |
-              |$simplTraceOpt
-              |
-              |${traceOpt(rwPc.trace)}
-              |
-              |${traceOpt(simplTrace)}""".render)
-        return emptyResult
+      reporter.error(step.just.id.attr.posOpt, Logika.kind,
+        st"""Could not match:
+            |  ${stepClaim.prettyST}
+            |
+            |After ${if (isEval) "evaluating" else "rewriting"} $from to:
+            |  ${rwClaim.prettyST}
+            |
+            |$simplTraceOpt
+            |
+            |${traceOpt(rwPc.trace)}
+            |
+            |${traceOpt(simplTrace)}""".render)
+      return emptyResult
     }
     val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
     val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)

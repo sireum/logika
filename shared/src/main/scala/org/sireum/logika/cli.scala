@@ -169,7 +169,10 @@ object cli {
           description = "Maximum number of rewriting"),
         Opt(name = "rwTrace", longKey = "rw-trace", shortKey = None(),
           tpe = Type.Flag(T),
-          description = "Disable rewriting trace")
+          description = "Disable rewriting trace"),
+        Opt(name = "rwEvalTrace", longKey = "rw-eval-trace", shortKey = None(),
+          tpe = Type.Flag(T),
+          description = "Disable evaluation rewriting trace")
       )),
       OptGroup(name = "SMT2", opts = ISZ(
         Opt(name = "elideEncoding", longKey = "elide-encoding", shortKey = None(),
