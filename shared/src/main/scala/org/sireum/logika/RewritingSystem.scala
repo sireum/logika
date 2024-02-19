@@ -1132,6 +1132,10 @@ object RewritingSystem {
                      provenClaims: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId],
                      exp: AST.CoreExp.Base,
                      shouldTrace: B): Option[(AST.CoreExp.Base, ISZ[Trace])] = {
+    @strictpure def equivST(left: AST.CoreExp.Base, right: AST.CoreExp.Base): ST =
+      AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b).prettyST
+    @strictpure def inequivST(left: AST.CoreExp.Base, right: AST.CoreExp.Base): ST =
+      AST.CoreExp.Binary(left, AST.Exp.BinaryOp.InequivUni, right, AST.Typed.b).prettyST
     @strictpure def equiv(left: AST.CoreExp.Base, right: AST.CoreExp.Base): AST.CoreExp.Binary =
       if (right < left) AST.CoreExp.Binary(right, AST.Exp.BinaryOp.EquivUni, left, AST.Typed.b)
       else AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b)
@@ -1220,7 +1224,7 @@ object RewritingSystem {
           if (e.op == AST.Exp.BinaryOp.MapsTo) {
             val r = AST.CoreExp.Constructor(AST.Typed.Tuple(ISZ(left.tipe, right.tipe)), ISZ(left, right))
             if (shouldTrace) {
-              trace = trace :+ Trace.Eval(st"tuple construction ${equiv(AST.CoreExp.Binary(left, "~>", right, r.tipe), r).prettyST}", e, r)
+              trace = trace :+ Trace.Eval(st"tuple construction ${equivST(AST.CoreExp.Binary(left, "~>", right, r.tipe), r)}", e, r)
             }
             return Some(r)
           }
@@ -1229,7 +1233,7 @@ object RewritingSystem {
               case (left: AST.CoreExp.Lit, right: AST.CoreExp.Lit) =>
                 val r = evalBinaryLit(left, e.op, right)
                 if (shouldTrace) {
-                  trace = trace :+ Trace.Eval(st"constant binop ${equiv(AST.CoreExp.Binary(left, e.op, right, r.tipe), r)}", e, r)
+                  trace = trace :+ Trace.Eval(st"constant binop ${equivST(AST.CoreExp.Binary(left, e.op, right, r.tipe), r)}", e, r)
                 }
                 return Some(r)
               case _ =>
@@ -1342,7 +1346,7 @@ object RewritingSystem {
               rOpt match {
                 case Some(r) =>
                   if (shouldTrace) {
-                    trace = trace :+ Trace.Eval(st"equivalence$stepIdOpt ${equiv(left, right).prettyST}", e, r)
+                    trace = trace :+ Trace.Eval(st"equivalence$stepIdOpt ${equivST(left, right)}", e, r)
                   }
                   return rOpt
                 case _ =>
@@ -1360,7 +1364,7 @@ object RewritingSystem {
                 rOpt match {
                   case Some(r) =>
                     if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"inequivalence ($stepId) ${inequiv(left, right).prettyST}", e, r)
+                      trace = trace :+ Trace.Eval(st"inequivalence ($stepId) ${inequivST(left, right)}", e, r)
                     }
                     return rOpt
                   case _ =>
@@ -1383,7 +1387,7 @@ object RewritingSystem {
               case exp: AST.CoreExp.Lit =>
                 val r = evalUnaryLit(e.op, exp)
                 if (shouldTrace) {
-                  trace = trace :+ Trace.Eval(st"constant unop ${equiv(AST.CoreExp.Unary(e.op, exp), r).prettyST}", e, r)
+                  trace = trace :+ Trace.Eval(st"constant unop ${equivST(AST.CoreExp.Unary(e.op, exp), r)}", e, r)
                 }
                 return Some(r)
               case _ =>
@@ -1405,7 +1409,7 @@ object RewritingSystem {
               case AST.Exp.UnaryOp.Plus =>
                 val r = ue
                 if (shouldTrace) {
-                  trace = trace :+ Trace.Eval(st"unary ${equiv(AST.CoreExp.Unary(e.op, ue), r).prettyST}", e, r)
+                  trace = trace :+ Trace.Eval(st"unary ${equivST(AST.CoreExp.Unary(e.op, ue), r)}", e, r)
                 }
                 return Some(r)
               case _ =>
@@ -1414,7 +1418,7 @@ object RewritingSystem {
                     if (e.op == ue.op) {
                       val r = ue.exp
                       if (shouldTrace) {
-                        trace = trace :+ Trace.Eval(st"unary ${equiv(AST.CoreExp.Unary(e.op, ue), r).prettyST}", e, r)
+                        trace = trace :+ Trace.Eval(st"unary ${equivST(AST.CoreExp.Unary(e.op, ue), r)}", e, r)
                       }
                       return Some(r)
                     }
@@ -1438,7 +1442,7 @@ object RewritingSystem {
                 val n = Z(ops.StringOps(e.id).substring(1, e.id.size)).get - 1
                 val r = receiver.args(n)
                 if (shouldTrace) {
-                  trace = trace :+ Trace.Eval(st"tuple projection ${equiv(AST.CoreExp.Select(receiver, s"_${n + 1}", r.tipe), r).prettyST}", e, r)
+                  trace = trace :+ Trace.Eval(st"tuple projection ${equivST(AST.CoreExp.Select(receiver, s"_${n + 1}", r.tipe), r)}", e, r)
                 }
                 return Some(r)
               case _ =>
@@ -1450,20 +1454,20 @@ object RewritingSystem {
                 if (receiver.id == e.id) {
                   val r = receiver.arg
                   if (shouldTrace) {
-                    trace = trace :+ Trace.Eval(st"field access ${equiv(AST.CoreExp.Select(receiver, e.id, r.tipe), r).prettyST}", e, r)
+                    trace = trace :+ Trace.Eval(st"field access ${equivST(AST.CoreExp.Select(receiver, e.id, r.tipe), r)}", e, r)
                   }
                   return Some(r)
                 } else {
                   val r = e(exp = receiver.exp)
                   if (shouldTrace) {
-                    trace = trace :+ Trace.Eval(st"field access ${equiv(AST.CoreExp.Select(receiver, e.id, r.tipe), r).prettyST}", e, r)
+                    trace = trace :+ Trace.Eval(st"field access ${equivST(AST.CoreExp.Select(receiver, e.id, r.tipe), r)}", e, r)
                   }
                   return Some(evalBaseH(deBruijnMap, r).getOrElse(r))
                 }
               case receiver: AST.CoreExp.IndexingUpdate =>
                 val r = e(exp = receiver.exp)
                 if (shouldTrace) {
-                  trace = trace :+ Trace.Eval(st"field access ${equiv(AST.CoreExp.Select(receiver, e.id, r.tipe), r).prettyST}", e, r)
+                  trace = trace :+ Trace.Eval(st"field access ${equivST(AST.CoreExp.Select(receiver, e.id, r.tipe), r)}", e, r)
                 }
                 return Some(evalBaseH(deBruijnMap, r).getOrElse(r))
               case receiver: AST.CoreExp.Constructor =>
@@ -1471,7 +1475,7 @@ object RewritingSystem {
                 if (e.id == "size" && (rt.ids == AST.Typed.isName || rt.ids == AST.Typed.msName)) {
                   val r = AST.CoreExp.LitZ(receiver.args.size)
                   if (shouldTrace) {
-                    trace = trace :+ Trace.Eval(st"size access ${equiv(AST.CoreExp.Select(receiver, e.id, r.tipe), r).prettyST}", e, r)
+                    trace = trace :+ Trace.Eval(st"size access ${equivST(AST.CoreExp.Select(receiver, e.id, r.tipe), r)}", e, r)
                   }
                   return Some(r)
                 } else {
@@ -1482,7 +1486,7 @@ object RewritingSystem {
                     case Some(i) =>
                       val r = receiver.args(i)
                       if (shouldTrace) {
-                        trace = trace :+ Trace.Eval(st"field access ${equiv(AST.CoreExp.Select(receiver, e.id, r.tipe), r).prettyST}", e, r)
+                        trace = trace :+ Trace.Eval(st"field access ${equivST(AST.CoreExp.Select(receiver, e.id, r.tipe), r)}", e, r)
                       }
                       return Some(r)
                     case _ =>
@@ -1509,7 +1513,7 @@ object RewritingSystem {
                       case _ => halt(s"Infeasible: ${e.id}")
                     }
                     if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"field access ${equiv(AST.CoreExp.Select(receiver, e.id, r.tipe), r).prettyST}", e, r)
+                      trace = trace :+ Trace.Eval(st"field access ${equivST(AST.CoreExp.Select(receiver, e.id, r.tipe), r)}", e, r)
                     }
                     return Some(r)
                   case info: TypeInfo.Enum => halt("TODO")
@@ -1538,7 +1542,7 @@ object RewritingSystem {
               case receiver: AST.CoreExp.Update if receiver.id == e.id =>
                 val r = e(exp = receiver.exp, arg = arg)
                 if (shouldTrace) {
-                  trace = trace :+ Trace.Eval(st"field update ${equiv(AST.CoreExp.Update(receiver, e.id, arg, r.tipe), r).prettyST}", e, r)
+                  trace = trace :+ Trace.Eval(st"field update ${equivST(AST.CoreExp.Update(receiver, e.id, arg, r.tipe), r)}", e, r)
                 }
                 return Some(evalBaseH(deBruijnMap, r).getOrElse(r))
               case _ =>
@@ -1565,7 +1569,7 @@ object RewritingSystem {
                 if (index == receiver.index) {
                   val r = receiver.arg
                   if (shouldTrace) {
-                    trace = trace :+ Trace.Eval(st"indexing ${equiv(AST.CoreExp.Indexing(receiver, index, r.tipe), r).prettyST}", e, r)
+                    trace = trace :+ Trace.Eval(st"indexing ${equivST(AST.CoreExp.Indexing(receiver, index, r.tipe), r)}", e, r)
                   }
                   return Some(r)
                 }
@@ -1574,7 +1578,7 @@ object RewritingSystem {
                   case Some(stepId) =>
                     val r = receiver.arg
                     if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"indexing with $stepId (${equiv(index, receiver.index).prettyST}) ${equiv(AST.CoreExp.Indexing(receiver, index, r.tipe), r).prettyST}", e, r)
+                      trace = trace :+ Trace.Eval(st"indexing with $stepId (${equivST(index, receiver.index)}) ${equivST(AST.CoreExp.Indexing(receiver, index, r.tipe), r)}", e, r)
                     }
                     return Some(r)
                   case _ =>
@@ -1584,7 +1588,7 @@ object RewritingSystem {
                   case Some(stepId) =>
                     val r = e(exp = receiver.exp, index = index)
                     if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"indexing with $stepId (${inequiv(index, receiver.index).prettyST}) ${equiv(AST.CoreExp.Indexing(receiver, index, r.tipe), r).prettyST}", e, r)
+                      trace = trace :+ Trace.Eval(st"indexing with $stepId (${inequivST(index, receiver.index)}) ${equivST(AST.CoreExp.Indexing(receiver, index, r.tipe), r)}", e, r)
                     }
                     return Some(evalBaseH(deBruijnMap,r).getOrElse(r))
                   case _ =>
@@ -1619,7 +1623,7 @@ object RewritingSystem {
                 if (index == receiver.index) {
                   val r = e(exp = receiver.exp, index = index, arg = arg)
                   if (shouldTrace) {
-                    trace = trace :+ Trace.Eval(st"indexing update ${equiv(AST.CoreExp.IndexingUpdate(receiver, index, arg, r.tipe), r).prettyST}", e, r)
+                    trace = trace :+ Trace.Eval(st"indexing update ${equivST(AST.CoreExp.IndexingUpdate(receiver, index, arg, r.tipe), r)}", e, r)
                   }
                   return Some(evalBaseH(deBruijnMap, r).getOrElse(r))
                 }
@@ -1627,7 +1631,7 @@ object RewritingSystem {
                   case Some(stepId) =>
                     val r = e(exp = receiver.exp, index = index, arg = arg)
                     if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"indexing with $stepId (${equiv(index, receiver.index).prettyST}) ${equiv(AST.CoreExp.IndexingUpdate(receiver, index, arg, r.tipe), r).prettyST}", e, r)
+                      trace = trace :+ Trace.Eval(st"indexing with $stepId (${equivST(index, receiver.index)}) ${equivST(AST.CoreExp.IndexingUpdate(receiver, index, arg, r.tipe), r)}", e, r)
                     }
                     return Some(evalBaseH(deBruijnMap, r).getOrElse(r))
                   case _ =>
@@ -1655,7 +1659,7 @@ object RewritingSystem {
             case Some(c@AST.CoreExp.LitB(b)) if config.constant =>
               val r: AST.CoreExp.Base = if (b) e.tExp else e.fExp
               if (shouldTrace) {
-                trace = trace :+ Trace.Eval(st"constant condition ${equiv(e.cond, c).prettyST}", e, r)
+                trace = trace :+ Trace.Eval(st"constant condition ${equivST(e.cond, c)}", e, r)
               }
               return Some(evalBaseH(deBruijnMap, r).getOrElse(r))
             case Some(c) =>
