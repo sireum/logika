@@ -3005,7 +3005,7 @@ object Util {
   }
 
   def extractAssignExpOpt(mi: lang.symbol.Info.Method): Option[AST.AssignExp] = {
-    if (mi.ast.purity == AST.Purity.StrictPure && mi.ast.bodyOpt.nonEmpty) {
+    if (mi.ast.isStrictPure && mi.ast.bodyOpt.nonEmpty) {
       mi.ast.bodyOpt.get.stmts match {
         case ISZ(stmt: AST.Stmt.Var, _: AST.Stmt.Return) => return stmt.initOpt
         case stmts => halt(s"Infeasible: $stmts")

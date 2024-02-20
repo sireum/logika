@@ -45,7 +45,7 @@ object StepProofContext {
                           val claims: ISZ[State.Claim]) extends StepProofContext {
     @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${exp.prettyST}, ${(for (claim <- claims) yield claim.toRawST, ", ")})"
     @memoize def coreExpClaim: AST.CoreExp.Base = {
-      return RewritingSystem.translate(th, F, exp)
+      return RewritingSystem.translateExp(th, F, exp)
     }
   }
 

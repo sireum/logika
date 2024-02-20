@@ -151,7 +151,7 @@ import FoldUnfoldPlugin._
           val typeRel = TypeChecker.TypeRelation.Supertype
           if (res.isInObject) {
             val mi = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
-            if (mi.ast.purity != AST.Purity.StrictPure) {
+            if (!mi.ast.isStrictPure) {
               return errSp()
             }
             val msm = TypeChecker.unifyFun(Logika.kind, logika.th, unfoldFrom.posOpt, typeRel, res.tpeOpt.get,
@@ -165,7 +165,7 @@ import FoldUnfoldPlugin._
             logika.th.typeMap.get(res.owner).get match {
               case info: TypeInfo.Sig =>
                 val mi = info.methods.get(res.id).get
-                if (mi.ast.purity != AST.Purity.StrictPure) {
+                if (!mi.ast.isStrictPure) {
                   return errSp()
                 }
                 val tsm = TypeChecker.buildTypeSubstMap(res.owner, posOpt, info.ast.typeParams,

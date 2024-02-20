@@ -95,7 +95,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       else None()
     val rwPc = Rewriter(if (logika.config.rwPar) logika.config.parCores else 1,
       logika.th, provenClaims, patterns, logika.config.rwTrace, logika.config.rwEvalTrace, F, ISZ())
-    val stepClaim = RewritingSystem.translate(logika.th, F, step.claim)
+    val stepClaim = RewritingSystem.translateExp(logika.th, F, step.claim)
 
     if (logika.config.rwEvalTrace) {
       rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("simplifying", stepClaim)
@@ -149,7 +149,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         reporter.error(from.posOpt, Logika.kind, s"Expecting a regular proof step")
         return emptyResult
     }
-    val fromCoreClaim = RewritingSystem.translate(logika.th, F, fromClaim)
+    val fromCoreClaim = RewritingSystem.translateExp(logika.th, F, fromClaim)
     @strictpure def simplTraceOpt: Option[ST] = if (stepClaim == stepClaimEv) None() else Some(
       st"""and/or after simplifying the step claim to:
           |  ${stepClaimEv.prettyST}"""

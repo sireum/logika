@@ -167,11 +167,13 @@ object RewritingSystem {
   @record class Rewriter(val maxCores: Z,
                          val th: TypeHierarchy,
                          val provenClaims: HashSMap[AST.ProofAst.StepId, AST.CoreExp.Base],
-                         val patterns: ISZ[Rewriter.Pattern],
+                         val rwPatterns: ISZ[Rewriter.Pattern],
                          val shouldTrace: B,
                          val shouldTraceEval: B,
                          var done: B,
                          var trace: ISZ[Trace]) extends AST.MCoreExpTransformer {
+    val patterns: ISZ[Rewriter.Pattern.Claim] = for (p <- rwPatterns if p.isInstanceOf[Rewriter.Pattern.Claim]) yield
+      p.asInstanceOf[Rewriter.Pattern.Claim]
     @memoize def provenClaimStepIdMap: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId] = {
       @strictpure def conjuncts(e: AST.CoreExp.Base): ISZ[AST.CoreExp.Base] = {
         e match {
@@ -317,12 +319,12 @@ object RewritingSystem {
                 val ems: MBox[UnificationErrorMessages] = MBox(ISZ())
                 val pas = MBox(pendingApplications)
                 val sm = MBox(substMap)
-                def r2l(p: Rewriter.Pattern): Rewriter.Pattern = {
+                def r2l(p: Rewriter.Pattern.Claim): Rewriter.Pattern.Claim = {
                   return if (pattern.rightToLeft) p.toRightToLeft else p
                 }
                 val patterns2: ISZ[Rewriter.Pattern] =
                   for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
-                    r2l(Rewriter.Pattern(pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))
+                    r2l(Rewriter.Pattern.Claim(pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))
                 val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, F, F, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
                 val m = unifyExp(T, th, pattern.localPatternSet, from, o2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
@@ -368,62 +370,79 @@ object RewritingSystem {
   }
 
   object Rewriter {
-    @datatype class Pattern(val name: ISZ[String],
+    @datatype trait Pattern {
+      @pure def toRightToLeft: Rewriter.Pattern = {
+        return this
+      }
+    }
+
+    object Pattern {
+      @datatype class Claim(val name: ISZ[String],
                             val rightToLeft: B,
                             val isPermutative: B,
                             val localPatternSet: LocalPatternSet,
-                            val exp: AST.CoreExp) {
-      @pure def toRightToLeft: Rewriter.Pattern = {
-        @pure def rec(e: AST.CoreExp): AST.CoreExp = {
-          e match {
-            case e: AST.CoreExp.Arrow =>
-              return e(left = rec(e.left).asInstanceOf[AST.CoreExp.Base], right = rec(e.right))
-            case e: AST.CoreExp.Binary if e.isEquiv && !e.right.isInstanceOf[AST.CoreExp.LitB] =>
-              return e(left = e.right, right = e.left)
-            case _ => return e
+                            val exp: AST.CoreExp) extends Pattern {
+        @pure override def toRightToLeft: Rewriter.Pattern.Claim = {
+          @pure def rec(e: AST.CoreExp): AST.CoreExp = {
+            e match {
+              case e: AST.CoreExp.Arrow =>
+                return e(left = rec(e.left).asInstanceOf[AST.CoreExp.Base], right = rec(e.right))
+              case e: AST.CoreExp.Binary if e.isEquiv && !e.right.isInstanceOf[AST.CoreExp.LitB] =>
+                return e(left = e.right, right = e.left)
+              case _ => return e
+            }
           }
+          val thiz = this
+          return thiz(rightToLeft = !rightToLeft, exp = rec(exp))
         }
-        val thiz = this
-        return thiz(rightToLeft = !rightToLeft, exp = rec(exp))
+      }
+      @datatype class Method(val isAbs: B,
+                             val isInObject: B,
+                             val owner: ISZ[String],
+                             val id: String,
+                             val params: ISZ[(String, AST.Typed)],
+                             val exp: AST.CoreExp.Base) extends Pattern {
+        @memoize def localPatternSet: LocalPatternSet = {
+          val context = owner :+ id
+          return HashSSet ++ (for (p <- params) yield (context, p._1))
+        }
       }
     }
   }
 
-  @strictpure def paramId(n: String): String = s"_$n"
-
-  @pure def translate(th: TypeHierarchy, isPattern: B, exp: AST.Exp): AST.CoreExp.Base = {
-    @pure def recBody(body: AST.Body, funStack: FunStack, localMap: LocalMap): AST.CoreExp.Base = {
+  @datatype class Translator(val th: TypeHierarchy, val isPattern: B) {
+    @pure def translateBody(body: AST.Body, funStack: FunStack, localMap: LocalMap): AST.CoreExp.Base = {
       val stmts = body.stmts
       var m = localMap
       for (i <- 0 until stmts.size - 2) {
-        m = recStmt(stmts(i), funStack, m)._2
+        m = translateStmt(stmts(i), funStack, m)._2
       }
-      return recAssignExp(stmts(stmts.size - 1).asAssignExp, funStack, m)
+      return translateAssignExp(stmts(stmts.size - 1).asAssignExp, funStack, m)
     }
-    @pure def recStmt(stmt: AST.Stmt, funStack: FunStack, localMap: LocalMap): (Option[AST.CoreExp.Base], LocalMap) = {
+    @pure def translateStmt(stmt: AST.Stmt, funStack: FunStack, localMap: LocalMap): (Option[AST.CoreExp.Base], LocalMap) = {
       stmt match {
-        case stmt: AST.Stmt.Expr => return (Some(rec(stmt.exp, funStack, localMap)), localMap)
+        case stmt: AST.Stmt.Expr => return (Some(translateExp(stmt.exp, funStack, localMap)), localMap)
         case stmt: AST.Stmt.Var =>
           val res = stmt.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
           return (None(), localMap + (res.context, res.id) ~>
-            recAssignExp(stmt.initOpt.get, funStack, localMap))
+            translateAssignExp(stmt.initOpt.get, funStack, localMap))
         case stmt: AST.Stmt.Block =>
-          return (Some(recBody(stmt.body, funStack, localMap)), localMap)
+          return (Some(translateBody(stmt.body, funStack, localMap)), localMap)
         case stmt: AST.Stmt.If =>
-          val condExp = rec(stmt.cond, funStack, localMap)
-          val tExp = recBody(stmt.thenBody, funStack, localMap)
-          val fExp = recBody(stmt.elseBody, funStack, localMap)
+          val condExp = translateExp(stmt.cond, funStack, localMap)
+          val tExp = translateBody(stmt.thenBody, funStack, localMap)
+          val fExp = translateBody(stmt.elseBody, funStack, localMap)
           return (Some(AST.CoreExp.If(condExp, tExp, fExp, stmt.attr.typedOpt.get)), localMap)
         case stmt: AST.Stmt.VarPattern => halt(s"TODO: $stmt")
         case stmt: AST.Stmt.Match => halt(s"TODO: $stmt")
         case _ => halt(s"Infeasible: $stmt")
       }
     }
-    @pure def recAssignExp(ae: AST.AssignExp, funStack: FunStack, localMap: LocalMap): AST.CoreExp.Base = {
-      val (Some(r), _) = recStmt(ae.asStmt, funStack, localMap)
+    @pure def translateAssignExp(ae: AST.AssignExp, funStack: FunStack, localMap: LocalMap): AST.CoreExp.Base = {
+      val (Some(r), _) = translateStmt(ae.asStmt, funStack, localMap)
       return r
     }
-    @pure def rec(e: AST.Exp, funStack: FunStack, localMap: LocalMap): AST.CoreExp.Base = {
+    @pure def translateExp(e: AST.Exp, funStack: FunStack, localMap: LocalMap): AST.CoreExp.Base = {
       e match {
         case e: AST.Exp.LitB => return AST.CoreExp.LitB(e.value)
         case e: AST.Exp.LitZ => return AST.CoreExp.LitZ(e.value)
@@ -447,8 +466,8 @@ object RewritingSystem {
             case _ => halt(s"Infeasible: expected typed expression")
           }
         case e: AST.Exp.Tuple =>
-          return if (e.args.size == 1) rec(e.args(0), funStack, localMap)
-          else AST.CoreExp.Constructor(e.typedOpt.get, for (arg <- e.args) yield rec(arg, funStack, localMap))
+          return if (e.args.size == 1) translateExp(e.args(0), funStack, localMap)
+          else AST.CoreExp.Constructor(e.typedOpt.get, for (arg <- e.args) yield translateExp(arg, funStack, localMap))
         case e: AST.Exp.This =>
           return AST.CoreExp.LocalVarRef(F, e.owner, "this", e.typedOpt.get)
         case e: AST.Exp.Ident =>
@@ -483,12 +502,12 @@ object RewritingSystem {
         case e: AST.Exp.Unary =>
           val op: AST.Exp.UnaryOp.Type = if (e.typedOpt.get == AST.Typed.b && e.op == AST.Exp.UnaryOp.Complement)
             AST.Exp.UnaryOp.Not else e.op
-          return AST.CoreExp.Unary(op, rec(e.exp, funStack, localMap))
+          return AST.CoreExp.Unary(op, translateExp(e.exp, funStack, localMap))
         case e: AST.Exp.Binary =>
           e.attr.resOpt.get match {
             case res: AST.ResolvedInfo.BuiltIn =>
-              val left = rec(e.left, funStack, localMap)
-              val right = rec(e.right, funStack, localMap)
+              val left = translateExp(e.left, funStack, localMap)
+              val right = translateExp(e.right, funStack, localMap)
               val op: String = res.kind match {
                 case AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd =>
                   return AST.CoreExp.condAnd(left, right)
@@ -507,12 +526,12 @@ object RewritingSystem {
           }
         case e: AST.Exp.Select =>
           e.receiverOpt match {
-            case Some(receiver) => return AST.CoreExp.Select(rec(receiver, funStack, localMap), e.id.value, e.typedOpt.get)
-            case _ => return rec(AST.Exp.Ident(e.id, e.attr), funStack, localMap)
+            case Some(receiver) => return AST.CoreExp.Select(translateExp(receiver, funStack, localMap), e.id.value, e.typedOpt.get)
+            case _ => return translateExp(AST.Exp.Ident(e.id, e.attr), funStack, localMap)
           }
         case e: AST.Exp.If =>
-          return AST.CoreExp.ite(rec(e.cond, funStack, localMap), rec(e.elseExp, funStack, localMap),
-            rec(e.elseExp, funStack, localMap), e.typedOpt.get)
+          return AST.CoreExp.ite(translateExp(e.cond, funStack, localMap), translateExp(e.elseExp, funStack, localMap),
+            translateExp(e.elseExp, funStack, localMap), e.typedOpt.get)
         case e: AST.Exp.Fun =>
           val params: ISZ[(String, AST.Typed)] = for (p <- e.params) yield
             (p.idOpt.get.value, p.typedOpt.get)
@@ -521,7 +540,7 @@ object RewritingSystem {
             stack = stack.push(p)
           }
           val last = params(params.size - 1)
-          var r = AST.CoreExp.Fun(AST.CoreExp.Param(last._1, last._2), recAssignExp(e.exp, stack, localMap))
+          var r = AST.CoreExp.Fun(AST.CoreExp.Param(last._1, last._2), translateAssignExp(e.exp, stack, localMap))
           for (i <- params.size - 2 to 0 by -1) {
             val p = params(i)
             r = AST.CoreExp.Fun(AST.CoreExp.Param(p._1, p._2), r)
@@ -539,16 +558,16 @@ object RewritingSystem {
           }
           val last = params(params.size - 1)
           var r = AST.CoreExp.Quant(kind, AST.CoreExp.Param(last._1, last._2),
-            recAssignExp(e.fun.exp, stack, localMap))
+            translateAssignExp(e.fun.exp, stack, localMap))
           for (i <- params.size - 2 to 0 by -1) {
             val p = params(i)
             r = AST.CoreExp.Quant(kind, AST.CoreExp.Param(p._1, p._2), r)
           }
           return r
         case e: AST.Exp.StrictPureBlock =>
-          return recStmt(e.block, funStack, localMap)._1.get
+          return translateStmt(e.block, funStack, localMap)._1.get
         case e: AST.Exp.Invoke =>
-          val args: ISZ[AST.CoreExp.Base] = for (arg <- e.args) yield rec(arg, funStack, localMap)
+          val args: ISZ[AST.CoreExp.Base] = for (arg <- e.args) yield translateExp(arg, funStack, localMap)
           e.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Method =>
               res.mode match {
@@ -558,20 +577,20 @@ object RewritingSystem {
                   return AST.CoreExp.Constructor(e.typedOpt.get, args)
                 case AST.MethodMode.Select =>
                   e.receiverOpt match {
-                    case Some(receiver) => return AST.CoreExp.Indexing(rec(receiver, funStack, localMap),
-                      rec(e.args(0), funStack, localMap), e.typedOpt.get)
-                    case _ => return AST.CoreExp.Indexing(rec(e.ident, funStack, localMap),
-                      rec(e.args(0), funStack, localMap), e.typedOpt.get)
+                    case Some(receiver) => return AST.CoreExp.Indexing(translateExp(receiver, funStack, localMap),
+                      translateExp(e.args(0), funStack, localMap), e.typedOpt.get)
+                    case _ => return AST.CoreExp.Indexing(translateExp(e.ident, funStack, localMap),
+                      translateExp(e.args(0), funStack, localMap), e.typedOpt.get)
                   }
                 case AST.MethodMode.Store =>
-                  val ie = rec(e.args(0), funStack, localMap)
+                  val ie = translateExp(e.args(0), funStack, localMap)
                   val tuple = ie.tipe.asInstanceOf[AST.Typed.Tuple]
                   val index = AST.CoreExp.Select(ie, "_1", tuple.args(0))
                   val value = AST.CoreExp.Select(ie, "_2", tuple.args(1))
                   e.receiverOpt match {
-                    case Some(receiver) => return AST.CoreExp.IndexingUpdate(rec(receiver, funStack, localMap),
+                    case Some(receiver) => return AST.CoreExp.IndexingUpdate(translateExp(receiver, funStack, localMap),
                       index, value, e.typedOpt.get)
-                    case _ => return AST.CoreExp.IndexingUpdate(rec(e.ident, funStack, localMap),
+                    case _ => return AST.CoreExp.IndexingUpdate(translateExp(e.ident, funStack, localMap),
                       index, value, e.typedOpt.get)
                   }
                 case AST.MethodMode.Extractor => halt("TODO")
@@ -584,17 +603,17 @@ object RewritingSystem {
           }
           e.receiverOpt match {
             case Some(receiver) =>
-              return AST.CoreExp.Apply(T, rec(e.ident, funStack, localMap),
-                rec(receiver, funStack, localMap) +: args, e.typedOpt.get)
+              return AST.CoreExp.Apply(T, translateExp(e.ident, funStack, localMap),
+                translateExp(receiver, funStack, localMap) +: args, e.typedOpt.get)
             case _ =>
-              return AST.CoreExp.Apply(F, rec(e.ident, funStack, localMap),
+              return AST.CoreExp.Apply(F, translateExp(e.ident, funStack, localMap),
                 args, e.typedOpt.get)
           }
         case e: AST.Exp.InvokeNamed =>
           def getArgs: ISZ[AST.CoreExp.Base] = {
             val args = MS.create[Z, AST.CoreExp.Base](e.args.size, AST.CoreExp.False)
             for (arg <- e.args) {
-              args(arg.index) = rec(arg.arg, funStack, localMap)
+              args(arg.index) = translateExp(arg.arg, funStack, localMap)
             }
             return args.toISZ
           }
@@ -607,12 +626,12 @@ object RewritingSystem {
                 case AST.MethodMode.Method =>
                 case AST.MethodMode.Copy =>
                   var r: AST.CoreExp.Base = e.receiverOpt match {
-                    case Some(receiver) => rec(receiver, funStack, localMap)
-                    case _ => rec(e.ident, funStack, localMap)
+                    case Some(receiver) => translateExp(receiver, funStack, localMap)
+                    case _ => translateExp(e.ident, funStack, localMap)
                   }
                   val t = e.typedOpt.get
                   for (arg <- e.args) {
-                    r = AST.CoreExp.Update(r, arg.id.value, rec(arg.arg, funStack, localMap), t)
+                    r = AST.CoreExp.Update(r, arg.id.value, translateExp(arg.arg, funStack, localMap), t)
                   }
                   return r
                 case AST.MethodMode.Ext => halt("TODO")
@@ -626,16 +645,25 @@ object RewritingSystem {
           }
           e.receiverOpt match {
             case Some(receiver) =>
-              return AST.CoreExp.Apply(T, rec(e.ident, funStack, localMap),
-                rec(receiver, funStack, localMap) +: getArgs, e.typedOpt.get)
-            case _ => return AST.CoreExp.Apply(F, rec(e.ident, funStack, localMap),
+              return AST.CoreExp.Apply(T, translateExp(e.ident, funStack, localMap),
+                translateExp(receiver, funStack, localMap) +: getArgs, e.typedOpt.get)
+            case _ => return AST.CoreExp.Apply(F, translateExp(e.ident, funStack, localMap),
               getArgs, e.typedOpt.get)
           }
         case e => halt(s"TODO: $e")
       }
     }
-    return rec(exp, Stack.empty, HashSMap.empty)
   }
+
+  @pure def translateExp(th: TypeHierarchy, isPattern: B, exp: AST.Exp): AST.CoreExp.Base = {
+    return Translator(th, isPattern).translateExp(exp, Stack.empty, HashSMap.empty)
+  }
+
+  @pure def translateAssignExp(th: TypeHierarchy, isPattern: B, ae: AST.AssignExp): AST.CoreExp.Base = {
+    return Translator(th, isPattern).translateAssignExp(ae, Stack.empty, HashSMap.empty)
+  }
+
+  @strictpure def paramId(n: String): String = s"_$n"
 
   @pure def unifyExp(silent: B,
                      th: TypeHierarchy,
@@ -1892,12 +1920,33 @@ object RewritingSystem {
     return rec(exp)
   }
 
+  def methodPatternOf(th: TypeHierarchy, cache: Logika.Cache, info: Info.Method): Rewriter.Pattern.Method = {
+    assert(info.ast.isStrictPure && !info.ast.hasContract)
+    cache.getPatterns(th, info.isInObject, info.name) match {
+      case Some(ISZ(r: Rewriter.Pattern.Method)) => return r
+      case rOpt => assert(rOpt.isEmpty)
+    }
+    var params = ISZ[(String, AST.Typed)]()
+    if (!info.isInObject) {
+      params = params :+ ("this", th.typeMap.get(info.owner).get.tpe)
+    }
+    for (p <- info.ast.sig.params) {
+      params = params :+ (p.id.value, p.tipe.typedOpt.get)
+    }
+    val r = Rewriter.Pattern.Method(info.ast.purity == AST.Purity.Abs, info.isInObject,
+      info.owner, info.ast.sig.id.value, params,
+      translateAssignExp(th, T, Util.extractAssignExpOpt(info).get))
+    cache.setPatterns(th, info.isInObject, info.name, ISZ(r))
+    return r
+  }
+
   def patternsOf(th: TypeHierarchy, cache: Logika.Cache, name: ISZ[String], rightToLeft: B): ISZ[Rewriter.Pattern] = {
-    cache.getPatterns(th, name) match {
+    cache.getPatterns(th, F, name) match {
       case Some(r) => return if (rightToLeft) for (e <- r) yield e.toRightToLeft else r
       case _ =>
     }
     var r = ISZ[Rewriter.Pattern]()
+    cache.setPatterns(th, F, name, r)
     th.nameMap.get(name).get match {
       case info: Info.Theorem =>
         var localPatternSet: RewritingSystem.LocalPatternSet = HashSSet.empty
@@ -1906,11 +1955,11 @@ object RewritingSystem {
             for (p <- params) {
               localPatternSet = localPatternSet + (info.name, p.idOpt.get.value)
             }
-            RewritingSystem.translate(th, T, c)
-          case c => RewritingSystem.translate(th, T, c)
+            RewritingSystem.translateExp(th, T, c)
+          case c => RewritingSystem.translateExp(th, T, c)
         }
         for (c <- RewritingSystem.toCondEquiv(th, claim)) {
-          r = r :+ Rewriter.Pattern(name, F, isPermutative(c), localPatternSet, c)
+          r = r :+ Rewriter.Pattern.Claim(name, F, isPermutative(c), localPatternSet, c)
         }
       case info: Info.Fact =>
         var localPatternSet: RewritingSystem.LocalPatternSet = HashSSet.empty
@@ -1920,18 +1969,53 @@ object RewritingSystem {
               for (p <- params) {
                 localPatternSet = localPatternSet + (info.name, p.idOpt.get.value)
               }
-              RewritingSystem.translate(th, T, c)
-            case c => RewritingSystem.translate(th, T, c)
+              RewritingSystem.translateExp(th, T, c)
+            case c => RewritingSystem.translateExp(th, T, c)
           }
           for (c <- RewritingSystem.toCondEquiv(th, claim)) {
-            r = r :+ Rewriter.Pattern(name, F, isPermutative(c), localPatternSet, c)
+            r = r :+ Rewriter.Pattern.Claim(name, F, isPermutative(c), localPatternSet, c)
           }
         }
       case info: Info.RsVal => r = r ++ retrievePatterns(th, cache, info.ast.init)
-      case info: Info.Method => halt("TODO")
+      case info: Info.Method =>
+        if (info.ast.hasContract) {
+          val context = info.name
+          val localPatternSet = HashSSet ++ (for (p <- info.ast.sig.params) yield (context, p.id.value))
+          def addContract(title: String, requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp]): Unit = {
+            var exp: AST.CoreExp = if (ensures.isEmpty) {
+              AST.CoreExp.True
+            } else {
+              var ensure: AST.CoreExp.Base = translateExp(th, T, ensures(0))
+              for (i <- 1 until ensures.size) {
+                ensure = AST.CoreExp.Binary(ensure, AST.Exp.BinaryOp.And, translateExp(th, T, ensures(i)), AST.Typed.b)
+              }
+              ensure
+            }
+            for (i <- requires.size - 1 to 0 by -1) {
+              exp = AST.CoreExp.Arrow(translateExp(th, T, requires(i)), exp)
+            }
+            r = r :+ Rewriter.Pattern.Claim(info.name :+ title, F, isPermutative(exp), localPatternSet, exp)
+          }
+          info.ast.contract match {
+            case c: AST.MethodContract.Simple => addContract("contract", c.requires, c.ensures)
+            case c: AST.MethodContract.Cases =>
+              for (i <- 0 until c.cases.size) {
+                val cas = c.cases(i)
+                var label = cas.label.value
+                if (label == "") {
+                  label = s"contract.case.$i"
+                } else {
+                  label = s"contract.case.$label"
+                }
+                addContract(label, cas.requires, cas.ensures)
+              }
+          }
+        } else {
+          r = r :+ methodPatternOf(th, cache, info)
+        }
       case _ => halt("Infeasible")
     }
-    cache.setPatterns(th, name, r)
+    cache.setPatterns(th, F, name, r)
     return if (rightToLeft) for (e <- r) yield e.toRightToLeft else r
   }
 
