@@ -1671,6 +1671,20 @@ object RewritingSystem {
               c
             case _ => e.cond
           }
+          (e.tExp, e.fExp) match {
+            case (tExp: AST.CoreExp.LitB, fExp: AST.CoreExp.LitB) =>
+              val r: AST.CoreExp.Base = (tExp.value, fExp.value) match {
+                case (T, T) => AST.CoreExp.LitB(T)
+                case (T, F) => cond
+                case (F, T) => AST.CoreExp.Unary(AST.Exp.UnaryOp.Not, cond)
+                case (F, F) => AST.CoreExp.LitB(F)
+              }
+              if (shouldTrace) {
+                trace = trace :+ Trace.Eval(st"if (${cond.prettyST}) ${tExp.prettyST} else ${fExp.prettyST}", e, r)
+              }
+              return Some(r)
+            case (_, _) =>
+          }
           return if (changed) Some(e(cond = cond)) else None()
         case e: AST.CoreExp.Apply =>
           var op = e.exp
