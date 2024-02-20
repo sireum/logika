@@ -113,7 +113,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Done(stepClaim, stepClaimEv)
     }
 
-    if (stepClaimEv == AST.CoreExp.LitB(T)) {
+    if (stepClaimEv == AST.CoreExp.True) {
       reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
         st"""Evaluating ${stepClaim.prettyST} produces T, hence the claim holds
             |
