@@ -101,7 +101,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("simplifying", stepClaim)
     }
 
-    val stepClaimEv: AST.CoreExp.Base = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all,
+    val stepClaimEv: AST.CoreExp.Base = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache,
       rwPc.provenClaimStepIdMap, stepClaim, logika.config.rwEvalTrace) match {
       case Some((e, t)) =>
         rwPc.trace = t
@@ -160,7 +160,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       if (logika.config.rwEvalTrace) {
         rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("evaluating", fromCoreClaim)
       }
-      rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all,
+      rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache,
         rwPc.provenClaimStepIdMap, rwClaim, logika.config.rwEvalTrace) match {
         case Some((c, t)) =>
           rwPc.trace = rwPc.trace ++ t
@@ -178,8 +178,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         if (logika.config.rwTrace) {
           rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("rewriting", rwClaim)
         }
-        rwClaim = rwPc.transformCoreExpBase(rwClaim) match {
-          case MSome(c) =>
+        rwClaim = rwPc.transformCoreExpBase(cache, rwClaim) match {
+          case Some(c) =>
             rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Done(rwClaim, c)
             c
           case _ =>

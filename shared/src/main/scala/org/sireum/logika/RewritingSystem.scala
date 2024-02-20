@@ -171,7 +171,7 @@ object RewritingSystem {
                          val shouldTrace: B,
                          val shouldTraceEval: B,
                          var done: B,
-                         var trace: ISZ[Trace]) extends AST.MCoreExpTransformer {
+                         var trace: ISZ[Trace]) {
     val patterns: ISZ[Rewriter.Pattern.Claim] = for (p <- rwPatterns if p.isInstanceOf[Rewriter.Pattern.Claim]) yield
       p.asInstanceOf[Rewriter.Pattern.Claim]
     @memoize def provenClaimStepIdMap: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId] = {
@@ -231,25 +231,135 @@ object RewritingSystem {
       return r
     }
 
-    override def preCoreExpIf(o: AST.CoreExp.If): AST.MCoreExpTransformer.PreResult[AST.CoreExp.Base] = {
-      postCoreExpBase(o.cond) match {
-        case MSome(cond: AST.CoreExp.LitB) =>
-          return AST.MCoreExpTransformer.PreResult(T, if (cond.value) MSome(o.tExp) else MSome(o.fExp))
-        case _ => return AST.MCoreExpTransformer.PreResult(F, MNone())
+    def transformCoreExpBases(cache: Logika.Cache, s: ISZ[AST.CoreExp.Base]): Option[ISZ[AST.CoreExp.Base]] = {
+      var changed = F
+      var r = ISZ[AST.CoreExp.Base]()
+      for (o <- s) {
+        transformCoreExpBase(cache, o) match {
+          case Some(o2) =>
+            changed = T
+            r = r :+ o2
+          case _ => r = r :+ o
+        }
+      }
+      return if (changed) Some(r) else None()
+    }
+    def transformCoreExpBase(cache: Logika.Cache, o: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
+      val r: Option[AST.CoreExp.Base] = {
+        val hasChanged = F
+        val rOpt: Option[AST.CoreExp.Base] = o match {
+          case _: AST.CoreExp.Lit => None()
+          case _: AST.CoreExp.ParamVarRef => None()
+          case _: AST.CoreExp.LocalVarRef => None()
+          case _: AST.CoreExp.ObjectVarRef => None()
+          case o: AST.CoreExp.Binary =>
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.left)
+            val r1: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.right)
+            if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+              Some(o(left = r0.getOrElse(o.left), right = r1.getOrElse(o.right)))
+            else
+              None()
+          case o: AST.CoreExp.Unary =>
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            if (hasChanged || r0.nonEmpty)
+              Some(o(exp = r0.getOrElse(o.exp)))
+            else
+              None()
+          case o: AST.CoreExp.Constructor =>
+            val r1: Option[IS[Z, AST.CoreExp.Base]] = transformCoreExpBases(cache, o.args)
+            if (hasChanged || r1.nonEmpty)
+              Some(o(args = r1.getOrElse(o.args)))
+            else
+              None()
+          case o: AST.CoreExp.Select =>
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            if (hasChanged || r0.nonEmpty)
+              Some(o(exp = r0.getOrElse(o.exp)))
+            else
+              None()
+          case o: AST.CoreExp.Update =>
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            val r1: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.arg)
+            if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+              Some(o(exp = r0.getOrElse(o.exp), arg = r1.getOrElse(o.arg)))
+            else
+              None()
+          case o: AST.CoreExp.Indexing =>
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            val r1: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.index)
+            if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+              Some(o(exp = r0.getOrElse(o.exp), index = r1.getOrElse(o.index)))
+            else
+              None()
+          case o: AST.CoreExp.IndexingUpdate =>
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            val r1: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.index)
+            val r2: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.arg)
+            if (hasChanged || r0.nonEmpty || r1.nonEmpty || r2.nonEmpty)
+              Some(o(exp = r0.getOrElse(o.exp), index = r1.getOrElse(o.index), arg = r2.getOrElse(o.arg)))
+            else
+              None()
+          case o: AST.CoreExp.If =>
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.cond)
+            r0 match {
+              case Some(cond: AST.CoreExp.LitB) =>
+                if (cond.value)
+                  transformCoreExpBase(cache, o.tExp)
+                else
+                  transformCoreExpBase(cache, o.fExp)
+              case _ =>
+                if (hasChanged || r0.nonEmpty)
+                  Some(o(cond = r0.getOrElse(o.cond)))
+                else
+                  None()
+            }
+          case o: AST.CoreExp.Apply =>
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            val r1: Option[IS[Z, AST.CoreExp.Base]] = transformCoreExpBases(cache, o.args)
+            if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+              Some(o(exp = r0.getOrElse(o.exp), args = r1.getOrElse(o.args)))
+            else
+              None()
+          case o: AST.CoreExp.Fun =>
+            val r1: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            if (hasChanged || r1.nonEmpty)
+              Some(o(exp = r1.getOrElse(o.exp)))
+            else
+              None()
+          case o: AST.CoreExp.Quant =>
+            val r1: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            if (hasChanged || r1.nonEmpty)
+              Some(o(exp = r1.getOrElse(o.exp)))
+            else
+              None()
+          case o: AST.CoreExp.InstanceOfExp =>
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            if (hasChanged || r0.nonEmpty)
+              Some(o(exp = r0.getOrElse(o.exp)))
+            else
+              None()
+        }
+        rOpt
+      }
+      val hasChanged: B = r.nonEmpty
+      val o2: AST.CoreExp.Base = r.getOrElse(o)
+      val postR = rewrite(cache, o2)
+      if (postR.nonEmpty) {
+        return postR
+      } else if (hasChanged) {
+        return Some(o2)
+      } else {
+        return None()
       }
     }
 
-    override def postCoreExpBase(o: AST.CoreExp.Base): MOption[AST.CoreExp.Base] = {
-      return rewrite(o)
-    }
-
-    def rewrite(o: AST.CoreExp.Base): MOption[AST.CoreExp.Base] = {
-      var rOpt = MOption.none[AST.CoreExp.Base]()
+    def rewrite(cache: Logika.Cache, o: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
+      var rOpt = Option.none[AST.CoreExp.Base]()
       var i = 0
       while (!done && rOpt.isEmpty && i < patterns.size) {
         val pattern = patterns(i)
         var assumptions = ISZ[AST.CoreExp.Base]()
-        def arrowRec(e: AST.CoreExp): AST.CoreExp = {
+        @tailrec def arrowRec(e: AST.CoreExp): AST.CoreExp = {
           e match {
             case e: AST.CoreExp.Arrow =>
               assumptions = assumptions :+ e.left
@@ -275,12 +385,13 @@ object RewritingSystem {
                   if (patterns2.isEmpty) {
                     o
                   } else {
-                    Rewriter(maxCores, th, HashSMap.empty, patterns2, F, F, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
+                    Rewriter(maxCores, th, HashSMap.empty, patterns2, F, F, F, ISZ()).
+                      transformCoreExpBase(cache, o).getOrElse(o)
                   }
               }
             }
             val (o3Opt, t): (Option[AST.CoreExp.Base], ISZ[Trace]) =
-              evalBase(th, EvalConfig.allButEquivSubst, provenClaimStepIdMap, o2, shouldTraceEval) match {
+              evalBase(th, EvalConfig.allButEquivSubst, cache, provenClaimStepIdMap, o2, shouldTraceEval) match {
                 case Some((o3o, t)) => (Some(o3o), t)
                 case _ => (None(),  ISZ())
               }
@@ -295,7 +406,7 @@ object RewritingSystem {
                   if (!shouldTraceEval) o3Opt else None(), ops.ISZOps(assumptions).zip(apcs))
               }
               trace = trace ++ t
-              rOpt = MSome(o3)
+              rOpt = Some(o3)
               done = T
             }
           }
@@ -325,7 +436,8 @@ object RewritingSystem {
                 val patterns2: ISZ[Rewriter.Pattern] =
                   for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
                     r2l(Rewriter.Pattern.Claim(pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))
-                val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, F, F, F, ISZ()).transformCoreExpBase(o).getOrElse(o)
+                val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, F, F, F, ISZ()).
+                  transformCoreExpBase(cache, o).getOrElse(o)
                 val m = unifyExp(T, th, pattern.localPatternSet, from, o2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
                   unifyPendingApplications(T, th, pattern.localPatternSet, m, pas, sm, ems) match {
@@ -377,6 +489,7 @@ object RewritingSystem {
     }
 
     object Pattern {
+
       @datatype class Claim(val name: ISZ[String],
                             val rightToLeft: B,
                             val isPermutative: B,
@@ -396,17 +509,13 @@ object RewritingSystem {
           return thiz(rightToLeft = !rightToLeft, exp = rec(exp))
         }
       }
+
       @datatype class Method(val isAbs: B,
                              val isInObject: B,
                              val owner: ISZ[String],
                              val id: String,
                              val params: ISZ[(String, AST.Typed)],
-                             val exp: AST.CoreExp.Base) extends Pattern {
-        @memoize def localPatternSet: LocalPatternSet = {
-          val context = owner :+ id
-          return HashSSet ++ (for (p <- params) yield (context, p._1))
-        }
-      }
+                             val exp: AST.CoreExp.Base) extends Pattern
     }
   }
 
@@ -585,8 +694,11 @@ object RewritingSystem {
                 case AST.MethodMode.Store =>
                   val ie = translateExp(e.args(0), funStack, localMap)
                   val tuple = ie.tipe.asInstanceOf[AST.Typed.Tuple]
-                  val index = AST.CoreExp.Select(ie, "_1", tuple.args(0))
-                  val value = AST.CoreExp.Select(ie, "_2", tuple.args(1))
+                  val (index, value): (AST.CoreExp.Base, AST.CoreExp.Base) = ie match {
+                    case AST.CoreExp.Constructor(_, ISZ(i, v)) => (i, v)
+                    case AST.CoreExp.Binary(i, AST.Exp.BinaryOp.MapsTo, v, _) => (i, v)
+                    case _ => (AST.CoreExp.Select(ie, "_1", tuple.args(0)), AST.CoreExp.Select(ie, "_2", tuple.args(1)))
+                  }
                   e.receiverOpt match {
                     case Some(receiver) => return AST.CoreExp.IndexingUpdate(translateExp(receiver, funStack, localMap),
                       index, value, e.typedOpt.get)
@@ -654,6 +766,63 @@ object RewritingSystem {
       }
     }
   }
+
+  @record class NoCache extends Logika.Cache {
+
+    override def clearTransition(): Unit = {}
+    override def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, state: State, smt2: Smt2): Option[(ISZ[State], U64)] = {
+      return None()
+    }
+    override def setTransition(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): U64 = {
+      return U64.fromZ(0)
+    }
+
+    override def getAssignExpTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, smt2: Smt2): Option[(ISZ[(State, State.Value)], U64)] = {
+      return None()
+    }
+
+    override def setAssignExpTransition(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, nextStatesValues: ISZ[(State, State.Value)], smt2: Smt2): U64 = {
+      return U64.fromZ(0)
+    }
+
+    override def getSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim]): Option[Smt2Query.Result] = {
+      return None()
+    }
+
+    override def setSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim], result: Smt2Query.Result): Unit = {}
+
+    override def getPatterns(th: TypeHierarchy, isInObject: B, name: ISZ[String]): Option[ISZ[Rewriter.Pattern]] = {
+      return None()
+    }
+
+    override def setPatterns(th: TypeHierarchy, isInObject: B, name: ISZ[String], patterns: ISZ[Rewriter.Pattern]): Unit = {}
+
+    override def keys: ISZ[Logika.Cache.Key] = {
+      return ISZ()
+    }
+
+    override def getValue(key: Logika.Cache.Key): Option[Logika.Cache.Value] = {
+      return None()
+    }
+
+    override def setValue(key: Logika.Cache.Key, value: Logika.Cache.Value): Unit = {}
+
+    override def clearValue(key: Logika.Cache.Key): Unit = {}
+
+    override def taskKeys: ISZ[Logika.Cache.Key] = {
+      return ISZ()
+    }
+
+    override def getTaskValue(key: Logika.Cache.Key): Option[Logika.Cache.Value] = {
+      return None()
+    }
+
+    override def setTaskValue(key: Logika.Cache.Key, value: Logika.Cache.Value): Unit = {}
+
+    override def clearTaskValue(key: Logika.Cache.Key): Unit = {}
+  }
+
+  val noCache: Logika.Cache = NoCache()
 
   @pure def translateExp(th: TypeHierarchy, isPattern: B, exp: AST.Exp): AST.CoreExp.Base = {
     return Translator(th, isPattern).translateExp(exp, Stack.empty, HashSMap.empty)
@@ -927,7 +1096,7 @@ object RewritingSystem {
       val (context, id, args, e) = pa
       m.get((context, id)) match {
         case Some(f: AST.CoreExp.Fun) =>
-          evalBase(th, EvalConfig.funApplicationOnly, HashSMap.empty, AST.CoreExp.Apply(F, f, args, e.tipe), F) match {
+          evalBase(th, EvalConfig.funApplicationOnly, noCache, HashSMap.empty, AST.CoreExp.Apply(F, f, args, e.tipe), F) match {
             case Some((pattern, _)) =>
               m = unifyExp(silent, th, localPatterns, pattern, e, m, pendingApplications, substMap, errorMessages)
             case _ =>
@@ -1130,6 +1299,7 @@ object RewritingSystem {
 
   @pure def eval(th: TypeHierarchy,
                  config: EvalConfig,
+                 cache: Logika.Cache,
                  provenClaims: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId],
                  exp: AST.CoreExp,
                  shouldTrace: B): Option[(AST.CoreExp, ISZ[Trace])] = {
@@ -1137,14 +1307,14 @@ object RewritingSystem {
       case exp: AST.CoreExp.Arrow =>
         var changed = F
         var trace = ISZ[Trace]()
-        val left: AST.CoreExp.Base = evalBase(th, config, provenClaims, exp.left, shouldTrace) match {
+        val left: AST.CoreExp.Base = evalBase(th, config, cache, provenClaims, exp.left, shouldTrace) match {
           case Some((l, t)) =>
             trace = trace ++ t
             changed = T
             l
           case _ => exp.left
         }
-        val right: AST.CoreExp = eval(th, config, provenClaims, exp.right, shouldTrace) match {
+        val right: AST.CoreExp = eval(th, config, cache, provenClaims, exp.right, shouldTrace) match {
           case Some((r, t)) =>
             trace = trace ++ t
             changed = T
@@ -1152,7 +1322,7 @@ object RewritingSystem {
           case _ => exp.right
         }
         return if (changed) Some((AST.CoreExp.Arrow(left, right), trace)) else None()
-      case exp: AST.CoreExp.Base => evalBase(th, config, provenClaims, exp, shouldTrace) match {
+      case exp: AST.CoreExp.Base => evalBase(th, config, cache, provenClaims, exp, shouldTrace) match {
         case Some((e, t)) => return Some((e, t))
         case _ => return None()
       }
@@ -1161,6 +1331,7 @@ object RewritingSystem {
 
   @pure def evalBase(th: TypeHierarchy,
                      config: EvalConfig,
+                     cache: Logika.Cache,
                      provenClaims: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId],
                      exp: AST.CoreExp.Base,
                      shouldTrace: B): Option[(AST.CoreExp.Base, ISZ[Trace])] = {
@@ -1523,6 +1694,45 @@ object RewritingSystem {
               case _ =>
             }
           }
+          receiver.tipe match {
+            case rt: AST.Typed.Name =>
+              th.typeMap.get(rt.ids).get match {
+                case ti: TypeInfo.Adt =>
+                  ti.methods.get(e.id) match {
+                    case Some(info) if !info.ast.hasContract && info.ast.purity == AST.Purity.StrictPure =>
+                      return Some(unfold(th, cache, info))
+                    case _ =>
+                  }
+                case ti: TypeInfo.Sig =>
+                  ti.methods.get(e.id) match {
+                    case Some(info) if !info.ast.hasContract && info.ast.purity == AST.Purity.StrictPure =>
+                      return Some(unfold(th, cache, info))
+                    case _ =>
+                  }
+                case info: TypeInfo.SubZ if config.fieldAccess =>
+                  val r: AST.CoreExp.Base = e.id match {
+                    case "Name" => AST.CoreExp.LitString(st"${(rt.ids, ".")}".render)
+                    case "isBitVector" => AST.CoreExp.LitB(info.ast.isBitVector)
+                    case "hasMin" => AST.CoreExp.LitB(info.ast.hasMin)
+                    case "hasMax" => AST.CoreExp.LitB(info.ast.hasMax)
+                    case "BitWidth" if info.ast.isBitVector => AST.CoreExp.LitZ(info.ast.bitWidth)
+                    case "Min" if info.ast.hasMin => AST.CoreExp.LitZ(info.ast.min)
+                    case "Max" if info.ast.hasMax => AST.CoreExp.LitZ(info.ast.max)
+                    case "isIndex" => AST.CoreExp.LitB(info.ast.isIndex)
+                    case "Index" => AST.CoreExp.LitZ(info.ast.index)
+                    case "isSigned" => AST.CoreExp.LitB(info.ast.isSigned)
+                    case "isZeroIndex" => AST.CoreExp.LitB(info.ast.isZeroIndex)
+                    case _ => halt(s"Infeasible: ${e.id}")
+                  }
+                  if (shouldTrace) {
+                    trace = trace :+ Trace.Eval(st"field access ${equivST(AST.CoreExp.Select(receiver, e.id, r.tipe), r)}", e, r)
+                  }
+                  return Some(r)
+                case info: TypeInfo.Enum if config.fieldAccess => halt("TODO")
+                case _ =>
+              }
+            case _ =>
+          }
           if (config.fieldAccess) {
             receiver match {
               case receiver: AST.CoreExp.Update =>
@@ -1566,33 +1776,6 @@ object RewritingSystem {
                       return Some(r)
                     case _ =>
                   }
-                }
-              case _ =>
-            }
-            receiver.tipe match {
-              case rt: AST.Typed.Name =>
-                th.typeMap.get(rt.ids).get match {
-                  case info: TypeInfo.SubZ =>
-                    val r: AST.CoreExp.Base = e.id match {
-                      case "Name" => AST.CoreExp.LitString(st"${(rt.ids, ".")}".render)
-                      case "isBitVector" => AST.CoreExp.LitB(info.ast.isBitVector)
-                      case "hasMin" => AST.CoreExp.LitB(info.ast.hasMin)
-                      case "hasMax" => AST.CoreExp.LitB(info.ast.hasMax)
-                      case "BitWidth" if info.ast.isBitVector => AST.CoreExp.LitZ(info.ast.bitWidth)
-                      case "Min" if info.ast.hasMin => AST.CoreExp.LitZ(info.ast.min)
-                      case "Max" if info.ast.hasMax => AST.CoreExp.LitZ(info.ast.max)
-                      case "isIndex" => AST.CoreExp.LitB(info.ast.isIndex)
-                      case "Index" => AST.CoreExp.LitZ(info.ast.index)
-                      case "isSigned" => AST.CoreExp.LitB(info.ast.isSigned)
-                      case "isZeroIndex" => AST.CoreExp.LitB(info.ast.isZeroIndex)
-                      case _ => halt(s"Infeasible: ${e.id}")
-                    }
-                    if (shouldTrace) {
-                      trace = trace :+ Trace.Eval(st"field access ${equivST(AST.CoreExp.Select(receiver, e.id, r.tipe), r)}", e, r)
-                    }
-                    return Some(r)
-                  case info: TypeInfo.Enum => halt("TODO")
-                  case _ =>
                 }
               case _ =>
             }
@@ -1880,6 +2063,11 @@ object RewritingSystem {
     }
   }
 
+  def unfold(th: TypeHierarchy, cache: Logika.Cache, info: Info.Method): AST.CoreExp.Base = {
+    val pattern = methodPatternOf(th, cache, info)
+    halt("TODO")
+  }
+
   @pure def toCondEquiv(th: TypeHierarchy, exp: AST.CoreExp): ISZ[AST.CoreExp] = {
     @pure def toEquiv(e: AST.CoreExp.Base): AST.CoreExp.Base = {
       e match {
@@ -1901,7 +2089,7 @@ object RewritingSystem {
             case _ => return ISZ(toEquiv(e))
           }
         case e: AST.CoreExp.Quant if e.kind == AST.CoreExp.Quant.Kind.ForAll =>
-          return toCondEquivH(evalBase(th, EvalConfig.quantApplicationOnly, HashSMap.empty,
+          return toCondEquivH(evalBase(th, EvalConfig.quantApplicationOnly, noCache, HashSMap.empty,
             AST.CoreExp.Apply(F, e,
               ISZ(AST.CoreExp.LocalVarRef(T, ISZ(), paramId(e.param.id), e.param.tipe)),
               AST.Typed.b), F).get._1)
@@ -1935,7 +2123,7 @@ object RewritingSystem {
     }
     val r = Rewriter.Pattern.Method(info.ast.purity == AST.Purity.Abs, info.isInObject,
       info.owner, info.ast.sig.id.value, params,
-      translateAssignExp(th, T, Util.extractAssignExpOpt(info).get))
+      translateAssignExp(th, F, Util.extractAssignExpOpt(info).get))
     cache.setPatterns(th, info.isInObject, info.name, ISZ(r))
     return r
   }
