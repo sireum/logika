@@ -8,9 +8,19 @@ object Rules {
     (x * z) + (y * z) == (x + y) * z
   )
 
-  @spec def subst[T](x: T, y: T, P: T => B @pure) = Theorem(
-    (x ≡ y) __>: P(x) __>: P(y)
-  )
+  //@spec def subst[T](x: T, y: T, P: T => B @pure) = Theorem(
+  //  (x ≡ y) __>: P(x) __>: P(y)
+  //)
+
+  @pure def subst[T](x: T, y: T, P: T => B @pure): Unit = {
+    Contract(
+      Requires(
+        x ≡ y,
+        P(x)
+      ),
+      Ensures(P(y))
+    )
+  }
 
   @rw val myRewriteSet = RS(zDistribute _)
 }
@@ -35,7 +45,7 @@ import Rules._
       //@formatter:off
       1  (c ≡ d)              by Premise,
       2  ((c + 1) ≡ 3)        by Premise,
-      3  ((d + 1) ≡ 3)        by Simpl //Rewrite(RS(subst _), 2)
+      3  ((d + 1) ≡ 3)        by Simpl //Rewrite(RS(subst[Z] _), 2)
       //@formatter:on
     )
   )
@@ -47,7 +57,7 @@ import Rules._
       //@formatter:off
       1  (c ≡ d)              by Premise,
       2  ((d + 1) ≡ 3)        by Premise,
-      3  ((c + 1) ≡ 3)        by Rewrite(~RS(subst _), 2) and (1, 2) // and (...) is optional but it makes the search faster
+      3  ((c + 1) ≡ 3)        by Rewrite(~RS(subst[Z] _), 2) and (1, 2) // and (...) is optional but it makes the search faster
       //@formatter:on
     )
   )

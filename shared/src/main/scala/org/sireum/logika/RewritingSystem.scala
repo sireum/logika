@@ -402,7 +402,7 @@ object RewritingSystem {
           }
           val (from, to): (AST.CoreExp.Base, AST.CoreExp.Base) = arrowRec(pattern.exp) match {
             case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, _) => (left, right)
-            case _ => halt("Infeasible")
+            case e => halt(st"Infeasible: ${e.prettyST}".render)
           }
           def last(m: UnificationMap, patterns2: ISZ[Rewriter.Pattern.Claim], apcs: ISZ[(AST.ProofAst.StepId, AST.CoreExp.Base)]): Unit = {
             val o2: AST.CoreExp.Base = if (m.isEmpty) {
@@ -2271,7 +2271,9 @@ object RewritingSystem {
             for (i <- requires.size - 1 to 0 by -1) {
               exp = AST.CoreExp.Arrow(translateExp(th, T, requires(i)), exp)
             }
-            r = r :+ Rewriter.Pattern.Claim(info.name :+ title, F, isPermutative(exp), localPatternSet, exp)
+            for (e <- toCondEquiv(th, exp)) {
+              r = r :+ Rewriter.Pattern.Claim(info.name :+ title, F, isPermutative(exp), localPatternSet, e)
+            }
           }
           info.ast.contract match {
             case c: AST.MethodContract.Simple => addContract("contract", c.requires, c.ensures)

@@ -115,9 +115,6 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       for (spc <- spcMap.values) {
         spc match {
           case spc: StepProofContext.Regular if !spc.stepNo.isPremise && (isEval ___>: (spc.stepNo != fromOpt.get)) =>
-            println(fromOpt)
-            println(spc.stepNo)
-            println(isEval ___>: (spc.stepNo != fromOpt.get))
             provenClaims = provenClaims + spc.stepNo ~> spc.coreExpClaim
           case _ =>
         }
