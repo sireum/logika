@@ -84,11 +84,26 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
         (r1, r2)
       }
+    val (fromOpt, fromClaim): (Option[AST.ProofAst.StepId], AST.Exp) = if (isRSimpl || isSimpl) {
+      (None(), AST.Exp.LitB(T, step.just.id.attr))
+    } else {
+      val from: AST.ProofAst.StepId =
+        AST.Util.toStepIds(ISZ(justArgs(if (isEval) 0 else 1)), Logika.kind, reporter) match {
+          case Some(s) => s(0)
+          case _ => return emptyResult
+        }
+      spcMap.get(from) match {
+        case Some(spc: StepProofContext.Regular) => (Some(from), spc.exp)
+        case _ =>
+          reporter.error(from.posOpt, Logika.kind, s"Expecting a regular proof step")
+          return emptyResult
+      }
+    }
     var provenClaims = HashSMap.empty[AST.ProofAst.StepId, AST.CoreExp.Base]
     if (step.just.hasWitness) {
       for (w <- step.just.witnesses) {
         spcMap.get(w) match {
-          case Some(spc: StepProofContext.Regular) =>
+          case Some(spc: StepProofContext.Regular) if isEval ___>: (w != fromOpt.get) =>
             provenClaims = provenClaims + w ~> spc.coreExpClaim
           case Some(_) =>
             reporter.error(w.posOpt, Logika.kind, s"Expecting a regular proof step for $w")
@@ -99,7 +114,10 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     } else {
       for (spc <- spcMap.values) {
         spc match {
-          case spc: StepProofContext.Regular if !spc.stepNo.isPremise =>
+          case spc: StepProofContext.Regular if !spc.stepNo.isPremise && (isEval ___>: (spc.stepNo != fromOpt.get)) =>
+            println(fromOpt)
+            println(spc.stepNo)
+            println(isEval ___>: (spc.stepNo != fromOpt.get))
             provenClaims = provenClaims + spc.stepNo ~> spc.coreExpClaim
           case _ =>
         }
@@ -157,21 +175,6 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     } else {
       val simplTrace = rwPc.trace
       rwPc.trace = ISZ()
-      val (fromOpt, fromClaim): (Option[ST], AST.Exp) = if (isRSimpl) {
-        (None(), AST.Exp.LitB(T, step.just.id.attr))
-      } else {
-        val from: AST.ProofAst.StepId =
-          AST.Util.toStepIds(ISZ(justArgs(if (isEval) 0 else 1)), Logika.kind, reporter) match {
-            case Some(s) => s(0)
-            case _ => return emptyResult
-          }
-        spcMap.get(from) match {
-          case Some(spc: StepProofContext.Regular) => (Some(st" $from"), spc.exp)
-          case _ =>
-            reporter.error(from.posOpt, Logika.kind, s"Expecting a regular proof step")
-            return emptyResult
-        }
-      }
       val fromCoreClaim = RewritingSystem.translateExp(logika.th, F, fromClaim)
       @strictpure def simplTraceOpt: Option[ST] = if (stepClaim == stepClaimEv) None() else Some(
         st"""and/or after simplifying the step claim to:
@@ -213,7 +216,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
       }
       @strictpure def fromCoreClaimST: Option[ST] = if (fromOpt.isEmpty) None() else Some(
-        st"""After ${if (isEval) "evaluating" else "rewriting"}$fromOpt:
+        st"""After ${if (isEval) "evaluating" else "rewriting"}${if (fromOpt.isEmpty) st"" else st" ${fromOpt.get}"}:
             |  ${fromCoreClaim.prettyST}
             |"""
       )

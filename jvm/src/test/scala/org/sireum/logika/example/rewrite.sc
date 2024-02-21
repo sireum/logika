@@ -47,7 +47,7 @@ import Rules._
       //@formatter:off
       1  (c ≡ d)              by Premise,
       2  ((d + 1) ≡ 3)        by Premise,
-      4  ((c + 1) ≡ 3)        by Rewrite(~RS(subst _), 2) and (1, 2) // and (...) is optional but it makes the search faster
+      3  ((c + 1) ≡ 3)        by Rewrite(~RS(subst _), 2) and (1, 2) // and (...) is optional but it makes the search faster
       //@formatter:on
     )
   )
@@ -75,10 +75,10 @@ import Rules._
   Deduce(
     //@formatter:off
     1  (EvalFoo(x = 4, y = 5).x == 4)   by Simpl,
-    3  (o(x = 4, y = 5).x == 4)         by Simpl,
-    5  (o(x = 4, y = 5).y == 5)         by Simpl,
-    7  (o(x = 4)(y = 1)(x = 5).x == 5)  by Simpl,
-    9  (o(x = 4)(x = 5).y == o.y)       by Simpl
+    2  (o(x = 4, y = 5).x == 4)         by Simpl,
+    3  (o(x = 4, y = 5).y == 5)         by Simpl,
+    4  (o(x = 4)(y = 1)(x = 5).x == 5)  by Simpl,
+    5  (o(x = 4)(x = 5).y == o.y)       by Simpl
     //@formatter:on
   )
 }
@@ -87,7 +87,7 @@ import Rules._
   Deduce(
     //@formatter:off
     1  ((1, 2)._1 == 1)   by Simpl,
-    3  ((1, 2)._2 == 2)   by Simpl
+    2  ((1, 2)._2 == 2)   by Simpl
     //@formatter:on
   )
 }
@@ -101,10 +101,10 @@ import Rules._
     1  (i != j)                             by Premise,
     2  (i == k)                             by Premise,
     3  (ISZ(1, 2, 3).size == 3)             by Simpl,
-    5  (ISZ[Z](1, 2, 3)(0 ~> 5).size == 3)  by Simpl,
-    7  (a(0 ~> t1).size == a.size)          by Simpl,
-    9  (a(i ~> t1)(j ~> t2)(i) == t1)       by Simpl,
-    11 (a(i ~> t1)(k ~> t2)(i) == t2)       by Simpl
+    4  (ISZ[Z](1, 2, 3)(0 ~> 5).size == 3)  by Simpl,
+    5  (a(0 ~> t1).size == a.size)          by Simpl,
+    6  (a(i ~> t1)(j ~> t2)(i) == t1)       by Simpl,
+    7  (a(i ~> t1)(k ~> t2)(i) == t2)       by Simpl
     //@formatter:on
   )
 }
@@ -127,6 +127,18 @@ import Rules._
   Deduce(
     //@formatter:off
     1  (a + 1 == inc(a))                     by RSimpl(RS(inc _))
+    //@formatter:on
+  )
+}
+
+@pure def evalTest(a: Z, b: Z): Unit = {
+  Contract(
+    Requires(a + b + (3 - 1) > 3)
+  )
+  Deduce(
+    //@formatter:off
+    1  (a + b + (3 - 1) > 3)                  by Premise,
+    2  (a + b + 2 > 3)                        by Eval(1)
     //@formatter:on
   )
 }
