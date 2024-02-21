@@ -690,7 +690,7 @@ object Util {
         case t: AST.Typed.TypeVar => return AST.Type.Named(toName(ISZ(t.id)), ISZ(), typedAttr)
         case t: AST.Typed.Tuple => return AST.Type.Tuple(for (arg <- t.args) yield typedToType(arg), typedAttr)
         case t: AST.Typed.Enum => return AST.Type.Named(toName(t.name), ISZ(), typedAttr)
-        case t: AST.Typed.Fun => return AST.Type.Fun(t.isPure, t.isByName, for (arg <- t.args) yield typedToType(arg),
+        case t: AST.Typed.Fun => return AST.Type.Fun(t.isPureFun, t.isByName, for (arg <- t.args) yield typedToType(arg),
           typedToType(t.ret), typedAttr)
         case t: AST.Typed.Method => halt(s"Infeasible: $t")
         case t: AST.Typed.Object => halt(s"Infeasible: $t")
@@ -1259,7 +1259,7 @@ object Util {
                                 if (left.receiverOpt == Some[AST.Exp](rll.ident)) {
                                   val fun = AST.Exp.Fun(fcontext, ISZ(params(1)(tipeOpt = None())),
                                     AST.Stmt.Expr(right.right, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
-                                    AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, ISZ(argTypes(1)), AST.Typed.b))))
+                                    AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(AST.Purity.Pure,F, ISZ(argTypes(1)), AST.Typed.b))))
                                   return Some(AST.Exp.QuantEach(let.isAll, rll.ident, fun, AST.ResolvedAttr(symPosOpt,
                                     Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current,
                                       F, T, params(1).idOpt.get.value)),
@@ -1278,7 +1278,7 @@ object Util {
                     }
                     val fun = AST.Exp.Fun(fcontext, ISZ(params(0)(tipeOpt = None())), AST.Stmt.Expr(exp.right,
                       AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), AST.TypedAttr(symPosOpt,
-                      Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
+                      Some(AST.Typed.Fun(AST.Purity.Pure,F, argTypes, AST.Typed.b))))
                     return Some(AST.Exp.QuantEach(let.isAll, AST.Exp.Select(left.receiverOpt, AST.Id("indices", attr),
                       ISZ(), AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), fun, AST.ResolvedAttr(symPosOpt,
                       Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
@@ -1292,7 +1292,7 @@ object Util {
                     val hi = left.right.asInstanceOf[AST.Exp.Binary].right
                     val fun = AST.Exp.Fun(fcontext, ISZ(params(0)(tipeOpt = None())), AST.Stmt.Expr(exp.right,
                       AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), AST.TypedAttr(symPosOpt,
-                      Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
+                      Some(AST.Typed.Fun(AST.Purity.Pure,F, argTypes, AST.Typed.b))))
                     return Some(AST.Exp.QuantRange(let.isAll, lo, hi, isExact, fun, AST.ResolvedAttr(symPosOpt,
                       Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
                         params(0).idOpt.get.value)),
@@ -1303,7 +1303,7 @@ object Util {
             case _ =>
           }
           val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(exp, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
-            AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(T, F, argTypes, AST.Typed.b))))
+            AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(AST.Purity.Pure,F, argTypes, AST.Typed.b))))
           return Some(AST.Exp.QuantType(let.isAll, fun, attr))
         case let: State.Claim.Let.FieldLookup =>
           valueToExp(let.adt) match {
@@ -1333,7 +1333,7 @@ object Util {
                       }
                       val info = ti.methods.get(let.id).get
                       val tOpt: Option[AST.Typed.Fun] = info.typedOpt match {
-                        case Some(_: AST.Typed.Method) => Some(AST.Typed.Fun(T, T, ISZ(), sym.tipe))
+                        case Some(_: AST.Typed.Method) => Some(AST.Typed.Fun(AST.Purity.Pure,T, ISZ(), sym.tipe))
                         case Some(t) => halt(s"Infeasible: $t")
                         case _ => None()
                       }
@@ -1344,13 +1344,13 @@ object Util {
                       assert(let.id == "toZ")
                       return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                         AST.ResolvedAttr(symPosOpt, TypeChecker.extResOpt(F, info.name, let.id, ISZ(),
-                          AST.Typed.Fun(T, T, ISZ(), AST.Typed.z)),
+                          AST.Typed.Fun(AST.Purity.Pure,T, ISZ(), AST.Typed.z)),
                           Some(sym.tipe))))
                     case info: TypeInfo.Enum =>
                       assert(let.id == "ordinal" || let.id == "name")
                       return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                         AST.ResolvedAttr(symPosOpt, TypeChecker.extResOpt(F, info.name, let.id, ISZ(),
-                          AST.Typed.Fun(T, T, ISZ(), AST.Typed.z)),
+                          AST.Typed.Fun(AST.Purity.Pure,T, ISZ(), AST.Typed.z)),
                           Some(sym.tipe))))
                     case ti => halt(s"Infeasible: $ti")
                   }
@@ -1367,7 +1367,7 @@ object Util {
                   assert(let.id == "toZ")
                   return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                     AST.ResolvedAttr(symPosOpt, TypeChecker.extResOpt(F, ISZ(t.id), let.id, ISZ(),
-                      AST.Typed.Fun(T, T, ISZ(), AST.Typed.z)),
+                      AST.Typed.Fun(AST.Purity.Pure,T, ISZ(), AST.Typed.z)),
                       Some(sym.tipe))))
                 case t => halt(s"Infeasible: $t")
               }
@@ -1476,12 +1476,12 @@ object Util {
                     let.pf.id.native match {
                       case "randomSeed" =>
                         val paramNames = ISZ[String]("seed")
-                        val f = AST.Typed.Fun(T, F, ISZ(AST.Typed.z), sym.tipe)
+                        val f = AST.Typed.Fun(AST.Purity.Pure,F, ISZ(AST.Typed.z), sym.tipe)
                         (TypeChecker.extResOpt(T, let.pf.context, let.pf.id, paramNames, f),
                           Some(AST.Typed.Method(T, AST.MethodMode.Ext, ISZ(), let.pf.context, let.pf.id, paramNames, f)))
                       case "randomSeedBetween" =>
                         val paramNames = ISZ[String]("seed", "min", "max")
-                        val f = AST.Typed.Fun(T, F, ISZ(AST.Typed.z, sym.tipe, sym.tipe), sym.tipe)
+                        val f = AST.Typed.Fun(AST.Purity.Pure,F, ISZ(AST.Typed.z, sym.tipe, sym.tipe), sym.tipe)
                         (TypeChecker.extResOpt(T, let.pf.context, let.pf.id, paramNames, f),
                           Some(AST.Typed.Method(T, AST.MethodMode.Ext, ISZ(), let.pf.context, let.pf.id, paramNames, f)))
                       case _ => halt(s"Unexpected: $let")
@@ -2254,7 +2254,7 @@ object Util {
     val assumeResAttr = AST.ResolvedAttr(
       posOpt = posOpt,
       resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Assume)),
-      typedOpt = Some(AST.Typed.Fun(F, F, ISZ(AST.Typed.b), AST.Typed.unit))
+      typedOpt = Some(AST.Typed.Fun(AST.Purity.Impure,F, ISZ(AST.Typed.b), AST.Typed.unit))
     )
     return AST.Stmt.Expr(AST.Exp.Invoke(
       None(), AST.Exp.Ident(AST.Id("assume", AST.Attr(posOpt)), assumeResAttr), ISZ(), ISZ(cond),
@@ -2431,7 +2431,7 @@ object Util {
         case _ =>
       }
       val (s2, pf) = pureMethod(logika.context.nameExePathMap, logika.context.maxCores, logika.context.fileOptions,
-        logika.th, logika.config, logika.plugins, smt2, cache, s0, receiverTypeOpt, AST.Typed.Fun(T, F, paramTypes, t),
+        logika.th, logika.config, logika.plugins, smt2, cache, s0, receiverTypeOpt, AST.Typed.Fun(AST.Purity.Pure,F, paramTypes, t),
         owner, id, isHelper, T, paramIds, AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter,
         logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)

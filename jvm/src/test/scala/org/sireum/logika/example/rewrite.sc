@@ -108,3 +108,25 @@ import Rules._
     //@formatter:on
   )
 }
+
+
+@strictpure def incN(x: Z, n: Z): Z = x + n
+
+@pure def incNTest(a: Z): Unit = {
+  Deduce(
+    //@formatter:off
+    1  (a + 1 == incN(a, 1))                 by Simpl
+    //@formatter:on
+  )
+}
+
+
+@abs def inc(x: Z): Z = x + 1
+
+@pure def incTest(a: Z): Unit = {
+  Deduce(
+    //@formatter:off
+    1  (a + 1 == inc(a))                     by RSimpl(RS(inc _))
+    //@formatter:on
+  )
+}

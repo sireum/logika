@@ -142,7 +142,7 @@ object InceptionPlugin {
           AST.Util.ExpSubstitutor(argParamRefMap).transformExp(te) match {
             case MSome(te2) =>
               val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(te2, AST.TypedAttr(te.posOpt, te.typedOpt)),
-                AST.TypedAttr(fe.posOpt, Some(AST.Typed.Fun(T, F, paramTypes, fe.typedOpt.get))))
+                AST.TypedAttr(fe.posOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F, paramTypes, fe.typedOpt.get))))
               addResult(id, fun)
             case _ =>
           }

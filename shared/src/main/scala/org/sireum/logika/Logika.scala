@@ -2677,7 +2677,7 @@ import Util._
       val (receiverModified, modLocals) = contract.modifiedLocalVars(lComp.context.receiverLocalTypeOpt, typeSubstMap)
 
       val pfOpt: Option[State.ProofFun] = if (config.pureFun ||
-        (info.sig.isPure && !info.hasBody && info.contract.isEmpty)) {
+        (info.sig.funType.isPureFun && !info.hasBody && info.contract.isEmpty)) {
         val typedAttr = AST.TypedAttr(posOpt, None())
         val (s8, pf) = Util.pureMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config,
           plugins, smt2, cache, s1, lComp.context.receiverTypeOpt, info.sig.funType.subst(typeSubstMap),
