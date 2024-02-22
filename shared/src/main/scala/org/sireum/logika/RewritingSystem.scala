@@ -1408,10 +1408,16 @@ object RewritingSystem {
     @strictpure def incDeBruijnMap(deBruijnMap: HashMap[Z, AST.CoreExp.Base], inc: Z): HashMap[Z, AST.CoreExp.Base] =
       if (inc != 0) HashMap ++ (for (p <- deBruijnMap.entries) yield (p._1 + inc, p._2)) else deBruijnMap
     def shouldUnfold(info: Info.Method): B = {
-      return !info.ast.hasContract && info.ast.isStrictPure &&
+      val r = !info.ast.hasContract && info.ast.isStrictPure &&
         ((info.ast.purity == AST.Purity.Abs) ->: methodPatterns.contains((info.name, info.isInObject)))
+      if (!r) {
+        return F
+      }
+      return unfoldingMap.value.get((info.name, info.isInObject)).getOrElse(0) < maxUnfolding
     }
     def unfold(info: Info.Method, receiverOpt: Option[AST.CoreExp.Base]): AST.CoreExp.Base = {
+      val key = (info.name, info.isInObject)
+      unfoldingMap.value = unfoldingMap.value + key ~> (unfoldingMap.value.get(key).getOrElse(0) + 1)
       val pattern = methodPatternOf(th, cache, info)
       val f = pattern.toFun
       receiverOpt match {
