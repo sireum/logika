@@ -26,6 +26,7 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.lang.ast.Typed
 import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
@@ -341,6 +342,7 @@ object RewritingSystem {
               Some(o(exp = r0.getOrElse(o.exp)))
             else
               None()
+          case o: AST.CoreExp.Halt => None()
         }
         rOpt
       }
@@ -578,6 +580,92 @@ object RewritingSystem {
       }
       return translateAssignExp(stmts(stmts.size - 1).asAssignExp, funStack, m)
     }
+    @pure def translatePattern(exp: AST.CoreExp.Base, pattern: AST.Pattern, funStack: FunStack, localMap: LocalMap): (ISZ[AST.CoreExp.Base], LocalMap) = {
+      var r = ISZ[AST.CoreExp.Base]()
+      var lMap = localMap
+      pattern match {
+        case _: AST.Pattern.Wildcard => // skip
+        case pattern: AST.Pattern.Literal =>
+          r = r :+ AST.CoreExp.Binary(exp, AST.Exp.BinaryOp.EquivUni,
+            translateExp(pattern.lit, funStack, localMap), AST.Typed.b)
+        case pattern: AST.Pattern.VarBinding =>
+          lMap = lMap + (pattern.idContext, pattern.id.value) ~> exp
+        case pattern: AST.Pattern.Structure =>
+          val t = pattern.typedOpt.get
+          lMap = pattern.idOpt match {
+            case Some(id) => localMap + (pattern.idContext, id.value) ~> exp
+            case _ => localMap
+          }
+          t match {
+            case t: AST.Typed.Tuple =>
+              var i = 0
+              var conds = ISZ[AST.CoreExp.Base]()
+              for (j <- 0 until t.args.size) {
+                val pat = pattern.patterns(i)
+                val f = AST.CoreExp.Select(exp, s"_${j + 1}", pat.typedOpt.get)
+                val (pconds, lMap2) = translatePattern(f, pat, funStack, lMap)
+                conds = conds ++ pconds
+                lMap = lMap2
+                i = i + 1
+              }
+              r = r :+ AST.CoreExp.condAnd(AST.CoreExp.InstanceOfExp(T, exp, t), AST.CoreExp.bigAnd(conds))
+              lMap = localMap
+            case t: AST.Typed.Name =>
+              val adt = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
+              var i = 0
+              var conds = ISZ[AST.CoreExp.Base]()
+              for (p <- adt.ast.params if !p.isHidden) {
+                val pat = pattern.patterns(i)
+                val f = AST.CoreExp.Select(exp, p.id.value, pat.typedOpt.get)
+                val (pconds, lMap2) = translatePattern(f, pat, funStack, lMap)
+                conds = conds ++ pconds
+                lMap = lMap2
+                i = i + 1
+              }
+              r = r :+ AST.CoreExp.condAnd(AST.CoreExp.InstanceOfExp(T, exp, t), AST.CoreExp.bigAnd(conds))
+              lMap = localMap
+            case _ => halt("Infeasible")
+          }
+        case pattern: AST.Pattern.Ref =>
+          val right: AST.CoreExp.Base = pattern.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.Var =>
+              if (res.isInObject) {
+                val ids = pattern.name.ids
+                val owner: ISZ[String] = for (i <- 0 until pattern.name.ids.size - 1) yield ids(i).value
+                AST.CoreExp.ObjectVarRef(owner, ids(ids.size - 1).value, pattern.typedOpt.get)
+              } else {
+                AST.CoreExp.Select(
+                  AST.CoreExp.LocalVarRef(F, pattern.idContext, "this", pattern.receiverTipeOpt.get),
+                  res.id, pattern.typedOpt.get)
+              }
+            case res: AST.ResolvedInfo.LocalVar =>
+              translateLocalInfo(res, pattern.typedOpt.get, funStack, localMap)
+            case res: AST.ResolvedInfo.EnumElement =>
+              val ti = th.typeMap.get(res.owner).get.asInstanceOf[TypeInfo.Enum]
+              halt("TODO")
+            case _ => halt("Infeasible")
+          }
+          r = r :+ AST.CoreExp.Binary(exp, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b)
+        case pattern: AST.Pattern.SeqWildcard => halt("TODO")
+        case pattern: AST.Pattern.LitInterpolate => halt("TODO")
+      }
+      return (r, lMap)
+    }
+    @pure def translateLocalInfo(res: AST.ResolvedInfo.LocalVar, t: AST.Typed, funStack: FunStack, localMap: LocalMap): AST.CoreExp.Base = {
+      localMap.get((res.context, res.id)) match {
+        case Some(r) => return r
+        case _ =>
+      }
+      val id = res.id
+      val stackSize = funStack.size
+      for (i <- stackSize - 1 to 0 by -1) {
+        val p = funStack.elements(i)
+        if (p._1 == id) {
+          return AST.CoreExp.ParamVarRef(stackSize - i, id, p._2)
+        }
+      }
+      return AST.CoreExp.LocalVarRef(isPattern, res.context, id, t)
+    }
     @pure def translateStmt(stmt: AST.Stmt, funStack: FunStack, localMap: LocalMap): (Option[AST.CoreExp.Base], LocalMap) = {
       stmt match {
         case stmt: AST.Stmt.Expr => return (Some(translateExp(stmt.exp, funStack, localMap)), localMap)
@@ -592,8 +680,41 @@ object RewritingSystem {
           val tExp = translateBody(stmt.thenBody, funStack, localMap)
           val fExp = translateBody(stmt.elseBody, funStack, localMap)
           return (Some(AST.CoreExp.If(condExp, tExp, fExp, stmt.attr.typedOpt.get)), localMap)
-        case stmt: AST.Stmt.VarPattern => halt(s"TODO: $stmt")
-        case stmt: AST.Stmt.Match => halt(s"TODO: $stmt")
+        case stmt: AST.Stmt.VarPattern =>
+          val exp = translateAssignExp(stmt.init, funStack, localMap)
+          val (conds, lMap) = translatePattern(exp, stmt.pattern, funStack, localMap)
+          val cond = AST.CoreExp.bigAnd(conds)
+          var lMap2 = lMap
+          for (p <- lMap.entries if localMap.get(p._1) != Some(p._2)) {
+            lMap2 = lMap2 + p._1 ~> AST.CoreExp.ite(cond, p._2, AST.CoreExp.Abort, p._2.tipe)
+          }
+          return (None(), lMap2)
+        case stmt: AST.Stmt.Match =>
+          val exp = translateExp(stmt.exp, funStack, localMap)
+          var condBodyPairs = ISZ[(AST.CoreExp.Base, AST.CoreExp.Base)]()
+          for (cas <- stmt.cases) {
+            val (conds, lMap) = translatePattern(exp, cas.pattern, funStack, localMap)
+            val conds2: ISZ[AST.CoreExp.Base] = cas.condOpt match {
+              case Some(cond) => conds :+ translateExp(cond, funStack, lMap)
+              case _ => conds
+            }
+            val body = translateBody(cas.body, funStack, lMap)
+            condBodyPairs = condBodyPairs :+ (AST.CoreExp.bigAnd(conds2), body)
+          }
+          val t = stmt.typedOpt.get
+          val (lastCond, lastBody) = condBodyPairs(condBodyPairs.size - 1)
+          var r = AST.CoreExp.ite(
+            AST.CoreExp.bigAnd((for (j <- 0 until condBodyPairs.size - 1) yield
+              AST.CoreExp.Unary(AST.Exp.UnaryOp.Not, condBodyPairs(j)._1).asInstanceOf[AST.CoreExp.Base]) :+ lastCond),
+            lastBody, AST.CoreExp.Abort, t)
+          for (i <- condBodyPairs.size - 2 to 0 by -1) {
+            val (cond, body) = condBodyPairs(i)
+            r = AST.CoreExp.ite(
+              AST.CoreExp.bigAnd((for (j <- 0 until i) yield
+                AST.CoreExp.Unary(AST.Exp.UnaryOp.Not, condBodyPairs(j)._1).asInstanceOf[AST.CoreExp.Base]) :+ cond),
+              body, r, t)
+          }
+          return (Some(r), localMap)
         case _ => halt(s"Infeasible: $stmt")
       }
     }
@@ -632,19 +753,7 @@ object RewritingSystem {
         case e: AST.Exp.Ident =>
           e.resOpt.get match {
             case res: AST.ResolvedInfo.LocalVar =>
-              localMap.get((res.context, res.id)) match {
-                case Some(r) => return r
-                case _ =>
-              }
-              val id = res.id
-              val stackSize = funStack.size
-              for (i <- stackSize - 1 to 0 by -1) {
-                val p = funStack.elements(i)
-                if (p._1 == id) {
-                  return AST.CoreExp.ParamVarRef(stackSize - i, id, p._2)
-                }
-              }
-              return AST.CoreExp.LocalVarRef(isPattern, res.context, id, e.typedOpt.get)
+              return translateLocalInfo(res, e.typedOpt.get, funStack, localMap)
             case res: AST.ResolvedInfo.Var if res.isInObject =>
               if (res.owner == AST.Typed.sireumName) {
                 res.id match {
@@ -681,7 +790,11 @@ object RewritingSystem {
                 case _ => e.op
               }
               return AST.CoreExp.Binary(left, op, right, e.typedOpt.get)
-            case _ => halt(s"TODO: $e")
+            case res: AST.ResolvedInfo.Method =>
+              return AST.CoreExp.Apply(T, AST.CoreExp.Select(translateExp(e.left, funStack, localMap), e.op,
+                AST.Typed.Method(res.isInObject, res.mode, res.typeParams, res.owner, res.id, res.paramNames,
+                  res.tpeOpt.get)), ISZ(translateExp(e.right, funStack, localMap)), e.typedOpt.get)
+            case _ => halt(s"Infeasible: $e")
           }
         case e: AST.Exp.Select =>
           e.receiverOpt match {
@@ -1303,7 +1416,9 @@ object RewritingSystem {
             case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left ≢ right)
             case _ => halt(s"Infeasible: $op on R")
           }
-        case lit1 => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
+        case lit1: AST.CoreExp.LitRange => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
+        case lit1: AST.CoreExp.LitBits => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
+        case lit1: AST.CoreExp.LitString => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
       }
     }
   }
@@ -1345,7 +1460,9 @@ object RewritingSystem {
           case AST.Exp.UnaryOp.Minus => AST.CoreExp.LitR(-lit.value)
           case _ => halt(s"Infeasible $op on R")
         }
-      case lit => halt(st"TODO: $op ${lit.prettyST}".render)
+      case lit: AST.CoreExp.LitBits => halt(st"TODO: $op ${lit.prettyST}".render)
+      case lit: AST.CoreExp.LitRange => halt(st"TODO: $op ${lit.prettyST}".render)
+      case lit: AST.CoreExp.LitString => halt(st"TODO: $op ${lit.prettyST}".render)
     }
 
   @pure def eval(th: TypeHierarchy,
@@ -1483,6 +1600,7 @@ object RewritingSystem {
     }
     def rec(deBruijnMap: HashMap[Z, AST.CoreExp.Base], e: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
       e match {
+        case _: AST.CoreExp.Halt => return None()
         case _: AST.CoreExp.Lit => return None()
         case _: AST.CoreExp.LocalVarRef => return None()
         case e: AST.CoreExp.ParamVarRef =>
@@ -1514,6 +1632,13 @@ object RewritingSystem {
               changed = T
               r
             case _ => e.right
+          }
+          if (left.isHalt || right.isHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(left = left, right = right).prettyST}", e, r)
+            }
+            return Some(r)
           }
           if (e.op == AST.Exp.BinaryOp.MapsTo) {
             val r = AST.CoreExp.Constructor(AST.Typed.Tuple(ISZ(left.tipe, right.tipe)), ISZ(left, right))
@@ -1717,6 +1842,13 @@ object RewritingSystem {
               exp2
             case _ => e.exp
           }
+          if (ue.isHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(exp = ue).prettyST}", e, r)
+            }
+            return Some(r)
+          }
           if (config.constant) {
             ue match {
               case exp: AST.CoreExp.Lit =>
@@ -1770,6 +1902,13 @@ object RewritingSystem {
               changed = T
               exp2
             case _ => e.exp
+          }
+          if (receiver.isHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(exp = receiver).prettyST}", e, r)
+            }
+            return Some(r)
           }
           if (config.tupleProjection && receiver.tipe.isInstanceOf[AST.Typed.Tuple]) {
             receiver match {
@@ -1894,6 +2033,13 @@ object RewritingSystem {
               arg2
             case _ => e.arg
           }
+          if (receiver.isHalt || arg.isHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(exp = receiver, arg = arg).prettyST}", e, r)
+            }
+            return Some(r)
+          }
           if (config.fieldAccess) {
             receiver match {
               case receiver: AST.CoreExp.Update if receiver.id == e.id =>
@@ -1919,6 +2065,13 @@ object RewritingSystem {
               changed = T
               index2
             case _ => e.index
+          }
+          if (receiver.isHalt || index.isHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(exp = receiver, index = index).prettyST}", e, r)
+            }
+            return Some(r)
           }
           if (config.seqIndexing) {
             receiver match {
@@ -1974,6 +2127,13 @@ object RewritingSystem {
               arg2
             case _ => e.arg
           }
+          if (receiver.isHalt || index.isHalt || arg.isHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(exp = receiver, index = index, arg = arg).prettyST}", e, r)
+            }
+            return Some(r)
+          }
           if (config.seqIndexing) {
             receiver match {
               case receiver: AST.CoreExp.IndexingUpdate =>
@@ -2000,14 +2160,25 @@ object RewritingSystem {
         case e: AST.CoreExp.Constructor =>
           var changed = F
           var args = ISZ[AST.CoreExp.Base]()
+          var hasHalt = F
           for (arg <- e.args) {
             evalBaseH(deBruijnMap, arg) match {
               case Some(arg2) =>
+                if (arg2.isHalt) {
+                  hasHalt = T
+                }
                 args = args :+ arg2
                 changed = T
               case _ =>
                 args = args :+ arg
             }
+          }
+          if (hasHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(args = args).prettyST}", e, r)
+            }
+            return Some(r)
           }
           return if (changed) Some(e(args = args)) else None()
         case e: AST.CoreExp.If =>
@@ -2024,12 +2195,23 @@ object RewritingSystem {
               c
             case _ => e.cond
           }
+          if (cond.isHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(cond = cond).prettyST}", e, r)
+            }
+            return Some(r)
+          }
           return if (changed) Some(e(cond = cond)) else None()
         case e: AST.CoreExp.Apply =>
           var op = e.exp
           var changed = F
+          var hasHalt = F
           evalBaseH(deBruijnMap, e.exp) match {
             case Some(o) =>
+              if (o.isHalt) {
+                hasHalt = T
+              }
               op = o
               changed = T
             case _ =>
@@ -2038,11 +2220,24 @@ object RewritingSystem {
           for (arg <- e.args) {
             evalBaseH(deBruijnMap, arg) match {
               case Some(arg2) =>
+                if (arg2.isHalt) {
+                  hasHalt = T
+                }
                 args = args :+ arg2
                 changed = T
               case _ =>
+                if (arg.isHalt) {
+                  hasHalt = T
+                }
                 args = args :+ arg
             }
+          }
+          if (hasHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(exp = op, args = args).prettyST}", e, r)
+            }
+            return Some(r)
           }
           op match {
             case f: AST.CoreExp.Fun if config.funApplication =>
@@ -2137,6 +2332,13 @@ object RewritingSystem {
               changed = T
               r
             case _ => e
+          }
+          if (receiver.isHalt) {
+            val r = AST.CoreExp.Abort
+            if (shouldTrace) {
+              trace = trace :+ Trace.Eval(st"halted ${e(exp = receiver).prettyST}", e, r)
+            }
+            return Some(r)
           }
           if (config.instanceOf && th.isSubType(receiver.tipe, e.tipe)) {
             if (e.isTest) {
