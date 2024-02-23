@@ -404,7 +404,7 @@ object Smt2 {
   }
 
   def addProofFunDecl(config: Config, pf: State.ProofFun, sym: State.Value.Sym, invClaims: ISZ[State.Claim],
-                      reporter: Reporter): Unit = {
+                      reporter: Reporter): (ST, ST) = {
     pf.receiverTypeOpt match {
       case Some(rt) => addType(config, rt, reporter)
       case _ =>
@@ -437,10 +437,11 @@ object Smt2 {
           |))"""
     val decl = st"(declare-fun $id (${(for (p <- paramIdTypes) yield adtId(p._2), " ")}) ${adtId(pf.returnType)})"
     pureFunsUp(pureFuns + pf ~> ((decl, declClaim)))
+    return (decl, declClaim)
   }
 
   def addProofFun(config: Config, pos: message.Position, pf: State.ProofFun, svs: ISZ[(State, State.Value.Sym)],
-                  statePrefix: Z, reporter: Reporter): Unit = {
+                  statePrefix: Z, decl: ST, declClaim: ST, reporter: Reporter): Unit = {
     val context = pf.context :+ pf.id
     val thisId = currentLocalIdString(context, "this")
     var paramIdTypes: ISZ[(String, ST, AST.Typed)] = ISZ[(String, ST, AST.Typed)]()
@@ -451,8 +452,6 @@ object Smt2 {
     for (p <- ops.ISZOps(pf.paramIds).zip(pf.paramTypes)) {
       paramIdTypes = paramIdTypes :+ ((p._1, currentLocalIdString(context, p._1), p._2))
     }
-    val (decl, declClaim) = pureFuns.get(pf).get
-
     var ecs = ISZ[ST]()
     val nlc = NonLocalIdCollector(pf.context :+ pf.id, HashSSet.empty)
     for (sv <- svs if sv._1.ok) {

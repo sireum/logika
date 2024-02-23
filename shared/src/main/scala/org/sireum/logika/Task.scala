@@ -64,9 +64,10 @@ object Task {
         posOpt = fact.posOpt,
         storage = HashMap.empty
       )))
+      val csmt2 = smt2
       val logika = Logika(th, config, context, plugins)
       for (tp <- fact.typeParams) {
-        smt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
+        csmt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
       var s0 = State.create
       var ctx = logika.context.methodName
@@ -86,11 +87,11 @@ object Task {
       var i = 1
       for (claim <- claims if s0.ok) {
         val pos = claim.posOpt.get
-        val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, smt2, cache, T, s0, claim, reporter)
+        val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, csmt2, cache, T, s0, claim, reporter)
         if (s1.ok) {
           val (s2, sym) = logika.value2Sym(s1, v, pos)
           val s3 = s2.addClaim(State.Claim.Prop(T, sym))
-          val r = smt2.satResult(ctx, config, cache, Smt2.satTimeoutInMs, T,
+          val r = csmt2.satResult(ctx, config, cache, Smt2.satTimeoutInMs, T,
             s"Fact claim #$i at [${pos.beginLine}, ${pos.beginColumn}]", pos, s3.claims, reporter)
           if (r._2.kind ==Smt2Query.Result.Kind.Unsat) {
             reporter.error(claim.posOpt, Logika.kind, s"Unsatisfiable fact claim")
@@ -131,18 +132,19 @@ object Task {
         posOpt = theorem.posOpt,
         storage = HashMap.empty
       )))
+      val csmt2 = smt2
       val logika = Logika(th, config, context, plugins)
       for (tp <- theorem.typeParams) {
-        smt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
+        csmt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
       if (theorem.proof.steps.isEmpty) {
-        logika.evalAssert(smt2, cache, T, theorem.id.value, State.create, theorem.claim, theorem.claim.posOpt, ISZ(),
+        logika.evalAssert(csmt2, cache, T, theorem.id.value, State.create, theorem.claim, theorem.claim.posOpt, ISZ(),
           reporter)
         return reporter.messages
       }
       var p = (State.create, HashSMap.empty[AST.ProofAst.StepId, StepProofContext])
       for (step <- theorem.proof.steps if p._1.ok) {
-        p = logika.evalProofStep(smt2, cache, p, step, reporter)
+        p = logika.evalProofStep(csmt2, cache, p, step, reporter)
       }
       if (!p._1.ok) {
         return reporter.messages

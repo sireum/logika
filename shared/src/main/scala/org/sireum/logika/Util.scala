@@ -2291,7 +2291,7 @@ object Util {
     } else {
       val posOpt = body.asStmt.posOpt
       val pos = posOpt.get
-      val (svs, maxFresh, ok): (ISZ[(State, State.Value.Sym)], Z, B) = {
+      val (svs, maxFresh, ok, decl, declClaim): (ISZ[(State, State.Value.Sym)], Z, B, ST, ST) = {
         val context = pf.context :+ pf.id
         val logika: Logika = logikaMethod(nameExePathMap, maxCores, fileOptions, th, config, isHelper, F, pf.context,
           pf.id, pf.receiverTypeOpt, ops.ISZOps(paramIds).zip(pf.paramTypes), pf.returnType, posOpt, ISZ(), ISZ(), ISZ(),
@@ -2301,7 +2301,7 @@ object Util {
         val s2: State =
           if (isHelper || isStrictPure && config.strictPureMode == Config.StrictPureMode.Uninterpreted) s1
           else assumeValueInv(logika, smt2, cache, T, s1, res, pos, reporter)
-        smt2.addProofFunDecl(config, pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size), reporter)
+        val (d, dc) = smt2.addProofFunDecl(config, pf, res, ops.ISZOps(s2.claims).slice(s1.claims.size, s2.claims.size), reporter)
         s0 = s0(nextFresh = s2.nextFresh, status = s2.status)
         for (pair <- ops.ISZOps(paramIds).zip(pf.paramTypes) if pair._1.value != "this") {
           val (pid, pt) = pair
@@ -2329,11 +2329,11 @@ object Util {
           }
         }
         assert(svs.isEmpty || maxFresh >= 0)
-        (for (ss <- sss) yield (ss._1(nextFresh = maxFresh), ss._2), maxFresh, status)
+        (for (ss <- sss) yield (ss._1(nextFresh = maxFresh), ss._2), maxFresh, status, d, dc)
       }
 
       if (ok && svs.nonEmpty) {
-        smt2.addProofFun(config, pos, pf, svs, 0, reporter)
+        smt2.addProofFun(config, pos, pf, svs, 0, decl, declClaim, reporter)
       }
 
       val s1 = state(status = State.statusOf(ok), nextFresh = maxFresh)

@@ -287,7 +287,7 @@ object State {
       @strictpure override def toRawST: ST = st"${(owner, ".")}.$id"
     }
 
-    @datatype class Sym(val num: org.sireum.Z, @hidden val tipe: AST.Typed, @hidden val pos: Position) extends Value {
+    @datatype class Sym(val num: org.sireum.Z, val tipe: AST.Typed, @hidden val pos: Position) extends Value {
 
       @pure override def toRawST: ST = {
         return st"$symPrefix$num@[${pos.beginLine},${pos.beginColumn}]"
