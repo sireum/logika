@@ -1721,17 +1721,17 @@ import Util._
           val (s1, cond) = s0.freshSym(AST.Typed.b, pos)
           val s2 = s1.addClaim(State.Claim.Let.TypeTest(cond, F, v, tipe))
           if (isCast) {
-            if (!rtCheck) {
-              val (s3, cv) = s2.freshSym(tipe, pos)
-              r = r :+ ((s3.addClaim(State.Claim.Let.Def(cv, v)), cv))
+            val s3: State = if (rtCheck) {
+              evalAssertH(T, smt2, cache, "asInstanceOf", s2, cond, Some(pos), ISZ(), reporter)
             } else {
-              val s3 = evalAssertH(T, smt2, cache, "asInstanceOf", s2, cond, Some(pos), ISZ(), reporter)
-              if (s3.ok) {
-                val (s4, cv) = s3.freshSym(tipe, pos)
-                r = r :+ ((s4.addClaim(State.Claim.Let.Def(cv, v)), cv))
-              } else {
-                r = r :+ ((s3, State.errorValue))
-              }
+              val thiz = this
+              thiz(config = thiz.config(sat = F)).evalAssumeH(T, smt2, cache, "asInstanceOf", s2, cond, Some(pos), reporter)
+            }
+            if (s3.ok) {
+              val (s4, cv) = s3.freshSym(tipe, pos)
+              r = r :+ ((s4.addClaim(State.Claim.Let.Def(cv, v)), cv))
+            } else {
+              r = r :+ ((s3, State.errorValue))
             }
           } else {
             r = r :+ ((s2, cond))
@@ -1757,8 +1757,13 @@ import Util._
                   val (s1, size) = s0.freshSym(AST.Typed.z, pos)
                   val (s2, cond) = s1.addClaim(State.Claim.Let.FieldLookup(size, o, "size")).freshSym(AST.Typed.b, pos)
                   val s3 = s2.addClaim(State.Claim.Let.Binary(cond, size, AST.Exp.BinaryOp.Gt, State.Value.Z(0, pos), AST.Typed.z))
-                  s0 = if (rtCheck) evalAssertH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), ISZ(), reporter)
-                  else s3.addClaim(State.Claim.Prop(T, cond))
+                  s0 = if (rtCheck) {
+                    evalAssertH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), ISZ(), reporter)
+                  } else {
+                    val thiz = this
+                    thiz(config = thiz.config(sat = F)).
+                      evalAssumeH(T, smt2, cache, s"Non-empty check for $tipe", s3, cond, Some(pos), reporter)
+                  }
                 } else {
                   evalConstantVarInstance(smt2, cache, rtCheck, s0, tipe.ids, id, reporter) match {
                     case Some((s1, v)) => return value2Sym(s1, v, pos)
@@ -1941,17 +1946,20 @@ import Util._
               case _ =>
             }
             val s4 = s3.addClaim(State.Claim.Let.AdtLit(sym, args.toIS[Option[State.Value]].map((vOpt: Option[State.Value]) => vOpt.get)))
-            if (rtCheck) {
-              val (s5, vs) = addValueInv(this, smt2, cache, T, s4, sym, attr.posOpt.get, reporter)
-              var s6 = s5
-              for (v <- vs if s6.ok) {
+            val (s5, vs) = addValueInv(this, smt2, cache, T, s4, sym, attr.posOpt.get, reporter)
+            var s6 = s5
+            var thiz = this
+            thiz = thiz(config = thiz.config(sat = F))
+            for (v <- vs if s6.ok) {
+              if (rtCheck) {
                 s6 = evalAssertH(T, smt2, cache, st"Invariant on ${(ti.name, ".")} construction".render, s6, v,
                   attr.posOpt, ISZ(), reporter)
+              } else {
+                s6 = thiz.evalAssumeH(T, smt2, cache, st"Invariant on ${(ti.name, ".")} construction".render, s6, v,
+                  attr.posOpt, reporter)
               }
-              r = r :+ ((s4(nextFresh = s6.nextFresh, status = s6.status), sym))
-            } else {
-              r = r :+ ((s4, sym))
             }
+            r = r :+ ((s4(nextFresh = s6.nextFresh, status = s6.status), sym))
           } else {
             r = r :+ ((s2, State.errorValue))
           }
@@ -3470,9 +3478,9 @@ import Util._
           val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
-          val thenBranch = !rtCheck || smt2.sat(context.methodName, config, cache, T,
+          val thenBranch = smt2.sat(context.methodName, config, cache, T,
             s"$construct-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
-          val elseBranch = !rtCheck || smt2.sat(context.methodName, config, cache, T,
+          val elseBranch = smt2.sat(context.methodName, config, cache, T,
             s"$construct-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
@@ -3502,8 +3510,8 @@ import Util._
                   r = r :+ ((s5.addClaim(State.Claim.Let.Ite(re, sym, tv, ev)), re))
                 }
               }
-            case (T, F) => r = r ++ evalExp(sp, smt2, cache, rtCheck, s1, ifExp.thenExp, reporter)
-            case (F, T) => r = r ++ evalExp(sp, smt2, cache, rtCheck, s1, ifExp.elseExp, reporter)
+            case (T, F) => r = r ++ evalExp(sp, smt2, cache, rtCheck, s1.addClaim(prop), ifExp.thenExp, reporter)
+            case (F, T) => r = r ++ evalExp(sp, smt2, cache, rtCheck, s1.addClaim(negProp), ifExp.elseExp, reporter)
             case (_, _) => r = r :+ ((s0(status = State.Status.Error), State.errorValue))
           }
         } else {
@@ -4737,8 +4745,7 @@ import Util._
           cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.ProofStep(step, m.values), s0, smt2) match {
             case Some((ISZ(nextState), cached)) =>
               reporter.coverage(F, cached, pos)
-              return (nextState, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim,
-                ops.ISZOps(nextState.claims).slice(s0.claims.size, nextState.claims.size)))
+              return (nextState, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
             case _ =>
           }
         }
@@ -4787,15 +4794,14 @@ import Util._
           if (!plugin.checkMode(this, normStep.just, reporter)) {
             return (s0(status = State.Status.Error), m)
           }
-          val Plugin.Result(ok, nextFresh, claims) = plugin.handle(this, smt2, cache, m, s0, normStep, reporter)
-          val nextState = s0(status = State.statusOf(ok), nextFresh = nextFresh).addClaims(claims)
-          if (config.transitionCache && ok && !reporter.hasError) {
+          val nextState = plugin.handle(this, smt2, cache, m, s0, normStep, reporter)
+          if (config.transitionCache && nextState.ok && !reporter.hasError) {
             val cached = cache.setTransition(th, config, Cache.Transition.ProofStep(step, m.values), s0, ISZ(nextState), smt2)
             reporter.coverage(T, cached, pos)
           } else {
             reporter.coverage(F, zeroU64, pos)
           }
-          return (nextState, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim, claims))
+          return (nextState, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
         }
         reporter.error(step.just.posOpt, Logika.kind, "Could not recognize justification form")
         return (s0(status = State.Status.Error), m)
@@ -4803,7 +4809,7 @@ import Util._
         val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
         return (s0(status = State.statusOf(ok), nextFresh = nextFresh,
           claims = (s0.claims ++ claims) :+ claim),
-          m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim, claims :+ claim))
+          m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
       case step: AST.ProofAst.Step.SubProof =>
         for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
@@ -4841,7 +4847,7 @@ import Util._
         val (ok, nextFresh, claims, claim) = evalRegularStepClaimRtCheck(smt2, cache, F, s0, step.claim, step.id.posOpt, reporter)
         return (s0(status = State.statusOf(ok), nextFresh = nextFresh,
           claims = (s0.claims ++ claims) :+ claim),
-          m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim, claims :+ claim))
+          m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
       case step: AST.ProofAst.Step.Let =>
         for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
@@ -4880,6 +4886,31 @@ import Util._
       return (s2.ok, s2.nextFresh, ops.ISZOps(s2.claims).slice(s0.claims.size, s2.claims.size), vProp)
     }
     return (F, s0.nextFresh, s0.claims, trueClaim)
+  }
+
+  def evalRegularStepClaim2(smt2: Smt2, cache: Logika.Cache, s0: State, claim: AST.Exp, posOpt: Option[Position],
+                           reporter: Reporter): State = {
+    return evalRegularStepClaimRtCheck2(smt2, cache, T, s0, claim, posOpt, reporter)
+  }
+
+  def evalRegularStepClaimValue(smt2: Smt2, cache: Logika.Cache, s0: State, claim: AST.Exp, posOpt: Option[Position],
+                                reporter: Reporter): (State, State.Value.Sym) = {
+    return evalRegularStepClaimRtCheckValue(smt2, cache, T, s0, claim, posOpt, reporter)
+  }
+  def evalRegularStepClaimRtCheck2(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, claim: AST.Exp,
+                                  posOpt: Option[Position], reporter: Reporter): State = {
+    val (s1, v) = evalRegularStepClaimRtCheckValue(smt2, cache, rtCheck, s0, claim, posOpt, reporter)
+    return if (s1.ok) s1.addClaim(State.Claim.Prop(T, v)) else s1
+  }
+  def evalRegularStepClaimRtCheckValue(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, claim: AST.Exp,
+                                       posOpt: Option[Position], reporter: Reporter): (State, State.Value.Sym) = {
+    val svs = evalExp(Logika.Split.Disabled, smt2, cache, rtCheck, s0, claim, reporter)
+    for (sv <- svs) {
+      val (s1, v) = sv
+      val (s2, sym) = value2Sym(s1, v, posOpt.get)
+      return (s2, sym)
+    }
+    return (s0(status = State.Status.Error), State.errorValue)
   }
 
   @pure def claimsAnd(claims: ISZ[AST.Exp]): Option[AST.Exp] = {
@@ -5226,11 +5257,13 @@ import Util._
         }
       }
       val m = p._2
-      var s1 = s0(nextFresh = p._1.nextFresh, claims = ops.ISZOps(p._1.claims).slice(0, s0.claims.size))
+      var s1 = s0
+      //var s1 = s0(nextFresh = p._1.nextFresh, claims = ops.ISZOps(p._1.claims).slice(0, s0.claims.size))
       if (p._1.ok) {
         for (stepId <- stepIds) {
           val spc = m.get(stepId).get.asInstanceOf[StepProofContext.Regular]
-          s1 = s1.addClaims(spc.claims)
+          s1 = evalAssume(smt2, cache, F, s"${spc.stepNo}", s1, spc.exp, spc.stepNo.posOpt, reporter)._1
+//          s1 = s1.addClaims(spc.claims)
         }
       }
       return ISZ(s1)
@@ -5248,10 +5281,8 @@ import Util._
         var st0 = st
         for (premise <- sequent.premises if st0.ok) {
           val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, st0, premise, premise.posOpt, reporter)
-          r = r + id ~> StepProofContext.Regular(th, id(attr = AST.Attr(premise.posOpt)), premise, claims :+ claim)
+          r = r + id ~> StepProofContext.Regular(th, id(attr = AST.Attr(premise.posOpt)), premise)
           id = id(no = id.no - 1)
-          st0 = st0(status = State.statusOf(ok), nextFresh = nextFresh,
-            claims = (st0.claims ++ claims) :+ claim)
         }
         return (st0, r)
       }

@@ -41,9 +41,8 @@ object StepProofContext {
 
   @datatype class Regular(val th: TypeHierarchy,
                           val stepNo: AST.ProofAst.StepId,
-                          val exp: AST.Exp,
-                          val claims: ISZ[State.Claim]) extends StepProofContext {
-    @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${exp.prettyST}, ${(for (claim <- claims) yield claim.toRawST, ", ")})"
+                          val exp: AST.Exp) extends StepProofContext {
+    @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${exp.prettyST})"
     @memoize def coreExpClaim: AST.CoreExp.Base = {
       return RewritingSystem.translateExp(th, F, exp)
     }

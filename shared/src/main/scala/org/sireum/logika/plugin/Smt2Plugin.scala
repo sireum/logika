@@ -54,14 +54,14 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
-                      reporter: Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+                      reporter: Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val (options, timeout, resourceLimit): (AST.Exp.LitString, Z, Z) = just.args match {
       case ISZ(s: AST.Exp.LitString, t: AST.Exp.LitZ, r: AST.Exp.LitZ) => (s, t.value, r.value)
       case _ =>
         reporter.error(just.invoke.posOpt, Logika.kind, s"Expecting literals for SMT2 configuration, timeout (ms), and resource limit")
-        return emptyResult
+        return err
     }
 
     val id = just.invokeIdent.id.value
@@ -70,7 +70,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
       case Either.Left(cs) => cs
       case Either.Right(msg) =>
         reporter.error(options.posOpt, Logika.kind, msg)
-        return emptyResult
+        return err
     }
 
     val rlimit: Z = if (resourceLimit <= 0) 0 else resourceLimit
@@ -78,9 +78,8 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
       smt2Configs = smt2Configs ++ (for (c <- logika.config.smt2Configs if c.isSat) yield c)))
     val posOpt = just.invokeIdent.posOpt
 
-    val ((stat, nextFresh, premises, conclusion), claims): ((B, Z, ISZ[State.Claim], State.Claim), ISZ[State.Claim]) = if (!just.hasWitness) {
-      val (stat, nextFresh, premises, conclusion) = logikaSmt2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-      ((stat, nextFresh, state.claims ++ premises, conclusion), premises :+ conclusion)
+    val (s6, conclusion): (State, State.Value.Sym) = if (!just.hasWitness) {
+      logikaSmt2.evalRegularStepClaimValue(smt2, cache, state, step.claim, step.id.posOpt, reporter)
     } else {
       var s0 = state.unconstrainedClaims
       val atMap = org.sireum.logika.Util.claimsToExps(logikaSmt2.jescmPlugins._4, posOpt.get, logikaSmt2.context.methodName,
@@ -103,33 +102,33 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
         }
       }
       if (!ok) {
-        return Plugin.Result(F, s0.nextFresh, ISZ())
+        return err
       }
-      val (s1, exp) = logikaSmt2.rewriteAt(atMap, s0, step.claim, reporter)
-      val q = logikaSmt2.evalRegularStepClaim(smt2, cache, s1, exp, step.id.posOpt, reporter)
-      ((q._1, q._2, s0.claims ++ q._3, q._4), q._3 :+ q._4)
+      val (s4, exp) = logikaSmt2.rewriteAt(atMap, s0, step.claim, reporter)
+      logikaSmt2.evalRegularStepClaimValue(smt2, cache, s4, exp, step.id.posOpt, reporter)
     }
 
-    val status: B = if (stat) {
+    if (s6.ok) {
+      val prop = State.Claim.Prop(T, conclusion)
       val r = smt2.valid(logikaSmt2.context.methodName, logikaSmt2.config, cache, T,
-        s"${just.invokeIdent.id.value} Justification", posOpt.get, premises, conclusion,
-        reporter)
+        s"${just.invokeIdent.id.value} Justification", posOpt.get, s6.claims, prop, reporter)
       def error(msg: String): B = {
         reporter.error(posOpt, Logika.kind, msg)
         return F
       }
 
-      r.kind match {
+      val status: B = r.kind match {
         case Smt2Query.Result.Kind.Unsat => T
         case Smt2Query.Result.Kind.Sat => error(s"Invalid claim of proof step ${step.id}")
         case Smt2Query.Result.Kind.Unknown => error(s"Could not deduce the claim of proof step ${step.id}")
         case Smt2Query.Result.Kind.Timeout => error(s"Timed out when deducing the claim of proof step ${step.id}")
         case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step ${step.id}")
       }
+      val s7 = s6.addClaim(prop)
+      return if (status) if (just.hasWitness) s7(claims = state.claims ++ s7.claims) else s7 else err
     } else {
-      F
+      return err
     }
-    return Plugin.Result(status, nextFresh, claims)
   }
 
 }

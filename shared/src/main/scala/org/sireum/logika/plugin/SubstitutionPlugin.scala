@@ -60,8 +60,10 @@ import org.sireum.ops.ISZOps
     return T
   }
 
-  override def handle(logika: Logika, smt2: Smt2, cache: Logika.Cache, spcMap: HashSMap[ProofAst.StepId, StepProofContext], state: State, step: Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+  override def handle(logika: Logika, smt2: Smt2, cache: Logika.Cache,
+                      spcMap: HashSMap[ProofAst.StepId, StepProofContext], state: State, step: Step.Regular,
+                      reporter: Logika.Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
 
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
@@ -77,12 +79,12 @@ import org.sireum.ops.ISZOps
                 if (!logika.th.isSubstitutableWithoutSpecVars(b.typedOpt.get)) {
                   val msg = s"Step $x must be substitutable without spec vars in or to use ${AST.ResolvedInfo.BuiltIn.Kind.BinaryEq} for substitution"
                   reporter.error(x.attr.posOpt, Logika.kind, msg)
-                  return emptyResult
+                  return err
                 }
               case _ =>
                 val msg = s"The first expression argument of step $x for ${res.id} in step ${step.id} has to be an equality"
                 reporter.error(x.attr.posOpt, Logika.kind, msg)
-                return emptyResult
+                return err
             }
             val (sub, repl): (AST.Exp, AST.Exp) = res.id match {
               case "Subst_<" => (e1, e2)
@@ -98,11 +100,10 @@ import org.sireum.ops.ISZOps
                     st"""Claim ${step.id} does not match the substituted expression of ${res.id} of $x for $y, i.e.,
                         |${subResult.prettyST} ≉ ${step.claim.prettyST}""".render
                   reporter.error(step.claim.posOpt, Logika.kind, msg)
-                  return emptyResult
+                  return err
                 } else {
-                  val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-                  val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
-                  if (stat && logika.config.detailedInfo) {
+                  val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+                  if (s0.ok && logika.config.detailedInfo) {
                     val msg =
                       st"""Accepted because:
                           |  [${repl.prettyST} / ${sub.prettyST}](${ySpc.exp.prettyST})
@@ -110,26 +111,26 @@ import org.sireum.ops.ISZOps
                           |≈ ${step.claim.prettyST}""".render
                     reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, msg)
                   }
-                  return Plugin.Result(stat, nextFresh, claims)
+                  return s0
                 }
               case Some(_) =>
                 reporter.error(y.posOpt, Logika.kind, s"Cannot use compound proof step $y as an argument for Substitution")
-                return emptyResult
+                return err
               case _ =>
                 reporter.error(y.posOpt, Logika.kind, s"Could not find proof step $y")
-                return emptyResult
+                return err
             }
           case _ =>
             val msg = s"The first expression argument of step $x for ${res.id} in step ${step.id} has to be an equality"
             reporter.error(x.attr.posOpt, Logika.kind, msg)
-            return emptyResult
+            return err
         }
       case Some(_) =>
         reporter.error(x.posOpt, Logika.kind, s"Cannot use compound proof step $x as an argument for Substitution")
-        return emptyResult
+        return err
       case _ =>
         reporter.error(x.posOpt, Logika.kind, s"Could not find proof step $x")
-        return emptyResult
+        return err
     }
   }
 }

@@ -76,10 +76,10 @@ object PredNatDedPlugin {
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
-                      reporter: Reporter): Plugin.Result = {
+                      reporter: Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     var acceptedMsg = st"""Accepted by using the ${res.id}, because"""
     res.id match {
       case string"AllI" =>
@@ -90,27 +90,27 @@ object PredNatDedPlugin {
             logika.th.normalizeQuantType(stepClaim).asInstanceOf[AST.Exp.QuantType]
           case _ =>
             reporter.error(step.claim.posOpt, Logika.kind, "Expecting a simple universal quantified type/range claim")
-            return emptyResult
+            return err
         }
         val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
         if (argsOpt.isEmpty) {
-          return emptyResult
+          return err
         }
         if (quant.fun.params(0).typedOpt != just.invoke.targs(0).typedOpt) {
           reporter.error(just.invoke.targs(0).posOpt, Logika.kind, s"Expecting type '${quant.fun.params(0).typedOpt.get}', but '${just.invoke.targs(0).typedOpt.get}' found")
-          return emptyResult
+          return err
         }
         val ISZ(subProofNo) = argsOpt.get
         val (params, subProof): (ISZ[AST.ProofAst.Step.Let.Param], HashSet[AST.Exp]) = spcMap.get(subProofNo) match {
           case Some(sp@StepProofContext.FreshSubProof(_, ps, _)) => (ps, HashSet ++ sp.claims)
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a parameterized let sub-proof step")
-            return emptyResult
+            return err
         }
         val size = params.size
         if (quant.fun.params.size < params.size) {
           reporter.error(step.id.posOpt, Logika.kind, s"Expecting at most ${quant.fun.params.size} fresh variables in sub-proof $subProofNo, but found ${params.size}")
-          return emptyResult
+          return err
         }
         var substMap = HashMap.empty[(ISZ[String], String), AST.Exp]
         for (p <- ops.ISZOps(ops.ISZOps(quant.fun.params).slice(0, size)).zip(ops.ISZOps(params).slice(0, size))) {
@@ -147,37 +147,37 @@ object PredNatDedPlugin {
                 |"""
         } else {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not infer the stated claim using ${just.invokeIdent.id.value}")
-          return emptyResult
+          return err
         }
       case string"ExistsE" =>
         val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
         if (argsOpt.isEmpty) {
-          return emptyResult
+          return err
         }
         val ISZ(existsP, subProofNo) = argsOpt.get
         val quant: AST.Exp.QuantType = spcMap.get(existsP) match {
-          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) =>
+          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)))) =>
             logika.th.normalizeQuantType(q).asInstanceOf[AST.Exp.QuantType]
-          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantRange(F, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)), _)) =>
+          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantRange(F, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)))) =>
             logika.th.normalizeQuantType(q).asInstanceOf[AST.Exp.QuantType]
           case _ =>
             reporter.error(existsP.posOpt, Logika.kind, "Expecting a simple existential quantified type/range claim")
-            return emptyResult
+            return err
         }
         if (quant.fun.params(0).typedOpt != just.invoke.targs(0).typedOpt) {
           reporter.error(just.invoke.targs(0).posOpt, Logika.kind, s"Expecting type '${quant.fun.params(0).typedOpt.get}', but '${just.invoke.targs(0).typedOpt.get}' found")
-          return emptyResult
+          return err
         }
         val (params, assumption, subProof): (ISZ[AST.ProofAst.Step.Let.Param], AST.Exp, HashSet[AST.Exp]) = spcMap.get(subProofNo) match {
           case Some(sp@StepProofContext.FreshAssumeSubProof(_, ps, ac, _)) => (ps, ac, HashSet ++ sp.claims)
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a parameterized let sub-proof assume step")
-            return emptyResult
+            return err
         }
         val size = params.size
         if (quant.fun.params.size < params.size) {
           reporter.error(step.id.posOpt, Logika.kind, s"Expecting at most ${quant.fun.params.size} fresh variables in sub-proof $subProofNo, but found ${params.size}")
-          return emptyResult
+          return err
         }
         var substMap = HashMap.empty[(ISZ[String], String), AST.Exp]
         for (p <- ops.ISZOps(ops.ISZOps(quant.fun.params).slice(0, size)).zip(ops.ISZOps(params).slice(0, size))) {
@@ -205,7 +205,7 @@ object PredNatDedPlugin {
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
         if (logika.th.normalizeExp(substClaim) != assumption) {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not match the assumption in let sub-proof $subProofNo")
-          return emptyResult
+          return err
         }
         val stepClaim = logika.th.normalizeExp(step.claim)
         if (subProof.contains(stepClaim) && stepClaim != assumption) {
@@ -219,13 +219,13 @@ object PredNatDedPlugin {
                 |"""
         } else {
           reporter.error(step.claim.posOpt, Logika.kind, s"Could not find the stated claim in let sub-proof $subProofNo")
-          return emptyResult
+          return err
         }
     }
-    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-    if (status) {
+    val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+    if (s0.ok) {
       reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, acceptedMsg.render)
     }
-    return Plugin.Result(status, nextFresh, claims :+ claim)
+    return s0
   }
 }

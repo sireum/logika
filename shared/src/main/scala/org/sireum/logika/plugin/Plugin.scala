@@ -32,13 +32,6 @@ import org.sireum.logika.{Context, Logika, Smt2, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
 
 object Plugin {
-  @datatype class Result(val status: B,
-                         val nextFresh: Z,
-                         val claims: ISZ[State.Claim])
-
-  object Result {
-    @strictpure def empty(nextFresh: Z): Result = Result(F, nextFresh, ISZ())
-  }
 
   @strictpure def stepNoDesc(cap: B, stepId: AST.ProofAst.StepId): ST =
     stepId match {
@@ -122,7 +115,7 @@ object Plugin {
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,
-             reporter: Reporter): Plugin.Result
+             reporter: Reporter): State
 }
 
 

@@ -61,7 +61,8 @@ import org.sireum.logika.Logika.Reporter
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
-                      reporter: Reporter): Plugin.Result = {
+                      reporter: Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
     @pure def isBuiltIn(exp: AST.Exp.Binary, kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == kind => return T
@@ -94,10 +95,9 @@ import org.sireum.logika.Logika.Reporter
     }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
     val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
     if (argsOpt.isEmpty) {
-      return emptyResult
+      return err
     }
     val args = argsOpt.get
     var acceptedMsg: ST =
@@ -136,16 +136,16 @@ import org.sireum.logika.Logika.Reporter
       case string"OrE" =>
         val ISZ(orClaimNo, leftSubProofNo, rightSubProofNo) = args
         val orClaim: AST.Exp.Binary = spcMap.get(orClaimNo) match {
-          case Some(StepProofContext.Regular(_, _, exp: AST.Exp.Binary, _)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) =>
+          case Some(StepProofContext.Regular(_, _, exp: AST.Exp.Binary)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) =>
             exp
-          case Some(StepProofContext.Regular(_, _, exp: AST.Exp.Binary, _)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryLe) =>
+          case Some(StepProofContext.Regular(_, _, exp: AST.Exp.Binary)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryLe) =>
             AST.Exp.Binary(
               exp(op = AST.Exp.BinaryOp.Lt, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLt)))),
               AST.Exp.BinaryOp.Or,
               exp(op = AST.Exp.BinaryOp.Eq, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)))),
               AST.ResolvedAttr(exp.posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)), AST.Typed.bOpt), exp.posOpt
             )
-          case Some(StepProofContext.Regular(_, _, exp: AST.Exp.Binary, _)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryGe) =>
+          case Some(StepProofContext.Regular(_, _, exp: AST.Exp.Binary)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryGe) =>
             AST.Exp.Binary(
               exp(op = AST.Exp.BinaryOp.Gt, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryGt)))),
               AST.Exp.BinaryOp.Or,
@@ -154,19 +154,19 @@ import org.sireum.logika.Logika.Reporter
             )
           case _ =>
             reporter.error(orClaimNo.posOpt, Logika.kind, s"Expecting a proof step with a disjunction binary expression claim")
-            return emptyResult
+            return err
         }
         val leftSubProof: HashSet[AST.Exp] = spcMap.get(leftSubProofNo) match {
           case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == logika.th.normalizeExp(orClaim.left) => HashSet ++ sp.claims
           case _ =>
             reporter.error(leftSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the left-operand of $orClaimNo's claim")
-            return emptyResult
+            return err
         }
         val rightSubProof: HashSet[AST.Exp] = spcMap.get(rightSubProofNo) match {
           case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == logika.th.normalizeExp(orClaim.right) => HashSet ++ sp.claims
           case _ =>
             reporter.error(rightSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the right-operand of $orClaimNo's claim")
-            return emptyResult
+            return err
         }
         val stepClaim = logika.th.normalizeExp(step.claim)
         if (leftSubProof.contains(stepClaim) && rightSubProof.contains(stepClaim)) {
@@ -183,30 +183,30 @@ import org.sireum.logika.Logika.Reporter
             case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) && leftSubProof.contains(logika.th.normalizeExp(stepClaim.left)) && rightSubProof.contains(logika.th.normalizeExp(stepClaim.right)) =>
             case _ =>
               reporter.error(step.id.posOpt, Logika.kind, s"Could not infer the stated claim from both sub-proofs $leftSubProofNo and $rightSubProofNo using ${just.invokeIdent.id.value}")
-              return emptyResult
+              return err
           }
         }
       case string"ImplyI" =>
         if(!implyH(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply, "an implication")) {
-          return emptyResult
+          return err
         }
       case string"SImplyI" =>
         if (!implyH(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply, "a conditional implication")) {
-          return emptyResult
+          return err
         }
       case string"NegI" =>
         val claim: AST.Exp.Unary = step.claim match {
           case stepClaim: AST.Exp.Unary if isUBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => stepClaim
           case _ =>
             reporter.error(step.claim.posOpt, Logika.kind, s"Expecting an implication")
-            return emptyResult
+            return err
         }
         val ISZ(subProofNo) = args
         val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo) match {
           case Some(sp: StepProofContext.SubProof) if sp.assumption == logika.th.normalizeExp(claim.exp) => sp.claims
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the operand of step ${step.id}'s claim")
-            return emptyResult
+            return err
         }
         if (ops.ISZOps(subProof).exists(isBottom _)) {
           acceptedMsg =
@@ -218,7 +218,7 @@ import org.sireum.logika.Logika.Reporter
                 |"""
         } else {
           reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof $subProofNo")
-          return emptyResult
+          return err
         }
       case string"BottomE" =>
         val ISZ(bottomNo) = args
@@ -229,7 +229,7 @@ import org.sireum.logika.Logika.Reporter
                   |"""
           case _ =>
             reporter.error(bottomNo.posOpt, Logika.kind, s"Expecting F as step $bottomNo's claim")
-            return emptyResult
+            return err
         }
       case string"PbC" =>
         val ISZ(subProofNo) = args
@@ -237,7 +237,7 @@ import org.sireum.logika.Logika.Reporter
           case Some(sp: StepProofContext.SubProof) if isUBuiltIn(sp.assumption, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => sp.claims
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the negation of step ${step.id}'s claim")
-            return emptyResult
+            return err
         }
         if (ops.ISZOps(subProof).exists(isBottom _)) {
           acceptedMsg =
@@ -249,13 +249,13 @@ import org.sireum.logika.Logika.Reporter
                 |"""
         } else {
           reporter.error(subProofNo.posOpt, Logika.kind, s"Could not find F in sub-proof $subProofNo")
-          return emptyResult
+          return err
         }
     }
-    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-    if (status) {
+    val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+    if (s0.ok) {
       reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified, acceptedMsg.render)
     }
-    return Plugin.Result(status, nextFresh, claims :+ claim)
+    return s0
   }
 }

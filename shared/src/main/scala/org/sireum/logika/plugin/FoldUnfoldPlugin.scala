@@ -82,30 +82,30 @@ import FoldUnfoldPlugin._
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
-                      reporter: Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+                      reporter: Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val justId = just.invokeIdent.id.value
     val isUnfold = justId == "Unfold"
     val posOpt = just.invokeIdent.id.attr.posOpt
     val fromStepId: AST.ProofAst.StepId = AST.Util.toStepIds(just.args, Logika.kind, reporter) match {
       case Some(as) => as(0)
-      case _ => return emptyResult
+      case _ => return err
     }
     val fromClaim: AST.Exp = spcMap.get(fromStepId) match {
       case Some(spc: StepProofContext.Regular) => spc.exp
       case Some(_) =>
         reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $fromStepId as an argument for $justId")
-        return emptyResult
+        return err
       case _ =>
         reporter.error(posOpt, Logika.kind, s"Could not find proof step $fromStepId")
-        return emptyResult
+        return err
     }
 
     val tOpt = Plugin.commonLabeled(logika.th, posOpt, fromStepId, if (isUnfold) fromClaim else step.claim,
       if (isUnfold) step.claim else fromClaim, reporter)
     if (tOpt.isEmpty) {
-      return emptyResult
+      return err
     }
 
     val Plugin.CommonLabeledResult(sortedNums, unfoldFromMap, unfoldToMap, labeled, aFromClaim, aToClaim) = tOpt.get
@@ -115,7 +115,7 @@ import FoldUnfoldPlugin._
         case e: AST.Exp.StrictPureBlock => e
         case e =>
           reporter.error(e.posOpt, Logika.kind, s"Expecting a strictly pure block expression")
-          return emptyResult
+          return err
       }
 
       val unfoldFrom: AST.Exp.Invoke = unfoldFromMap.get(num).get.exp match {
@@ -132,18 +132,18 @@ import FoldUnfoldPlugin._
               case Some(earg) => args = args :+ earg
               case _ =>
                 reporter.error(e.ident.attr.posOpt, Logika.kind, s"Missing argument #$i for ${e.ident.id.value}")
-                return emptyResult
+                return err
             }
           }
           AST.Exp.Invoke(e.receiverOpt, e.ident, e.targs, args, e.attr)
         case e =>
           reporter.error(e.posOpt, Logika.kind, s"Expecting an invocation expression")
-          return emptyResult
+          return err
       }
 
-      def errSp(): Plugin.Result = {
+      def errSp(): State = {
         reporter.error(unfoldFrom.posOpt, Logika.kind, s"Expecting a defined @strictpure method invocation expression")
-        return emptyResult
+        return err
       }
 
       val (minfo, body): (Info.Method, AST.AssignExp) = unfoldFrom.attr.resOpt.get match {
@@ -232,7 +232,7 @@ import FoldUnfoldPlugin._
       if (unfoldToNorm != unfoldFromSpBlockNorm) {
         reporter.error(posOpt, Logika.kind,
           st"The labeled expression #$num in the stated claim and in $fromStepId's' claim are not equivalent after ${if (isUnfold) "unfolding" else "folding"}".render)
-        return emptyResult
+        return err
       }
     }
 
@@ -262,8 +262,6 @@ import FoldUnfoldPlugin._
             |""".render)
     }
 
-  val (stat, nextFresh, premises, conclusion) =
-      logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-    return Plugin.Result(stat, nextFresh, premises :+ conclusion)
+    return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
   }
 }

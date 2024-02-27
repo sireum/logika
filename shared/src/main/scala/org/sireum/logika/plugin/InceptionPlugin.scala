@@ -203,13 +203,13 @@ import InceptionPlugin._
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,
-             reporter: Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+             reporter: Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
     val just = step.just
 
     def handleH(conc: String, sm: HashMap[String, AST.Typed], name: ISZ[String], context: ISZ[String],
                 paramNames: ISZ[String], args: ISZ[AST.Exp], requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp],
-                posOpt: Option[Position], evidenceInit: ISZ[ST]): Plugin.Result = {
+                posOpt: Option[Position], evidenceInit: ISZ[ST]): State = {
       val id = name(name.size - 1)
       val ips = org.sireum.logika.Util.Substitutor(sm, context,
         HashSMap.empty[String, AST.Exp] ++ ops.ISZOps(paramNames).zip(args), reporter.empty)
@@ -242,7 +242,7 @@ import InceptionPlugin._
         }
         if (!ok || ips.reporter.messages.nonEmpty) {
           reporter.reports(ips.reporter.messages)
-          return emptyResult
+          return err
         }
       } else {
         var witnesses = HashMap.empty[AST.Exp, (AST.ProofAst.StepId, AST.Exp)]
@@ -259,12 +259,12 @@ import InceptionPlugin._
           }
         }
         if (!ok) {
-          return emptyResult
+          return err
         }
         val rs: ISZ[AST.Exp] = for (require <- requires) yield ips.transformExp(require).getOrElseEager(require)
         if (ips.reporter.messages.nonEmpty) {
           reporter.reports(ips.reporter.messages)
-          return emptyResult
+          return err
         }
         for (i <- 0 until rs.size) {
           val pos = requires(i).posOpt.get
@@ -284,12 +284,12 @@ import InceptionPlugin._
           }
         }
         if (!ok) {
-          return emptyResult
+          return err
         }
       }
       if (ips.reporter.messages.nonEmpty) {
         reporter.reports(ips.reporter.messages)
-        return emptyResult
+        return err
       }
       @pure def esMapEntry(ensure: AST.Exp): (AST.Exp, (Position, AST.Exp, AST.Exp)) = {
         val tensure = ips.transformExp(ensure).getOrElseEager(ensure)
@@ -300,13 +300,10 @@ import InceptionPlugin._
       val ePosExpTExpOpt = esMap.get(logika.th.normalizeExp(step.claim))
       if (ePosExpTExpOpt.isEmpty) {
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from $id's $conc${if (ensures.size > 1) "s" else ""}".render)
-        return emptyResult
+        return err
       }
-      val (status, nextFresh, claims, claim): (B, Z, ISZ[State.Claim], State.Claim) =
-        if (logika.isAuto)
-          logika.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-        else logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-      if (status && logika.config.detailedInfo) {
+      val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+      if (s0.ok && logika.config.detailedInfo) {
         val (ePos, ensure, tensure) = ePosExpTExpOpt.get
         evidence = evidence :+
           st"""* The stated claim is guaranteed by $id's $conc at [${ePos.beginLine}, ${ePos.beginColumn}], i.e.,
@@ -320,14 +317,14 @@ import InceptionPlugin._
               |${(evidence, "\n\n")}
               |""".render)
       }
-      return Plugin.Result(status, nextFresh, claims :+ claim)
+      return s0
     }
 
     def handleEtaH(conc: String, sm: HashMap[String, AST.Typed], name: ISZ[String], context: ISZ[String], paramNames: ISZ[String],
-                   requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp], posOpt: Option[Position]): Plugin.Result = {
+                   requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp], posOpt: Option[Position]): State = {
       if (requires.size != just.witnesses.size) {
         reporter.error(posOpt, Logika.kind, s"Requires ${requires.size} witnesses, but found ${just.witnesses}")
-        return emptyResult
+        return err
       }
       val id = name(name.size - 1)
       if (id == "AllE") {
@@ -351,7 +348,7 @@ import InceptionPlugin._
         }
       }
       if (!ok) {
-        return emptyResult
+        return err
       }
 
       for (e <- ensures) {
@@ -415,16 +412,16 @@ import InceptionPlugin._
               |  ${(for (p <- ops.ISZOps(paramNames).zip(args)) yield st"+ ${p._1} ≡ ${p._2.prettyST}", "\n\n")}
               |"""))
       } else {
-        return emptyResult
+        return err
       }
     }
 
-    def handleMethod(isEta: B, res: AST.ResolvedInfo.Method, posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
+    def handleMethod(isEta: B, res: AST.ResolvedInfo.Method, posOpt: Option[Position], args: ISZ[AST.Exp]): State = {
       val mi: Info.Method = logika.th.nameMap.get(res.owner :+ res.id).get match {
         case info: Info.Method => info
         case _: Info.JustMethod =>
           reporter.error(posOpt, Logika.kind, "Inception on a @just method application is currently unsupported")
-          return emptyResult
+          return err
         case info => halt(s"Infeasible: $info")
       }
       val (reads, requires, modifies, ensures): (ISZ[AST.Exp.Ref], ISZ[AST.Exp], ISZ[AST.Exp.Ref], ISZ[AST.Exp]) = {
@@ -432,16 +429,16 @@ import InceptionPlugin._
           case c: AST.MethodContract.Simple => (c.reads, c.requires, c.modifies, c.ensures)
           case _: AST.MethodContract.Cases =>
             reporter.error(posOpt, Logika.kind, "Could not use method with contract cases")
-            return emptyResult
+            return err
         }
       }
       if (reads.nonEmpty) {
         reporter.error(posOpt, Logika.kind, "Could not use method with non-empty reads clause")
-        return emptyResult
+        return err
       }
       if (modifies.nonEmpty) {
         reporter.error(posOpt, Logika.kind, "Could not use method with non-empty modifies clause")
-        return emptyResult
+        return err
       }
       val sm = TypeChecker.unifyFun(Logika.kind, logika.th, posOpt, TypeChecker.TypeRelation.Subtype, res.tpeOpt.get,
         mi.methodType.tpe, reporter).get
@@ -451,10 +448,10 @@ import InceptionPlugin._
         return handleH("conclusion", sm, mi.name, mi.name, res.paramNames, args, requires, ensures, posOpt, ISZ())
       }
     }
-    def handleFactTheorem(name: ISZ[String], posOpt: Option[Position], args: ISZ[AST.Exp]): Plugin.Result = {
+    def handleFactTheorem(name: ISZ[String], posOpt: Option[Position], args: ISZ[AST.Exp]): State = {
       if (args.isEmpty) {
         reporter.error(posOpt, Logika.kind, "Please use ClaimOf justification for empty arguments")
-        return Plugin.Result(F, state.nextFresh, ISZ())
+        return err
       }
       logika.th.nameMap.get(name) match {
         case Some(info: Info.Fact) =>
@@ -475,7 +472,7 @@ import InceptionPlugin._
               return handleH("claim", sm, info.name, fun.context, paramNames, args, ISZ(), claims, posOpt, ISZ())
             case _ =>
               reporter.error(posOpt, Logika.kind, s"Inception on a Fact requires argument types ($argTypes) to be equal to parameter types ($paramTypes)")
-              return emptyResult
+              return err
           }
         case Some(info: Info.Theorem) =>
           val fun = info.ast.claim.asInstanceOf[AST.Exp.Quant].fun
@@ -492,7 +489,7 @@ import InceptionPlugin._
               return handleH("claim", sm, info.name, fun.context, paramNames, args, ISZ(), claims, posOpt, ISZ())
             case _ =>
               reporter.error(posOpt, Logika.kind, s"Inception on a ${if (info.ast.isLemma) "Lemma" else "Theorem"} requires equal argument types to parameter types")
-              return emptyResult
+              return err
           }
         case _ => halt("Infeasible")
       }
@@ -510,10 +507,10 @@ import InceptionPlugin._
           case res: AST.ResolvedInfo.Method => return handleMethod(T, res, just.eta.ref.posOpt, ISZ())
           case _: AST.ResolvedInfo.Fact =>
             reporter.error(just.eta.posOpt, Logika.kind, "Cannot use argument-less justifications on facts")
-            return emptyResult
+            return err
           case _: AST.ResolvedInfo.Theorem =>
             reporter.error(just.eta.posOpt, Logika.kind, "Cannot use argument-less justifications on theorems")
-            return emptyResult
+            return err
           case _ => halt("Infeasible")
         }
       case _ => halt("Infeasible")

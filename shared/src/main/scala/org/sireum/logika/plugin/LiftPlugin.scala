@@ -67,8 +67,8 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
              spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
              state: State,
              step: AST.ProofAst.Step.Regular,
-             reporter: Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+             reporter: Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
 
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val AST.ProofAst.Step.Justification.Apply(AST.Exp.Invoke(_, _, _, ISZ(invoke: AST.Exp.Invoke)), _, _) = just
@@ -82,16 +82,16 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
         case c: AST.MethodContract.Simple => (c.reads, c.requires, c.modifies, c.ensures)
         case _: AST.MethodContract.Cases =>
           reporter.error(posOpt, Logika.kind, "Could not use method with contract cases")
-          return emptyResult
+          return err
       }
     }
     if (reads.nonEmpty) {
       reporter.error(posOpt, Logika.kind, "Could not use method with non-empty reads clause")
-      return emptyResult
+      return err
     }
     if (modifies.nonEmpty) {
       reporter.error(posOpt, Logika.kind, "Could not use method with non-empty modifies clause")
-      return emptyResult
+      return err
     }
 
     val smOpt = TypeChecker.unifyFun(Logika.kind, logika.th, posOpt, TypeChecker.TypeRelation.Subtype, res.tpeOpt.get,
@@ -131,16 +131,16 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
 
     if (ips.reporter.messages.nonEmpty) {
       reporter.reports(ips.reporter.messages)
-      return emptyResult
+      return err
     }
 
     if (logika.th.normalizeExp(step.claim) != logika.th.normalizeExp(iclaim)) {
       reporter.error(posOpt, Logika.kind, s"Could not lift ${mi.methodRes.id} to produce the stated claim")
-      return emptyResult
+      return err
     }
 
-    val (status, nextFresh, claims, claim) = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-    if (status && logika.config.detailedInfo) {
+    val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+    if (s0.ok && logika.config.detailedInfo) {
       val ipsSubst: ST = st"[${(for (pair <- ips.paramMap.entries) yield st"${pair._2.prettyST} / ${pair._1}", ", ")}]"
       reporter.inform(step.claim.posOpt.get, Logika.Reporter.Info.Kind.Verified,
         st"""Accepted by contract lifting because:
@@ -153,6 +153,6 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
             |""".render)
     }
 
-    return Plugin.Result(status, nextFresh, claims :+ claim)
+    return s0
   }
 }

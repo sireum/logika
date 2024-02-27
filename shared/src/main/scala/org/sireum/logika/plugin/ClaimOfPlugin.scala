@@ -59,14 +59,14 @@ import org.sireum.logika.Logika.Reporter
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
-                      reporter: Reporter): Plugin.Result = {
-    @strictpure def err(): Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+                      reporter: Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val arg: AST.Exp = just.args(0) match {
       case a: AST.Exp.Eta => a.ref.asExp
       case a =>
         reporter.error(a.posOpt, Logika.kind, s"Expecting an eta expansion of a fact, theorem, or lemma")
-        return err()
+        return err
     }
     val (name, targs): (ISZ[String], ISZ[AST.Typed]) = arg match {
       case arg: AST.Exp.Ident =>
@@ -75,7 +75,7 @@ import org.sireum.logika.Logika.Reporter
           case res: AST.ResolvedInfo.Theorem => (res.name, ISZ())
           case _ =>
             reporter.error(arg.posOpt, Logika.kind, s"Expecting a fact, theorem, or lemma")
-            return err()
+            return err
         }
       case arg: AST.Exp.Select =>
         arg.attr.resOpt.get match {
@@ -83,11 +83,11 @@ import org.sireum.logika.Logika.Reporter
           case res: AST.ResolvedInfo.Theorem => (res.name, ISZ())
           case _ =>
             reporter.error(arg.posOpt, Logika.kind, s"Expecting a fact, theorem, or lemma")
-            return err()
+            return err
         }
       case arg =>
         reporter.error(arg.posOpt, Logika.kind, s"Expecting a name, but found $arg")
-        return err()
+        return err
     }
 
     val (kind, typeParams, claims): (String, ISZ[AST.TypeParam], ISZ[AST.Exp]) = logika.th.nameMap.get(name).get match {
@@ -102,21 +102,20 @@ import org.sireum.logika.Logika.Reporter
       val substNormClaim = AST.Util.substExpSkipResolvedInfo(normClaim, sm)
       if (stepClaim == substNormClaim) {
         val claimPos = claim.posOpt.get
-        val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-        val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
-        if (stat && logika.config.detailedInfo) {
+        val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+        if (s0.ok && logika.config.detailedInfo) {
           reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
             st"""Accepted by using $kind ${(name, ".")}'s claim at [${claimPos.beginLine}, ${claimPos.beginColumn}], i.e.:
                 |
                 |$claim
                 |""".render)
         }
-        return Plugin.Result(stat, nextFresh, claims)
+        return s0
       }
     }
 
     reporter.error(step.claim.posOpt, Logika.kind, st"Could not find the stated claim in $kind ${(name, ".")}".render)
-    return err()
+    return err
   }
 
 }

@@ -70,8 +70,8 @@ object ValIntroElimPlugin {
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
-                      reporter: Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+                      reporter: Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
 
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val justId = just.invokeIdent.id.value
@@ -79,22 +79,22 @@ object ValIntroElimPlugin {
     val posOpt = just.invokeIdent.id.attr.posOpt
     val fromStepId: AST.ProofAst.StepId = AST.Util.toStepIds(just.args, Logika.kind, reporter) match {
       case Some(as) => as(0)
-      case _ => return emptyResult
+      case _ => return err
     }
     val fromClaim: AST.Exp = spcMap.get(fromStepId) match {
       case Some(spc: StepProofContext.Regular) => spc.exp
       case Some(_) =>
         reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $fromStepId as an argument for $justId")
-        return emptyResult
+        return err
       case _ =>
         reporter.error(posOpt, Logika.kind, s"Could not find proof step $fromStepId")
-        return emptyResult
+        return err
     }
 
     val tOpt = Plugin.commonLabeled(logika.th, posOpt, fromStepId, if (isElim) fromClaim else step.claim,
       if (isElim) step.claim else fromClaim, reporter)
     if (tOpt.isEmpty) {
-      return emptyResult
+      return err
     }
 
     val Plugin.CommonLabeledResult(sortedNums, fromMap, toMap, labeled, aFromClaim, aToClaim) = tOpt.get
@@ -110,7 +110,7 @@ object ValIntroElimPlugin {
         case e: AST.Exp.StrictPureBlock => e
         case e =>
           reporter.error(e.posOpt, Logika.kind, s"Expecting a strictly pure block expression")
-          return emptyResult
+          return err
       }
       var fromVals = HashSMap.empty[String, (Z, AST.Stmt.Var)]
       for (i <- 0 until from.block.body.stmts.size) {
@@ -123,7 +123,7 @@ object ValIntroElimPlugin {
         case e: AST.Exp.StrictPureBlock => e
         case e =>
           reporter.error(e.posOpt, Logika.kind, s"Expecting a strictly pure block expression")
-          return emptyResult
+          return err
       }
       var toValIds = ISZ[String]()
       for (stmt <- to.block.body.stmts) {
@@ -135,7 +135,7 @@ object ValIntroElimPlugin {
       fromVals = fromVals -- toValIds
       if (fromVals.isEmpty) {
         reporter.error(posOpt, Logika.kind, s"Expecting more val definitions in labeled #$num of $fid than of $tid")
-        return emptyResult
+        return err
       }
 
       var lvMap = HashSMap.empty[ISZ[String], (Z, message.Position, AST.Exp)]
@@ -189,7 +189,7 @@ object ValIntroElimPlugin {
     }
 
     if (!ok) {
-      return emptyResult
+      return err
     }
 
     if (logika.config.detailedInfo) {
@@ -212,8 +212,6 @@ object ValIntroElimPlugin {
             |""".render)
     }
 
-    val (stat, nextFresh, premises, conclusion) =
-      logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-    return Plugin.Result(stat, nextFresh, premises :+ conclusion)
+    return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
   }
 }

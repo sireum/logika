@@ -54,8 +54,8 @@ import org.sireum.message.Position
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
-                      reporter: Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+                      reporter: Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
 
     val just = step.just
     val (id, posOpt, arg): (String, Option[Position], AST.ProofAst.StepId) = step.just match {
@@ -71,23 +71,23 @@ import org.sireum.message.Position
       case Some(spc: StepProofContext.Regular) => spc.exp
       case Some(_) =>
         reporter.error(posOpt, Logika.kind, s"Cannot use compound proof step $fromStepId as an argument for $id")
-        return emptyResult
+        return err
       case _ =>
         reporter.error(posOpt, Logika.kind, s"Could not find proof step $fromStepId")
-        return emptyResult
+        return err
     }
 
     val tOpt = Plugin.commonLabeled(logika.th, posOpt, fromStepId, fromClaim, step.claim, reporter)
     if (tOpt.isEmpty) {
-      return emptyResult
+      return err
     }
 
     val Plugin.CommonLabeledResult(sortedNums, fromMap, toMap, labeled, aFromClaim, aToClaim) = tOpt.get
 
     val logika2 = logika(plugins = SameDiffExpPlugin(posOpt, id, fromStepId, fromMap, step.id) +: logika.plugins)
 
-    val (stat, nextFresh, premises, conclusion): (B, Z, ISZ[State.Claim], State.Claim) = if (!just.hasWitness) {
-      logika2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+    val s0: State = if (!just.hasWitness) {
+      logika2.evalRegularStepClaim2(smt2, cache, state, step.claim, step.id.posOpt, reporter)
     } else {
       val psmt2 = smt2.emptyCache(logika.config)
       var s1 = state.unconstrainedClaims
@@ -107,11 +107,11 @@ import org.sireum.message.Position
         }
       }
       if (!ok) {
-        return emptyResult
+        return err
       }
-      logika2.evalRegularStepClaim(psmt2, cache, s1, step.claim, step.id.posOpt, reporter)
+      logika2.evalRegularStepClaim2(psmt2, cache, s1, step.claim, step.id.posOpt, reporter)
     }
-    if (stat && logika.config.detailedInfo) {
+    if (s0.ok && logika.config.detailedInfo) {
       val eqSTs: ISZ[ST] = for (num <- sortedNums) yield
         st"""+ Labeled expression #$num:
             |
@@ -136,7 +136,8 @@ import org.sireum.message.Position
             |  ${(eqSTs, "\n\n")}
             |""".render)
     }
-    return Plugin.Result(stat, nextFresh, premises :+ conclusion)
+
+    return if (s0.ok) s0(claims = state.claims ++ s0.claims) else err
   }
 }
 

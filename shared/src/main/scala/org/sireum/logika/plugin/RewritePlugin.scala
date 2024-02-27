@@ -58,8 +58,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
 
   override def handle(logika: Logika, smt2: Smt2, cache: Logika.Cache,
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext], state: State,
-                      step: AST.ProofAst.Step.Regular, reporter: Logika.Reporter): Plugin.Result = {
-    @strictpure def emptyResult: Plugin.Result = Plugin.Result(F, state.nextFresh, ISZ())
+                      step: AST.ProofAst.Step.Regular, reporter: Logika.Reporter): State = {
+    @strictpure def err: State = state(status = State.Status.Error)
     @strictpure def justArgs: ISZ[AST.Exp] = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply].args
     val isSimpl = step.just.id.value == "Simpl"
     val isEval = step.just.id.value == "Eval"
@@ -90,13 +90,13 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       val from: AST.ProofAst.StepId =
         AST.Util.toStepIds(ISZ(justArgs(if (isEval) 0 else 1)), Logika.kind, reporter) match {
           case Some(s) => s(0)
-          case _ => return emptyResult
+          case _ => return err
         }
       spcMap.get(from) match {
         case Some(spc: StepProofContext.Regular) => (Some(from), spc.exp)
         case _ =>
           reporter.error(from.posOpt, Logika.kind, s"Expecting a regular proof step")
-          return emptyResult
+          return err
       }
     }
     var provenClaims = HashSMap.empty[AST.ProofAst.StepId, AST.CoreExp.Base]
@@ -152,9 +152,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |
             |${traceOpt(rwPc.trace)}""".render)
       if (isSimpl) {
-        val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-        val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
-        return Plugin.Result(stat, nextFresh, claims)
+        return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
       } else if (rwPc.methodPatterns.isEmpty) {
         reporter.warn(step.just.id.attr.posOpt, Logika.kind, "The claim can be discharged by using Simpl instead")
       } else if (rwPc.methodPatterns.nonEmpty && !isRSimpl) {
@@ -168,7 +166,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |  ${stepClaimEv.prettyST}
             |
             |${traceOpt(rwPc.trace)}""".render)
-      return emptyResult
+      return err
     } else {
       val simplTrace = rwPc.trace
       rwPc.trace = ISZ()
@@ -248,11 +246,9 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
               |${traceOpt(rwPc.trace)}
               |
               |${traceOpt(simplTrace)}""".render)
-        return emptyResult
+        return err
       }
     }
-    val q = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-    val (stat, nextFresh, claims) = (q._1, q._2, q._3 :+ q._4)
-    return Plugin.Result(stat, nextFresh, claims)
+    return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
   }
 }

@@ -256,7 +256,9 @@ object AutoPlugin {
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext],
                       state: State,
                       step: AST.ProofAst.Step.Regular,
-                      reporter: Reporter): Plugin.Result = {
+                      reporter: Reporter): State = {
+
+    @strictpure def err: State = state(status = State.Status.Error)
 
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Ref]
 
@@ -272,15 +274,14 @@ object AutoPlugin {
       return !ac.reporter.hasError
     }
 
-    def checkValid(psmt2: Smt2, stat: B, nextFresh: Z, premises: ISZ[State.Claim], conclusion: State.Claim,
-                   claims: ISZ[State.Claim]): Plugin.Result = {
+    def checkValid(psmt2: Smt2, s0: State, conclusion: State.Claim): State = {
       if (id == "Algebra" && !checkAlgebraExp(step.claim)) {
-        return Plugin.Result.empty(nextFresh)
+        return err
       }
 
-      var status = stat
+      var status = s0.ok
       if (status) {
-        val r = psmt2.valid(logika.context.methodName, logika.config, cache, T, s"$id Justification", pos, premises,
+        val r = psmt2.valid(logika.context.methodName, logika.config, cache, T, s"$id Justification", pos, s0.claims,
           conclusion, reporter)
 
         def error(msg: String): B = {
@@ -296,7 +297,7 @@ object AutoPlugin {
           case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step ${step.id}")
         }
       }
-      return Plugin.Result(status, nextFresh, claims)
+      return if (status) s0.addClaim(conclusion) else err
     }
 
     val provenClaims = HashMap ++ (for (spc <- spcMap.values if spc.isInstanceOf[StepProofContext.Regular]) yield
@@ -315,7 +316,7 @@ object AutoPlugin {
                   |${spc.exp}
                   |""".render)
           }
-          return Plugin.Result(T, state.nextFresh, spc.claims)
+          return state
         case _ =>
           logika.context.pathConditionsOpt match {
             case Some(pcs@Logika.PathConditions(_, pathConditions)) if id == "Premise" || id == "Auto" =>
@@ -328,41 +329,36 @@ object AutoPlugin {
                         |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
                         |}""".render)
                 }
-                val (stat, nextFresh, premises, conclusion) =
-                  logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-                return Plugin.Result(stat, nextFresh, premises :+ conclusion)
+                return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
               } else if (id == "Premise") {
                 AutoPlugin.detectOrIntro(logika.th, step.claim, pathConditions) match {
                   case Some(acceptMsg) =>
                     if (logika.config.detailedInfo) {
                       reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
                     }
-                    val (stat, nextFresh, premises, conclusion) =
-                      logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-                    return Plugin.Result(stat, nextFresh, premises :+ conclusion)
+                    return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
                   case _ =>
                     reporter.error(posOpt, Logika.kind,
                       st"""The stated claim has not been proven before nor is a premise in the path conditions:
                           |{
                           |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
                           |}""".render)
-                    return Plugin.Result.empty(state.nextFresh)
+                    return err
                 }
               }
             case _ =>
               if (id == "Premise") {
                 reporter.error(posOpt, Logika.kind, "The stated claim has not been proven before")
-                return Plugin.Result.empty(state.nextFresh)
+                return err
               }
           }
       }
     }
 
     if (!just.hasWitness) {
-      val (stat, nextFresh, premises, conclusion) =
-        logika(config = logika.config(isAuto = T)).
-          evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
-      return checkValid(smt2, stat, nextFresh, state.claims ++ premises, conclusion, premises :+ conclusion)
+      val (s0, conclusion) = logika(config = logika.config(isAuto = T)).
+          evalRegularStepClaimValue(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+      return checkValid(smt2, s0, State.Claim.Prop(T, conclusion))
     } else {
       val psmt2 = smt2.emptyCache(logika.config)
       val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
@@ -386,15 +382,14 @@ object AutoPlugin {
         }
       }
       if (!ok) {
-        return Plugin.Result.empty(state.nextFresh)
+        return err
       }
       val (s5, exp) = logika.rewriteAt(atMap, s1, step.claim, reporter)
-      val (stat, nextFresh, premises, conclusion) =
-        logika(config = logika.config(isAuto = T)).
-          evalRegularStepClaim(psmt2, cache, s5, exp, step.id.posOpt, reporter)
-      val r = checkValid(psmt2, stat, nextFresh, s1.claims ++ premises, conclusion, premises :+ conclusion)
+      val (s6, conclusion) = logika(config = logika.config(isAuto = T)).
+          evalRegularStepClaimValue(psmt2, cache, s5, exp, step.id.posOpt, reporter)
+      val r = checkValid(psmt2, s6, State.Claim.Prop(T, conclusion))
       smt2.combineWith(psmt2)
-      return r
+      return if (r.ok) r(claims = state.claims ++ r.claims) else err
     }
   }
 
