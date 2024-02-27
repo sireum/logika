@@ -141,7 +141,8 @@ object Smt2Invoke {
                 |; Solver: ${config.exe}
                 |; Arguments: ${(args, " ")}
                 |; Output:
-                |${(for (line <- ops.StringOps(pout).split((c: C) => c == '\n')) yield st"; $line", "\n")}""".render, pout, 0, F))
+                |${(for (line <- ops.StringOps(pout).split((c: C) => c == '\n')) yield st"; $line", "\n")}
+                |$queryString""".render, pout, 0, F))
         }
       }
       rOpt
