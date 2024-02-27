@@ -114,8 +114,8 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
       var r = ips.transformExp(exps(0)).getOrElseEager(exps(0))
       for (i <- 1 until exps.size) {
         r = AST.Exp.Binary(r, AST.Exp.BinaryOp.CondAnd, ips.transformExp(exps(1)).getOrElseEager(exps(1)), AST.ResolvedAttr(
-          exps(i).posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)), AST.Typed.bOpt)
-        )
+          exps(i).posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)), AST.Typed.bOpt),
+          exps(i).posOpt)
       }
       return r
     }
@@ -123,7 +123,7 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
     val iclaim: AST.Exp = if (requires.nonEmpty) {
       AST.Exp.Binary(conjunct(requires), AST.Exp.BinaryOp.CondImply, conjunct(ensures), AST.ResolvedAttr(
         ensures(ensures.size - 1).posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)),
-        AST.Typed.bOpt)
+        AST.Typed.bOpt), ensures(ensures.size - 1).posOpt
       )
     } else {
       conjunct(ensures)

@@ -4862,9 +4862,6 @@ import Util._
         } else {
           return (s0, stateMap._2)
         }
-      case step: AST.ProofAst.Step.StructInduction =>
-        reporter.warn(step.id.posOpt, kind, s"Not currently supported: $step")
-        return (s0(status = State.Status.Error), HashSMap.empty)
     }
   }
 
@@ -4895,7 +4892,7 @@ import Util._
     for (i <- claims.size - 2 to 0 by -1) {
       val exp = claims(i)
       val attr = AST.ResolvedAttr(exp.posOpt, resOpt, typedOpt)
-      claim = AST.Exp.Binary(exp, AST.Exp.BinaryOp.CondAnd, claim, attr)
+      claim = AST.Exp.Binary(exp, AST.Exp.BinaryOp.CondAnd, claim, attr, attr.posOpt)
     }
     return Some(claim)
   }
@@ -5308,7 +5305,7 @@ import Util._
         st0 = st0(claims = s0.claims)
         @strictpure def bin(e1: AST.Exp, op: String, opKind: AST.ResolvedInfo.BuiltIn.Kind.Type, e2: AST.Exp,
                             posOpt: Option[Position]): AST.Exp =
-          AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, Some(AST.ResolvedInfo.BuiltIn(opKind)), Some(AST.Typed.b)))
+          AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, Some(AST.ResolvedInfo.BuiltIn(opKind)), Some(AST.Typed.b)), posOpt)
         var i = 0
         for (sequent <- deduceStmt.sequents) {
           val seqClaim: AST.Exp = if (sequent.premises.isEmpty) {

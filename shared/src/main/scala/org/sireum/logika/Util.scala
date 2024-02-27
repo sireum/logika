@@ -611,7 +611,7 @@ object Util {
       }
       var r = es(0)
       for (i <- 1 until es.size) {
-        r = AST.Exp.Binary(r, op, es(i), AST.ResolvedAttr(None(), Some(res), tOpt))
+        r = AST.Exp.Binary(r, op, es(i), AST.ResolvedAttr(None(), Some(res), tOpt), None())
       }
       return r
     }
@@ -665,7 +665,7 @@ object Util {
       var i = es.size - 2
       while (i >= 0) {
         if (r != trueLit) {
-          r = AST.Exp.Binary(es(i), op, r, AST.ResolvedAttr(None(), Some(res), AST.Typed.bOpt))
+          r = AST.Exp.Binary(es(i), op, r, AST.ResolvedAttr(None(), Some(res), AST.Typed.bOpt), None())
         }
         i = i - 1
       }
@@ -708,13 +708,13 @@ object Util {
           return trueLit
         }
         return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondImply, left, AST.ResolvedAttr(pOpt,
-          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)), AST.Typed.bOpt))
+          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)), AST.Typed.bOpt), pOpt)
       } else if (right == falseLit) {
         return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondAnd, left, AST.ResolvedAttr(pOpt,
-          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)), AST.Typed.bOpt))
+          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)), AST.Typed.bOpt), pOpt)
       } else if (left == trueLit) {
         return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondOr, right, AST.ResolvedAttr(pOpt,
-          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr)), AST.Typed.bOpt))
+          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr)), AST.Typed.bOpt), pOpt)
       }
       return AST.Exp.If(cond, left, right, AST.TypedAttr(pOpt, tOpt))
     }
@@ -747,13 +747,13 @@ object Util {
     }
 
     @pure def equate(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): AST.Exp = {
-      return if (th.isGroundType(t)) AST.Exp.Binary(e1, AST.Exp.BinaryOp.Eq, e2, AST.ResolvedAttr(posOpt, eqResOpt, Some(t)))
-      else AST.Exp.Binary(e1, AST.Exp.BinaryOp.EquivUni, e2, AST.ResolvedAttr(posOpt, equivResOpt, Some(t)))
+      return if (th.isGroundType(t)) AST.Exp.Binary(e1, AST.Exp.BinaryOp.Eq, e2, AST.ResolvedAttr(posOpt, eqResOpt, Some(t)), posOpt)
+      else AST.Exp.Binary(e1, AST.Exp.BinaryOp.EquivUni, e2, AST.ResolvedAttr(posOpt, equivResOpt, Some(t)), posOpt)
     }
 
     @pure def inequate(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): AST.Exp = {
-      return if (th.isGroundType(t)) AST.Exp.Binary(e1, AST.Exp.BinaryOp.Ne, e2, AST.ResolvedAttr(posOpt, neResOpt, Some(t)))
-      else AST.Exp.Binary(e1, AST.Exp.BinaryOp.InequivUni, e2, AST.ResolvedAttr(posOpt, inequivResOpt, Some(t)))
+      return if (th.isGroundType(t)) AST.Exp.Binary(e1, AST.Exp.BinaryOp.Ne, e2, AST.ResolvedAttr(posOpt, neResOpt, Some(t)), posOpt)
+      else AST.Exp.Binary(e1, AST.Exp.BinaryOp.InequivUni, e2, AST.ResolvedAttr(posOpt, inequivResOpt, Some(t)), posOpt)
     }
 
     @pure def equateOpt(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): Option[AST.Exp] = {
@@ -952,7 +952,7 @@ object Util {
           valueToExp(let.value) match {
             case Some(e) =>
               return Some(AST.Exp.Unary(op, e, AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(kind)),
-                Some(sym.tipe))))
+                Some(sym.tipe)), symPosOpt))
             case _ =>
               return None()
           }
@@ -985,7 +985,7 @@ object Util {
                   let.left.tipe.asInstanceOf[AST.Typed.Name]
                 }
                 val info = th.typeMap.get(sType.ids).get.asInstanceOf[TypeInfo.Sig].methods.get(op).get
-                return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))))
+                return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe)), symPosOpt))
               case (_, _) => return None()
             }
           }
@@ -1034,7 +1034,7 @@ object Util {
                 case _ =>
               }
               return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt,
-                Some(AST.ResolvedInfo.BuiltIn(kind)), Some(sym.tipe))))
+                Some(AST.ResolvedInfo.BuiltIn(kind)), Some(sym.tipe)), symPosOpt))
             case (_, _) => return None()
           }
         case let: State.Claim.Let.Def =>
@@ -1380,7 +1380,7 @@ object Util {
               return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(AST.Exp.Binary(index,
                 AST.Exp.BinaryOp.MapsTo, element, AST.ResolvedAttr(symPosOpt,
                   Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo)), Some(AST.Typed.Tuple(ISZ(
-                    let.index.tipe, let.element.tipe)))))),
+                    let.index.tipe, let.element.tipe)))), symPosOpt)),
                 AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe))))
             case (_, _, _) => return None()
           }
@@ -1700,7 +1700,7 @@ object Util {
               return Some(
                 if (claim.isPos) e
                 else AST.Exp.Unary(AST.Exp.UnaryOp.Not, e, AST.ResolvedAttr(posOpt,
-                  Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)), AST.Typed.bOpt)))
+                  Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)), AST.Typed.bOpt), posOpt))
             case _ =>
               return None()
           }
