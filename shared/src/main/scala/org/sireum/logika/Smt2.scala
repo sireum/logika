@@ -669,7 +669,7 @@ object Smt2 {
         val filename: String =
           if (ops.StringOps(title).contains("[")) s"sat-$title"
           else s"sat-$title-at-${pos.beginLine}-${pos.beginColumn}"
-        writeFile(logDir, filename, res.query)
+        writeFile(logDir, filename, s"${res.info}\n${res.query}")
       case _ =>
     }
     if (config.smt2Caching && res.solverName != "none") {
@@ -1692,7 +1692,7 @@ object Smt2 {
         val filename: String =
           if (ops.StringOps(title).contains("[")) s"vc-$title"
           else s"vc-$title-at-${pos.beginLine}-${pos.beginColumn}"
-        writeFile(logDir, filename, res.query)
+        writeFile(logDir, filename, s"${res.info}\n${res.query}")
       case _ =>
     }
     if (config.smt2Caching && res.solverName != "none") {
