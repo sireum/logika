@@ -1224,7 +1224,7 @@ import Util._
       val key: ClaimsToExps.AtKey = (ISZ(), ".random", t, exp.num.value)
       atMap.get(key) match {
         case Some((poss, _, sym)) =>
-          if (poss.size > 1) {
+          if (poss.size > 0) {
             val (s0, sym) = state.freshSym(t, pos)
             return (s0.addClaim(State.Claim.Let.Random(sym, F, poss(0))), sym)
           } else {
@@ -1240,7 +1240,7 @@ import Util._
       val key: ClaimsToExps.AtKey = (ISZ(), st"${(res.context :+ res.id, ".")}".render, t, exp.num.value)
       atMap.get(key) match {
         case Some((poss, num, sym)) =>
-          if (poss.size > 1) {
+          if (poss.size > 0) {
             val (s0, sym) = state.freshSym(t, pos)
             return (s0.addClaim(State.Claim.Let.Id(sym, T, res.context, res.id, num, poss)), sym)
           } else {
@@ -1256,7 +1256,7 @@ import Util._
       val key: ClaimsToExps.AtKey = (res.owner :+ res.id, "", t, exp.num.value)
       atMap.get(key) match {
         case Some((poss, num, sym)) =>
-          if (poss.size > 1) {
+          if (poss.size > 0) {
             val (s0, sym) = state.freshSym(t, pos)
             return (s0.addClaim(State.Claim.Let.Name(sym, key._1, num, poss)), sym)
           } else {
@@ -5226,7 +5226,7 @@ import Util._
         }
       }
       val m = p._2
-      var s1 = s0(nextFresh = p._1.nextFresh)
+      var s1 = s0(nextFresh = p._1.nextFresh, claims = ops.ISZOps(p._1.claims).slice(0, s0.claims.size))
       if (p._1.ok) {
         for (stepId <- stepIds) {
           val spc = m.get(stepId).get.asInstanceOf[StepProofContext.Regular]
@@ -5302,7 +5302,7 @@ import Util._
         }
       }
       if (st0.ok) {
-        st0 = st0(claims = s0.claims)
+        st0 = s0
         @strictpure def bin(e1: AST.Exp, op: String, opKind: AST.ResolvedInfo.BuiltIn.Kind.Type, e2: AST.Exp,
                             posOpt: Option[Position]): AST.Exp =
           AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, Some(AST.ResolvedInfo.BuiltIn(opKind)), Some(AST.Typed.b)), posOpt)
@@ -5321,9 +5321,7 @@ import Util._
           i = i + 1
         }
       }
-      val s1: State = if (s0.claims.size != st0.claims.size) s0.addClaims(
-        ops.ISZOps(st0.claims).slice(s0.claims.size, st0.claims.size)) else s0
-      return ISZ(s1(status = st0.status, nextFresh = st0.nextFresh))
+      return ISZ(st0)
     }
 
     def evalVarPattern(varPattern: AST.Stmt.VarPattern): (Logika, ISZ[State]) = {
