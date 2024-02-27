@@ -660,7 +660,7 @@ object State {
       }
 
       @datatype class CurrentName(val sym: Value.Sym, val ids: ISZ[String],
-                                  @hidden val defPosOpt: Option[Position]) extends Let {
+                                  val defPosOpt: Option[Position]) extends Let {
         @pure override def toRawST: ST = {
           return st"${(shorten(ids), ".")} == ${sym.toRawST}"
         }
@@ -723,7 +723,7 @@ object State {
       }
 
       @datatype class CurrentId(val declId: B, val sym: Value.Sym, val context: ISZ[String], val id: String,
-                                @hidden val defPosOpt: Option[Position]) extends Let {
+                                val defPosOpt: Option[Position]) extends Let {
         @pure override def toRawST: ST = {
           return st"$id == ${sym.toRawST}"
         }
