@@ -93,7 +93,7 @@ object Smt2Formatter_Ext {
 
   def formatFilename(filename: String): String = {
     val fname = for (c <- filename.value) yield if (('0' <= c && c <= '9') || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')) c else '-'
-    return fname + '.' + System.identityHashCode(Thread.currentThread)
+    return fname + '.' + extension.Time.currentNanos
   }
 
   def formatTime(milis: Z): ST = {
