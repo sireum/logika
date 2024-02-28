@@ -302,7 +302,7 @@ import InceptionPlugin._
         reporter.error(step.claim.posOpt, Logika.kind, st"Could not derive the stated claim from $id's $conc${if (ensures.size > 1) "s" else ""}".render)
         return err
       }
-      val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+      val s0 = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
       if (s0.ok && logika.config.detailedInfo) {
         val (ePos, ensure, tensure) = ePosExpTExpOpt.get
         evidence = evidence :+

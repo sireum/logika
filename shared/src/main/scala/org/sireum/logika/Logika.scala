@@ -2151,17 +2151,10 @@ import Util._
         }
         s2
       }
-      var nextFresh = s1.nextFresh
-      val sp: Split.Type = Split.Disabled
-      for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s1, quant.fun.exp, reporter)) {
-        val (s8, v) = p
-        val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
-        if (s9.ok) {
-          quantClaims = quantClaims ++ ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym)
-        }
-        if (nextFresh < s9.nextFresh) {
-          nextFresh = s9.nextFresh
-        }
+      val ISZ((s8, v)) = evalAssignExpValue(Split.Disabled, smt2, cache, AST.Typed.b, rtCheck, s1, quant.fun.exp, reporter)
+      val (s9, expSym) = value2Sym(s8, v, quant.fun.exp.asStmt.posOpt.get)
+      if (s9.ok) {
+        quantClaims = quantClaims ++ ops.ISZOps(s9.claims).slice(s1.claims.size, s9.claims.size) :+ State.Claim.Prop(T, expSym)
       }
       val vars: ISZ[State.Claim.Let.Quant.Var] =
         for (p <- quant.fun.params) yield State.Claim.Let.Quant.Var(quant.fun.context, p.idOpt.get.value, p.typedOpt.get)
@@ -2174,17 +2167,17 @@ import Util._
       } else {
         quantClaims
       }
-      return (s0(nextFresh = nextFresh).addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, qcs)), sym)
+      return (s9(claims = ops.ISZOps(s9.claims).slice(0, s0.claims.size)).
+        addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, qcs)), sym)
     }
 
     def evalQuantRange(quant: AST.Exp.QuantRange): ISZ[(State, State.Value)] = {
       val qVarType = quant.attr.typedOpt.get
       val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
       val s0 = state
-      val sp: Split.Type = Split.Disabled
       var r = ISZ[(State, State.Value)]()
-      for (p1 <- evalExp(sp, smt2, cache, rtCheck, s0, quant.lo, reporter);
-           p2 <- evalExp(sp, smt2, cache, rtCheck, p1._1, quant.hi, reporter)) {
+      for (p1 <- evalExp(Split.Disabled, smt2, cache, rtCheck, s0, quant.lo, reporter);
+           p2 <- evalExp(Split.Disabled, smt2, cache, rtCheck, p1._1, quant.hi, reporter)) {
         val (_, lo) = p1
         val (s2, hi) = p2
         if (s2.ok) {
@@ -2199,27 +2192,22 @@ import Util._
           val rangeProp = State.Claim.Prop(T, range)
           val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var(quant.fun.context, qVarRes.id, qVarType))
           var quantClaims = ISZ[State.Claim]()
-          var nextFresh: Z = s8.nextFresh
-          for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s9.addClaim(rangeProp), quant.fun.exp, reporter)) {
-            val (s10, v) = p
-            val (s11, vSym) = value2Sym(s10, v, quant.fun.exp.asStmt.posOpt.get)
-            val s12 = s11.addClaims(
-              if (quant.isForall) ISZ(State.Claim.Imply(F, ISZ(rangeProp, State.Claim.Prop(T, vSym))))
-              else ISZ(rangeProp, State.Claim.Prop(T, vSym))
-            )
-            if (s12.ok) {
-              val s12ClaimsOps = ops.ISZOps(s12.claims)
-              quantClaims = quantClaims ++ s12ClaimsOps.slice(s2.claims.size, s9.claims.size) ++
-                s12ClaimsOps.slice(s9.claims.size + 1, s12.claims.size)
-            }
-            if (nextFresh < s12.nextFresh) {
-              nextFresh = s12.nextFresh
-            }
+          val ISZ((s10, v)) = evalAssignExpValue(Split.Disabled, smt2, cache, AST.Typed.b, rtCheck, s9.addClaim(rangeProp), quant.fun.exp, reporter)
+          val (s11, vSym) = value2Sym(s10, v, quant.fun.exp.asStmt.posOpt.get)
+          val s12 = s11.addClaims(
+            if (quant.isForall) ISZ(State.Claim.Imply(F, ISZ(rangeProp, State.Claim.Prop(T, vSym))))
+            else ISZ(rangeProp, State.Claim.Prop(T, vSym))
+          )
+          if (s12.ok) {
+            val s12ClaimsOps = ops.ISZOps(s12.claims)
+            quantClaims = quantClaims ++ s12ClaimsOps.slice(s2.claims.size, s9.claims.size) ++
+              s12ClaimsOps.slice(s9.claims.size + 1, s12.claims.size)
           }
           if (quantClaims.isEmpty) {
             r = r :+ ((s2(status = State.Status.Error), State.errorValue))
           } else {
-            r = r :+ ((s2(nextFresh = nextFresh).addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym))
+            r = r :+ ((s12(claims = ops.ISZOps(s12.claims).slice(0, s2.claims.size)).
+              addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym))
           }
         } else {
           r = r :+ ((s2, State.errorValue))
@@ -2232,45 +2220,36 @@ import Util._
       val qVarType = quant.attr.typedOpt.get
       val qVarRes = quant.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
       val s0 = state
-      val sp: Split.Type = Split.Disabled
       var r = ISZ[(State, State.Value)]()
-      for (p1 <- evalExp(sp, smt2, cache, rtCheck, s0, seqExp, reporter)) {
-        val (s2, s) = p1
-        if (s2.ok) {
-          val (s3, ident) = evalIdentH(s2, quant.attr.resOpt.get, qVarType, quant.fun.params(0).idOpt.get.attr.posOpt.get)
-          val (s4, inBoundSym) = s3.freshSym(AST.Typed.b, seqExp.posOpt.get)
-          val s5 = s4.addClaim(State.Claim.Let.SeqInBound(inBoundSym, s, ident))
-          val inBoundProp = State.Claim.Prop(T, inBoundSym)
-          val (s6, sym) = s5.freshSym(AST.Typed.b, quant.attr.posOpt.get)
-          val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var(quant.fun.context, qVarRes.id, qVarType))
-          var quantClaims = ISZ[State.Claim]()
-          var nextFresh: Z = s6.nextFresh
-          for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s6.addClaims(ISZ(inBoundProp)),
-            quant.fun.exp, reporter)) {
-            val (s7, v) = p
-            val (s8, vSym) = value2Sym(s7, v, quant.fun.exp.asStmt.posOpt.get)
-            val s9 = s8.addClaims(
-              if (quant.isForall) ISZ(State.Claim.Imply(F, ISZ(inBoundProp, State.Claim.Prop(T, vSym))))
-              else ISZ(inBoundProp, State.Claim.Prop(T, vSym))
-            )
-            if (s9.ok) {
-              val s9ClaimsOps = ops.ISZOps(s9.claims)
-              quantClaims = quantClaims ++ s9ClaimsOps.slice(s2.claims.size, s6.claims.size) ++
-                s9ClaimsOps.slice(s6.claims.size + 1, s9.claims.size)
-            }
-            if (nextFresh < s9.nextFresh) {
-              nextFresh = s9.nextFresh
-            }
-          }
-          if (quantClaims.isEmpty) {
-            r = r :+ ((s2(status = State.Status.Error), State.errorValue))
-          } else {
-            r = r :+ ((s2(nextFresh = nextFresh).addClaim(
-              State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym))
-          }
-        } else {
-          r = r :+ ((s2, State.errorValue))
+      val ISZ((s2, s)) = evalExp(Split.Disabled, smt2, cache, rtCheck, s0, seqExp, reporter)
+      if (s2.ok) {
+        val (s3, ident) = evalIdentH(s2, quant.attr.resOpt.get, qVarType, quant.fun.params(0).idOpt.get.attr.posOpt.get)
+        val (s4, inBoundSym) = s3.freshSym(AST.Typed.b, seqExp.posOpt.get)
+        val s5 = s4.addClaim(State.Claim.Let.SeqInBound(inBoundSym, s, ident))
+        val inBoundProp = State.Claim.Prop(T, inBoundSym)
+        val (s6, sym) = s5.freshSym(AST.Typed.b, quant.attr.posOpt.get)
+        val vars = ISZ[State.Claim.Let.Quant.Var](State.Claim.Let.Quant.Var(quant.fun.context, qVarRes.id, qVarType))
+        var quantClaims = ISZ[State.Claim]()
+        val ISZ((s7, v)) = evalAssignExpValue(Split.Disabled, smt2, cache, AST.Typed.b, rtCheck, s6.addClaims(ISZ(inBoundProp)),
+          quant.fun.exp, reporter)
+        val (s8, vSym) = value2Sym(s7, v, quant.fun.exp.asStmt.posOpt.get)
+        val s9 = s8.addClaims(
+          if (quant.isForall) ISZ(State.Claim.Imply(F, ISZ(inBoundProp, State.Claim.Prop(T, vSym))))
+          else ISZ(inBoundProp, State.Claim.Prop(T, vSym))
+        )
+        if (s9.ok) {
+          val s9ClaimsOps = ops.ISZOps(s9.claims)
+          quantClaims = quantClaims ++ s9ClaimsOps.slice(s2.claims.size, s6.claims.size) ++
+            s9ClaimsOps.slice(s6.claims.size + 1, s9.claims.size)
         }
+        if (quantClaims.isEmpty) {
+          r = r :+ ((s2(status = State.Status.Error), State.errorValue))
+        } else {
+          r = r :+ ((s9(claims = ops.ISZOps(s9.claims).slice(0, s2.claims.size)).
+            addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym))
+        }
+      } else {
+        r = r :+ ((s2, State.errorValue))
       }
       return r
     }
@@ -2286,60 +2265,52 @@ import Util._
       val eType = sType.args(1)
       val pos = quant.fun.params(0).idOpt.get.attr.posOpt.get
       var r = ISZ[(State, State.Value)]()
-      val sp: Split.Type = Split.Disabled
-      for (p <- evalExp(sp, smt2, cache, rtCheck, state, quant.seq, reporter)) {
-        val (s0, seq) = p
-        if (s0.ok) {
-          val idx = s"${qVarRes.id}$idxSuffix"
-          val (s1, qvarIdx) = idIntro(pos, s0, qVarRes.context, idx, iType, Some(pos))
-          val (s2, inBound) = s1.freshSym(AST.Typed.b, pos)
-          val s3 = s2.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvarIdx))
-          val inBoundProp = State.Claim.Prop(T, inBound)
-          val (s4, select) = s3.freshSym(eType, pos)
-          val s5 = s4.addClaim(State.Claim.Let.SeqLookup(select, seq, qvarIdx))
-          val (s6, qvar) = idIntro(pos, s5, qVarRes.context, qVarRes.id, eType, Some(pos))
-          val (s7, eqSym) = s6.freshSym(AST.Typed.b, pos)
-          val s8 = s7.addClaim(State.Claim.Let.Binary(eqSym, select, AST.Exp.BinaryOp.Equiv, qvar, select.tipe))
-          val (s9, sym) = s8.freshSym(AST.Typed.b, quant.attr.posOpt.get)
-          val (s10, invSyms) = Util.addValueInv(this, smt2, cache, rtCheck, s9, select, pos, reporter)
-          val vars = ISZ[State.Claim.Let.Quant.Var](
-            State.Claim.Let.Quant.Var(qVarRes.context, idx, iType),
-            State.Claim.Let.Quant.Var(qVarRes.context, qVarRes.id, eType)
-          )
-          var quantClaims = ISZ[State.Claim]()
-          var nextFresh: Z = s10.nextFresh
-          for (p <- evalAssignExpValue(sp, smt2, cache, AST.Typed.b, rtCheck, s10.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)) {
-            val (s11, v) = p
-            val (s12, vSym) = value2Sym(s11, v, quant.fun.exp.asStmt.posOpt.get)
-            var prop: State.Claim =
-              if (quant.isForall) State.Claim.Imply(F, ISZ(State.Claim.Prop(T, eqSym), State.Claim.Prop(T, vSym)))
-              else State.Claim.And(ISZ(State.Claim.Prop(T, eqSym), State.Claim.Prop(T, vSym)))
-            if (invSyms.nonEmpty) {
-              prop = State.Claim.And(
-                (for (invSym <- invSyms) yield State.Claim.Prop(T, invSym).asInstanceOf[State.Claim]) :+ prop)
-            }
-            val s13 = s12.addClaims(
-              if (quant.isForall) ISZ(State.Claim.Imply(F, ISZ(inBoundProp, prop)))
-              else ISZ(inBoundProp, prop))
-            if (s13.ok) {
-              val s13ClaimsOps = ops.ISZOps(s13.claims)
-              quantClaims = quantClaims ++ s13ClaimsOps.slice(s0.claims.size, s10.claims.size) ++
-                  s13ClaimsOps.slice(s10.claims.size + 1, s13.claims.size
-              )
-            }
-            if (nextFresh < s13.nextFresh) {
-              nextFresh = s13.nextFresh
-            }
-          }
-          if (quantClaims.isEmpty) {
-            r = r :+ ((s0(status = State.Status.Error), State.errorValue))
-          } else {
-            r = r :+ ((s0(nextFresh = nextFresh).addClaim(
-              State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym))
-          }
-        } else {
-          r = r :+ ((s0, State.errorValue))
+      val ISZ((s0, seq)) = evalExp(Split.Disabled, smt2, cache, rtCheck, state, quant.seq, reporter)
+      if (s0.ok) {
+        val idx = s"${qVarRes.id}$idxSuffix"
+        val (s1, qvarIdx) = idIntro(pos, s0, qVarRes.context, idx, iType, Some(pos))
+        val (s2, inBound) = s1.freshSym(AST.Typed.b, pos)
+        val s3 = s2.addClaim(State.Claim.Let.SeqInBound(inBound, seq, qvarIdx))
+        val inBoundProp = State.Claim.Prop(T, inBound)
+        val (s4, select) = s3.freshSym(eType, pos)
+        val s5 = s4.addClaim(State.Claim.Let.SeqLookup(select, seq, qvarIdx))
+        val (s6, qvar) = idIntro(pos, s5, qVarRes.context, qVarRes.id, eType, Some(pos))
+        val (s7, eqSym) = s6.freshSym(AST.Typed.b, pos)
+        val s8 = s7.addClaim(State.Claim.Let.Binary(eqSym, select, AST.Exp.BinaryOp.Equiv, qvar, select.tipe))
+        val (s9, sym) = s8.freshSym(AST.Typed.b, quant.attr.posOpt.get)
+        val (s10, invSyms) = Util.addValueInv(this, smt2, cache, rtCheck, s9, select, pos, reporter)
+        val vars = ISZ[State.Claim.Let.Quant.Var](
+          State.Claim.Let.Quant.Var(qVarRes.context, idx, iType),
+          State.Claim.Let.Quant.Var(qVarRes.context, qVarRes.id, eType)
+        )
+        var quantClaims = ISZ[State.Claim]()
+        val ISZ((s11, v)) = evalAssignExpValue(Split.Disabled, smt2, cache, AST.Typed.b, rtCheck,
+          s10.addClaims(ISZ(inBoundProp)), quant.fun.exp, reporter)
+        val (s12, vSym) = value2Sym(s11, v, quant.fun.exp.asStmt.posOpt.get)
+        var prop: State.Claim =
+          if (quant.isForall) State.Claim.Imply(F, ISZ(State.Claim.Prop(T, eqSym), State.Claim.Prop(T, vSym)))
+          else State.Claim.And(ISZ(State.Claim.Prop(T, eqSym), State.Claim.Prop(T, vSym)))
+        if (invSyms.nonEmpty) {
+          prop = State.Claim.And(
+            (for (invSym <- invSyms) yield State.Claim.Prop(T, invSym).asInstanceOf[State.Claim]) :+ prop)
         }
+        val s13 = s12.addClaims(
+          if (quant.isForall) ISZ(State.Claim.Imply(F, ISZ(inBoundProp, prop)))
+          else ISZ(inBoundProp, prop))
+        if (s13.ok) {
+          val s13ClaimsOps = ops.ISZOps(s13.claims)
+          quantClaims = quantClaims ++ s13ClaimsOps.slice(s0.claims.size, s10.claims.size) ++
+            s13ClaimsOps.slice(s10.claims.size + 1, s13.claims.size
+            )
+        }
+        if (quantClaims.isEmpty) {
+          r = r :+ ((s0(status = State.Status.Error), State.errorValue))
+        } else {
+          r = r :+ ((s13(claims = ops.ISZOps(s13.claims).slice(0, s0.claims.size)).
+            addClaim(State.Claim.Let.Quant(sym, quant.isForall, vars, quantClaims)), sym))
+        }
+      } else {
+        r = r :+ ((s0, State.errorValue))
       }
       return r
     }
@@ -2802,7 +2773,7 @@ import Util._
                 val p = logikaComp.evalAssume(smt2, cache, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt, rep)
                 val size = p._1.claims.size
                 assert(p._1.claims(size - 1) == State.Claim.Prop(T, p._2))
-                (p._1(claims = ops.ISZOps(p._1.claims).slice(0, size - 1)), p._2)
+                (p._1(claims = ops.ISZOps(p._1.claims).dropRight(1)), p._2)
               } else {
                 logikaComp.evalAssert(smt2, cache, F, title, csr0, AST.Util.substExp(require, typeSubstMap), posOpt,
                   pLocals, rep)
@@ -3645,8 +3616,8 @@ import Util._
           if (nextFresh < s7.nextFresh) {
             nextFresh = s7.nextFresh
           }
-          val s8ClaimOps = ops.ISZOps(s7.claims)
-          r = r :+ ((s7(claims = s8ClaimOps.slice(0, s1.claims.size) ++ s8ClaimOps.slice(s1.claims.size + 1, s7.claims.size)), res))
+          val s7ClaimOps = ops.ISZOps(s7.claims)
+          r = r :+ ((s7(claims = s7ClaimOps.slice(0, s1.claims.size) ++ s7ClaimOps.slice(s1.claims.size + 1, s7.claims.size)), res))
         }
       }
       for (p <- evalArgs(split, smt2, cache, rtCheck, state, cond.args.size, Either.Left[ISZ[AST.Exp], ISZ[AST.NamedArg]](cond.args), reporter)) {
@@ -4806,10 +4777,8 @@ import Util._
         reporter.error(step.just.posOpt, Logika.kind, "Could not recognize justification form")
         return (s0(status = State.Status.Error), m)
       case step: AST.ProofAst.Step.Assume =>
-        val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
-        return (s0(status = State.statusOf(ok), nextFresh = nextFresh,
-          claims = (s0.claims ++ claims) :+ claim),
-          m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
+        val s1 = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
+        return (s1, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
       case step: AST.ProofAst.Step.SubProof =>
         for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
@@ -4844,10 +4813,8 @@ import Util._
           reporter.error(step.claim.posOpt, Logika.kind, "The claim is not proven in the assertion's sub-proof")
           return (s0(status = State.Status.Error), stateMap._2)
         }
-        val (ok, nextFresh, claims, claim) = evalRegularStepClaimRtCheck(smt2, cache, F, s0, step.claim, step.id.posOpt, reporter)
-        return (s0(status = State.statusOf(ok), nextFresh = nextFresh,
-          claims = (s0.claims ++ claims) :+ claim),
-          m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
+        val s1 = evalRegularStepClaimRtCheck(smt2, cache, F, s0, step.claim, step.id.posOpt, reporter)
+        return (s1, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
       case step: AST.ProofAst.Step.Let =>
         for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
@@ -4872,32 +4839,15 @@ import Util._
   }
 
   def evalRegularStepClaim(smt2: Smt2, cache: Logika.Cache, s0: State, claim: AST.Exp, posOpt: Option[Position],
-                           reporter: Reporter): (B, Z, ISZ[State.Claim], State.Claim) = {
-    return evalRegularStepClaimRtCheck(smt2, cache, T, s0, claim, posOpt, reporter)
-  }
-
-  def evalRegularStepClaimRtCheck(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, claim: AST.Exp,
-                                  posOpt: Option[Position], reporter: Reporter): (B, Z, ISZ[State.Claim], State.Claim) = {
-    val svs = evalExp(Logika.Split.Disabled, smt2, cache, rtCheck, s0, claim, reporter)
-    for (sv <- svs) {
-      val (s1, v) = sv
-      val (s2, sym) = value2Sym(s1, v, posOpt.get)
-      val vProp = State.Claim.Prop(T, sym)
-      return (s2.ok, s2.nextFresh, ops.ISZOps(s2.claims).slice(s0.claims.size, s2.claims.size), vProp)
-    }
-    return (F, s0.nextFresh, s0.claims, trueClaim)
-  }
-
-  def evalRegularStepClaim2(smt2: Smt2, cache: Logika.Cache, s0: State, claim: AST.Exp, posOpt: Option[Position],
                            reporter: Reporter): State = {
-    return evalRegularStepClaimRtCheck2(smt2, cache, T, s0, claim, posOpt, reporter)
+    return evalRegularStepClaimRtCheck(smt2, cache, T, s0, claim, posOpt, reporter)
   }
 
   def evalRegularStepClaimValue(smt2: Smt2, cache: Logika.Cache, s0: State, claim: AST.Exp, posOpt: Option[Position],
                                 reporter: Reporter): (State, State.Value.Sym) = {
     return evalRegularStepClaimRtCheckValue(smt2, cache, T, s0, claim, posOpt, reporter)
   }
-  def evalRegularStepClaimRtCheck2(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, claim: AST.Exp,
+  def evalRegularStepClaimRtCheck(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, claim: AST.Exp,
                                   posOpt: Option[Position], reporter: Reporter): State = {
     val (s1, v) = evalRegularStepClaimRtCheckValue(smt2, cache, rtCheck, s0, claim, posOpt, reporter)
     return if (s1.ok) s1.addClaim(State.Claim.Prop(T, v)) else s1
@@ -5280,7 +5230,7 @@ import Util._
         var id = AST.ProofAst.StepId.Num(-1, AST.Attr(None()))
         var st0 = st
         for (premise <- sequent.premises if st0.ok) {
-          val (ok, nextFresh, claims, claim) = evalRegularStepClaim(smt2, cache, st0, premise, premise.posOpt, reporter)
+          st0 = evalRegularStepClaim(smt2, cache, st0, premise, premise.posOpt, reporter)
           r = r + id ~> StepProofContext.Regular(th, id(attr = AST.Attr(premise.posOpt)), premise)
           id = id(no = id.no - 1)
         }

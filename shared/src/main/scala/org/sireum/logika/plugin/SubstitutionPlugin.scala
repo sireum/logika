@@ -102,7 +102,7 @@ import org.sireum.ops.ISZOps
                   reporter.error(step.claim.posOpt, Logika.kind, msg)
                   return err
                 } else {
-                  val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+                  val s0 = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
                   if (s0.ok && logika.config.detailedInfo) {
                     val msg =
                       st"""Accepted because:

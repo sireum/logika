@@ -56,6 +56,6 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext], state: State,
                       step: AST.ProofAst.Step.Regular, reporter: Logika.Reporter): State = {
     reporter.warn(step.claim.posOpt, Logika.kind, "Admitted claim")
-    return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+    return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
   }
 }

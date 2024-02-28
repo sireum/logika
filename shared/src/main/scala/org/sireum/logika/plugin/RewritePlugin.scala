@@ -152,7 +152,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |
             |${traceOpt(rwPc.trace)}""".render)
       if (isSimpl) {
-        return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+        return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
       } else if (rwPc.methodPatterns.isEmpty) {
         reporter.warn(step.just.id.attr.posOpt, Logika.kind, "The claim can be discharged by using Simpl instead")
       } else if (rwPc.methodPatterns.nonEmpty && !isRSimpl) {
@@ -249,6 +249,6 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         return err
       }
     }
-    return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+    return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
   }
 }

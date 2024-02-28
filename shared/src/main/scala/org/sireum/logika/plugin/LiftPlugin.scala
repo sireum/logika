@@ -139,7 +139,7 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
       return err
     }
 
-    val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+    val s0 = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
     if (s0.ok && logika.config.detailedInfo) {
       val ipsSubst: ST = st"[${(for (pair <- ips.paramMap.entries) yield st"${pair._2.prettyST} / ${pair._1}", ", ")}]"
       reporter.inform(step.claim.posOpt.get, Logika.Reporter.Info.Kind.Verified,

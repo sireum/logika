@@ -329,14 +329,14 @@ object AutoPlugin {
                         |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
                         |}""".render)
                 }
-                return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+                return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
               } else if (id == "Premise") {
                 AutoPlugin.detectOrIntro(logika.th, step.claim, pathConditions) match {
                   case Some(acceptMsg) =>
                     if (logika.config.detailedInfo) {
                       reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
                     }
-                    return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+                    return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
                   case _ =>
                     reporter.error(posOpt, Logika.kind,
                       st"""The stated claim has not been proven before nor is a premise in the path conditions:
@@ -363,7 +363,8 @@ object AutoPlugin {
       val psmt2 = smt2.emptyCache(logika.config)
       val atMap = org.sireum.logika.Util.claimsToExps(logika.jescmPlugins._4, pos, logika.context.methodName,
         state.claims, logika.th, F, logika.config.atRewrite)._2
-      var s1 = state.unconstrainedClaims
+      val (suc, m) = state.unconstrainedClaims
+      var s1 = suc
       var ok = T
       for (arg <- just.witnesses if ok) {
         val stepNo = arg
@@ -389,7 +390,12 @@ object AutoPlugin {
           evalRegularStepClaimValue(psmt2, cache, s5, exp, step.id.posOpt, reporter)
       val r = checkValid(psmt2, s6, State.Claim.Prop(T, conclusion))
       smt2.combineWith(psmt2)
-      return if (r.ok) r(claims = state.claims ++ r.claims) else err
+      val sClaims = state.claims.toMS
+      for (p <- m) {
+        val (i, j) = p
+        sClaims(i) = r.claims(j)
+      }
+      return if (r.ok) r(claims = sClaims.toISZ[State.Claim] ++ ops.ISZOps(r.claims).slice(suc.claims.size, r.claims.size)) else err
     }
   }
 

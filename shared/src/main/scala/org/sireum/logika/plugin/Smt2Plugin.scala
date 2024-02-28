@@ -81,7 +81,8 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
     val (s6, conclusion): (State, State.Value.Sym) = if (!just.hasWitness) {
       logikaSmt2.evalRegularStepClaimValue(smt2, cache, state, step.claim, step.id.posOpt, reporter)
     } else {
-      var s0 = state.unconstrainedClaims
+      val (suc, m) = state.unconstrainedClaims
+      var s0 = suc
       val atMap = org.sireum.logika.Util.claimsToExps(logikaSmt2.jescmPlugins._4, posOpt.get, logikaSmt2.context.methodName,
         state.claims, logikaSmt2.th, F, logikaSmt2.config.atRewrite)._2
       var ok = T
@@ -105,7 +106,13 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
         return err
       }
       val (s4, exp) = logikaSmt2.rewriteAt(atMap, s0, step.claim, reporter)
-      logikaSmt2.evalRegularStepClaimValue(smt2, cache, s4, exp, step.id.posOpt, reporter)
+      val sClaims = state.claims.toMS
+      for (p <- m) {
+        val (i, j) = p
+        sClaims(i) = s4.claims(j)
+      }
+      val s5 = s4(claims = sClaims.toISZ[State.Claim] ++ ops.ISZOps(s4.claims).slice(suc.claims.size, s4.claims.size))
+      logikaSmt2.evalRegularStepClaimValue(smt2, cache, s5, exp, step.id.posOpt, reporter)
     }
 
     if (s6.ok) {
@@ -125,7 +132,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
         case Smt2Query.Result.Kind.Error => error(s"Error occurred when deducing the claim of proof step ${step.id}")
       }
       val s7 = s6.addClaim(prop)
-      return if (status) if (just.hasWitness) s7(claims = state.claims ++ s7.claims) else s7 else err
+      return if (status) s7 else err
     } else {
       return err
     }

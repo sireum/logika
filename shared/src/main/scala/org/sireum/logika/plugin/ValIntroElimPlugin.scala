@@ -212,6 +212,6 @@ object ValIntroElimPlugin {
             |""".render)
     }
 
-    return logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+    return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
   }
 }

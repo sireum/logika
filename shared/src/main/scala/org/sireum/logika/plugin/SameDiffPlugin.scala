@@ -87,10 +87,11 @@ import org.sireum.message.Position
     val logika2 = logika(plugins = SameDiffExpPlugin(posOpt, id, fromStepId, fromMap, step.id) +: logika.plugins)
 
     val s0: State = if (!just.hasWitness) {
-      logika2.evalRegularStepClaim2(smt2, cache, state, step.claim, step.id.posOpt, reporter)
+      logika2.evalRegularStepClaim(smt2, cache, state, step.claim, step.id.posOpt, reporter)
     } else {
       val psmt2 = smt2.emptyCache(logika.config)
-      var s1 = state.unconstrainedClaims
+      val (suc, m) = state.unconstrainedClaims
+      var s1 = suc
       var ok = T
       for (stepNo <- just.witnesses if ok) {
         spcMap.get(stepNo) match {
@@ -109,7 +110,13 @@ import org.sireum.message.Position
       if (!ok) {
         return err
       }
-      logika2.evalRegularStepClaim2(psmt2, cache, s1, step.claim, step.id.posOpt, reporter)
+      val sClaims = state.claims.toMS
+      for (p <- m) {
+        val (i, j) = p
+        sClaims(i) = s1.claims(j)
+      }
+      s1 = if (s1.ok) s1(claims = sClaims.toISZ[State.Claim] ++ ops.ISZOps(s1.claims).slice(suc.claims.size, s1.claims.size)) else err
+      logika2.evalRegularStepClaim(psmt2, cache, s1, step.claim, step.id.posOpt, reporter)
     }
     if (s0.ok && logika.config.detailedInfo) {
       val eqSTs: ISZ[ST] = for (num <- sortedNums) yield
@@ -137,7 +144,7 @@ import org.sireum.message.Position
             |""".render)
     }
 
-    return if (s0.ok) s0(claims = state.claims ++ s0.claims) else err
+    return if (s0.ok) s0 else err
   }
 }
 

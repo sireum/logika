@@ -102,7 +102,7 @@ import org.sireum.logika.Logika.Reporter
       val substNormClaim = AST.Util.substExpSkipResolvedInfo(normClaim, sm)
       if (stepClaim == substNormClaim) {
         val claimPos = claim.posOpt.get
-        val s0 = logika.evalRegularStepClaimRtCheck2(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+        val s0 = logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
         if (s0.ok && logika.config.detailedInfo) {
           reporter.inform(step.claim.posOpt.get, Reporter.Info.Kind.Verified,
             st"""Accepted by using $kind ${(name, ".")}'s claim at [${claimPos.beginLine}, ${claimPos.beginColumn}], i.e.:
