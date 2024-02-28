@@ -611,16 +611,44 @@ object RewritingSystem {
               r = r :+ AST.CoreExp.condAnd(AST.CoreExp.InstanceOfExp(T, exp, t), AST.CoreExp.bigAnd(conds))
               lMap = localMap
             case t: AST.Typed.Name =>
-              val adt = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
-              var i = 0
               var conds = ISZ[AST.CoreExp.Base]()
-              for (p <- adt.ast.params if !p.isHidden) {
-                val pat = pattern.patterns(i)
-                val f = AST.CoreExp.Select(exp, p.id.value, pat.typedOpt.get)
-                val (pconds, lMap2) = translatePattern(f, pat, funStack, lMap)
-                conds = conds ++ pconds
-                lMap = lMap2
-                i = i + 1
+              if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
+                val hasWildcard = pattern.patterns.size > 0 && pattern.patterns(pattern.patterns.size - 1).
+                  isInstanceOf[AST.Pattern.SeqWildcard]
+                val (size, op): (Z, String) = if (hasWildcard) (pattern.patterns.size - 1, AST.Exp.BinaryOp.Ge)
+                else (pattern.patterns.size, AST.Exp.BinaryOp.EquivUni)
+                var mk: Z => AST.CoreExp.Lit @pure = (i: Z) => AST.CoreExp.LitZ(i)
+                var n: Z = th.typeMap.get(t.args(0).asInstanceOf[AST.Typed.Name].ids).get match {
+                  case ti: TypeInfo.SubZ =>
+                    if (ti.ast.isBitVector) {
+                      mk = (i: Z) => AST.CoreExp.LitBits(i.string, ti.typedOpt.get)
+                    } else {
+                      mk = (i: Z) => AST.CoreExp.LitRange(i, ti.typedOpt.get)
+                    }
+                    if (ti.ast.isZeroIndex) 0 else ti.ast.index
+                  case _ => 0
+                }
+                conds = conds :+ AST.CoreExp.Binary(AST.CoreExp.Select(exp, "size", AST.Typed.z), op,
+                  AST.CoreExp.LitZ(size), AST.Typed.b)
+                for (i <- 0 until pattern.patterns.size - (if (hasWildcard) 1 else 0)) {
+                  val pat = pattern.patterns(i)
+                  val f = AST.CoreExp.Indexing(exp, mk(n), pat.typedOpt.get)
+                  val (pconds, lMap2) = translatePattern(f, pat, funStack, lMap)
+                  conds = conds ++ pconds
+                  lMap = lMap2
+                  n = n + 1
+                }
+              } else {
+                val adt = th.typeMap.get(t.ids).get.asInstanceOf[TypeInfo.Adt]
+                var i = 0
+                for (p <- adt.ast.params if !p.isHidden) {
+                  val pat = pattern.patterns(i)
+                  val f = AST.CoreExp.Select(exp, p.id.value, pat.typedOpt.get)
+                  val (pconds, lMap2) = translatePattern(f, pat, funStack, lMap)
+                  conds = conds ++ pconds
+                  lMap = lMap2
+                  i = i + 1
+                }
               }
               r = r :+ AST.CoreExp.condAnd(AST.CoreExp.InstanceOfExp(T, exp, t), AST.CoreExp.bigAnd(conds))
               lMap = localMap
@@ -642,12 +670,12 @@ object RewritingSystem {
               translateLocalInfo(res, pattern.typedOpt.get, funStack, localMap)
             case res: AST.ResolvedInfo.EnumElement =>
               val ti = th.typeMap.get(res.owner).get.asInstanceOf[TypeInfo.Enum]
-              halt("TODO")
+              AST.CoreExp.ObjectVarRef(ti.name, res.name, AST.Typed.Enum(ti.name))
             case _ => halt("Infeasible")
           }
           r = r :+ AST.CoreExp.Binary(exp, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b)
-        case pattern: AST.Pattern.SeqWildcard => halt("TODO")
         case pattern: AST.Pattern.LitInterpolate => halt("TODO")
+        case _: AST.Pattern.SeqWildcard => halt("Infeasible")
       }
       return (r, lMap)
     }
