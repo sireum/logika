@@ -609,7 +609,6 @@ object RewritingSystem {
                 i = i + 1
               }
               r = r :+ AST.CoreExp.condAnd(AST.CoreExp.InstanceOfExp(T, exp, t), AST.CoreExp.bigAnd(conds))
-              lMap = localMap
             case t: AST.Typed.Name =>
               var conds = ISZ[AST.CoreExp.Base]()
               if (t.ids == AST.Typed.isName || t.ids == AST.Typed.msName) {
@@ -651,7 +650,6 @@ object RewritingSystem {
                 }
               }
               r = r :+ AST.CoreExp.condAnd(AST.CoreExp.InstanceOfExp(T, exp, t), AST.CoreExp.bigAnd(conds))
-              lMap = localMap
             case _ => halt("Infeasible")
           }
         case pattern: AST.Pattern.Ref =>
@@ -696,7 +694,8 @@ object RewritingSystem {
     }
     @pure def translateStmt(stmt: AST.Stmt, funStack: FunStack, localMap: LocalMap): (Option[AST.CoreExp.Base], LocalMap) = {
       stmt match {
-        case stmt: AST.Stmt.Expr => return (Some(translateExp(stmt.exp, funStack, localMap)), localMap)
+        case stmt: AST.Stmt.Expr =>
+          return (Some(translateExp(stmt.exp, funStack, localMap)), localMap)
         case stmt: AST.Stmt.Var =>
           val res = stmt.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.LocalVar]
           return (None(), localMap + (res.context, res.id) ~>
@@ -830,7 +829,7 @@ object RewritingSystem {
             case _ => return translateExp(AST.Exp.Ident(e.id, e.attr), funStack, localMap)
           }
         case e: AST.Exp.If =>
-          return AST.CoreExp.ite(translateExp(e.cond, funStack, localMap), translateExp(e.elseExp, funStack, localMap),
+          return AST.CoreExp.ite(translateExp(e.cond, funStack, localMap), translateExp(e.thenExp, funStack, localMap),
             translateExp(e.elseExp, funStack, localMap), e.typedOpt.get)
         case e: AST.Exp.Fun =>
           val params: ISZ[(String, AST.Typed)] = for (p <- e.params) yield
@@ -867,7 +866,9 @@ object RewritingSystem {
         case e: AST.Exp.StrictPureBlock =>
           return translateStmt(e.block, funStack, localMap)._1.get
         case e: AST.Exp.Invoke =>
-          val args: ISZ[AST.CoreExp.Base] = for (arg <- e.args) yield translateExp(arg, funStack, localMap)
+          def args: ISZ[AST.CoreExp.Base] = {
+            return for (arg <- e.args) yield translateExp(arg, funStack, localMap)
+          }
           e.attr.resOpt.get match {
             case res: AST.ResolvedInfo.Method =>
               res.mode match {
@@ -902,6 +903,8 @@ object RewritingSystem {
                 case AST.MethodMode.Just => halt("Infeasible")
                 case AST.MethodMode.Copy => halt("Infeasible")
               }
+            case AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Halt) =>
+              return AST.CoreExp.Abort
             case _ =>
           }
           e.receiverOpt match {
