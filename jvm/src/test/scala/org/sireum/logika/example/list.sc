@@ -37,31 +37,31 @@ object List {
       map match {
         case Cons(p, next) => {
 
-          Deduce((  map ≡ Cons(p, next)  ) by Auto)
-
           if (p._1 ≡ key) {
 
             Deduce(
               //@formatter:off
-              1  (  map ≡ Cons(p, next)                                 ) by Auto,
-              2  (  p._1 ≡ key                                          ) by Premise,
-              3  (  update(map, key, value) ≡ Cons(key ~> value, next)  ) by RSimpl(RS(update[K, V] _)), //Auto,
-              4  (  lookup(update(map, key, value), key) ≡ value        ) by RSimpl(RS(lookup[K, V] _)) //Auto
+              1 (  map ≡ Cons(p, next)                                 ) by Auto,
+              2 (  p._1 ≡ key                                          ) by Premise,
+              3 (  update(map, key, value) ≡ Cons(key ~> value, next)  ) by RSimpl(RS(update[K, V] _)), //Auto,
+              4 (  lookup(update(map, key, value), key) ≡ value        ) by RSimpl(RS(lookup[K, V] _))  //Auto
               //@formatter:on
             )
+            return
 
           } else {
 
             Deduce(
               //@formatter:off
-              1  (  map ≡ Cons(p, next)                                          ) by Auto,
-              2  (  p._1 ≢ key                                                   ) by Auto,
-              3  (  update(map, key, value) ≡ Cons(p, update(next, key, value))  ) by Auto,
-              4  (  lookup(Cons(p, update(next, key, value)), key) ≡
-                    lookup(update(next, key, value), key)                        ) by RSimpl(RS(lookup[K, V] _)),
-              5  (  lookup(Cons(p, update(next, key, value)), key) ≡ value       ) by Rewrite(RS(lookupUpdateEq[K, V] _), 4)
+              1 (  map ≡ Cons(p, next)                                          ) by Auto,
+              2 (  !(p._1 ≡ key)                                                ) by Premise,
+              3 (  update(map, key, value) ≡ Cons(p, update(next, key, value))  ) by RSimpl(RS(update[K, V] _)), //Auto,
+              4 (  lookup(Cons(p, update(next, key, value)), key) ≡
+                      lookup(update(next, key, value), key)                     ) by RSimpl(RS(lookup[K, V] _)),
+              5 (  lookup(update(map, key, value), key) ≡ value                 ) by Rewrite(RS(lookupUpdateEq[K, V] _), 4)
               //@formatter:on
             )
+            return
 
           }
         }
@@ -69,11 +69,12 @@ object List {
 
           Deduce(
             //@formatter:off
-            1  (  map ≡ Nil[(K, V)]()                                          ) by Auto,
-            2  (  update(map, key, value) ≡ Cons(key ~> value, Nil[(K, V)]())  ) by Auto,
-            3  (  lookup(update(map, key, value), key) ≡ value                 ) by Auto
+            1 (  map ≡ Nil[(K, V)]()                                          ) by Auto,
+            2 (  update(map, key, value) ≡ Cons(key ~> value, Nil[(K, V)]())  ) by RSimpl(RS(update[K, V] _)), //Auto,
+            3 (  lookup(update(map, key, value), key) ≡ value                 ) by RSimpl(RS(lookup[K, V] _))  //Auto
             //@formatter:on
           )
+          return
 
         }
       }
@@ -82,23 +83,54 @@ object List {
     @pure def lookupUpdateNe[K, V](map: Map[K, V], key1: K, key2: K, value: V): Unit = {
       Contract(
         Requires(key1 ≢ key2),
-        Ensures(lookup(update(map, key1, value), key2) ≡ lookup(map, key1))
+        Ensures(lookup(update(map, key1, value), key2) ≡ lookup(map, key2))
       )
       map match {
-        case Cons(p, next) =>
+        case Cons(p, next) => {
+          
+          if (p._1 ≡ key1) {
+
+            Deduce(
+              //@formatter:off
+              1 (  key1 ≢ key2                                                 ) by Premise,
+              2 (  map ≡ Cons(p, next)                                         ) by Auto,
+              3 (  p._1 ≡ key1                                                 ) by Premise,
+              4 (  p._1 ≢ key2                                                 ) by Auto,
+              5 (  update(map, key1, value) ≡ Cons(key1 ~> value, next)        ) by RSimpl(RS(update[K, V] _)), //Auto,
+              6 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)  ) by RSimpl(RS(lookup[K, V] _))  //Auto
+              //@formatter:on
+            )
+            return
+            
+          } else {
+
+            Deduce(
+              //@formatter:off
+              1 (  key1 ≢ key2                                                    ) by Premise,
+              2 (  map ≡ Cons(p, next)                                            ) by Auto,
+              3 (  !(p._1 ≡ key1)                                                 ) by Premise,
+              4 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update[K, V] _)), //Auto,
+              5 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup[K, V] _))
+              //@formatter:on
+            )
+            return
+
+          }
+
+        }
+        case _ => {
           Deduce(
             //@formatter:off
-            1  (  map ≡ Cons(p, next)  ) by Auto
+            1 (  key1 ≢ key2                                                    ) by Premise,
+            2 (  map ≡ Nil[(K, V)]()                                            ) by Auto,
+            3 (  update(map, key1, value) ≡ Cons(key1 ~> value, Nil[(K, V)]())  ) by RSimpl(RS(update[K, V] _)), //Auto,
+            4 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup[K, V] _))  //Auto,
             //@formatter:on
           )
-        case _ =>
-          Deduce(
-            //@formatter:off
-            1  (  map ≡ Nil[(K, V)]()  ) by Auto
-            //@formatter:on
-          )
+          return
+          
+        }
       }
-      halt("TODO")
     }
 
   }
