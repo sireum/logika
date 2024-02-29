@@ -55,7 +55,7 @@ import org.sireum.logika.{Logika, Smt2, State, StepProofContext}
   override def handle(logika: Logika, smt2: Smt2, cache: Logika.Cache,
                       spcMap: HashSMap[AST.ProofAst.StepId, StepProofContext], state: State,
                       step: AST.ProofAst.Step.Regular, reporter: Logika.Reporter): State = {
-    reporter.warn(step.claim.posOpt, Logika.kind, "Admitted claim")
+    reporter.warn(step.just.posOpt, Logika.kind, "Admitted claim")
     return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
   }
 }
