@@ -4514,17 +4514,18 @@ import Util._
     return r
   }
 
+
   def evalMatch(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
                 stmt: AST.Stmt.Match, reporter: Reporter): ISZ[State] = {
 
-    def evalCasePattern(s1: State, lcontext: ISZ[String], c: AST.Case, v: State.Value): (State, State.Value.Sym, Bindings, HashMap[String, (Z, ISZ[Position])]) = {
-      val (s2, pcond, m) = evalPattern(smt2, cache, rtCheck, s1, v, c.pattern, reporter)
-      val (s3, bindings) = addBindings(smt2, cache, rtCheck, s2, lcontext, m, reporter)
+    def evalCasePattern(s1: State, lcontext: ISZ[String], c: AST.Case, v: State.Value, rep: Reporter): (State, State.Value.Sym, Bindings, HashMap[String, (Z, ISZ[Position])]) = {
+      val (s2, pcond, m) = evalPattern(smt2, cache, rtCheck, s1, v, c.pattern, rep)
+      val (s3, bindings) = addBindings(smt2, cache, rtCheck, s2, lcontext, m, rep)
       var conds = ISZ(pcond)
       val s6: State = c.condOpt match {
         case Some(cond) =>
           val condPos = cond.posOpt.get
-          val (s4, ccond) = singleStateValue(condPos, s3, evalExp(Split.Disabled, smt2, cache, rtCheck, s3, cond, reporter))
+          val (s4, ccond) = singleStateValue(condPos, s3, evalExp(Split.Disabled, smt2, cache, rtCheck, s3, cond, rep))
           if (bindings.nonEmpty) {
             val (s5, sym) = s4.freshSym(AST.Typed.b, condPos)
             conds = conds :+ sym
@@ -4555,7 +4556,7 @@ import Util._
         var branches = ISZ[Branch]()
         var s1 = s0
         for (c <- stmt.cases) {
-          val (s2, sym, m, bidMap) = evalCasePattern(s1, lcontext, c, v)
+          val (s2, sym, m, bidMap) = evalCasePattern(s1, lcontext, c, v, reporter)
           s1 = s2
           branches = branches :+ Branch("match case pattern", sym, c.body, m, bidMap)
         }
@@ -4776,8 +4777,9 @@ import Util._
         val s1 = evalRegularStepClaim(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
         return (s1, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
       case step: AST.ProofAst.Step.SubProof =>
+        val rep = reporter.child
         for (sub <- step.steps if s0.ok) {
-          val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
+          val p = evalProofStep(smt2, cache, (s0, m), sub, rep)
           s0 = p._1
           m  = p._2
         }
@@ -4791,8 +4793,9 @@ import Util._
         }
       case step: AST.ProofAst.Step.Assert =>
         var provenClaims = HashSet.empty[AST.Exp]
+        val rep = reporter.child
         for (sub <- step.steps if s0.ok) {
-          val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
+          val p = evalProofStep(smt2, cache, (s0, m), sub, rep)
           s0 = p._1
           m  = p._2
           sub match {
@@ -4812,8 +4815,9 @@ import Util._
         val s1 = evalRegularStepClaimRtCheck(smt2, cache, F, s0, step.claim, step.id.posOpt, reporter)
         return (s1, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
       case step: AST.ProofAst.Step.Let =>
+        val rep = reporter.child
         for (sub <- step.steps if s0.ok) {
-          val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
+          val p = evalProofStep(smt2, cache, (s0, m), sub, rep)
           s0 = p._1
           m  = p._2
         }
