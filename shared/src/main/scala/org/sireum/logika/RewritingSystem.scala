@@ -2584,13 +2584,16 @@ object RewritingSystem {
     return r
   }
 
-  def patternsOf(th: TypeHierarchy, cache: Logika.Cache, name: ISZ[String], rightToLeft: B): ISZ[Rewriter.Pattern] = {
+  def patternsOf(th: TypeHierarchy, cache: Logika.Cache, name: ISZ[String], rightToLeft: B,
+                 seen: HashSet[ISZ[String]]): ISZ[Rewriter.Pattern] = {
+    if (seen.contains(name)) {
+      return ISZ()
+    }
     cache.getPatterns(th, F, name) match {
       case Some(r) => return if (rightToLeft) for (e <- r) yield e.toRightToLeft else r
       case _ =>
     }
     var r = ISZ[Rewriter.Pattern]()
-    cache.setPatterns(th, F, name, r)
     th.nameMap.get(name).get match {
       case info: Info.Theorem =>
         var localPatternSet: RewritingSystem.LocalPatternSet = HashSSet.empty
@@ -2620,7 +2623,7 @@ object RewritingSystem {
             r = r :+ Rewriter.Pattern.Claim(name, F, isPermutative(c), localPatternSet, c)
           }
         }
-      case info: Info.RsVal => r = r ++ retrievePatterns(th, cache, info.ast.init)
+      case info: Info.RsVal => r = r ++ retrievePatterns(th, cache, info.ast.init, HashSet.empty)
       case info: Info.Method =>
         if (info.ast.hasContract) {
           val context = info.name
@@ -2665,22 +2668,22 @@ object RewritingSystem {
     return if (rightToLeft) for (e <- r) yield e.toRightToLeft else r
   }
 
-  def retrievePatterns(th: TypeHierarchy, cache: Logika.Cache, exp: AST.Exp): ISZ[Rewriter.Pattern] = {
+  def retrievePatterns(th: TypeHierarchy, cache: Logika.Cache, exp: AST.Exp, seen: HashSet[ISZ[String]]): ISZ[Rewriter.Pattern] = {
     def rec(rightToLeft: B, e: AST.Exp): HashSMap[ISZ[String], ISZ[Rewriter.Pattern]] = {
       var r = HashSMap.empty[ISZ[String], ISZ[Rewriter.Pattern]]
       e match {
         case e: AST.Exp.Ref =>
           e.resOpt.get match {
             case res: AST.ResolvedInfo.Theorem =>
-              return r + res.name ~> patternsOf(th, cache, res.name, rightToLeft)
+              return r + res.name ~> patternsOf(th, cache, res.name, rightToLeft, seen)
             case res: AST.ResolvedInfo.Fact =>
-              return r + res.name ~> patternsOf(th, cache, res.name, rightToLeft)
+              return r + res.name ~> patternsOf(th, cache, res.name, rightToLeft, seen)
             case res: AST.ResolvedInfo.Method =>
               val name = res.owner :+ res.id
-              return r + name ~> patternsOf(th, cache, name, rightToLeft)
+              return r + name ~> patternsOf(th, cache, name, rightToLeft, seen)
             case res: AST.ResolvedInfo.Var =>
               val name = res.owner :+ res.id
-              return r + name ~> patternsOf(th, cache, name, rightToLeft)
+              return r + name ~> patternsOf(th, cache, name, rightToLeft, seen)
             case _ => halt("Infeasible")
           }
         case e: AST.Exp.Binary =>

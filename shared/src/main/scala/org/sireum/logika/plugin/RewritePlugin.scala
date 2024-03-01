@@ -70,7 +70,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       } else {
         var r1 = ISZ[Rewriter.Pattern.Claim]()
         var r2 = HashSMap.empty[(ISZ[String], B), Rewriter.Pattern.Method]
-        for (p <- RewritingSystem.retrievePatterns(logika.th, cache, justArgs(0))) {
+        for (p <- RewritingSystem.retrievePatterns(logika.th, cache, justArgs(0), HashSet.empty)) {
           p match {
             case p: Rewriter.Pattern.Claim => r1 = r1 :+ p
             case p: Rewriter.Pattern.Method =>
