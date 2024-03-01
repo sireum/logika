@@ -97,16 +97,16 @@ final class NoTransitionSmt2CacheImpl(val persistentCache: java.util.concurrent.
   override def clearTransition(): Unit = {}
 
   def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State,
-                                 smt2: Smt2): Option[(ISZ[State], U64)] = None()
+                                 smt2: Smt2, reporter: Logika.Reporter): Option[ISZ[State]] = None()
 
   def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State,
-                    nextStates: ISZ[State], smt2: Smt2): U64 = u64"0"
+                    nextStates: ISZ[State], smt2: Smt2, reporter: Logika.Reporter, numOfReports: Z): Unit = {}
 
   def getAssignExpTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State,
-                                          smt2: Smt2): Option[(ISZ[(State, State.Value)], U64)] = None()
+                                          smt2: Smt2, reporter: Logika.Reporter): Option[ISZ[(State, State.Value)]] = None()
 
   def setAssignExpTransition(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State,
-                             nextStatesValues: ISZ[(State, State.Value)], smt2: Smt2): U64 = u64"0"
+                             nextStatesValues: ISZ[(State, State.Value)], smt2: Smt2, reporter: Logika.Reporter, numOfReports: Z): Unit = {}
 
   def getSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim]): Option[Smt2Query.Result] = None()
 

@@ -66,13 +66,13 @@ object Logika {
   @msig trait Cache {
     def clearTransition(): Unit
 
-    def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State, smt2: Smt2): Option[(ISZ[State], U64)]
+    def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State, smt2: Smt2, reporter: Reporter): Option[ISZ[State]]
 
-    def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): U64
+    def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2, reporter: Reporter, numOfReports: Z): Unit
 
-    def getAssignExpTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, smt2: Smt2): Option[(ISZ[(State, State.Value)], U64)]
+    def getAssignExpTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, smt2: Smt2, reporter: Reporter): Option[ISZ[(State, State.Value)]]
 
-    def setAssignExpTransition(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, nextStatesValues: ISZ[(State, State.Value)], smt2: Smt2): U64
+    def setAssignExpTransition(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, nextStatesValues: ISZ[(State, State.Value)], smt2: Smt2, reporter: Reporter, numOfReports: Z): Unit
 
     def getSmt2(isSat: B, th: TypeHierarchy, config: Config, timeoutInMs: Z, claims: ISZ[State.Claim]): Option[Smt2Query.Result]
 
@@ -154,6 +154,7 @@ object Logika {
     def numOfSats: Z
     def vcMillis: Z
     def satMillis: Z
+    def numOfReports: Z
 
     def state(plugins: ISZ[logika.plugin.ClaimPlugin], posOpt: Option[Position], context: ISZ[String],
               th: TypeHierarchy, s: State, atLinesFresh: B, atRewrite: B): Unit
@@ -162,9 +163,11 @@ object Logika {
 
     def inform(pos: Position, kind: Reporter.Info.Kind.Type, message: String): Unit
 
-    def coverage(setCache: B, cached: U64, pos: Position): Unit
+    def coverage(pos: Position): Unit
 
     def empty: Reporter
+
+    def child: Reporter
 
     def combine(other: Reporter): Reporter
 
@@ -3748,13 +3751,13 @@ import Util._
       }
       if (config.transitionCache && cachedExp && state.ok) {
         cache.getAssignExpTransitionAndUpdateSmt2(th, config,
-          AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)), state, smt2) match {
-          case Some((svs, cached)) =>
-            reporter.coverage(F, cached, e.posOpt.get)
+          AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)), state, smt2, reporter) match {
+          case Some(svs) =>
             return svs
           case _ =>
         }
       }
+      val numOfReports = reporter.numOfReports
       val svs = expH(state)
       def check(): B = {
         if (!(svs.size > 0)) {
@@ -3777,12 +3780,10 @@ import Util._
       if (cachedExp) {
         if (config.transitionCache && ops.ISZOps(svs).
           forall((p: (State, State.Value)) => p._1.status != State.Status.Error)) {
-          val cached = cache.setAssignExpTransition(th, config, AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)),
-            state, svs, smt2)
-          reporter.coverage(T, cached, e.posOpt.get)
-        } else {
-          reporter.coverage(F, zeroU64, e.posOpt.get)
+          cache.setAssignExpTransition(th, config, AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)),
+            state, svs, smt2, reporter, numOfReports)
         }
+        reporter.coverage(e.posOpt.get)
       }
       return svs
     }
@@ -3936,13 +3937,12 @@ import Util._
                          ae: AST.AssignExp, reporter: Reporter): ISZ[(State, State.Value)] = {
     val pos = ae.asStmt.posOpt.get
     if (config.transitionCache && s0.ok) {
-      cache.getAssignExpTransitionAndUpdateSmt2(th, config, ae, s0, smt2) match {
-        case Some((svs, cached)) =>
-          reporter.coverage(F, cached, pos)
-          return svs
+      cache.getAssignExpTransitionAndUpdateSmt2(th, config, ae, s0, smt2, reporter) match {
+        case Some(svs) => return svs
         case _ =>
       }
     }
+    val numOfReports = reporter.numOfReports
     val r: ISZ[(State, State.Value)] = ae match {
       case ae: AST.Stmt.Expr => evalExp(split, smt2, cache, rtCheck, s0, ae.exp, reporter)
       case _ =>
@@ -3950,11 +3950,9 @@ import Util._
         for (s2 <- evalAssignExp(split, smt2, cache, Some(sym), rtCheck, s1, ae, reporter)) yield (s2, sym)
     }
     if (config.transitionCache && ops.ISZOps(r).forall((p: (State, State.Value)) => p._1.status != State.Status.Error)) {
-      val cached = cache.setAssignExpTransition(th, config, ae, s0, r, smt2)
-      reporter.coverage(T, cached, pos)
-    } else {
-      reporter.coverage(F, zeroU64, pos)
+      cache.setAssignExpTransition(th, config, ae, s0, r, smt2, reporter, numOfReports)
     }
+    reporter.coverage(pos)
     return r
   }
 
@@ -4713,13 +4711,13 @@ import Util._
       case step: AST.ProofAst.Step.Regular =>
         val pos = step.claim.posOpt.get
         if (config.transitionCache) {
-          cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.ProofStep(step, m.values), s0, smt2) match {
-            case Some((ISZ(nextState), cached)) =>
-              reporter.coverage(F, cached, pos)
+          cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.ProofStep(step, m.values), s0, smt2, reporter) match {
+            case Some(ISZ(nextState)) =>
               return (nextState, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
             case _ =>
           }
         }
+        val numOfReports = reporter.numOfReports
         val normStep: AST.ProofAst.Step.Regular = step.just match {
           case j: AST.ProofAst.Step.Justification.Apply =>
             j.invokeIdent.attr.resOpt.get match {
@@ -4767,11 +4765,9 @@ import Util._
           }
           val nextState = plugin.handle(this, smt2, cache, m, s0, normStep, reporter)
           if (config.transitionCache && nextState.ok && !reporter.hasError) {
-            val cached = cache.setTransition(th, config, Cache.Transition.ProofStep(step, m.values), s0, ISZ(nextState), smt2)
-            reporter.coverage(T, cached, pos)
-          } else {
-            reporter.coverage(F, zeroU64, pos)
+            cache.setTransition(th, config, Cache.Transition.ProofStep(step, m.values), s0, ISZ(nextState), smt2, reporter, numOfReports)
           }
+          reporter.coverage(pos)
           return (nextState, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
         }
         reporter.error(step.just.posOpt, Logika.kind, "Could not recognize justification form")
@@ -5242,14 +5238,14 @@ import Util._
           val pos = sequent.attr.posOpt.get
           var cacheHit = F
           if (config.transitionCache) {
-            cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.Sequent(sequent), st0, smt2) match {
-              case Some((ISZ(nextState), cached)) =>
+            cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.Sequent(sequent), st0, smt2, reporter) match {
+              case Some(ISZ(nextState)) =>
                 cacheHit = T
-                reporter.coverage(F, cached, pos)
                 st0 = nextState
               case _ =>
             }
           }
+          val numOfReports = reporter.numOfReports
           if (!cacheHit) {
             var i = 0
             val st00 = st0
@@ -5262,11 +5258,9 @@ import Util._
                 ISZ(), reporter)._1
             }
             if (config.transitionCache && st0.ok) {
-              val cached = cache.setTransition(th, config, Cache.Transition.Sequent(sequent), st00, ISZ(st0), smt2)
-              reporter.coverage(T, cached, pos)
-            } else {
-              reporter.coverage(F, zeroU64, pos)
+              cache.setTransition(th, config, Cache.Transition.Sequent(sequent), st00, ISZ(st0), smt2, reporter, numOfReports)
             }
+            reporter.coverage(pos)
           }
         } else {
           var p = premises(st0, sequent)
@@ -5447,7 +5441,7 @@ import Util._
             |Split statement evaluation does not maintain nextFresh invariant for: ${stmt.prettyST}
             |${(for (s <- ss) yield st"* ${s.toST}", "\n")}""".render)
       if (stmt.isInstruction) {
-        reporter.coverage(F, zeroU64, stmt.posOpt.get)
+        reporter.coverage(stmt.posOpt.get)
       }
       return p
     }
@@ -5506,15 +5500,12 @@ import Util._
   def checkExps(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, title: String, titleSuffix: String,
                 s0: State, exps: ISZ[AST.Exp], reporter: Reporter): ISZ[State] = {
     if (config.transitionCache && s0.ok) {
-      cache.getTransitionAndUpdateSmt2(th, config, Logika.Cache.Transition.Exps(exps), s0, smt2) match {
-        case Some((nextStates, cached)) =>
-          for (exp <- exps) {
-            reporter.coverage(F, cached, exp.posOpt.get)
-          }
-          return nextStates
+      cache.getTransitionAndUpdateSmt2(th, config, Logika.Cache.Transition.Exps(exps), s0, smt2, reporter) match {
+        case Some(nextStates) => return nextStates
         case _ =>
       }
     }
+    val numOfReports = reporter.numOfReports
     var currents = ISZ(s0)
     var done = ISZ[State]()
     for (exp <- exps) {
@@ -5530,14 +5521,10 @@ import Util._
     }
     val r = currents ++ done
     if (config.transitionCache && !reporter.hasError) {
-      val cached = cache.setTransition(th, config, Logika.Cache.Transition.Exps(exps), s0, r, smt2)
-      for (exp <- exps) {
-        reporter.coverage(T, cached, exp.posOpt.get)
-      }
-    } else {
-      for (exp <- exps) {
-        reporter.coverage(F, zeroU64, exp.posOpt.get)
-      }
+      cache.setTransition(th, config, Logika.Cache.Transition.Exps(exps), s0, r, smt2, reporter, numOfReports)
+    }
+    for (exp <- exps) {
+      reporter.coverage(exp.posOpt.get)
     }
     return r
   }

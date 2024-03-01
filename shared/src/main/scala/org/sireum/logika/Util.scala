@@ -1904,23 +1904,21 @@ object Util {
     for (r <- requires if s.ok) {
       var cacheHit = F
       if (logika.config.transitionCache) {
-        cache.getTransitionAndUpdateSmt2(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s, smt2) match {
-          case Some((ISZ(nextState), cached)) =>
+        cache.getTransitionAndUpdateSmt2(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s, smt2, reporter) match {
+          case Some(ISZ(nextState)) =>
             cacheHit = T
-            reporter.coverage(F, cached, r.posOpt.get)
             s = nextState
           case _ =>
         }
       }
+      val numOfReports = reporter.numOfReports
       if (!cacheHit) {
         val s0 = s
         s = logika.evalAssume(smt2, cache, T, "Precondition", s, r, r.posOpt, reporter)._1
         if (logika.config.transitionCache && s.ok) {
-          val cached = cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s0, ISZ(s), smt2)
-          reporter.coverage(T, cached, r.posOpt.get)
-        } else {
-          reporter.coverage(F, Logika.zeroU64, r.posOpt.get)
+          cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(r), s0, ISZ(s), smt2, reporter, numOfReports)
         }
+        reporter.coverage(r.posOpt.get)
       }
     }
     return s
@@ -1948,23 +1946,21 @@ object Util {
         for (e <- ensures if s.ok) {
           var cacheHit = F
           if (logika.config.transitionCache) {
-            cache.getTransitionAndUpdateSmt2(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s, smt2) match {
-              case Some((ISZ(nextState), cached)) =>
+            cache.getTransitionAndUpdateSmt2(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s, smt2, reporter) match {
+              case Some(ISZ(nextState)) =>
                 cacheHit = T
-                reporter.coverage(F, cached, e.posOpt.get)
                 s = nextState
               case _ =>
             }
           }
+          val numOfReports = reporter.numOfReports
           if (!cacheHit) {
             val s0 = s
             s = logika.evalAssert(smt2, cache, T, "Postcondition", s, e, e.posOpt, rwLocals, reporter)._1
             if (logika.config.transitionCache && s.ok) {
-              val cached = cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s0, ISZ(s), smt2)
-              reporter.coverage(T, cached, e.posOpt.get)
-            } else {
-              reporter.coverage(F, Logika.zeroU64, e.posOpt.get)
+              cache.setTransition(logika.th, logika.config, Logika.Cache.Transition.Exp(e), s0, ISZ(s), smt2, reporter, numOfReports)
             }
+            reporter.coverage(e.posOpt.get)
           }
         }
         if (postPosOpt.nonEmpty && s.ok) {
@@ -2641,15 +2637,12 @@ object Util {
     }
     if (logika.config.transitionCache) {
       cache.getTransitionAndUpdateSmt2(logika.th, logika.config,
-        Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, smt2) match {
-        case Some((ISZ(nextState), cached)) =>
-          for (inv <- invs) {
-            reporter.coverage(F, cached, inv.posOpt.get)
-          }
-          return nextState
+        Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, smt2, reporter) match {
+        case Some(ISZ(nextState)) => return nextState
         case _ =>
       }
     }
+    val numOfReports = reporter.numOfReports
     val pos = posOpt.get
     def spInv(): Option[State] = {
       val claim: AST.Exp = logika.invs2exp(invs, substMap) match {
@@ -2690,15 +2683,11 @@ object Util {
       s4 = logika.evalInv(posOpt, isAssume, title, smt2, cache, rtCheck, s4, inv.ast, substMap, reporter)
     }
     if (logika.config.transitionCache && s4.ok) {
-      val cached = cache.setTransition(logika.th, logika.config,
-        Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, ISZ(s4), smt2)
-      for (inv <- invs) {
-        reporter.coverage(T, cached, inv.posOpt.get)
-      }
-    } else {
-      for (inv <- invs) {
-        reporter.coverage(F, Logika.zeroU64, inv.posOpt.get)
-      }
+      cache.setTransition(logika.th, logika.config,
+        Logika.Cache.Transition.Stmts(for (inv <- invs) yield inv.ast), s0, ISZ(s4), smt2, reporter, numOfReports)
+    }
+    for (inv <- invs) {
+      reporter.coverage(inv.posOpt.get)
     }
     return s4
   }
@@ -2882,12 +2871,13 @@ object Util {
   }
 
   def evalStmtsLogika(l: Logika, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym],
-                      rtCheck: B, state: State, stmts: ISZ[AST.Stmt], reporter: Reporter): (Logika, ISZ[State]) = {
+                      rtCheck: B, state: State, stmts: ISZ[AST.Stmt], rep: Reporter): (Logika, ISZ[State]) = {
     var logika = l
     val initConfig = logika.config
     val context = logika.context
     var currents = ISZ(state)
     var done = ISZ[State]()
+    val reporter = rep.child
 
     val size: Z = if (rOpt.nonEmpty) stmts.size - 1 else stmts.size
     for (i <- 0 until size) {
@@ -2911,7 +2901,7 @@ object Util {
                 OptionsUtil.toConfig(initConfig, l.context.maxCores, LibUtil.setOptions, l.context.nameExePathMap, value) match {
                   case Either.Left(c) =>
                     logika = logika(config = c)
-                    reporter.coverage(F, org.sireum.U64.fromZ(0), stmt.posOpt.get)
+                    reporter.coverage(stmt.posOpt.get)
                     currents = currents :+ currentNoOld
                   case Either.Right(msgs) =>
                     for (msg <- msgs) {
@@ -2941,40 +2931,23 @@ object Util {
                 val transition: Logika.Cache.Transition = if (stmt.hasReturnMemoized && ensures.nonEmpty)
                   Logika.Cache.Transition.StmtExps(stmt, context.methodOpt.get.ensures)
                 else Logika.Cache.Transition.Stmt(stmt)
-                cache.getTransitionAndUpdateSmt2(logika.th, logika.config, transition, currentNoOld, smt2) match {
-                  case Some((ss, cached)) =>
-                    if (stmt.isInstruction) {
-                      reporter.coverage(F, cached, stmt.posOpt.get)
-                      if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                        for (e <- ensures) {
-                          reporter.coverage(F, cached, e.posOpt.get)
-                        }
-                      }
-                    }
-                    ss
+                cache.getTransitionAndUpdateSmt2(logika.th, logika.config, transition, currentNoOld, smt2, reporter) match {
+                  case Some(ss) => ss
                   case _ =>
+                    val numOfReports = reporter.numOfReports
                     if (stmt.isInstruction) {
                       logika.logPc(current, reporter, stmt.posOpt)
                     }
                     val (l2, ss) = logika.evalStmt(split, smt2, cache, rtCheck, currentNoOld, stmts(i), reporter)
                     logika = l2
                     if (!reporter.hasError && ops.ISZOps(ss).forall((s: State) => s.status != State.Status.Error)) {
-                      val cached = cache.setTransition(logika.th, logika.config, transition, currentNoOld, ss, smt2)
-                      if (stmt.isInstruction) {
-                        reporter.coverage(T, cached, stmt.posOpt.get)
-                        if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                          for (e <- ensures) {
-                            reporter.coverage(T, cached, e.posOpt.get)
-                          }
-                        }
-                      }
-                    } else {
-                      if (stmt.isInstruction) {
-                        reporter.coverage(F, Logika.zeroU64, stmt.posOpt.get)
-                        if (stmt.isInstanceOf[AST.Stmt.Return]) {
-                          for (e <- ensures) {
-                            reporter.coverage(F, Logika.zeroU64, e.posOpt.get)
-                          }
+                      cache.setTransition(logika.th, logika.config, transition, currentNoOld, ss, smt2, reporter, numOfReports)
+                    }
+                    if (stmt.isInstruction) {
+                      reporter.coverage(stmt.posOpt.get)
+                      if (stmt.isInstanceOf[AST.Stmt.Return]) {
+                        for (e <- ensures) {
+                          reporter.coverage(e.posOpt.get)
                         }
                       }
                     }

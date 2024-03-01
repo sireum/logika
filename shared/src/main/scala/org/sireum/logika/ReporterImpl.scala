@@ -55,6 +55,7 @@ final class ReporterImpl(val logPc: B,
   override def numOfSats: Z = _numOfSats.get
   override def vcMillis: Z = _vcMillis.get
   override def satMillis: Z = _satMillis.get
+  override def numOfReports: Z = _messages.size
 
   override def $clonable: Boolean = clonable
 
@@ -120,13 +121,15 @@ final class ReporterImpl(val logPc: B,
   override def illFormed(): Unit = {
   }
 
-  override def coverage(setCache: B, cached: U64, pos: Position): Unit = {
+  override def coverage(pos: Position): Unit = {
   }
 
   override def empty: Logika.Reporter = {
     return new ReporterImpl(logPc, logPcRaw, logVc, logDetailedInfo, F, ISZ(), collectStats, _numOfVCs, _numOfSats,
       _vcMillis, _satMillis)
   }
+
+ override def child: Logika.Reporter = this
 
   override def messages: ISZ[Message] = {
     return _messages
