@@ -2507,7 +2507,6 @@ object RewritingSystem {
             }
             return Some(r)
           }
-          return None()
         }
         val r = checkSubtyping()
         if (r.nonEmpty) {
@@ -2623,7 +2622,7 @@ object RewritingSystem {
             r = r :+ Rewriter.Pattern.Claim(name, F, isPermutative(c), localPatternSet, c)
           }
         }
-      case info: Info.RsVal => r = r ++ retrievePatterns(th, cache, info.ast.init, HashSet.empty)
+      case info: Info.RsVal => r = r ++ retrievePatterns(th, cache, info.ast.init, seen + name)
       case info: Info.Method =>
         if (info.ast.hasContract) {
           val context = info.name

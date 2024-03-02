@@ -126,6 +126,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             |
             |${(for (te <- trace) yield te.toST, "\n\n")}""")
       else None()
+
     val rwPc = Rewriter(if (logika.config.rwPar) logika.config.parCores else 1, logika.th,
       provenClaims, patterns, methodPatterns, logika.config.rwTrace, logika.config.rwEvalTrace, F, ISZ())
     val stepClaim = RewritingSystem.translateExp(logika.th, F, step.claim)
@@ -238,7 +239,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
           st"""Could not match:
               |  ${stepClaim.prettyST}
               |
-              |After ${if (isEval) "evaluating" else "rewriting"}$fromOpt to:
+              |After attempting to ${if (isEval) "evaluate" else "rewrite"}$fromOpt to:
               |  ${rwClaim.prettyST}
               |
               |$simplTraceOpt
