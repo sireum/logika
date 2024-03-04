@@ -1516,14 +1516,14 @@ object Util {
               val t = let.adt.tipe.asInstanceOf[AST.Typed.Name]
                 th.typeMap.get(t.ids).get match {
                   case _: TypeInfo.Adt =>
-                    val (_, resOpt, _, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), message.Reporter.create)
-                    val index = ops.ISZOps(resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames).indexOf(let.id)
+                    val (_, resOpt, _, paramNames) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), message.Reporter.create)
+                    val index = ops.ISZOps(paramNames).indexOf(let.id)
                     val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
                       e, index)), AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
                     return Some(r)
                   case _: TypeInfo.Sig =>
-                    val (_, resOpt, _, _) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), message.Reporter.create)
-                    val index = ops.ISZOps(resOpt.get.asInstanceOf[AST.ResolvedInfo.Method].paramNames).indexOf(let.id)
+                    val (_, resOpt, _, paramNames) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), message.Reporter.create)
+                    val index = ops.ISZOps(paramNames).indexOf(let.id)
                     val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
                       e, index)), AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
                     return Some(r)
