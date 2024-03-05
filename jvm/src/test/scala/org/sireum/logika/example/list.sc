@@ -90,6 +90,8 @@ object List {
 
           } else {
 
+            lookupUpdateEq(next, key, value) // either this or proof step #5 below
+
             Deduce(
               //@formatter:off
               1 (  map ≡ Cons(p, next)                                          ) by Auto,

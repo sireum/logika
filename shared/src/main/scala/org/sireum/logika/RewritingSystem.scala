@@ -126,6 +126,11 @@ object RewritingSystem {
         st"""Begin $title ${exp.prettyST} ..."""
     }
 
+    @datatype class BeginST(val title: ST) extends Trace {
+      @strictpure def toST: ST =
+        st"""Begin $title"""
+    }
+
     @datatype class Eval(val desc: ST,
                          val from: AST.CoreExp.Base,
                          val to: AST.CoreExp.Base) extends Trace {
@@ -2387,6 +2392,9 @@ object RewritingSystem {
           var map = incDeBruijnMap(deBruijnMap, params.size)
           for (i <- 0 until params.size) {
             map = map + (params.size - i) ~> args(i)
+          }
+          if (shouldTrace) {
+            trace = trace :+ Trace.BeginST(st"function application ${f.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, if (args.size > params.size) params.size else args.size)) yield arg.prettyST, ", ")})")
           }
           evalBaseH(map, body) match {
             case Some(body2) =>
