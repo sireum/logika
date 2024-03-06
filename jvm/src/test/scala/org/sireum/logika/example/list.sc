@@ -90,7 +90,7 @@ object List {
 
           } else {
 
-            lookupUpdateEq(next, key, value) // either this or proof step #5 below
+            //lookupUpdateEq(next, key, value) // either this or proof step #5 below
 
             Deduce(
               //@formatter:off

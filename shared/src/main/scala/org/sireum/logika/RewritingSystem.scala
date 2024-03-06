@@ -126,9 +126,9 @@ object RewritingSystem {
         st"""Begin $title ${exp.prettyST} ..."""
     }
 
-    @datatype class BeginST(val title: ST) extends Trace {
+    @datatype class Info(val isEval: B, val title: ST) extends Trace {
       @strictpure def toST: ST =
-        st"""Begin $title"""
+        st"""info [${if (isEval) "eval" else "rw"}] $title"""
     }
 
     @datatype class Eval(val desc: ST,
@@ -2394,7 +2394,7 @@ object RewritingSystem {
             map = map + (params.size - i) ~> args(i)
           }
           if (shouldTrace) {
-            trace = trace :+ Trace.BeginST(st"function application ${f.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, if (args.size > params.size) params.size else args.size)) yield arg.prettyST, ", ")})")
+            trace = trace :+ Trace.Info(T, st"function application ${f.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, if (args.size > params.size) params.size else args.size)) yield arg.prettyST, ", ")})")
           }
           evalBaseH(map, body) match {
             case Some(body2) =>
@@ -2427,6 +2427,9 @@ object RewritingSystem {
           var map = incDeBruijnMap(deBruijnMap, params.size)
           for (i <- 0 until params.size) {
             map = map + (params.size - i) ~> args(i)
+          }
+          if (shouldTrace) {
+            trace = trace :+ Trace.Info(T, st"∀-elimination ${q.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, params.size)) yield arg.prettyST, ", ")})")
           }
           evalBaseH(map, body) match {
             case Some(body2) =>
