@@ -26,7 +26,7 @@
 package org.sireum.logika
 
 import org.sireum._
-import org.sireum.lang.ast.Typed
+import org.sireum.lang.ast.{CoreExp, MCoreExpTransformer}
 import org.sireum.lang.symbol.{Info, TypeInfo}
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
@@ -116,6 +116,26 @@ object RewritingSystem {
     }
   }
 
+  @record class LabeledDetector(var found: B) extends AST.MCoreExpTransformer {
+    override def preCoreExpLabeled(o: AST.CoreExp.Labeled): AST.MCoreExpTransformer.PreResult[AST.CoreExp.Base] = {
+      found = T
+      return AST.MCoreExpTransformer.PreResultCoreExpLabeled(continu = F)
+    }
+
+    override def transformCoreExpBase(o: AST.CoreExp.Base): MOption[AST.CoreExp.Base] = {
+      if (found) {
+        return MNone()
+      }
+      return super.transformCoreExpBase(o)
+    }
+  }
+
+  @record class LabeledRemover extends AST.MCoreExpTransformer {
+    override def postCoreExpLabeled(o: AST.CoreExp.Labeled): MOption[AST.CoreExp.Base] = {
+      return MSome(o.exp)
+    }
+  }
+
   @datatype trait Trace {
     @pure def toST: ST
   }
@@ -180,6 +200,8 @@ object RewritingSystem {
                          val methodPatterns: MethodPatternMap,
                          val shouldTrace: B,
                          val shouldTraceEval: B,
+                         var labeledOnly: B,
+                         var inLabel: B,
                          var done: B,
                          var trace: ISZ[Trace]) {
     val unfoldingMap: MBox[UnfoldingNumMap] = MBox(HashSMap.empty)
@@ -370,14 +392,37 @@ object RewritingSystem {
               Some(o(exp = r0.getOrElse(o.exp)))
             else
               None()
-          case o: AST.CoreExp.Halt => None()
+          case _: AST.CoreExp.Halt => None()
+          case o: AST.CoreExp.Labeled =>
+            val oldInLabel = inLabel
+            inLabel = T
+            val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.exp)
+            inLabel = oldInLabel
+            r0 match {
+              case Some(r) =>
+                o.numOpt match {
+                  case Some(num) =>
+                    val n = num - 1
+                    if (n <= 0) {
+                      return Some(r)
+                    } else {
+                      return Some(o(numOpt = Some(n), exp = r))
+                    }
+                  case _ => return Some(o(exp = r))
+                }
+              case _ =>
+            }
+            if (hasChanged || r0.nonEmpty)
+              Some(o(exp = r0.getOrElse(o.exp)))
+            else
+              None()
         }
         rOpt
       }
       val hasChanged: B = r.nonEmpty
       val o2: AST.CoreExp.Base = r.getOrElse(o)
       val shouldUnfold: B = o2 match {
-        case o2: AST.CoreExp.ObjectVarRef if methodPatterns.contains((o2.owner :+ o2.id, F)) => T
+        case o2: AST.CoreExp.ObjectVarRef if methodPatterns.contains((o2.owner :+ o2.id, T)) => T
         case o2: AST.CoreExp.Select =>
           val infoOpt: Option[Info.Method] = o2.exp.tipe match {
             case t: AST.Typed.Name =>
@@ -395,7 +440,7 @@ object RewritingSystem {
         case _ => F
       }
       if (shouldUnfold) {
-        evalBase(th, EvalConfig.none, cache, methodPatterns, unfoldingMap, 1, HashSMap.empty, o2, shouldTraceEval) match {
+        evalBase(th, EvalConfig.none, cache, methodPatterns, unfoldingMap, 1, HashSMap.empty, o2, F, shouldTraceEval) match {
           case Some((o3, t)) =>
             trace = trace ++ t
             return Some(o3)
@@ -413,6 +458,9 @@ object RewritingSystem {
     }
 
     def rewrite(cache: Logika.Cache, o: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
+      if (!inLabel && labeledOnly) {
+        return None()
+      }
       var rOpt = Option.none[AST.CoreExp.Base]()
       var i = 0
       while (!done && rOpt.isEmpty && i < patterns.size) {
@@ -444,14 +492,14 @@ object RewritingSystem {
                   if (patterns2.isEmpty) {
                     o
                   } else {
-                    Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, F, F, F, ISZ()).
+                    Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, F, F, F, F, F, ISZ()).
                       transformCoreExpBase(cache, o).getOrElse(o)
                   }
               }
             }
             val (o3Opt, t): (Option[AST.CoreExp.Base], ISZ[Trace]) =
               evalBase(th, EvalConfig.allButEquivSubst, cache, methodPatterns, unfoldingMap, 1,
-                provenClaimStepIdMap, o2, shouldTraceEval) match {
+                provenClaimStepIdMap, o2, F, shouldTraceEval) match {
                 case Some((o3o, t)) => (Some(o3o), t)
                 case _ => (None(),  ISZ())
               }
@@ -497,7 +545,7 @@ object RewritingSystem {
                   (for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
                     r2l(Rewriter.Pattern.Claim(pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))) ++
                     patterns
-                val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, F, F, F, ISZ()).
+                val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, F, F, F, F, F, ISZ()).
                   transformCoreExpBase(cache, o).getOrElse(o)
                 val m = unifyExp(T, th, pattern.localPatternSet, from, o2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
@@ -537,6 +585,16 @@ object RewritingSystem {
         }
         tryPattern()
         i = i + 1
+      }
+      if (rOpt.isEmpty) {
+        evalBase(th, EvalConfig.allButEquivSubst, cache, methodPatterns, unfoldingMap, 1,
+          provenClaimStepIdMap, o, F, shouldTraceEval) match {
+          case Some((r2, t)) =>
+            trace = trace ++ t
+            rOpt = Some(r2)
+            done = T
+          case _ =>
+        }
       }
       return rOpt
     }
@@ -984,6 +1042,12 @@ object RewritingSystem {
             case _ => return AST.CoreExp.Apply(F, translateExp(e.ident, funStack, localMap),
               getArgs, e.typedOpt.get)
           }
+        case e: AST.Exp.Labeled =>
+          val numOpt: Option[Z] = e.numOpt match {
+            case Some(num) => Some(num.value)
+            case _ => None()
+          }
+          return AST.CoreExp.Labeled(numOpt, translateExp(e.exp, funStack, localMap))
         case e => halt(s"TODO: $e")
       }
     }
@@ -1319,7 +1383,7 @@ object RewritingSystem {
       m.get((context, id)) match {
         case Some(f: AST.CoreExp.Fun) =>
           evalBase(th, EvalConfig.funApplicationOnly, noCache, HashSMap.empty, MBox(HashSMap.empty), 1, HashSMap.empty,
-            AST.CoreExp.Apply(F, f, args, e.tipe), F) match {
+            AST.CoreExp.Apply(F, f, args, e.tipe), F, F) match {
             case Some((pattern, _)) =>
               m = unifyExp(silent, th, localPatterns, pattern, e, m, pendingApplications, substMap, errorMessages)
             case _ =>
@@ -1532,13 +1596,14 @@ object RewritingSystem {
                  maxUnfolding: Z,
                  provenClaims: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId],
                  exp: AST.CoreExp,
+                 removeLabels: B,
                  shouldTrace: B): Option[(AST.CoreExp, ISZ[Trace])] = {
     exp match {
       case exp: AST.CoreExp.Arrow =>
         var changed = F
         var trace = ISZ[Trace]()
         val left: AST.CoreExp.Base = evalBase(th, config, cache, methodPatterns, unfoldingMap, maxUnfolding,
-          provenClaims, exp.left, shouldTrace) match {
+          provenClaims, exp.left, removeLabels, shouldTrace) match {
           case Some((l, t)) =>
             trace = trace ++ t
             changed = T
@@ -1546,7 +1611,7 @@ object RewritingSystem {
           case _ => exp.left
         }
         val right: AST.CoreExp = eval(th, config, cache, methodPatterns, unfoldingMap, maxUnfolding, provenClaims,
-          exp.right, shouldTrace) match {
+          exp.right, removeLabels, shouldTrace) match {
           case Some((r, t)) =>
             trace = trace ++ t
             changed = T
@@ -1555,7 +1620,7 @@ object RewritingSystem {
         }
         return if (changed) Some((AST.CoreExp.Arrow(left, right), trace)) else None()
       case exp: AST.CoreExp.Base => evalBase(th, config, cache, methodPatterns, unfoldingMap, maxUnfolding,
-        provenClaims, exp, shouldTrace) match {
+        provenClaims, exp, removeLabels, shouldTrace) match {
         case Some((e, t)) => return Some((e, t))
         case _ => return None()
       }
@@ -1563,7 +1628,7 @@ object RewritingSystem {
   }
 
   @pure def simplify(th: TypeHierarchy, exp: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
-    evalBase(th, EvalConfig.all, NoCache(), HashSMap.empty, MBox(HashSMap.empty), 1, HashSMap.empty, exp, F) match {
+    evalBase(th, EvalConfig.all, NoCache(), HashSMap.empty, MBox(HashSMap.empty), 1, HashSMap.empty, exp, T, F) match {
       case Some((r, _)) => return Some(r)
       case _ => return None()
     }
@@ -1577,6 +1642,7 @@ object RewritingSystem {
                      maxUnfolding: Z,
                      provenClaims: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId],
                      exp: AST.CoreExp.Base,
+                     removeLabels: B,
                      shouldTrace: B): Option[(AST.CoreExp.Base, ISZ[Trace])] = {
     @strictpure def equivST(left: AST.CoreExp.Base, right: AST.CoreExp.Base): ST =
       AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b).prettyST
@@ -1688,6 +1754,7 @@ object RewritingSystem {
         case e: AST.CoreExp.Fun => return evalFun(deBruijnMap, e)
         case e: AST.CoreExp.Quant => return evalQuant(deBruijnMap, e)
         case e: AST.CoreExp.InstanceOfExp => return evalInstanceOf(deBruijnMap, e)
+        case e: AST.CoreExp.Labeled => return evalLabeled(deBruijnMap, e)
       }
     }
 
@@ -2092,7 +2159,7 @@ object RewritingSystem {
             trace = trace :+ Trace.Eval(st"unfolding", e(exp = receiver), fApp)
           }
           val p = evalBase(th, EvalConfig.funApplicationOnly, cache, HashSMap.empty,
-            MBox(HashSMap.empty), 1, HashSMap.empty, fApp, shouldTrace).get
+            MBox(HashSMap.empty), 1, HashSMap.empty, fApp, removeLabels, shouldTrace).get
           trace = trace ++ p._2
           return Some(p._1)
         case _ =>
@@ -2527,6 +2594,13 @@ object RewritingSystem {
       return if (changed) Some(e(exp = receiver)) else None()
     }
 
+    def evalLabeled(deBruijnMap: HashMap[Z, AST.CoreExp.Base], e: AST.CoreExp.Labeled): Option[AST.CoreExp.Base] = {
+      evalBaseH(deBruijnMap, e.exp) match {
+        case Some(r) => return Some(if (removeLabels) r else e(exp = r))
+        case _ => return if (removeLabels) Some(e.exp) else None()
+      }
+    }
+
     evalBaseH(HashMap.empty, exp) match {
       case Some(e) => return Some((e, trace))
       case _ => return None()
@@ -2558,7 +2632,7 @@ object RewritingSystem {
             MBox(HashSMap.empty), 1, HashSMap.empty,
             AST.CoreExp.Apply(F, e,
               ISZ(AST.CoreExp.LocalVarRef(T, ISZ(), paramId(e.param.id), e.param.tipe)),
-              AST.Typed.b), F).get._1)
+              AST.Typed.b), T, F).get._1)
         case e: AST.CoreExp.If =>
           return (for (t <- toCondEquivH(e.tExp)) yield AST.CoreExp.Arrow(e.cond, t).asInstanceOf[AST.CoreExp]) ++
             (for (f <- toCondEquivH(e.fExp)) yield AST.CoreExp.Arrow(e.cond, f).asInstanceOf[AST.CoreExp])
