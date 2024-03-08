@@ -198,6 +198,7 @@ object RewritingSystem {
                          val provenClaims: HashSMap[AST.ProofAst.StepId, AST.CoreExp.Base],
                          val patterns: ISZ[Rewriter.Pattern.Claim],
                          val methodPatterns: MethodPatternMap,
+                         val fromStepOpt: Option[(AST.CoreExp.Base, AST.ProofAst.StepId)],
                          val shouldTrace: B,
                          val shouldTraceEval: B,
                          var labeledOnly: B,
@@ -205,6 +206,12 @@ object RewritingSystem {
                          var done: B,
                          var trace: ISZ[Trace]) {
     val unfoldingMap: MBox[UnfoldingNumMap] = MBox(HashSMap.empty)
+    @memoize def provenClaimStepIdMapEval: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId] = {
+      fromStepOpt match {
+        case Some((e, fromStepId)) => return provenClaimStepIdMap - (e, fromStepId)
+        case _ => return provenClaimStepIdMap
+      }
+    }
     @memoize def provenClaimStepIdMap: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId] = {
       @strictpure def conjuncts(e: AST.CoreExp.Base): ISZ[AST.CoreExp.Base] = {
         e match {
@@ -411,6 +418,16 @@ object RewritingSystem {
                   case _ => return Some(o(exp = r))
                 }
               case _ =>
+                if (r0.isEmpty && labeledOnly) {
+                  evalBase(th, EvalConfig.all, cache, methodPatterns, unfoldingMap, 1,
+                    provenClaimStepIdMapEval, o, F, shouldTraceEval) match {
+                    case Some((r1, t)) =>
+                      trace = trace ++ t
+                      done = T
+                      return Some(r1)
+                    case _ =>
+                  }
+                }
             }
             if (hasChanged || r0.nonEmpty)
               Some(o(exp = r0.getOrElse(o.exp)))
@@ -492,14 +509,14 @@ object RewritingSystem {
                   if (patterns2.isEmpty) {
                     o
                   } else {
-                    Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, F, F, F, F, F, ISZ()).
+                    Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, fromStepOpt, F, F, F, F, F, ISZ()).
                       transformCoreExpBase(cache, o).getOrElse(o)
                   }
               }
             }
             val (o3Opt, t): (Option[AST.CoreExp.Base], ISZ[Trace]) =
-              evalBase(th, EvalConfig.allButEquivSubst, cache, methodPatterns, unfoldingMap, 1,
-                provenClaimStepIdMap, o2, F, shouldTraceEval) match {
+              evalBase(th, EvalConfig.all, cache, methodPatterns, unfoldingMap, 1,
+                provenClaimStepIdMapEval, o2, F, shouldTraceEval) match {
                 case Some((o3o, t)) => (Some(o3o), t)
                 case _ => (None(),  ISZ())
               }
@@ -545,7 +562,7 @@ object RewritingSystem {
                   (for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
                     r2l(Rewriter.Pattern.Claim(pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))) ++
                     patterns
-                val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, F, F, F, F, F, ISZ()).
+                val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, fromStepOpt, F, F, F, F, F, ISZ()).
                   transformCoreExpBase(cache, o).getOrElse(o)
                 val m = unifyExp(T, th, pattern.localPatternSet, from, o2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
@@ -585,16 +602,6 @@ object RewritingSystem {
         }
         tryPattern()
         i = i + 1
-      }
-      if (rOpt.isEmpty) {
-        evalBase(th, EvalConfig.allButEquivSubst, cache, methodPatterns, unfoldingMap, 1,
-          provenClaimStepIdMap, o, F, shouldTraceEval) match {
-          case Some((r2, t)) =>
-            trace = trace ++ t
-            rOpt = Some(r2)
-            done = T
-          case _ =>
-        }
       }
       return rOpt
     }
