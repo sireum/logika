@@ -84,9 +84,9 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
         (r1, r2)
       }
-    val (fromOpt, fromClaim, fromCoreClaim): (Option[AST.ProofAst.StepId], AST.Exp, AST.CoreExp.Base) =
+    val (fromOpt, fromCoreClaim): (Option[AST.ProofAst.StepId], AST.CoreExp.Base) =
       if (isRSimpl || isSimpl) {
-        (None(), AST.Exp.LitB(T, step.just.id.attr), AST.CoreExp.LitB(T))
+        (None(), AST.CoreExp.LitB(T))
       } else {
         val from: AST.ProofAst.StepId =
           AST.Util.toStepIds(ISZ(justArgs(if (isEval) 0 else 1)), Logika.kind, reporter) match {
@@ -94,7 +94,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             case _ => return err
           }
         spcMap.get(from) match {
-          case Some(spc: StepProofContext.Regular) => (Some(from), spc.exp, spc.coreExpClaim)
+          case Some(spc: StepProofContext.Regular) => (Some(from), spc.coreExpClaim)
           case _ =>
             reporter.error(from.posOpt, Logika.kind, s"Expecting a regular proof step")
             return err
