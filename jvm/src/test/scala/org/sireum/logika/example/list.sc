@@ -145,13 +145,16 @@ object List {
             
           } else {
 
+            //lookupUpdateNe(next, key1, key2, value)
+
             Deduce(
               //@formatter:off
               1 (  key1 ≢ key2                                                    ) by Premise,
               2 (  map ≡ Cons(p, next)                                            ) by Auto,
               3 (  !(p._1 ≡ key1)                                                 ) by Premise,
-              4 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)), //Auto,
-              5 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
+              4 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
+              5 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
+              6 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
               //@formatter:on
             )
             return
@@ -257,6 +260,14 @@ object List {
 
     @strictpure def empty[T](c: Z, s: Strategy.Type): Queue[T] = Queue(F, Nil(), c, s)
 
+//    @pure def wfEmpty[T](c: Z, s: Strategy.Type): Unit = {
+//      Contract(
+//        Ensures(empty[T](c, s).wellFormed)
+//      )
+//      Deduce(
+//        1 (  empty[T](c, s).wellFormed  ) by RSimpl(RS(Queue.$.wellFormed _))
+//      )
+//    }
   }
 
 
