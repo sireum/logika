@@ -2281,7 +2281,9 @@ object RewritingSystem {
                 trace = trace :+ Trace.Eval(st"unfolding", e(exp = receiver), fApp)
               }
               applyFun(HashMap.empty, f, args, t) match {
-                case Some((r, _)) => return Some(r)
+                case Some((r, _)) =>
+                  val r2 = evalBaseH(HashMap.empty, r).getOrElse(r)
+                  return Some(r2)
                 case _ =>
               }
             case _ =>
@@ -2744,17 +2746,91 @@ object RewritingSystem {
       case Some(ISZ(r: Rewriter.Pattern.Method)) => return r
       case rOpt => assert(rOpt.isEmpty)
     }
+    val (mi, body): (Info.Method, AST.CoreExp.Base) = if (info.ast.bodyOpt.nonEmpty && info.isInObject) {
+      (info, translateAssignExp(th, F, Util.extractAssignExpOpt(info).get))
+    } else {
+      val id = info.ast.sig.id.value
+      def findDefault(name: ISZ[String], defaultOpt: MBox[Option[(Info.Method, AST.CoreExp.Base)]]): Unit = {
+        def mTranslate(minfo: Info.Method): Unit = {
+          if (minfo.ast.bodyOpt.isEmpty) {
+            return
+          }
+          Util.extractAssignExpOpt(minfo) match {
+            case Some(ae) => defaultOpt.value = Some((minfo, translateAssignExp(th, F, ae)))
+            case _ =>
+          }
+        }
+        th.typeMap.get(name).get match {
+          case ti: TypeInfo.Sig =>
+            ti.methods.get(id) match {
+              case Some(minfo) => mTranslate(minfo)
+              case _ =>
+            }
+          case ti: TypeInfo.Adt =>
+            ti.methods.get(id) match {
+              case Some(minfo) => mTranslate(minfo)
+              case _ =>
+            }
+          case _ =>
+        }
+        if (defaultOpt.value.nonEmpty) {
+          return
+        }
+        val parents = th.poset.parentsOf(name).elements
+        var i = 0
+        while (defaultOpt.value.isEmpty && i < parents.size) {
+          findDefault(parents(i), defaultOpt)
+          i = i + 1
+        }
+      }
+      val descendants = th.poset.descendantsOf(info.owner).elements
+      if (descendants.isEmpty) {
+        val mdo = MBox(Option.none[(Info.Method, AST.CoreExp.Base)]())
+        findDefault(info.owner, mdo)
+        val p = (info, AST.CoreExp.Abort.asInstanceOf[AST.CoreExp.Base])
+        mdo.value.getOrElse(p)
+      } else {
+        var leaves = ISZ[ISZ[String]]()
+        for (descendant <- descendants if th.poset.childrenOf(descendant).isEmpty) {
+          leaves = leaves :+ descendant
+        }
+        var allLeavesNoImpl = T
+        for (leaf <- leaves if allLeavesNoImpl) {
+          th.typeMap.get(leaf).get match {
+            case ti: TypeInfo.Sig => ti.methods.get(id) match {
+              case Some(minfo) if minfo.ast.bodyOpt.nonEmpty => allLeavesNoImpl = F
+              case _ =>
+            }
+            case ti: TypeInfo.Adt => ti.methods.get(id) match {
+              case Some(minfo) if minfo.ast.bodyOpt.nonEmpty => allLeavesNoImpl = F
+              case _ =>
+            }
+            case _ =>
+          }
+        }
+        if (allLeavesNoImpl) {
+          val mdo = MBox(Option.none[(Info.Method, AST.CoreExp.Base)]())
+          findDefault(info.owner, mdo)
+          val p = (info, AST.CoreExp.Abort.asInstanceOf[AST.CoreExp.Base])
+          mdo.value.getOrElse(p)
+        } else {
+          halt("TODO")
+        }
+      }
+    }
     var params = ISZ[(String, AST.Typed)]()
     if (!info.isInObject) {
-      params = params :+ ("this", th.typeMap.get(info.owner).get.tpe)
+      params = params :+ ("this", th.typeMap.get(mi.owner).get.tpe)
     }
     for (p <- info.ast.sig.params) {
       params = params :+ (p.id.value, p.tipe.typedOpt.get)
     }
-    val r = Rewriter.Pattern.Method(info.ast.purity == AST.Purity.Abs, info.isInObject,
-      info.owner, info.ast.sig.id.value, params,
-      translateAssignExp(th, F, Util.extractAssignExpOpt(info).get))
+    val r = Rewriter.Pattern.Method(mi.ast.purity == AST.Purity.Abs, mi.isInObject,
+      mi.owner, mi.ast.sig.id.value, params, body)
     cache.setPatterns(th, info.isInObject, info.name, ISZ(r))
+    if (info.name != mi.name) {
+      cache.setPatterns(th, mi.isInObject, mi.name, ISZ(r))
+    }
     return r
   }
 
