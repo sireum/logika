@@ -268,7 +268,7 @@ object List {
       Deduce(
         //@formatter:off
         1 (  0 < c                      ) by Premise,
-        2 (  empty[T](c, s).wellFormed  ) by RSimpl(RS(Queue.$.wellFormed _))
+        2 (  empty[T](c, s).wellFormed  ) by RSimpl(RS(Queue.$.wellFormed _)) // Auto
         //@formatter:on
       )
     }
