@@ -260,14 +260,18 @@ object List {
 
     @strictpure def empty[T](c: Z, s: Strategy.Type): Queue[T] = Queue(F, Nil(), c, s)
 
-//    @pure def wfEmpty[T](c: Z, s: Strategy.Type): Unit = {
-//      Contract(
-//        Ensures(empty[T](c, s).wellFormed)
-//      )
-//      Deduce(
-//        1 (  empty[T](c, s).wellFormed  ) by RSimpl(RS(Queue.$.wellFormed _))
-//      )
-//    }
+    @pure def wfEmpty[T](c: Z, s: Strategy.Type): Unit = {
+      Contract(
+        Requires(0 < c),
+        Ensures(empty[T](c, s).wellFormed)
+      )
+      Deduce(
+        //@formatter:off
+        1 (  0 < c                      ) by Premise,
+        2 (  empty[T](c, s).wellFormed  ) by RSimpl(RS(Queue.$.wellFormed _))
+        //@formatter:on
+      )
+    }
   }
 
 
