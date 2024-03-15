@@ -1109,6 +1109,7 @@ object State {
   @datatype class ProofFun(val receiverTypeOpt: Option[AST.Typed],
                            val context: ISZ[String],
                            val id: String,
+                           val isByName: B,
                            val paramIds: ISZ[String],
                            val paramTypes: ISZ[AST.Typed],
                            val returnType: AST.Typed)

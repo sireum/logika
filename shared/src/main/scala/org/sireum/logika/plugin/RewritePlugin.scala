@@ -134,7 +134,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
 
     val rwPc = Rewriter(if (logika.config.rwPar) logika.config.parCores else 1, logika.th,
       provenClaims, patterns, methodPatterns,
-      if (fromOpt.isEmpty) None() else Some((fromCoreClaim, fromOpt.get)),
+      if (fromOpt.isEmpty) None() else Some(fromOpt.get),
       logika.config.rwTrace, logika.config.rwEvalTrace, logika.config.rwMax, F, F, F, ISZ())
     if (logika.config.rwEvalTrace) {
       rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("simplifying", stepClaim)
@@ -231,6 +231,15 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
             }
           }
           i = i + 1
+        }
+        if (continu && !rwPc.labeledOnly) {
+          rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache, rwPc.methodPatterns,
+            MBox(HashSMap.empty), logika.config.rwMax, rwPc.provenClaimStepIdMapEval, rwClaim, T, T) match {
+            case Some((r, t)) =>
+              rwPc.trace = rwPc.trace ++ t
+              r
+            case _ => rwClaim
+          }
         }
         rwClaim = RewritingSystem.LabeledRemover().transformCoreExpBase(rwClaim).getOrElse(rwClaim)
       }

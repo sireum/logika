@@ -1447,9 +1447,14 @@ object Util {
                 if (resOpt.isEmpty) {
                   return None()
                 }
-                return Some(AST.Exp.Invoke(Some(o), AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
-                  AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
-                  Some(sym.tipe))))
+                if (let.pf.isByName) {
+                  return Some(AST.Exp.Select(Some(o), AST.Id(let.pf.id, AST.Attr(symPosOpt)), ISZ(), AST.ResolvedAttr(symPosOpt, resOpt,
+                    Some(sym.tipe))))
+                } else {
+                  return Some(AST.Exp.Invoke(Some(o), AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
+                    AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
+                    Some(sym.tipe))))
+                }
               case _ => return None()
             }
           } else {
@@ -1492,9 +1497,14 @@ object Util {
             if (resOpt.isEmpty) {
               return None()
             }
-            return Some(AST.Exp.Invoke(rcvOpt, AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
-              AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
-              Some(sym.tipe))))
+            if (let.pf.isByName) {
+              return Some(AST.Exp.Select(rcvOpt, AST.Id(let.pf.id, AST.Attr(symPosOpt)), ISZ(), AST.ResolvedAttr(symPosOpt, resOpt,
+                Some(sym.tipe))))
+            } else {
+              return Some(AST.Exp.Invoke(rcvOpt, AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
+                AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
+                Some(sym.tipe))))
+            }
           }
         case let: State.Claim.Let.Apply =>
           var es = ISZ[AST.Exp]()
@@ -2285,7 +2295,7 @@ object Util {
                  receiverTypeOpt: Option[AST.Typed], funType: AST.Typed.Fun, owner: ISZ[String], id: String,
                  isHelper: B, isStrictPure: B, paramIds: ISZ[AST.Id], body: AST.AssignExp, reporter: Reporter,
                  implicitContextOpt: Option[(String, Position)]): (State, State.ProofFun) = {
-    val pf = State.ProofFun(receiverTypeOpt, owner, id, for (id <- paramIds) yield id.value, funType.args, Util.normType(funType.ret))
+    val pf = State.ProofFun(receiverTypeOpt, owner, id, funType.isByName, for (id <- paramIds) yield id.value, funType.args, Util.normType(funType.ret))
     if (smt2.pureFuns.contains(pf)) {
       return (state, pf)
     } else {

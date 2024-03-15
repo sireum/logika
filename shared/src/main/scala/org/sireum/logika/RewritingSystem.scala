@@ -232,7 +232,7 @@ object RewritingSystem {
                          val provenClaims: HashSMap[AST.ProofAst.StepId, AST.CoreExp.Base],
                          val patterns: ISZ[Rewriter.Pattern.Claim],
                          val methodPatterns: MethodPatternMap,
-                         val fromStepOpt: Option[(AST.CoreExp.Base, AST.ProofAst.StepId)],
+                         val fromStepOpt: Option[AST.ProofAst.StepId],
                          val shouldTrace: B,
                          val shouldTraceEval: B,
                          val maxUnfolding: Z,
@@ -243,7 +243,7 @@ object RewritingSystem {
     @strictpure def unfoldingMap: MBox[UnfoldingNumMap] = MBox(HashSMap.empty)
     @memoize def provenClaimStepIdMapEval: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId] = {
       fromStepOpt match {
-        case Some((e, fromStepId)) => return provenClaimStepIdMap - (e, fromStepId)
+        case Some(fromStepId) => return HashSMap ++ (for (p <- provenClaimStepIdMap.entries if p._2 != fromStepId) yield p)
         case _ => return provenClaimStepIdMap
       }
     }
@@ -705,7 +705,7 @@ object RewritingSystem {
     @pure def translateBody(body: AST.Body, funStack: FunStack, localMap: LocalMap): AST.CoreExp.Base = {
       val stmts = body.stmts
       var m = localMap
-      for (i <- 0 until stmts.size - 2) {
+      for (i <- 0 until stmts.size - 1) {
         m = translateStmt(stmts(i), funStack, m)._2
       }
       return translateAssignExp(stmts(stmts.size - 1).asAssignExp, funStack, m)

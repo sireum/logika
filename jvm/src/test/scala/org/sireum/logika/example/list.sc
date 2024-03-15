@@ -22,6 +22,11 @@ import org.sireum.justification._
     case _ => halt("Trying to access tl on an empty list")
   }
 
+  @strictpure def tlLax: List[T] = this match {
+    case List.Cons(_, next) => next
+    case _ => List.Nil()
+  }
+
   @strictpure def ++(l2: List[T]): List[T] = this match {
     case l@List.Cons(_, next) => l(next = next ++ l2)
     case _ => l2
@@ -154,10 +159,10 @@ object List {
                 1 (  key1 ≢ key2                                                    ) by Premise,
                 2 (  map ≡ Cons(p, next)                                            ) by Auto,
                 3 (  !(p._1 ≡ key1)                                                 ) by Premise,
-                7 (  p._1 ≡ key2                                                    ) by Premise,
-                4 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
-                5 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
-                6 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
+                4 (  p._1 ≡ key2                                                    ) by Premise,
+                5 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
+                6 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
+                7 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
                 //@formatter:on
               )
             } else {
@@ -166,10 +171,10 @@ object List {
                 1 (  key1 ≢ key2                                                    ) by Premise,
                 2 (  map ≡ Cons(p, next)                                            ) by Auto,
                 3 (  !(p._1 ≡ key1)                                                 ) by Premise,
-                7 (  !(p._1 ≡ key2)                                                 ) by Premise,
-                4 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
-                5 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
-                6 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
+                4 (  !(p._1 ≡ key2)                                                 ) by Premise,
+                5 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
+                6 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
+                7 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
                 //@formatter:on
               )
             }
@@ -212,7 +217,7 @@ object List {
 
     @strictpure def tail: Queue[T] = {
       val thiz = this
-      thiz(buffer = buffer.tl)
+      thiz(buffer = buffer.tlLax)
     }
 
     @strictpure def length: Z = buffer.length
@@ -298,6 +303,47 @@ object List {
         //@formatter:off
         1 (  q.buffer ≡ List.Cons[T](a, List.Nil[T]())  ) by Premise,
         2 (  q.head ≡ a                                 ) by Simpl // Auto
+        //@formatter:on
+      )
+    }
+
+    @pure def frameTail[T](q: Queue[T]): Unit = {
+      Contract(
+        Ensures(
+          q.tail.error ≡ q.error,
+          q.tail.capacity ≡ q.capacity,
+          q.tail.strategy ≡ q.strategy
+        )
+      )
+      Deduce(
+        //@formatter:off
+        1 (  q.tail.error ≡ q.error        ) by Simpl,
+        2 (  q.tail.capacity ≡ q.capacity  ) by Simpl,
+        3 (  q.tail.strategy ≡ q.strategy  ) by Simpl
+        //@formatter:on
+      )
+    }
+
+    @pure def wfTail[T](q: Queue[T]): Unit = {
+      Contract(
+        Requires(q.wellFormed),
+        Ensures(q.tail.wellFormed)
+      )
+
+      frameTail(q)
+
+      Deduce(
+        //@formatter:off
+        1 (  q.wellFormed                                                                               ) by Premise,
+        2 (  q.tail.error == q.error                                                                    ) by Premise,
+        3 (  q.tail.capacity == q.capacity                                                              ) by Premise,
+        4 (  q.tail.strategy == q.strategy                                                              ) by Premise,
+        5 (  q.buffer.length >= q.tail.length                                                           ) by Auto,
+        6 (  0 < q.capacity &
+               (q.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.capacity)                 ) by Rewrite(RS(Queue.$.wellFormed _), 1), // Auto,
+        7 (  0 < q.tail.capacity &
+               (q.tail.strategy != Queue.Strategy.Unbounded __>: q.tail.buffer.length <= q.tail.capacity)  ) by Auto,
+        8 (  q.tail.wellFormed                                                                          ) by Rewrite(RS(Queue.$.wellFormed _), 7) // Auto,
         //@formatter:on
       )
     }

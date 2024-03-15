@@ -3084,7 +3084,7 @@ import Util._
       }
       def randomSeed(tpe: AST.Typed.Name): Option[ISZ[(State, State.Value)]] = {
         var r = ISZ[(State, State.Value)]()
-        val pf = State.ProofFun(None(), tpe.ids, "randomSeed", ISZ("seed"), ISZ(AST.Typed.z), tpe)
+        val pf = State.ProofFun(None(), tpe.ids, "randomSeed", F, ISZ("seed"), ISZ(AST.Typed.z), tpe)
         for (p <- evalArgs(split, smt2, cache, rtCheck, s0, 1, eargs, reporter)) {
           val s1 = p._1
           val args: ISZ[State.Value] = for (argOpt <- p._2) yield argOpt.get
@@ -3121,7 +3121,7 @@ import Util._
       def randomSeedBetween(tpe: AST.Typed.Name): Option[ISZ[(State, State.Value)]] = {
         var r = ISZ[(State, State.Value)]()
         val posOpt = Option.some(pos)
-        val pf = State.ProofFun(None(), tpe.ids, "randomSeedBetween", ISZ("seed", "min", "max"),
+        val pf = State.ProofFun(None(), tpe.ids, "randomSeedBetween", F, ISZ("seed", "min", "max"),
           ISZ(AST.Typed.z, tpe, tpe), tpe)
         for (p <- evalArgs(split, smt2, cache, rtCheck, s0, 3, eargs, reporter)) {
           val s1 = p._1
