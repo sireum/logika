@@ -135,7 +135,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     val rwPc = Rewriter(if (logika.config.rwPar) logika.config.parCores else 1, logika.th,
       provenClaims, patterns, methodPatterns,
       if (fromOpt.isEmpty) None() else Some((fromCoreClaim, fromOpt.get)),
-      logika.config.rwTrace, logika.config.rwEvalTrace, F, F, F, ISZ())
+      logika.config.rwTrace, logika.config.rwEvalTrace, logika.config.rwMax, F, F, F, ISZ())
     if (logika.config.rwEvalTrace) {
       rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("simplifying", stepClaim)
     }
@@ -204,7 +204,10 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         ld.transformCoreExpBase(rwClaim)
         rwPc.labeledOnly = ld.found
         var changed = F
-        while (!done && i < logika.config.rwMax && (if (isRSimpl) rwClaim != AST.CoreExp.True else rwClaim != stepClaim)) {
+        def continu: B = {
+          return if (isRSimpl) rwClaim != AST.CoreExp.True else rwClaim != stepClaim
+        }
+        while (!done && i < logika.config.rwMax && continu) {
           rwPc.done = F
           if (logika.config.rwTrace) {
             rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("rewriting", rwClaim)
@@ -218,18 +221,18 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
               done = T
               rwClaim
           }
+          if (continu && !rwPc.labeledOnly) {
+            rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache, rwPc.methodPatterns,
+              MBox(HashSMap.empty), 0, rwPc.provenClaimStepIdMapEval, rwClaim, T, T) match {
+              case Some((r, t)) =>
+                rwPc.trace = rwPc.trace ++ t
+                r
+              case _ => rwClaim
+            }
+          }
           i = i + 1
         }
         rwClaim = RewritingSystem.LabeledRemover().transformCoreExpBase(rwClaim).getOrElse(rwClaim)
-        if (!rwPc.labeledOnly) {
-          rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache, rwPc.methodPatterns,
-            rwPc.unfoldingMap, 1, rwPc.provenClaimStepIdMapEval, rwClaim, T, T) match {
-            case Some((r, t)) =>
-              rwPc.trace = rwPc.trace ++ t
-              r
-            case _ => rwClaim
-          }
-        }
       }
       @strictpure def fromCoreClaimST: Option[ST] = if (fromOpt.isEmpty) None() else Some(
         st"""After ${if (isEval) "evaluating" else "rewriting"}${if (fromOpt.isEmpty) st"" else st" ${fromOpt.get}"}:

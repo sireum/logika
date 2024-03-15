@@ -99,7 +99,8 @@ object List {
               3 (  update(map, key, value) ≡ Cons(p, update(next, key, value))  ) by RSimpl(RS(update _)), //Auto,
               4 (  lookup(Cons(p, update(next, key, value)), key) ≡
                       lookup(update(next, key, value), key)                     ) by RSimpl(RS(lookup _)),
-              5 (  lookup(update(map, key, value), key) ≡ value                 ) by Rewrite(RS(lookupUpdateEq _), 4)
+              5 (  lookup(Cons(p, update(next, key, value)), key) ≡ value       ) by Rewrite(RS(lookupUpdateEq _), 4),
+              6 (  lookup(update(next, key, value), key) ≡ value                ) by Rewrite(RS(lookup _), 5)
               //@formatter:on
             )
             return
@@ -147,16 +148,31 @@ object List {
 
             //lookupUpdateNe(next, key1, key2, value)
 
-            Deduce(
-              //@formatter:off
-              1 (  key1 ≢ key2                                                    ) by Premise,
-              2 (  map ≡ Cons(p, next)                                            ) by Auto,
-              3 (  !(p._1 ≡ key1)                                                 ) by Premise,
-              4 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
-              5 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
-              6 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
-              //@formatter:on
-            )
+            if (p._1 ≡ key2) {
+              Deduce(
+                //@formatter:off
+                1 (  key1 ≢ key2                                                    ) by Premise,
+                2 (  map ≡ Cons(p, next)                                            ) by Auto,
+                3 (  !(p._1 ≡ key1)                                                 ) by Premise,
+                7 (  p._1 ≡ key2                                                    ) by Premise,
+                4 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
+                5 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
+                6 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
+                //@formatter:on
+              )
+            } else {
+              Deduce(
+                //@formatter:off
+                1 (  key1 ≢ key2                                                    ) by Premise,
+                2 (  map ≡ Cons(p, next)                                            ) by Auto,
+                3 (  !(p._1 ≡ key1)                                                 ) by Premise,
+                7 (  !(p._1 ≡ key2)                                                 ) by Premise,
+                4 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
+                5 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
+                6 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
+                //@formatter:on
+              )
+            }
             return
 
           }
@@ -269,6 +285,19 @@ object List {
         //@formatter:off
         1 (  0 < c                      ) by Premise,
         2 (  empty[T](c, s).wellFormed  ) by RSimpl(RS(Queue.$.wellFormed _)) // Auto
+        //@formatter:on
+      )
+    }
+
+    @pure def singleQueueHead[T](q: Queue[T], a: T): Unit = {
+      Contract(
+        Requires(q.buffer ≡ Cons[T](a, Nil())),
+        Ensures(q.head ≡ a)
+      )
+      Deduce(
+        //@formatter:off
+        1 (  q.buffer ≡ List.Cons[T](a, List.Nil[T]())  ) by Premise,
+        2 (  q.head ≡ a                                 ) by Simpl // Auto
         //@formatter:on
       )
     }

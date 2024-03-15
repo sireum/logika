@@ -235,11 +235,12 @@ object RewritingSystem {
                          val fromStepOpt: Option[(AST.CoreExp.Base, AST.ProofAst.StepId)],
                          val shouldTrace: B,
                          val shouldTraceEval: B,
+                         val maxUnfolding: Z,
                          var labeledOnly: B,
                          var inLabel: B,
                          var done: B,
                          var trace: ISZ[Trace]) {
-    val unfoldingMap: MBox[UnfoldingNumMap] = MBox(HashSMap.empty)
+    @strictpure def unfoldingMap: MBox[UnfoldingNumMap] = MBox(HashSMap.empty)
     @memoize def provenClaimStepIdMapEval: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId] = {
       fromStepOpt match {
         case Some((e, fromStepId)) => return provenClaimStepIdMap - (e, fromStepId)
@@ -455,7 +456,7 @@ object RewritingSystem {
                 }
               case _ =>
                 if (r0.isEmpty && labeledOnly) {
-                  evalBase(th, EvalConfig.all, cache, methodPatterns, unfoldingMap, 1,
+                  evalBase(th, EvalConfig.all, cache, methodPatterns, unfoldingMap, 0,
                     provenClaimStepIdMapEval, o, F, shouldTraceEval) match {
                     case Some((r1, t)) =>
                       trace = trace ++ t
@@ -492,7 +493,7 @@ object RewritingSystem {
           }
         case _ => F
       }
-      if (shouldUnfold) {
+      if (shouldUnfold && (!labeledOnly || inLabel)) {
         evalBase(th, EvalConfig.none, cache, methodPatterns, unfoldingMap, 1, HashSMap.empty, o2, F, shouldTraceEval) match {
           case Some((o3, t)) =>
             trace = trace ++ t
@@ -545,13 +546,13 @@ object RewritingSystem {
                   if (patterns2.isEmpty) {
                     o
                   } else {
-                    Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, fromStepOpt, F, F, F, F, F, ISZ()).
-                      transformCoreExpBase(cache, o).getOrElse(o)
+                    Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, fromStepOpt, F, F, maxUnfolding,
+                      F, F, F, ISZ()).transformCoreExpBase(cache, o).getOrElse(o)
                   }
               }
             }
             val (o3Opt, t): (Option[AST.CoreExp.Base], ISZ[Trace]) =
-              evalBase(th, EvalConfig.all, cache, methodPatterns, unfoldingMap, 1,
+              evalBase(th, EvalConfig.all, cache, methodPatterns, unfoldingMap, 0,
                 provenClaimStepIdMapEval, o2, F, shouldTraceEval) match {
                 case Some((o3o, t)) => (Some(o3o), t)
                 case _ => (None(),  ISZ())
@@ -598,8 +599,8 @@ object RewritingSystem {
                   (for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
                     r2l(Rewriter.Pattern.Claim(pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))) ++
                     patterns
-                val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, fromStepOpt, F, F, F, F, F, ISZ()).
-                  transformCoreExpBase(cache, o).getOrElse(o)
+                val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, fromStepOpt, F, F,
+                  maxUnfolding, F, F, F, ISZ()).transformCoreExpBase(cache, o).getOrElse(o)
                 val m = unifyExp(T, th, pattern.localPatternSet, from, o2, map, pas, sm, ems)
                 if (ems.value.isEmpty) {
                   unifyPendingApplications(T, th, pattern.localPatternSet, m, pas, sm, ems) match {
@@ -1768,11 +1769,7 @@ object RewritingSystem {
       if (right < left) AST.CoreExp.Binary(right, AST.Exp.BinaryOp.InequivUni, left, AST.Typed.b)
       else AST.CoreExp.Binary(left, AST.Exp.BinaryOp.InequivUni, right, AST.Typed.b)
 
-    var unfoldDisabled = F
     def shouldUnfold(info: Info.Method): B = {
-      if (unfoldDisabled) {
-        return F
-      }
       val r = !info.ast.hasContract && info.ast.isStrictPure &&
         ((info.ast.purity == AST.Purity.Abs) ->: methodPatterns.contains((info.name, info.isInObject)))
       if (!r) {
@@ -1888,8 +1885,6 @@ object RewritingSystem {
           }
         case _ =>
       }
-      val oldUnfoldDisabled = unfoldDisabled
-      unfoldDisabled = T
       var done = rOpt.isEmpty
       while (!done) {
         rOpt match {
@@ -1903,7 +1898,6 @@ object RewritingSystem {
           case _ => done = T
         }
       }
-      unfoldDisabled = oldUnfoldDisabled
       return rOpt
     }
 
@@ -2517,26 +2511,7 @@ object RewritingSystem {
         }
         return Some(r)
       }
-      var tExp = e.tExp
-      var fExp = e.fExp
-      if (config.iteBranches) {
-        val oldUnfoldDisabled = unfoldDisabled
-        unfoldDisabled = T
-        evalBaseH(e.tExp) match {
-          case Some(t) =>
-            changed = T
-            tExp = t
-          case _ =>
-        }
-        evalBaseH(e.fExp) match {
-          case Some(f) =>
-            changed = T
-            fExp = f
-          case _ =>
-        }
-        unfoldDisabled = oldUnfoldDisabled
-      }
-      return if (changed) Some(e(cond = cond, tExp = tExp, fExp = fExp)) else None()
+      return if (changed) Some(e(cond = cond)) else None()
     }
 
     def evalApply(e: AST.CoreExp.Apply): Option[AST.CoreExp.Base] = {
