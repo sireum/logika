@@ -314,6 +314,7 @@ object RewritingSystem {
         }
         claim match {
           case claim: AST.CoreExp.Unary if claim.op == AST.Exp.UnaryOp.Not =>
+            r = r + claim ~> stepId
             claim.exp match {
               case e: AST.CoreExp.Binary =>
                 val newOp = negBinaryOp(e.op)
@@ -349,7 +350,7 @@ object RewritingSystem {
           case _: AST.CoreExp.Lit => None()
           case _: AST.CoreExp.ParamVarRef => None()
           case _: AST.CoreExp.LocalVarRef => None()
-          case _: AST.CoreExp.ObjectVarRef => None()
+          case _: AST.CoreExp.VarRef => None()
           case o: AST.CoreExp.Binary =>
             val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.left)
             val r1: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.right)
@@ -476,7 +477,7 @@ object RewritingSystem {
       val hasChanged: B = r.nonEmpty
       val o2: AST.CoreExp.Base = r.getOrElse(o)
       val shouldUnfold: B = o2 match {
-        case o2: AST.CoreExp.ObjectVarRef if methodPatterns.contains((o2.owner :+ o2.id, T)) => T
+        case o2: AST.CoreExp.VarRef if methodPatterns.contains((o2.owner :+ o2.id, o2.isInObject)) => T
         case o2: AST.CoreExp.Select =>
           val infoOpt: Option[Info.Method] = o2.exp.tipe match {
             case t: AST.Typed.Name =>
@@ -788,7 +789,7 @@ object RewritingSystem {
               if (res.isInObject) {
                 val ids = pattern.name.ids
                 val owner: ISZ[String] = for (i <- 0 until pattern.name.ids.size - 1) yield ids(i).value
-                AST.CoreExp.ObjectVarRef(owner, ids(ids.size - 1).value, pattern.typedOpt.get)
+                AST.CoreExp.VarRef(T, owner, ids(ids.size - 1).value, pattern.typedOpt.get)
               } else {
                 AST.CoreExp.Select(
                   AST.CoreExp.LocalVarRef(F, pattern.idContext, "this", pattern.receiverTipeOpt.get),
@@ -797,8 +798,7 @@ object RewritingSystem {
             case res: AST.ResolvedInfo.LocalVar =>
               translateLocalInfo(res, pattern.typedOpt.get, funStack, localMap)
             case res: AST.ResolvedInfo.EnumElement =>
-              val ti = th.typeMap.get(res.owner).get.asInstanceOf[TypeInfo.Enum]
-              AST.CoreExp.ObjectVarRef(ti.name, res.name, AST.Typed.Enum(ti.name))
+              AST.CoreExp.LitEnum(res.owner, res.name, res.ordinal)
             case _ => halt("Infeasible")
           }
           r = r :+ AST.CoreExp.Binary(exp, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b)
@@ -919,9 +919,9 @@ object RewritingSystem {
                   case _ =>
                 }
               }
-              return AST.CoreExp.ObjectVarRef(res.owner, res.id, e.typedOpt.get)
+              return AST.CoreExp.VarRef(T, res.owner, res.id, e.typedOpt.get)
             case res: AST.ResolvedInfo.Method =>
-              return AST.CoreExp.ObjectVarRef(res.owner, res.id, e.typedOpt.get)
+              return AST.CoreExp.VarRef(res.isInObject, res.owner, res.id, e.typedOpt.get)
             case _ =>
               halt(s"Infeasible: $e")
           }
@@ -949,15 +949,15 @@ object RewritingSystem {
               }
               return AST.CoreExp.Binary(left, op, right, e.typedOpt.get)
             case res: AST.ResolvedInfo.Method =>
-              return AST.CoreExp.Apply(T, AST.CoreExp.Select(translateExp(e.left, funStack, localMap), e.op,
+              return AST.CoreExp.Apply(AST.CoreExp.Select(translateExp(e.left, funStack, localMap), e.op,
                 AST.Typed.Method(res.isInObject, res.mode, res.typeParams, res.owner, res.id, res.paramNames,
                   res.tpeOpt.get)), ISZ(translateExp(e.right, funStack, localMap)), e.typedOpt.get)
             case _ => halt(s"Infeasible: $e")
           }
         case e: AST.Exp.Select =>
           e.resOpt.get match {
-            case res: AST.ResolvedInfo.EnumElement => return AST.CoreExp.ObjectVarRef(res.owner, res.name, e.typedOpt.get)
-            case res: AST.ResolvedInfo.Method if res.isInObject => return AST.CoreExp.ObjectVarRef(res.owner, res.id, e.typedOpt.get)
+            case res: AST.ResolvedInfo.EnumElement => return AST.CoreExp.LitEnum(res.owner, res.name, res.ordinal)
+            case res: AST.ResolvedInfo.Method if res.isInObject => return AST.CoreExp.VarRef(T, res.owner, res.id, e.typedOpt.get)
             case _ =>
           }
           e.receiverOpt match {
@@ -1051,10 +1051,10 @@ object RewritingSystem {
           }
           e.receiverOpt match {
             case Some(receiver) if !inObject =>
-              return AST.CoreExp.Apply(T, translateExp(e.ident, funStack, localMap),
+              return AST.CoreExp.Apply(translateExp(e.ident, funStack, localMap),
                 translateExp(receiver, funStack, localMap) +: args, e.typedOpt.get)
             case _ =>
-              return AST.CoreExp.Apply(F, translateExp(e.ident, funStack, localMap),
+              return AST.CoreExp.Apply(translateExp(e.ident, funStack, localMap),
                 args, e.typedOpt.get)
           }
         case e: AST.Exp.InvokeNamed =>
@@ -1093,9 +1093,9 @@ object RewritingSystem {
           }
           e.receiverOpt match {
             case Some(receiver) =>
-              return AST.CoreExp.Apply(T, translateExp(e.ident, funStack, localMap),
+              return AST.CoreExp.Apply(translateExp(e.ident, funStack, localMap),
                 translateExp(receiver, funStack, localMap) +: getArgs, e.typedOpt.get)
-            case _ => return AST.CoreExp.Apply(F, translateExp(e.ident, funStack, localMap),
+            case _ => return AST.CoreExp.Apply(translateExp(e.ident, funStack, localMap),
               getArgs, e.typedOpt.get)
           }
         case e: AST.Exp.Labeled =>
@@ -1299,7 +1299,7 @@ object RewritingSystem {
           if (p.deBruijn != e.deBruijn) {
             err(p, e)
           }
-        case (p: AST.CoreExp.ObjectVarRef, e: AST.CoreExp.ObjectVarRef) =>
+        case (p: AST.CoreExp.VarRef, e: AST.CoreExp.VarRef) =>
           if (!(p.id == e.id && p.owner == e.owner)) {
             err(p, e)
           }
@@ -1389,7 +1389,7 @@ object RewritingSystem {
           }
           e match {
             case e: AST.CoreExp.Apply =>
-              if (p.hasReceiver != e.hasReceiver || p.args.size != e.args.size) {
+              if (p.args.size != e.args.size) {
                 err(p, e)
               } else {
                 matchPatternLocals(p.exp, e.exp)
@@ -1597,6 +1597,14 @@ object RewritingSystem {
         case lit1: AST.CoreExp.LitRange => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
         case lit1: AST.CoreExp.LitBits => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
         case lit1: AST.CoreExp.LitString => halt(st"TODO: ${lit1.prettyST} $op ${lit2.prettyST}".render)
+        case lit1: AST.CoreExp.LitEnum =>
+          val left = lit1.ordinal
+          val right = lit2.asInstanceOf[AST.CoreExp.LitEnum].ordinal
+          op match {
+            case AST.Exp.BinaryOp.EquivUni => AST.CoreExp.LitB(left == right)
+            case AST.Exp.BinaryOp.InequivUni => AST.CoreExp.LitB(left != right)
+            case _ => halt(s"Infeasible: $op on ${lit1.owner(lit1.owner.size - 1)}.${lit1.id}")
+          }
       }
     }
   }
@@ -1641,6 +1649,7 @@ object RewritingSystem {
       case lit: AST.CoreExp.LitBits => halt(st"TODO: $op ${lit.prettyST}".render)
       case lit: AST.CoreExp.LitRange => halt(st"TODO: $op ${lit.prettyST}".render)
       case lit: AST.CoreExp.LitString => halt(st"TODO: $op ${lit.prettyST}".render)
+      case lit: AST.CoreExp.LitEnum => halt(s"Infeasible $op on ${lit.owner(lit.owner.size - 1)}.${lit.id}")
     }
 
   @pure def eval(th: TypeHierarchy,
@@ -1710,7 +1719,7 @@ object RewritingSystem {
     ParamSubstitutor(map).transformCoreExpBase(body) match {
       case MSome(body2) =>
         if (args.size > params.size) {
-          return Some((AST.CoreExp.Apply(args.isEmpty, body2, ops.ISZOps(args).slice(params.size, args.size), t), params.size))
+          return Some((AST.CoreExp.Apply(body2, ops.ISZOps(args).slice(params.size, args.size), t), params.size))
         } else {
           return Some((body2, args.size))
         }
@@ -1736,7 +1745,7 @@ object RewritingSystem {
     ParamSubstitutor(map).transformCoreExpBase(body) match {
       case MSome(body2) =>
         if (args.size > params.size) {
-          return Some((AST.CoreExp.Apply(F, body2, ops.ISZOps(args).slice(params.size, args.size), t), params.size))
+          return Some((AST.CoreExp.Apply(body2, ops.ISZOps(args).slice(params.size, args.size), t), params.size))
         } else {
           return Some((body2, args.size))
         }
@@ -1784,7 +1793,7 @@ object RewritingSystem {
       val pattern = methodPatternOf(th, cache, info)
       val f = pattern.toFun
       receiverOpt match {
-        case Some(receiver) => return AST.CoreExp.Apply(T, f, ISZ(receiver), f.exp.tipe)
+        case Some(receiver) => return AST.CoreExp.Apply(f, ISZ(receiver), f.exp.tipe)
         case _ => return f
       }
     }
@@ -1800,6 +1809,8 @@ object RewritingSystem {
               case (_, right: AST.CoreExp.Lit) => r = r + left ~> (right, stepId)
               case (left: AST.CoreExp.Constructor, _) => r = r + right ~> (left, stepId)
               case (_, right: AST.CoreExp.Constructor) => r = r + left ~> (right, stepId)
+              case (left: AST.CoreExp.Apply, _) => r = r + right ~> (left, stepId)
+              case (_, right: AST.CoreExp.Apply) => r = r + left ~> (right, stepId)
               case (_, _) =>
                 val (key, value): (AST.CoreExp.Base, AST.CoreExp.Base) =
                   if (left < right) (right, left) else (left, right)
@@ -1858,7 +1869,7 @@ object RewritingSystem {
         case _: AST.CoreExp.Lit => None()
         case _: AST.CoreExp.LocalVarRef => None()
         case e: AST.CoreExp.ParamVarRef => evalParamVarRef(e)
-        case e: AST.CoreExp.ObjectVarRef => evalObjectVarRef(e)
+        case e: AST.CoreExp.VarRef => evalVarRef(e)
         case e: AST.CoreExp.Binary => evalBinary(e)
         case e: AST.CoreExp.Unary => evalUnary(e)
         case e: AST.CoreExp.Select => evalSelect(e)
@@ -1888,6 +1899,7 @@ object RewritingSystem {
       var done = rOpt.isEmpty
       while (!done) {
         rOpt match {
+          case Some(_: AST.CoreExp.Lit) => done = T
           case Some(r) =>
             val rOpt2 = evalBaseH(r)
             if (rOpt2.isEmpty) {
@@ -1905,15 +1917,27 @@ object RewritingSystem {
       return None()
     }
 
-    def evalObjectVarRef(e: AST.CoreExp.ObjectVarRef): Option[AST.CoreExp.Base] = {
-      th.nameMap.get(e.owner :+ e.id) match {
-        case Some(info: Info.Method) if shouldUnfold(info) =>
-          val r = unfold(info, None())
-          if (shouldTrace) {
-            trace = trace :+ Trace.Eval(st"unfolding", e, r)
-          }
-          return Some(r)
-        case _ =>
+    def evalVarRef(e: AST.CoreExp.VarRef): Option[AST.CoreExp.Base] = {
+      val minfo: Info.Method = if (e.isInObject) {
+        th.nameMap.get(e.owner :+ e.id) match {
+          case Some(info: Info.Method) => info
+          case _ => return None()
+        }
+      } else {
+        th.typeMap.get(e.owner).get match {
+          case ti: TypeInfo.Sig => ti.methods.get(e.id).get
+          case ti: TypeInfo.Adt => ti.methods.get(e.id).get
+          case ti: TypeInfo.Enum => halt(s"TODO: $ti")
+          case ti: TypeInfo.SubZ => halt(s"TODO: $ti")
+          case _ => halt("Infeasible")
+        }
+      }
+      if (shouldUnfold(minfo)) {
+        val r = unfold(minfo, None())
+        if (shouldTrace) {
+          trace = trace :+ Trace.Eval(st"unfolding", e, r)
+        }
+        return Some(r)
       }
       return None()
     }
@@ -2257,7 +2281,7 @@ object RewritingSystem {
       infoOpt match {
         case Some(info) =>
           unfold(info, Some(receiver)) match {
-            case fApp@AST.CoreExp.Apply(T, f: AST.CoreExp.Fun, args, t) =>
+            case fApp@AST.CoreExp.Apply(f: AST.CoreExp.Fun, args, t) =>
               if (shouldTrace) {
                 trace = trace :+ Trace.Eval(st"unfolding", e(exp = receiver), fApp)
               }

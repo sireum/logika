@@ -112,10 +112,13 @@ final class ReporterImpl(val logPc: B,
     }
   }
 
-  override def inform(pos: Position, kind: Logika.Reporter.Info.Kind.Type, message: String): Unit =
-    if (logDetailedInfo) {
-      info(Some(pos), Logika.kind, message)
-    }
+  override def inform(pos: Position, kind: Logika.Reporter.Info.Kind.Type, message: String): Unit = kind match {
+    case Logika.Reporter.Info.Kind.Verified =>
+      if (logDetailedInfo) {
+        info(Some(pos), Logika.kind, message)
+      }
+    case Logika.Reporter.Info.Kind.Error => error(Some(pos), Logika.kind, message)
+  }
 
   override def illFormed(): Unit = {
   }

@@ -154,10 +154,12 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
     }
 
     if (stepClaimEv == AST.CoreExp.True) {
-      reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
-        st"""Evaluating ${stepClaim.prettyST} produces T, hence the claim holds
-            |
-            |${traceOpt(rwPc.trace)}""".render)
+      if (logika.config.detailedInfo) {
+        reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
+          st"""Evaluating ${stepClaim.prettyST} produces T, hence the claim holds
+              |
+              |${traceOpt(rwPc.trace)}""".render)
+      }
       if (isSimpl) {
         return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
       } else if (rwPc.methodPatterns.isEmpty) {
@@ -166,7 +168,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         reporter.warn(step.just.id.attr.posOpt, Logika.kind, "The claim can be discharged by using RSimpl instead")
       }
     } else if (isSimpl) {
-      reporter.error(step.just.id.attr.posOpt, Logika.kind,
+      reporter.error(step.just.id.attr.posOpt, Logika.kind, st"Could not simplify ${stepClaim.prettyST} to T".render)
+      reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Error,
         st"""Could not simplify ${stepClaim.prettyST} to T
             |
             |After simplification:
@@ -250,12 +253,15 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       )
       if (isRSimpl) {
         if (rwClaim == AST.CoreExp.True) {
-          reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
-            st"""Rewriting ${stepClaim.prettyST} produces T, hence the claim holds
-                |
-                |${traceOpt(rwPc.trace)}""".render)
+          if (logika.config.detailedInfo) {
+            reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
+              st"""Rewriting ${stepClaim.prettyST} produces T, hence the claim holds
+                  |
+                  |${traceOpt(rwPc.trace)}""".render)
+          }
         } else {
-          reporter.error(step.just.id.attr.posOpt, Logika.kind,
+          reporter.error(step.just.id.attr.posOpt, Logika.kind, st"Could not rewrite ${stepClaim.prettyST} to T".render)
+          reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Error,
             st"""Could not rewrite ${stepClaim.prettyST} to T
                 |
                 |After rewriting:
@@ -265,25 +271,32 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
       } else {
         if (rwClaim == stepClaim) {
-          reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
-            st"""Matched:
-                |  ${stepClaim.prettyST}
-                |
-                |$fromCoreClaimST
-                |${traceOpt(rwPc.trace)}""".render)
+          if (logika.config.detailedInfo) {
+            reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
+              st"""Matched:
+                  |  ${stepClaim.prettyST}
+                  |
+                  |$fromCoreClaimST
+                  |${traceOpt(rwPc.trace)}""".render)
+          }
         } else if (rwClaim == stepClaimEv) {
-          reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
-            st"""Matched:
-                |  ${stepClaim.prettyST}
-                |
-                |$fromCoreClaimST
-                |$simplTraceOpt
-                |
-                |${traceOpt(rwPc.trace)}
-                |
-                |${traceOpt(simplTrace)}""".render)
+          if (logika.config.detailedInfo) {
+            reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Verified,
+              st"""Matched:
+                  |  ${stepClaim.prettyST}
+                  |
+                  |$fromCoreClaimST
+                  |$simplTraceOpt
+                  |
+                  |${traceOpt(rwPc.trace)}
+                  |
+                  |${traceOpt(simplTrace)}""".render)
+          }
         } else {
           reporter.error(step.just.id.attr.posOpt, Logika.kind,
+            st"""Could not match:
+                |  ${stepClaim.prettyST}""".render)
+          reporter.inform(step.just.id.attr.posOpt.get, Reporter.Info.Kind.Error,
             st"""Could not match:
                 |  ${stepClaim.prettyST}
                 |

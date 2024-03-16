@@ -145,6 +145,7 @@ object Logika {
     object Info {
       @enum object Kind {
         "Verified"
+        "Error"
       }
     }
   }
@@ -1501,13 +1502,11 @@ import Util._
             }
             return s0
           } else if (!config.searchPc) {
-            if (config.detailedInfo) {
-              reporter.error(Some(pos), kind,
-                st"""Could not find the fact that the right-hand-side operand is non-zero in the path conditions:
-                    |{
-                    |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
-                    |}""".render)
-            }
+            reporter.error(Some(pos), kind,
+              st"""Could not find the fact that the right-hand-side operand is non-zero in the path conditions:
+                  |{
+                  |  ${(for (pc <- pcs) yield pc.prettyST, ";\n")}
+                  |}""".render)
             return s0(status = State.Status.Error)
           }
         }
