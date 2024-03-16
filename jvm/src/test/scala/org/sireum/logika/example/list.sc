@@ -227,7 +227,7 @@ object List {
       strategy match {
         case Queue.Strategy.DropEarliest =>
           if (length < capacity) thiz(buffer = buffer ++ make(value))
-          else thiz(buffer = buffer.tl ++ make(value))
+          else thiz(buffer = buffer.tlLax ++ make(value))
         case Queue.Strategy.DropLatest =>
           if (length < capacity) thiz(buffer = buffer ++ make(value))
           else this
@@ -374,8 +374,8 @@ object List {
           if (q.length < q.capacity) {
             Deduce(
               //@formatter:off
-              1 (  q.length < q.capacity                           ) by Premise,
-              2 (  q.strategy == List.Queue.Strategy.DropEarliest  ) by Auto,
+              1 (  q.strategy == List.Queue.Strategy.DropEarliest  ) by Auto,
+              2 (  q.length < q.capacity                           ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity                 ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy                 ) by Simpl
               //@formatter:on
@@ -384,8 +384,8 @@ object List {
           } else {
             Deduce(
               //@formatter:off
-              1 (  !(q.length < q.capacity)                        ) by Premise,
-              2 (  q.strategy == List.Queue.Strategy.DropEarliest  ) by Auto,
+              1 (  q.strategy == List.Queue.Strategy.DropEarliest  ) by Auto,
+              2 (  !(q.length < q.capacity)                        ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity                 ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy                 ) by Simpl
               //@formatter:on
@@ -397,8 +397,8 @@ object List {
           if (q.length < q.capacity) {
             Deduce(
               //@formatter:off
-              1 (  q.length < q.capacity                         ) by Premise,
-              2 (  q.strategy == List.Queue.Strategy.DropLatest  ) by Auto,
+              1 (  q.strategy == List.Queue.Strategy.DropLatest  ) by Auto,
+              2 (  q.length < q.capacity                         ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity               ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy               ) by Simpl
               //@formatter:on
@@ -407,8 +407,8 @@ object List {
           } else {
             Deduce(
               //@formatter:off
-              1 (  !(q.length < q.capacity)                      ) by Premise,
-              2 (  q.strategy == List.Queue.Strategy.DropLatest  ) by Auto,
+              1 (  q.strategy == List.Queue.Strategy.DropLatest  ) by Auto,
+              2 (  !(q.length < q.capacity)                      ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity               ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy               ) by Simpl
               //@formatter:on
@@ -420,8 +420,8 @@ object List {
           if (q.length < q.capacity) {
             Deduce(
               //@formatter:off
-              1 (  q.length < q.capacity                    ) by Premise,
-              2 (  q.strategy == List.Queue.Strategy.Error  ) by Auto,
+              1 (  q.strategy == List.Queue.Strategy.Error  ) by Auto,
+              2 (  q.length < q.capacity                    ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity          ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy          ) by Simpl
               //@formatter:on
@@ -430,8 +430,8 @@ object List {
           } else {
             Deduce(
               //@formatter:off
-              1 (  !(q.length < q.capacity)                 ) by Premise,
-              2 (  q.strategy == List.Queue.Strategy.Error  ) by Auto,
+              1 (  q.strategy == List.Queue.Strategy.Error  ) by Auto,
+              2 (  !(q.length < q.capacity)                 ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity          ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy          ) by Simpl
               //@formatter:on
@@ -500,6 +500,128 @@ object List {
           return
         }
       }
+    }
+
+    @pure def wfPush[T](q: Queue[T], a: T): Unit = {
+      Contract(
+        Requires(q.wellFormed),
+        Ensures(q.push(a).wellFormed)
+      )
+
+      framePush(q, a)
+
+      q.strategy match {
+        case Queue.Strategy.DropEarliest => {
+          if (q.length < q.capacity) {
+
+            pushWithinCapacity(q, a)
+
+            Deduce(
+              //@formatter:off
+              1 (  q.wellFormed                                    ) by Premise,
+              2 (  q.push(a).capacity == q.capacity                ) by Premise,
+              3 (  q.push(a).strategy == q.strategy                ) by Premise,
+              4 (  q.strategy == List.Queue.Strategy.DropEarliest  ) by Auto,
+              5 (  q.length < q.capacity                           ) by Premise,
+              6 (  q.push(a).buffer ≡ (q.buffer ++ List.make(a))   ) by Auto,
+              7 (  q.push(a).wellFormed                            ) by Simpl
+              //@formatter:on
+            )
+            return
+          } else {
+            Deduce(
+              //@formatter:off
+              1 (  q.wellFormed                                         ) by Premise,
+              2 (  q.push(a).capacity == q.capacity                     ) by Premise,
+              3 (  q.push(a).strategy == q.strategy                     ) by Premise,
+              4 (  q.strategy == List.Queue.Strategy.DropEarliest       ) by Auto,
+              5 (  !(q.length < q.capacity)                             ) by Premise,
+              6 (  q.push(a).buffer ≡ (q.buffer.tlLax ++ List.make(a))  ) by Simpl,
+              7 (  q.push(a).wellFormed                                 ) by Simpl
+              //@formatter:on
+            )
+            return
+          }
+        }
+        case Queue.Strategy.DropLatest => {
+          if (q.length < q.capacity) {
+
+            pushWithinCapacity(q, a)
+
+            Deduce(
+              //@formatter:off
+              1 (  q.wellFormed                                   ) by Premise,
+              2 (  q.push(a).capacity == q.capacity               ) by Premise,
+              3 (  q.push(a).strategy == q.strategy               ) by Premise,
+              4 (  q.strategy == List.Queue.Strategy.DropLatest   ) by Auto,
+              5 (  q.length < q.capacity                          ) by Premise,
+              6 (  q.push(a).buffer ≡ (q.buffer ++ List.make(a))  ) by Simpl, // Auto,
+              7 (  q.push(a).wellFormed                           ) by Simpl
+              //@formatter:on
+            )
+            return
+          } else {
+            Deduce(
+              //@formatter:off
+              1 (  q.wellFormed                                  ) by Premise,
+              2 (  q.push(a).capacity == q.capacity              ) by Premise,
+              3 (  q.push(a).strategy == q.strategy              ) by Premise,
+              4 (  q.strategy == List.Queue.Strategy.DropLatest  ) by Auto,
+              5 (  !(q.length < q.capacity)                      ) by Premise,
+              6 (  q.push(a).buffer ≡ q.buffer                   ) by Simpl, // Auto,
+              7 (  q.push(a).wellFormed                          ) by Simpl // Auto
+              //@formatter:on
+            )
+            return
+          }
+        }
+        case Queue.Strategy.Error => {
+          if (q.length < q.capacity) {
+
+            pushWithinCapacity(q, a)
+
+            Deduce(
+              //@formatter:off
+              1 (  q.wellFormed                                   ) by Premise,
+              2 (  q.push(a).capacity == q.capacity               ) by Premise,
+              3 (  q.push(a).strategy == q.strategy               ) by Premise,
+              4 (  q.strategy == List.Queue.Strategy.Error        ) by Auto,
+              5 (  q.length < q.capacity                          ) by Premise,
+              6 (  q.push(a).buffer ≡ (q.buffer ++ List.make(a))  ) by Simpl, // Auto,
+              7 (  q.push(a).wellFormed                           ) by Simpl
+              //@formatter:on
+            )
+            return
+          } else {
+            Deduce(
+              //@formatter:off
+              1 (  q.wellFormed                             ) by Premise,
+              2 (  q.push(a).capacity == q.capacity         ) by Premise,
+              3 (  q.push(a).strategy == q.strategy         ) by Premise,
+              4 (  q.strategy == List.Queue.Strategy.Error  ) by Auto,
+              5 (  !(q.length < q.capacity)                 ) by Premise,
+              6 (  q.push(a).buffer ≡ List.empty[T]         ) by Simpl, // Auto,
+              7 (  q.push(a).wellFormed                     ) by Simpl // Auto
+              //@formatter:on
+            )
+            return
+          }
+        }
+        case Queue.Strategy.Unbounded => {
+          Deduce(
+            //@formatter:off
+            1 (  q.wellFormed                                   ) by Premise,
+            2 (  q.push(a).capacity == q.capacity               ) by Premise,
+            3 (  q.push(a).strategy == q.strategy               ) by Premise,
+            4 (  q.strategy == List.Queue.Strategy.Unbounded    ) by Auto,
+            5 (  q.push(a).buffer ≡ (q.buffer ++ List.make(a))  ) by Simpl,
+            6 (  q.push(a).wellFormed                           ) by Simpl
+            //@formatter:on
+          )
+          return
+        }
+      }
+
     }
   }
 
