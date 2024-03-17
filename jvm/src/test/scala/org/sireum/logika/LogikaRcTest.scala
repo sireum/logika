@@ -51,6 +51,7 @@ class LogikaRcTest extends SireumRcSpec {
     name match {
     case "opsem.sc" | "opsem-alt.sc" => Os.isMac && isInGithubAction
     case "conformance-swap.sc" => isSimplified
+    case "list.sc" => isInGithubAction
     case "strictpure.sc" => Os.isWin && isInGithubAction && !isSimplified
     case _ => false
   }
