@@ -337,7 +337,7 @@ object List {
       Deduce(
         //@formatter:off
         1 (  0 < c                      ) by Premise,
-        2 (  empty[T](c, s).wellFormed  ) by RSimpl(RS(Queue.$.wellFormed _)) // Auto
+        2 (  empty[T](c, s).wellFormed  ) by RSimpl(RS(Queue.$$.wellFormed _)) // Auto
         //@formatter:on
       )
     }
@@ -413,10 +413,10 @@ object List {
         4 (  q.tail.strategy ≡ q.strategy                                                               ) by Premise,
         5 (  q.buffer.length >= q.tail.length                                                           ) by Auto,
         6 (  0 < q.capacity &
-               (q.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.capacity)                 ) by Rewrite(RS(Queue.$.wellFormed _), 1), // Auto,
+               (q.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.capacity)                 ) by Rewrite(RS(Queue.$$.wellFormed _), 1), // Auto,
         7 (  0 < q.tail.capacity &
                (q.tail.strategy != Queue.Strategy.Unbounded __>: q.tail.buffer.length <= q.tail.capacity)  ) by Auto,
-        8 (  q.tail.wellFormed                                                                          ) by Rewrite(RS(Queue.$.wellFormed _), 7) // Auto,
+        8 (  q.tail.wellFormed                                                                          ) by Rewrite(RS(Queue.$$.wellFormed _), 7) // Auto,
         //@formatter:on
       )
     }
@@ -799,10 +799,10 @@ object List {
         6 (  q.buffer.dropLax(n).length ≡ q.drop(n).length                                                ) by Simpl,
         7 (  q.buffer.length >= q.drop(n).length                                                          ) by Subst_<(6, 5),
         8 (  0 < q.capacity &
-          (q.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.capacity)                        ) by Rewrite(RS(Queue.$.wellFormed _), 1), // Auto,
+          (q.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.capacity)                        ) by Rewrite(RS(Queue.$$.wellFormed _), 1), // Auto,
         9 (  0 < q.drop(n).capacity &
                (q.drop(n).strategy != Queue.Strategy.Unbounded __>: q.drop(n).length <= q.drop(n).capacity)  ) by Auto,
-       10 (  q.drop(n).wellFormed                                                                         ) by Rewrite(RS(Queue.$.wellFormed _), 9)
+       10 (  q.drop(n).wellFormed                                                                         ) by Rewrite(RS(Queue.$$.wellFormed _), 9)
         //@formatter:on
       )
     }
@@ -849,13 +849,13 @@ object List {
         4 (  q.clear.error ≡ q.error                                                                       ) by Premise,
         5 (  q.clear.buffer.length ≡ 0                                                                     ) by Simpl,
         6 (  0 < q.capacity &
-               (q.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.capacity)                    ) by Rewrite(RS(Queue.$.wellFormed _), 1), // Auto,
+               (q.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.capacity)                    ) by Rewrite(RS(Queue.$$.wellFormed _), 1), // Auto,
         7 (  0 < q.capacity                                                                                ) by Simpl,
         8 (  0 < q.clear.capacity &
                (q.clear.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.clear.capacity)        ) by Auto,
         9 (  0 < q.clear.capacity &
                (q.clear.strategy != Queue.Strategy.Unbounded __>: q.clear.buffer.length <= q.clear.capacity)  ) by Simpl,
-       10 (  q.clear.wellFormed                                                                            ) by RSimpl(RS(Queue.$.wellFormed _))
+       10 (  q.clear.wellFormed                                                                            ) by RSimpl(RS(Queue.$$.wellFormed _))
         //@formatter:on
       )
     }
@@ -914,10 +914,10 @@ object List {
         7 (  q.setBuffer(l).length <= q.capacity                                                                                ) by Subst_>(6, 2),
         8 (  q.setBuffer(l).length <= q.setBuffer(l).capacity                                                                   ) by Subst_>(3, 7),
         9 (  0 < q.capacity &
-               (q.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.capacity)                                         ) by Rewrite(RS(Queue.$.wellFormed _), 1), // Auto,
+               (q.strategy != Queue.Strategy.Unbounded __>: q.buffer.length <= q.capacity)                                         ) by Rewrite(RS(Queue.$$.wellFormed _), 1), // Auto,
        10 (  0 < q.setBuffer(l).capacity &
                (q.setBuffer(l).strategy != Queue.Strategy.Unbounded __>: q.setBuffer(l).buffer.length <= q.setBuffer(l).capacity)  ) by Auto,
-       11 (  q.setBuffer(l).wellFormed                                                                                          ) by Rewrite(RS(Queue.$.wellFormed _), 10)
+       11 (  q.setBuffer(l).wellFormed                                                                                          ) by Rewrite(RS(Queue.$$.wellFormed _), 10)
         //@formatter:on
       )
       
