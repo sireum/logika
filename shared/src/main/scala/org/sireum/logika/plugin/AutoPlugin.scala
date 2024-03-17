@@ -30,6 +30,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.logika.{Config, Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
+import org.sireum.logika.plugin.AutoPlugin.conjuncts
 
 object AutoPlugin {
   @record class MAlgebraChecker(var reporter: Reporter) extends AST.MTransformer {
@@ -142,7 +143,40 @@ object AutoPlugin {
     }
   }
 
-  def detectOrIntro(th: TypeHierarchy, claim: AST.Exp, pc: ISZ[AST.Exp]): Option[ST] = {
+  @strictpure def conjuncts(e: AST.Exp): ISZ[AST.Exp] = {
+    e match {
+      case e: AST.Exp.Binary if e.attr.resOpt.get == AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd) =>
+        conjuncts(e.left) ++ conjuncts(e.right)
+      case _ => ISZ(e)
+    }
+  }
+
+  def detectOrIntro(th: TypeHierarchy, claimNorm: AST.Exp, claim: AST.Exp, conjuncts: ISZ[AST.Exp], pc: ISZ[AST.Exp]): Option[ST] = {
+    @strictpure def inPc: Some[ST] = Some(
+      st"""Accepted because ${claim.prettyST} is in the path conditions:
+          |{
+          |  ${(for (e <- pc) yield e.prettyST, ",\n")}
+          |}"""
+    )
+    claimNorm match {
+      case claimNorm: AST.Exp.Binary =>
+        claimNorm.attr.resOpt match {
+          case Some(res: AST.ResolvedInfo.BuiltIn) =>
+            res.kind match {
+              case AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv if th.isSubstitutableWithoutSpecVars(claimNorm.left.typedOpt.get) =>
+                if ((HashSet ++ conjuncts).contains(claimNorm(op = AST.Exp.BinaryOp.Eq, attr = claimNorm.attr(resOpt = Some(res(kind = AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)))))) {
+                  return inPc
+                }
+              case AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv if th.isSubstitutableWithoutSpecVars(claimNorm.left.typedOpt.get) =>
+                if ((HashSet ++ conjuncts).contains(claimNorm(op = AST.Exp.BinaryOp.Ne, attr = claimNorm.attr(resOpt = Some(res(kind = AST.ResolvedInfo.BuiltIn.Kind.BinaryNe)))))) {
+                  return inPc
+                }
+              case _ =>
+            }
+          case _ =>
+        }
+      case _ =>
+    }
     val (left, right): (AST.Exp, AST.Exp) = claim match {
       case claim: AST.Exp.Binary =>
         claim.attr.resOpt match {
@@ -159,7 +193,7 @@ object AutoPlugin {
     var posAntecedents = HashMap.empty[(AST.Exp, AST.Exp), AST.Exp.Binary]
     var negAntecedents = HashMap.empty[(AST.Exp, AST.Exp), AST.Exp.Binary]
 
-    for (c <- pc) {
+    for (c <- conjuncts) {
       c match {
         case c: AST.Exp.Binary =>
           c.attr.resOpt match {
@@ -331,20 +365,22 @@ object AutoPlugin {
                 }
                 return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
               } else if (id == "Premise") {
-                AutoPlugin.detectOrIntro(logika.th, step.claim, pathConditions) match {
-                  case Some(acceptMsg) =>
-                    if (logika.config.detailedInfo) {
-                      reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
-                    }
-                    return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-                  case _ =>
-                    reporter.error(posOpt, Logika.kind,
-                      st"""The stated claim has not been proven before nor is a premise in the path conditions:
-                          |{
-                          |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
-                          |}""".render)
-                    return err
+                for (pc <- normPathConditions.elements) {
+                  AutoPlugin.detectOrIntro(logika.th, claimNorm, step.claim, conjuncts(pc), pathConditions) match {
+                    case Some(acceptMsg) =>
+                      if (logika.config.detailedInfo) {
+                        reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
+                      }
+                      return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+                    case _ =>
+                  }
                 }
+                reporter.error(posOpt, Logika.kind,
+                  st"""The stated claim has not been proven before nor is a premise in the path conditions:
+                      |{
+                      |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
+                      |}""".render)
+                return err
               }
             case _ =>
               if (id == "Premise") {

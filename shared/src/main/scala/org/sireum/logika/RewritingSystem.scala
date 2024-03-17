@@ -1716,6 +1716,9 @@ object RewritingSystem {
     for (i <- 0 until params.size) {
       map = map + (params.size - i) ~> args(i)
     }
+    if (f.param.tipe == AST.Typed.unit && args.isEmpty) {
+      return Some((f.exp, 0))
+    }
     ParamSubstitutor(map).transformCoreExpBase(body) match {
       case MSome(body2) =>
         if (args.size > params.size) {
@@ -1794,7 +1797,7 @@ object RewritingSystem {
       val f = pattern.toFun
       receiverOpt match {
         case Some(receiver) => return AST.CoreExp.Apply(f, ISZ(receiver), f.exp.tipe)
-        case _ => return f
+        case _ => return if (info.ast.sig.funType.isByName) AST.CoreExp.Apply(f, ISZ(), f.exp.tipe) else f
       }
     }
 
@@ -1809,8 +1812,6 @@ object RewritingSystem {
               case (_, right: AST.CoreExp.Lit) => r = r + left ~> (right, stepId)
               case (left: AST.CoreExp.Constructor, _) => r = r + right ~> (left, stepId)
               case (_, right: AST.CoreExp.Constructor) => r = r + left ~> (right, stepId)
-              case (left: AST.CoreExp.Apply, _) => r = r + right ~> (left, stepId)
-              case (_, right: AST.CoreExp.Apply) => r = r + left ~> (right, stepId)
               case (_, _) =>
                 val (key, value): (AST.CoreExp.Base, AST.CoreExp.Base) =
                   if (left < right) (right, left) else (left, right)
@@ -1833,6 +1834,7 @@ object RewritingSystem {
     var trace = ISZ[Trace]()
 
     def evalBaseH(e: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
+      var rOpt = Option.none[AST.CoreExp.Base]()
       if (e.tipe == AST.Typed.b) {
         provenClaims.get(e) match {
           case Some(stepId) =>
@@ -1840,49 +1842,53 @@ object RewritingSystem {
             if (shouldTrace) {
               trace = trace :+ Trace.Eval(st"using $stepId", e, r)
             }
-            return Some(r)
+            rOpt = Some(r)
           case _ =>
         }
-        provenClaims.get(AST.CoreExp.Unary(AST.Exp.UnaryOp.Not, e)) match {
-          case Some(stepId) =>
-            val r = AST.CoreExp.False
-            if (shouldTrace) {
-              trace = trace :+ Trace.Eval(st"using $stepId", e, r)
-            }
-            return Some(r)
-          case _ =>
+        if (rOpt.isEmpty) {
+          provenClaims.get(AST.CoreExp.Unary(AST.Exp.UnaryOp.Not, e)) match {
+            case Some(stepId) =>
+              val r = AST.CoreExp.False
+              if (shouldTrace) {
+                trace = trace :+ Trace.Eval(st"using $stepId", e, r)
+              }
+              rOpt = Some(r)
+            case _ =>
+          }
         }
       }
-      if (config.equivSubst) {
+      if (rOpt.isEmpty && config.equivSubst) {
         val r = eqMap.get(e)
         r match {
           case Some((to, stepId)) =>
             if (shouldTrace) {
               trace = trace :+ Trace.Eval(st"substitution using $stepId [${to.prettyST}/${e.prettyST}]", e, to)
             }
-            return Some(to)
+            rOpt = Some(to)
           case _ =>
         }
       }
-      var rOpt: Option[AST.CoreExp.Base] = e match {
-        case _: AST.CoreExp.Halt => None()
-        case _: AST.CoreExp.Lit => None()
-        case _: AST.CoreExp.LocalVarRef => None()
-        case e: AST.CoreExp.ParamVarRef => evalParamVarRef(e)
-        case e: AST.CoreExp.VarRef => evalVarRef(e)
-        case e: AST.CoreExp.Binary => evalBinary(e)
-        case e: AST.CoreExp.Unary => evalUnary(e)
-        case e: AST.CoreExp.Select => evalSelect(e)
-        case e: AST.CoreExp.Update => evalUpdate(e)
-        case e: AST.CoreExp.Indexing => evalIndexing(e)
-        case e: AST.CoreExp.IndexingUpdate => evalIndexingUpdate(e)
-        case e: AST.CoreExp.Constructor => evalConstructor(e)
-        case e: AST.CoreExp.If => evalIf(e)
-        case e: AST.CoreExp.Apply => evalApply(e)
-        case e: AST.CoreExp.Fun => evalFun(e)
-        case e: AST.CoreExp.Quant => evalQuant(e)
-        case e: AST.CoreExp.InstanceOfExp => evalInstanceOf(e)
-        case e: AST.CoreExp.Labeled => evalLabeled(e)
+      if (rOpt.isEmpty) {
+        rOpt = e match {
+          case _: AST.CoreExp.Halt => None()
+          case _: AST.CoreExp.Lit => None()
+          case _: AST.CoreExp.LocalVarRef => None()
+          case e: AST.CoreExp.ParamVarRef => evalParamVarRef(e)
+          case e: AST.CoreExp.VarRef => evalVarRef(e)
+          case e: AST.CoreExp.Binary => evalBinary(e)
+          case e: AST.CoreExp.Unary => evalUnary(e)
+          case e: AST.CoreExp.Select => evalSelect(e)
+          case e: AST.CoreExp.Update => evalUpdate(e)
+          case e: AST.CoreExp.Indexing => evalIndexing(e)
+          case e: AST.CoreExp.IndexingUpdate => evalIndexingUpdate(e)
+          case e: AST.CoreExp.Constructor => evalConstructor(e)
+          case e: AST.CoreExp.If => evalIf(e)
+          case e: AST.CoreExp.Apply => evalApply(e)
+          case e: AST.CoreExp.Fun => evalFun(e)
+          case e: AST.CoreExp.Quant => evalQuant(e)
+          case e: AST.CoreExp.InstanceOfExp => evalInstanceOf(e)
+          case e: AST.CoreExp.Labeled => evalLabeled(e)
+        }
       }
       rOpt match {
         case Some(r) =>
@@ -2065,19 +2071,7 @@ object RewritingSystem {
         case _ =>
       }
       if (config.equality) {
-        var eq = F
-        var stepIdOpt = Option.none[ST]()
         if (left == right) {
-          eq = T
-        } else {
-          provenClaims.get(equiv(left, right)) match {
-            case Some(stepId) =>
-              stepIdOpt = Some(st" ($stepId)")
-              eq = T
-            case _ =>
-          }
-        }
-        if (eq) {
           rOpt = e.op match {
             case AST.Exp.BinaryOp.EquivUni => Some(AST.CoreExp.True)
             case AST.Exp.BinaryOp.InequivUni => Some(AST.CoreExp.False)
@@ -2092,7 +2086,7 @@ object RewritingSystem {
           rOpt match {
             case Some(r) =>
               if (shouldTrace) {
-                trace = trace :+ Trace.Eval(st"equivalence$stepIdOpt ${equivST(left, right)}", e, r)
+                trace = trace :+ Trace.Eval(st"equivalence ${equivST(left, right)}", e, r)
               }
               return rOpt
             case _ =>
@@ -2103,8 +2097,6 @@ object RewritingSystem {
             rOpt = e.op match {
               case AST.Exp.BinaryOp.EquivUni => Some(AST.CoreExp.False)
               case AST.Exp.BinaryOp.InequivUni => Some(AST.CoreExp.True)
-              case AST.Exp.BinaryOp.Eq => Some(AST.CoreExp.False)
-              case AST.Exp.BinaryOp.Ne => Some(AST.CoreExp.True)
               case _ => None()
             }
             rOpt match {
