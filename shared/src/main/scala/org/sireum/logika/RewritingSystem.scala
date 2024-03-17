@@ -1112,18 +1112,18 @@ object RewritingSystem {
   @record class NoCache extends Logika.Cache {
 
     override def clearTransition(): Unit = {}
-    override def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, state: State, smt2: Smt2): Option[(ISZ[State], U64)] = {
+    override def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, context: ISZ[String], state: State, smt2: Smt2): Option[(ISZ[State], U64)] = {
       return None()
     }
-    override def setTransition(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, state: State, nextStates: ISZ[State], smt2: Smt2): U64 = {
+    override def setTransition(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, context: ISZ[String], state: State, nextStates: ISZ[State], smt2: Smt2): U64 = {
       return U64.fromZ(0)
     }
 
-    override def getAssignExpTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, smt2: Smt2): Option[(ISZ[(State, State.Value)], U64)] = {
+    override def getAssignExpTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, exp: AST.AssignExp, context: ISZ[String], state: State, smt2: Smt2): Option[(ISZ[(State, State.Value)], U64)] = {
       return None()
     }
 
-    override def setAssignExpTransition(th: TypeHierarchy, config: Config, exp: AST.AssignExp, state: State, nextStatesValues: ISZ[(State, State.Value)], smt2: Smt2): U64 = {
+    override def setAssignExpTransition(th: TypeHierarchy, config: Config, exp: AST.AssignExp, context: ISZ[String], state: State, nextStatesValues: ISZ[(State, State.Value)], smt2: Smt2): U64 = {
       return U64.fromZ(0)
     }
 
