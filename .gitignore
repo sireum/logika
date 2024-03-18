@@ -3,6 +3,7 @@
 /out
 target
 /versions.properties
+/bin/install
 /bin/mill.bat
 /bin/prelude.sh
 /bin/platform.sh

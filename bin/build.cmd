@@ -63,14 +63,12 @@ if (Os.cliArgs.isEmpty) {
 
 
 val homeBin = Os.slashDir
-val home = homeBin.up
+val home = homeBin.up.canon
 val sireumJar = homeBin / "sireum.jar"
-val mill = homeBin / "mill.bat"
 var didTipe = F
 var didCompile = F
 val versions = (home / "versions.properties").properties
-val cache = Os.home / "Downloads" / "sireum"
-
+val projectStandalone = home / "bin" / "project-standalone.cmd"
 
 def platformKind(kind: Os.Kind.Type): String = {
   kind match {
@@ -79,16 +77,6 @@ def platformKind(kind: Os.Kind.Type): String = {
     case Os.Kind.LinuxArm => return "linux/arm"
     case Os.Kind.Mac => return "mac"
     case _ => return "unsupported"
-  }
-}
-
-
-def downloadMill(): Unit = {
-  if (!mill.exists) {
-    println("Downloading mill ...")
-    mill.downloadFrom("https://github.com/sireum/rolling/releases/download/mill/standalone")
-    mill.chmod("+x")
-    println()
   }
 }
 
@@ -140,7 +128,7 @@ def compile(): Unit = {
     didCompile = T
     tipe()
     println("Compiling ...")
-    Os.proc(ISZ(mill.string, "all", "logika.shared.tests.compile")).at(home).console.runCheck()
+    proc"java -jar $sireumJar proyek compile --project $projectStandalone $home".console.echo.runCheck()
     println()
   }
 }
@@ -149,20 +137,11 @@ def compile(): Unit = {
 def test(): Unit = {
   compile()
   println("Running shared tests ...")
-  Os.proc(ISZ(mill.string, "logika.jvm.tests")).at(home).console.runCheck()
+  proc"java -jar $sireumJar proyek test --java -Xss2M --project $projectStandalone --packages org.sireum $home org.sireum.logika".
+    console.echo.runCheck()
   println()
 }
 
-
-def testJs(): Unit = {
-  compile()
-  println("Running js tests ...")
-  Os.proc(ISZ(mill.string, "logika.js.tests")).at(home).console.runCheck()
-  println()
-}
-
-
-downloadMill()
 installZ3(Os.kind)
 installCVC(Os.kind)
 
@@ -174,7 +153,6 @@ for (i <- 0 until Os.cliArgs.size) {
   Os.cliArgs(i) match {
     case string"compile" => compile()
     case string"test" => test()
-    case string"test-js" => testJs()
     case cmd =>
       usage()
       eprintln(s"Unrecognized command: $cmd")
