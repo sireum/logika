@@ -82,7 +82,9 @@ object List {
 
     l match {
       case Cons(a, next) => {
+
         emptyZeroLength(next)
+
         Deduce(
           //@formatter:off
           1 (  l ≡ Cons(a, next)             ) by Auto,
@@ -94,6 +96,35 @@ object List {
         return
       }
       case _ => {
+        Deduce(
+          //@formatter:off
+          1 (  l ≡ Nil[T]()   ) by Auto,
+          2 (  l.length >= 0  ) by Simpl
+          //@formatter:on
+        )
+        return
+      }
+    }
+  }
+
+  @pure def emptyZeroLengthInduct[T](l: List[T]): Unit = {
+    Contract(
+      Ensures(l.length >= 0)
+    )
+
+    (l : @induct) match {
+      case Cons(value, next) => {
+        Deduce(
+          //@formatter:off
+          1 (  l ≡ Cons[T](value, next)      ) by Auto,
+          2 (  next.length >= 0              ) by Admit, // Premise,
+          3 (  l.length ≡ (1 + next.length)  ) by Simpl,
+          4 (  l.length >= 0                 ) by Auto and (2, 3)
+          //@formatter:on
+        )
+        return
+      }
+      case Nil() => {
         Deduce(
           //@formatter:off
           1 (  l ≡ Nil[T]()   ) by Auto,
@@ -143,7 +174,7 @@ object List {
 
           } else {
 
-            //lookupUpdateEq(next, key, value) // either this or proof step #5 below
+            lookupUpdateEq(next, key, value)
 
             Deduce(
               //@formatter:off
@@ -152,8 +183,8 @@ object List {
               3 (  update(map, key, value) ≡ Cons(p, update(next, key, value))  ) by RSimpl(RS(update _)), //Auto,
               4 (  lookup(Cons(p, update(next, key, value)), key) ≡
                       lookup(update(next, key, value), key)                     ) by RSimpl(RS(lookup _)),
-              5 (  lookup(Cons(p, update(next, key, value)), key) ≡ value       ) by Rewrite(RS(lookupUpdateEq _), 4),
-              6 (  lookup(update(next, key, value), key) ≡ value                ) by Rewrite(RS(lookup _), 5)
+              5 (  lookup(update(next, key, value), key) ≡ value                ) by Auto,
+              6 (  lookup(update(map, key, value), key) ≡ value                 ) by Rewrite(RS(lookup _), 5)
               //@formatter:on
             )
             return
@@ -199,7 +230,7 @@ object List {
             
           } else {
 
-            //lookupUpdateNe(next, key1, key2, value)
+            lookupUpdateNe(next, key1, key2, value)
 
             if (p._1 ≡ key2) {
               Deduce(
@@ -209,7 +240,7 @@ object List {
                 3 (  !(p._1 ≡ key1)                                                 ) by Premise,
                 4 (  p._1 ≡ key2                                                    ) by Premise,
                 5 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
-                6 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
+                6 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by Auto,
                 7 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
                 //@formatter:on
               )
@@ -221,7 +252,7 @@ object List {
                 3 (  !(p._1 ≡ key1)                                                 ) by Premise,
                 4 (  !(p._1 ≡ key2)                                                 ) by Premise,
                 5 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
-                6 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by RSimpl(RS(lookupUpdateNe _)),
+                6 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by Auto,
                 7 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
                 //@formatter:on
               )
