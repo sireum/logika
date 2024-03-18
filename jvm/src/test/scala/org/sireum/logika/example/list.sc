@@ -107,6 +107,7 @@ object List {
     }
   }
 
+  /*
   @pure def emptyZeroLengthInduct[T](l: List[T]): Unit = {
     Contract(
       Ensures(l.length >= 0)
@@ -135,6 +136,7 @@ object List {
       }
     }
   }
+  */
 
   type Map[K, V] = List[(K, V)]
 
