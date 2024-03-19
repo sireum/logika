@@ -89,9 +89,11 @@ object AutoPlugin {
           case _ => return F
         }
       }
+
       def failE(): Unit = {
         fail(e.posOpt, st"Algebra cannot be used on '${e.prettyST}'".render)
       }
+
       e match {
         case _: AST.Exp.Quant => fail(e.posOpt, "Algebra cannot be used with quantifiers")
         case _: AST.Exp.LitZ =>
@@ -126,12 +128,12 @@ object AutoPlugin {
           e.ident.resOpt match {
             case Some(res: AST.ResolvedInfo.Method) if res.mode == AST.MethodMode.Spec =>
             case _ =>
-            e.attr.resOpt match {
-              case Some(res: AST.ResolvedInfo.Method) if res.mode == AST.MethodMode.Select ||
-                res.mode == AST.MethodMode.Store =>
-              case _ =>
-                failE()
-            }
+              e.attr.resOpt match {
+                case Some(res: AST.ResolvedInfo.Method) if res.mode == AST.MethodMode.Select ||
+                  res.mode == AST.MethodMode.Store =>
+                case _ =>
+                  failE()
+              }
           }
         case _ => failE()
       }
@@ -151,7 +153,7 @@ object AutoPlugin {
     }
   }
 
-  def detectOrIntro(th: TypeHierarchy, claimNorm: AST.Exp, claim: AST.Exp, conjuncts: ISZ[AST.Exp], pc: ISZ[AST.Exp]): Option[ST] = {
+  def detectInPc(th: TypeHierarchy, claimNorm: AST.Exp, claim: AST.Exp, conjuncts: ISZ[AST.Exp], pc: ISZ[AST.Exp]): Option[ST] = {
     @strictpure def inPc: Some[ST] = Some(
       st"""Accepted because ${claim.prettyST} is in the path conditions:
           |{
@@ -177,6 +179,10 @@ object AutoPlugin {
         }
       case _ =>
     }
+    return None()
+  }
+
+  def detectOrIntro(th: TypeHierarchy, claim: AST.Exp, pc: ISZ[AST.Exp]): Option[ST] = {
     val (left, right): (AST.Exp, AST.Exp) = claim match {
       case claim: AST.Exp.Binary =>
         claim.attr.resOpt match {
@@ -193,7 +199,7 @@ object AutoPlugin {
     var posAntecedents = HashMap.empty[(AST.Exp, AST.Exp), AST.Exp.Binary]
     var negAntecedents = HashMap.empty[(AST.Exp, AST.Exp), AST.Exp.Binary]
 
-    for (c <- conjuncts) {
+    for (c <- pc) {
       c match {
         case c: AST.Exp.Binary =>
           c.attr.resOpt match {
@@ -365,8 +371,16 @@ object AutoPlugin {
                 }
                 return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
               } else if (id == "Premise") {
+                AutoPlugin.detectOrIntro(logika.th, step.claim, pathConditions) match {
+                  case Some(acceptMsg) =>
+                    if (logika.config.detailedInfo) {
+                      reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
+                    }
+                    return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+                  case _ =>
+                }
                 for (pc <- normPathConditions.elements) {
-                  AutoPlugin.detectOrIntro(logika.th, claimNorm, step.claim, conjuncts(pc), pathConditions) match {
+                  AutoPlugin.detectInPc(logika.th, claimNorm, step.claim, conjuncts(pc), pathConditions) match {
                     case Some(acceptMsg) =>
                       if (logika.config.detailedInfo) {
                         reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
