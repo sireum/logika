@@ -672,36 +672,6 @@ object Util {
       return r
     }
 
-    @pure def typedToType(t: AST.Typed): AST.Type = {
-      val attr = AST.Attr(Some(pos))
-      val typedAttr = AST.TypedAttr(attr.posOpt, Some(t))
-
-      @pure def toName(ids: ISZ[String]): AST.Name = {
-        ids match {
-          case ISZ("org", "sireum", _*) if ids.size > 2 =>
-            return AST.Name(for (i <- 2 until ids.size) yield AST.Id(ids(i), attr), attr)
-          case _ => return AST.Name(for (id <- ids) yield AST.Id(id, attr), attr)
-        }
-      }
-
-      t match {
-        case t: AST.Typed.Name => return AST.Type.Named(toName(t.ids),
-          for (arg <- t.args) yield typedToType(arg), typedAttr)
-        case t: AST.Typed.TypeVar => return AST.Type.Named(toName(ISZ(t.id)), ISZ(), typedAttr)
-        case t: AST.Typed.Tuple => return AST.Type.Tuple(for (arg <- t.args) yield typedToType(arg), typedAttr)
-        case t: AST.Typed.Enum => return AST.Type.Named(toName(t.name), ISZ(), typedAttr)
-        case t: AST.Typed.Fun => return AST.Type.Fun(t.isPureFun, t.isByName, for (arg <- t.args) yield typedToType(arg),
-          typedToType(t.ret), typedAttr)
-        case t: AST.Typed.Method => halt(s"Infeasible: $t")
-        case t: AST.Typed.Object => halt(s"Infeasible: $t")
-        case t: AST.Typed.Methods => halt(s"Infeasible: $t")
-        case t: AST.Typed.Package => halt(s"Infeasible: $t")
-        case t: AST.Typed.Fact => halt(s"Infeasible: $t")
-        case t: AST.Typed.Theorem => halt(s"Infeasible: $t")
-        case t: AST.Typed.Inv => halt(s"Infeasible: $t")
-      }
-    }
-
     @pure def constructIf(cond: AST.Exp, left: AST.Exp, right: AST.Exp, pOpt: Option[Position], tOpt: Option[AST.Typed]): AST.Exp = {
       if (right == trueLit) {
         if (left == trueLit) {
@@ -920,14 +890,14 @@ object Util {
                 Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
                 Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr))
             } else {
-              return Some(AST.Exp.At(Some(typedToType(sym.tipe)),
+              return Some(AST.Exp.At(Some(AST.Util.typedToType(sym.tipe, pos)),
                 AST.Exp.LitString(key._2, AST.Attr(symPosOpt)),
                 AST.Exp.LitZ(n, attr), linesFresh, attr))
             }
           } else {
             val key: ClaimsToExps.AtPossKey = (ISZ[String](), st"${(let.context :+ let.id, ".")}".render, sym.tipe)
             val n = computeAtNum(key, let.poss, let.num, let.sym)
-            return Some(AST.Exp.At(Some(typedToType(sym.tipe)),
+            return Some(AST.Exp.At(Some(AST.Util.typedToType(sym.tipe, pos)),
               AST.Exp.LitString(key._2, AST.Attr(symPosOpt)),
               AST.Exp.LitZ(n, attr), linesFresh, attr))
           }
@@ -1108,7 +1078,7 @@ object Util {
               nameExp.resOpt,
               nameExp.typedOpt
             )),
-            for (targ <- let.tipe.args) yield typedToType(targ),
+            for (targ <- let.tipe.args) yield AST.Util.typedToType(targ, pos),
             es,
             AST.ResolvedAttr(
               symPosOpt,
@@ -1129,12 +1099,12 @@ object Util {
             if (t.args(0) == AST.Typed.z) {
               if (t.ids == AST.Typed.msName) {
                 if (t.args(1) == AST.Typed.z) (AST.Typed.zsName, ISZ())
-                else (AST.Typed.mszName, ISZ(typedToType(t.args(1))))
+                else (AST.Typed.mszName, ISZ(AST.Util.typedToType(t.args(1), pos)))
               } else {
-                (AST.Typed.iszName, ISZ(typedToType(t.args(1))))
+                (AST.Typed.iszName, ISZ(AST.Util.typedToType(t.args(1), pos)))
               }
             } else {
-              (t.ids, ISZ(typedToType(t.args(0)), typedToType(t.args(1))))
+              (t.ids, ISZ(AST.Util.typedToType(t.args(0), pos), AST.Util.typedToType(t.args(1), pos)))
             }
           val nameExp = th.nameToExp(name, symPos)
           val ident = AST.Exp.Ident(AST.Id(name(name.size - 1), AST.Attr(symPosOpt)),
@@ -1234,7 +1204,7 @@ object Util {
           for (x <- let.vars) {
             fcontext = x.context
             argTypes = argTypes :+ x.tipe
-            val t = typedToType(x.tipe)
+            val t = AST.Util.typedToType(x.tipe, pos)
             params = params :+ AST.Exp.Fun.Param(Some(AST.Id(x.id, attr)), Some(t), Some(x.tipe))
           }
           exp match {
@@ -1406,7 +1376,7 @@ object Util {
           valueToExp(let.value) match {
             case Some(e) =>
               return Some(AST.Exp.Select(Some(e), AST.Id("isInstanceOf", AST.Attr(symPosOpt)),
-                ISZ(typedToType(let.tipe)), AST.ResolvedAttr(symPosOpt, lang.tipe.TypeChecker.isInstanceOfResOpt,
+                ISZ(AST.Util.typedToType(let.tipe, pos)), AST.ResolvedAttr(symPosOpt, lang.tipe.TypeChecker.isInstanceOfResOpt,
                   AST.Typed.bOpt)))
             case _ => return None()
           }
@@ -1637,7 +1607,7 @@ object Util {
       val linesFresh: ISZ[AST.Exp.LitZ] =
         if (includeFreshLines) ISZ(AST.Exp.LitZ(sym.pos.beginLine, attr), AST.Exp.LitZ(sym.num, attr))
         else ISZ()
-      return AST.Exp.At(Some(typedToType(sym.tipe)), AST.Exp.LitString(id, attr),
+      return AST.Exp.At(Some(AST.Util.typedToType(sym.tipe, pos)), AST.Exp.LitString(id, attr),
         AST.Exp.LitZ(n, attr), linesFresh, attr)
     }
 
