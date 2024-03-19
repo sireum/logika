@@ -544,8 +544,6 @@ object Util {
                              val eqMap: HashMap[Z, HashSSet[State.Claim.Eq]],
                              var atPossMap: HashMap[ClaimsToExps.AtPossKey, HashMap[ISZ[Position], HashMap[Z, (Z, State.Value.Sym)]]]) {
 
-    val trueLit: AST.Exp.LitB = AST.Exp.LitB(T, AST.Attr(Some(pos)))
-    val falseLit: AST.Exp = AST.Exp.LitB(F, trueLit.attr)
     val posOpt: Option[Position] = Some(pos)
     val mulSymDefs: HashSet[Z] = {
       var r = HashSet.empty[Z]
@@ -614,79 +612,6 @@ object Util {
         r = AST.Exp.Binary(r, op, es(i), AST.ResolvedAttr(None(), Some(res), tOpt), None())
       }
       return r
-    }
-
-    @pure def bigAndExp(exps: ISZ[AST.Exp]): AST.Exp = {
-      var set = HashSSet.empty[AST.Exp]
-      for (exp <- exps) {
-        if (exp == trueLit) {
-          // skip
-        } else if (exp == falseLit) {
-          return falseLit
-        } else {
-          set = set + exp
-        }
-      }
-      return esToBinaryExp(set.elements, trueLit, AST.Exp.BinaryOp.And,
-        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
-    }
-
-    @pure def bigOrExp(exps: ISZ[AST.Exp]): AST.Exp = {
-      var set = HashSSet.empty[AST.Exp]
-      for (exp <- exps) {
-        if (exp == trueLit) {
-          return trueLit
-        } else if (exp == falseLit) {
-          // skip
-        } else {
-          set = set + exp
-        }
-      }
-      return esToBinaryExp(set.elements, falseLit, AST.Exp.BinaryOp.Or,
-        AST.Typed.bOpt, AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr))
-    }
-
-    @pure def bigImplyExp(isCond: B, exps: ISZ[AST.Exp]): AST.Exp = {
-      var es = ISZ[AST.Exp]()
-      for (i <- 0 until exps.size - 1) {
-        val exp = exps(i)
-        if (exp == falseLit) {
-          return trueLit
-        } else {
-          es = es :+ exp
-        }
-      }
-      es = es :+ exps(exps.size - 1)
-      assert(es.size >= 2)
-      var r = es(es.size - 1)
-      val op: String = if (isCond) AST.Exp.BinaryOp.CondImply else AST.Exp.BinaryOp.Imply
-      val res = AST.ResolvedInfo.BuiltIn(if (isCond) AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply else
-        AST.ResolvedInfo.BuiltIn.Kind.BinaryImply)
-      var i = es.size - 2
-      while (i >= 0) {
-        if (r != trueLit) {
-          r = AST.Exp.Binary(es(i), op, r, AST.ResolvedAttr(None(), Some(res), AST.Typed.bOpt), None())
-        }
-        i = i - 1
-      }
-      return r
-    }
-
-    @pure def constructIf(cond: AST.Exp, left: AST.Exp, right: AST.Exp, pOpt: Option[Position], tOpt: Option[AST.Typed]): AST.Exp = {
-      if (right == trueLit) {
-        if (left == trueLit) {
-          return trueLit
-        }
-        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondImply, left, AST.ResolvedAttr(pOpt,
-          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply)), AST.Typed.bOpt), pOpt)
-      } else if (right == falseLit) {
-        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondAnd, left, AST.ResolvedAttr(pOpt,
-          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd)), AST.Typed.bOpt), pOpt)
-      } else if (left == trueLit) {
-        return AST.Exp.Binary(cond, AST.Exp.BinaryOp.CondOr, right, AST.ResolvedAttr(pOpt,
-          Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondOr)), AST.Typed.bOpt), pOpt)
-      }
-      return AST.Exp.If(cond, left, right, AST.TypedAttr(pOpt, tOpt))
     }
 
     @pure def rcvOptIdent(v: State.Value, symPosOpt: Option[Position]): Option[(Option[AST.Exp], AST.Exp.Ident)] = {
@@ -1017,7 +942,7 @@ object Util {
               case _ =>
             }
           }
-          return Some(bigAndExp(es))
+          return Some(AST.Util.bigAnd(es, posOpt))
         case let: State.Claim.Let.Or =>
           var es = ISZ[AST.Exp]()
           for (v <- let.args) {
@@ -1026,7 +951,7 @@ object Util {
               case _ => return None()
             }
           }
-          return Some(bigOrExp(es))
+          return Some(AST.Util.bigOr(es, posOpt))
         case let: State.Claim.Let.Imply =>
           var es = ISZ[AST.Exp]()
           for (i <- 0 until let.args.size - 1) {
@@ -1043,11 +968,11 @@ object Util {
               es = es :+ e
             case _ => return None()
           }
-          return Some(bigImplyExp(F, es))
+          return Some(AST.Util.bigImply(F, es, posOpt))
         case let: State.Claim.Let.Ite =>
           (valueToExp(let.cond), valueToExp(let.left), valueToExp(let.right)) match {
             case (Some(cond), Some(left), Some(right)) =>
-              return Some(constructIf(cond, left, right, symPosOpt, Some(sym.tipe)))
+              return Some(AST.Util.ite(cond, left, right, symPosOpt, Some(sym.tipe)))
             case (_, _, _) => return None()
           }
         case let: State.Claim.Let.TupleLit =>
@@ -1647,7 +1572,7 @@ object Util {
               case _ =>
             }
           }
-          return Some(bigAndExp(es))
+          return Some(AST.Util.bigAnd(es, posOpt))
         case claim: State.Claim.Or =>
           var es = ISZ[AST.Exp]()
           for (c <- defsToEqs(claim.claims)) {
@@ -1656,7 +1581,7 @@ object Util {
               case _ => return None()
             }
           }
-          return Some(bigOrExp(es))
+          return Some(AST.Util.bigOr(es, posOpt))
         case claim: State.Claim.Imply =>
           var es = ISZ[AST.Exp]()
           val cs = defsToEqs(claim.claims)
@@ -1673,7 +1598,7 @@ object Util {
             case Some(e) => es = es :+ e
             case _ => return None()
           }
-          return Some(bigImplyExp(claim.isCond, es))
+          return Some(AST.Util.bigImply(claim.isCond, es, posOpt))
         case claim: State.Claim.Prop =>
           valueToExp(claim.value) match {
             case Some(e) =>
@@ -1689,7 +1614,7 @@ object Util {
           val leftOpt = toExp(State.Claim.And(claim.tClaims))
           val rightOpt = toExp(State.Claim.And(claim.fClaims))
           (condOpt, leftOpt, rightOpt) match {
-            case (Some(cond), Some(left), Some(right)) => return Some(constructIf(cond, left, right, posOpt, AST.Typed.bOpt))
+            case (Some(cond), Some(left), Some(right)) => return Some(AST.Util.ite(cond, left, right, posOpt, AST.Typed.bOpt))
             case (_, _, _) => return None()
           }
         case claim: State.Claim.Let.CurrentId =>
@@ -1748,7 +1673,7 @@ object Util {
 
       for (i <- 0 until claims.size if !ignore(claims(i))) {
         toExp(claims(i)) match {
-          case Some(`trueLit`) =>
+          case Some(AST.Util.trueLit) =>
           case Some(exp: AST.Exp.Binary) if isEquivLeftRight(exp) =>
           case Some(exp) =>
             r = r :+ exp
