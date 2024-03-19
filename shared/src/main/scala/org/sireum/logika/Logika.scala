@@ -633,7 +633,7 @@ object Logika {
             e.op match {
               case AST.Exp.BinaryOp.And =>
               case AST.Exp.BinaryOp.Or =>
-              case AST.Exp.BinaryOp.Imply =>
+              case "->:" =>
               case _ => hasError = T
             }
             checkExp(e.left)
@@ -743,8 +743,8 @@ object Logika {
               val r: B = e.op match {
                 case AST.Exp.BinaryOp.And => evalExp(e.left) & evalExp(e.right)
                 case AST.Exp.BinaryOp.Or => evalExp(e.left) | evalExp(e.right)
-                case AST.Exp.BinaryOp.Imply => !evalExp(e.left) | evalExp(e.right)
-                case _ => F
+                case "->:" => !evalExp(e.left) | evalExp(e.right)
+                case _ => halt(s"Infeasible: ${e.op}")
               }
               putResult(r, F)
               return r
