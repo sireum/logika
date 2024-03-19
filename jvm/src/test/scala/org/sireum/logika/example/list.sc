@@ -107,7 +107,6 @@ object List {
     }
   }
 
-  /*
   @pure def emptyZeroLengthInduct[T](l: List[T]): Unit = {
     Contract(
       Ensures(l.length >= 0)
@@ -117,10 +116,10 @@ object List {
       case Cons(value, next) => {
         Deduce(
           //@formatter:off
-          1 (  l ≡ Cons[T](value, next)      ) by Auto,
-          2 (  next.length >= 0              ) by Admit, // Premise,
-          3 (  l.length ≡ (1 + next.length)  ) by Simpl,
-          4 (  l.length >= 0                 ) by Auto and (2, 3)
+          1 (  l ≡ List.Cons[T](value, next)  ) by Premise, // auto-generated
+          2 (  next.length >= 0               ) by Premise, // auto-generated
+          3 (  l.length ≡ (1 + next.length)   ) by Simpl,
+          4 (  l.length >= 0                  ) by Auto and (2, 3)
           //@formatter:on
         )
         return
@@ -128,15 +127,14 @@ object List {
       case Nil() => {
         Deduce(
           //@formatter:off
-          1 (  l ≡ Nil[T]()   ) by Auto,
-          2 (  l.length >= 0  ) by Simpl
+          1 (  l ≡ List.Nil[T]()  ) by Premise, // auto-generated
+          2 (  l.length >= 0      ) by Simpl
           //@formatter:on
         )
         return
       }
     }
   }
-  */
 
   type Map[K, V] = List[(K, V)]
 

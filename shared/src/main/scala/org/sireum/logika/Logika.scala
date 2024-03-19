@@ -4517,7 +4517,6 @@ import Util._
 
   def evalMatch(split: Split.Type, smt2: Smt2, cache: Logika.Cache, rOpt: Option[State.Value.Sym], rtCheck: B, state: State,
                 stmt: AST.Stmt.Match, reporter: Reporter): ISZ[State] = {
-
     def evalCasePattern(s1: State, lcontext: ISZ[String], c: AST.Case, v: State.Value): (State, State.Value.Sym, Bindings, HashMap[String, (Z, ISZ[Position])]) = {
       val (s2, pcond, m) = evalPattern(smt2, cache, rtCheck, s1, v, c.pattern, reporter)
       val (s3, bindings) = addBindings(smt2, cache, rtCheck, s2, lcontext, m, reporter)
@@ -4542,6 +4541,82 @@ import Util._
       val s8 = s7.addClaim(State.Claim.Let.And(sym, conds))
       val (s9, locals) = rewriteLocals(s8, F, lcontext, m.keys)
       return (s9, sym, m, HashMap.empty[String, (Z, ISZ[Position])] ++ (for (p <- locals.entries) yield (p._1._2, (p._2._2, p._2._1))))
+    }
+    def evalInductMatch(): ISZ[State] = {
+      @pure def unifyPattern(p1: AST.Pattern, p2: AST.Pattern): Option[HashMap[AST.Exp, AST.Exp]] = {
+        @strictpure def ident(vb: AST.Pattern.VarBinding): AST.Exp =
+          AST.Exp.Ident(vb.id, AST.ResolvedAttr(vb.attr.posOpt, Some(AST.ResolvedInfo.LocalVar(vb.idContext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, vb.id.value)), vb.attr.typedOpt))
+        (p1, p2) match {
+          case (p1: AST.Pattern.Ref, p2: AST.Pattern.Ref) if p1.attr.resOpt == p2.attr.resOpt => return Some(HashMap.empty)
+          case (p1: AST.Pattern.VarBinding, p2: AST.Pattern.VarBinding) if p1.id.value == p2.id.value && p1.idContext == p2.idContext =>
+            return Some(HashMap.empty[AST.Exp, AST.Exp] + ident(p1) ~> ident(p2))
+          case (p1: AST.Pattern.Structure, p2: AST.Pattern.Structure) if p1.attr.typedOpt == p2.attr.typedOpt =>
+            var m = HashMap.empty[AST.Exp, AST.Exp]
+            for (i <- 0 until p1.patterns.size) {
+              unifyPattern(p1.patterns(i), p2.patterns(i)) match {
+                case Some(m2) => m = m ++ m2.entries
+                case _ => return None()
+              }
+            }
+            return Some(m)
+          case _ => return None()
+        }
+      }
+      val posOpt = stmt.exp.posOpt
+      val cm = context.methodOpt.get
+      val claim: AST.Exp =
+        if (cm.requires.isEmpty) AST.Util.bigAnd(cm.ensures, posOpt)
+        else AST.Util.bigImply(T, cm.requires :+ AST.Util.bigAnd(cm.ensures, posOpt), posOpt)
+      var (s1, v) = evalExp(Split.Disabled, smt2, cache, rtCheck, state, stmt.exp, reporter)(0)
+      var branches = ISZ[Branch]()
+      lang.FrontEnd.induct(th, HashSet.empty, context.methodName, claim, stmt.exp, posOpt.get) match {
+        case Some(ir) =>
+          val lcontext = context.methodName
+          var cases = ir.cases
+          for (cas <- stmt.cases) {
+            var found = F
+            for (icas <- ir.cases if !found) {
+              unifyPattern(cas.pattern, icas.pattern) match {
+                case Some(sm) =>
+                  found = T
+                  cases = cases - icas
+                  val premises: ISZ[AST.Exp] = if (sm.isEmpty) {
+                    icas.premises
+                  } else {
+                    val es = AST.Util.ExpSubstitutor(sm)
+                    for (p <- icas.premises) yield es.transformExp(p).getOrElse(p)
+                  }
+                  val (s2, sym, m, bidMap) = evalCasePattern(s1, lcontext, cas, v)
+                  s1 = s2
+                  val assumeAttr = AST.ResolvedAttr(posOpt, TypeChecker.assumeResOpt, TypeChecker.assertumeTypedOpt)
+                  val assumeIdent = AST.Exp.Ident(AST.Id("assume", AST.Attr(posOpt)), assumeAttr)
+                  val exprAttr = AST.TypedAttr(posOpt, AST.Typed.unitOpt)
+                  val assumes: ISZ[AST.Stmt] = for (p <- premises) yield AST.Stmt.Expr(
+                    AST.Exp.Invoke(None(), assumeIdent, ISZ(), ISZ(p), assumeAttr), exprAttr)
+                  branches = branches :+ Branch("match case pattern", sym,
+                    cas.body(stmts = assumes ++ cas.body.stmts), m, bidMap)
+                case _ =>
+              }
+            }
+            if (!found) {
+              reporter.error(cas.pattern.posOpt, kind, s"Could not match the induction pattern")
+            }
+          }
+          val (s3, leafClaims) = evalBranches(T, split, smt2, cache, rtCheck, rOpt, lcontext, s1, branches, reporter)
+          val shouldSplit: B = split match {
+            case Split.Default => config.splitAll || config.splitMatch
+            case Split.Enabled => T
+            case Split.Disabled => F
+          }
+          return mergeBranches(shouldSplit, s3, leafClaims)
+        case _ =>
+          reporter.error(posOpt, kind, st"Could not induct on ${stmt.exp.prettyST}".render)
+          return ISZ(state(status = State.Status.Error))
+      }
+    }
+
+    if (stmt.isInduct) {
+      return evalInductMatch()
     }
 
     var r = ISZ[State]()

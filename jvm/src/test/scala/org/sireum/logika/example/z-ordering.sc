@@ -9,11 +9,11 @@ import org.sireum.justification.natded.prop.ImplyI
 @strictpure def isOrderedH(seq: ZS): B = All(0 until seq.size)(i => All(i until seq.size)(j => seq(i) <= seq(j)))
 
 @pure def ordered1Lemma(seq: ZS): Unit = {
-  Deduce(|- (isOrderedH(seq) ->: isOrdered(seq)))
+  Deduce(|- (isOrderedH(seq) __>: isOrdered(seq)))
 }
 
 //@pure def ordered2LemmaFail(seq: ZS): Unit = {
-//  Deduce(|- (isOrdered(seq) ->: isOrderedH(seq)))  // Could not deduce
+//  Deduce(|- (isOrdered(seq) __>: isOrderedH(seq)))  // Could not deduce
 //}
 
 @pure def ordered2Lemma(seq: ZS): Unit = {
@@ -42,8 +42,8 @@ import org.sireum.justification.natded.prop.ImplyI
       m = m + 1
       Deduce(                                                 // required when SMT2 query is simplified
         //@formatter:off
-        1 #> All(n until m - 1)(j => seq(n) <= seq(j))  by Auto,
-        2 #> ((m - 2 >= 0) -->: (seq(m - 2) <= seq(m - 1)))  by Auto
+        1 (  All(n until m - 1)(j => seq(n) <= seq(j))  ) by Auto,
+        2 (  (m - 2 >= 0) ___>: (seq(m - 2) <= seq(m - 1))  ) by Auto
         //@formatter:on
       )
     }
@@ -54,13 +54,13 @@ import org.sireum.justification.natded.prop.ImplyI
 @pure def orderedEqTheorem(seq: ZS): Unit = {
   Deduce(|- (isOrderedH(seq) == isOrdered(seq)) Proof(
     //@formatter:off
-    1 #> (isOrderedH(seq) ->: isOrdered(seq))   by ordered1Lemma(seq),
-    4 #> SubProof(
-      5 #> Assume(isOrdered(seq)),
-      6 #> isOrderedH(seq)                      by ordered2Lemma(seq) and 5
+    1 (  isOrderedH(seq) __>: isOrdered(seq)   ) by ordered1Lemma(seq),
+    2 #> SubProof(
+      3 #> Assume(  isOrdered(seq)  ),
+      4 (  isOrderedH(seq)                  ) by ordered2Lemma(seq) and 3
     ),
-    2 #> (isOrdered(seq) ->: isOrderedH(seq))   by ImplyI(4),
-    3 #> (isOrderedH(seq) == isOrdered(seq))    by Auto and (1, 2)
+    5 (  isOrdered(seq) __>: isOrderedH(seq)   ) by ImplyI(2),
+    6 (  isOrderedH(seq) == isOrdered(seq)  ) by Auto and (1, 5)
     //@formatter:on
   ))
 }
@@ -69,9 +69,9 @@ import org.sireum.justification.natded.prop.ImplyI
 @pure def orderedEqTheoremUsingLift(seq: ZS): Unit = {
   Deduce(|- (isOrderedH(seq) == isOrdered(seq)) Proof(
     //@formatter:off
-    1 #> (isOrderedH(seq) ->: isOrdered(seq))   by ordered1Lemma(seq),
-    2 #> (isOrdered(seq) -->: isOrderedH(seq))  by Lift(ordered2Lemma(seq)),
-    3 #> (isOrderedH(seq) == isOrdered(seq))    by Auto and (1, 2)
+    1 (  isOrderedH(seq) __>: isOrdered(seq)   ) by ordered1Lemma(seq),
+    2 (  isOrdered(seq) ___>: isOrderedH(seq)   ) by Lift(ordered2Lemma(seq)),
+    3 (  isOrderedH(seq) == isOrdered(seq)  ) by Auto and (1, 2)
     //@formatter:on
   ))
 }
