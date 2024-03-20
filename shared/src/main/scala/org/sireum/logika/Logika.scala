@@ -4569,7 +4569,7 @@ import Util._
         else AST.Util.bigImply(T, cm.requires :+ AST.Util.bigAnd(cm.ensures, posOpt), posOpt)
       var (s1, v) = evalExp(Split.Disabled, smt2, cache, rtCheck, state, stmt.exp, reporter)(0)
       var branches = ISZ[Branch]()
-      lang.FrontEnd.induct(th, HashSet.empty, context.methodName, claim, stmt.exp, posOpt.get) match {
+      th.induct(T, HashSet.empty, context.methodName, claim, stmt.exp, posOpt.get) match {
         case Some(ir) =>
           val lcontext = context.methodName
           var cases = ir.cases
@@ -5484,6 +5484,8 @@ import Util._
           return (this, evalDeduceSteps(state, stmt))
         case stmt: AST.Stmt.DeduceSequent if stmt.justOpt.isEmpty =>
           return (this, evalDeduceSequent(state, stmt))
+        case stmt: AST.Stmt.Induct =>
+          return (this, for (sv <- evalExp(split, smt2, cache, rtCheck, state, stmt.exp, reporter)) yield sv._1)
         case _: AST.Stmt.Object => return (this, ISZ(state))
         case _: AST.Stmt.Import => return (this, ISZ(state))
         case _: AST.Stmt.Method => return (this, ISZ(state))
