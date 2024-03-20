@@ -118,7 +118,7 @@ object List {
           //@formatter:off
           1 (  l ≡ List.Cons[T](value, next)  ) by Premise, // auto-generated
           2 (  next.length >= 0               ) by Premise, // auto-generated
-          3 (  l.length ≡ (1 + next.length)   ) by Simpl,
+          3 (  l.length ≡ (1 + next.length)   ) by Simpl,   // Auto,
           4 (  l.length >= 0                  ) by Auto and (2, 3)
           //@formatter:on
         )
@@ -128,7 +128,7 @@ object List {
         Deduce(
           //@formatter:off
           1 (  l ≡ List.Nil[T]()  ) by Premise, // auto-generated
-          2 (  l.length >= 0      ) by Simpl
+          2 (  l.length >= 0      ) by Simpl    // Auto
           //@formatter:on
         )
         return
@@ -325,6 +325,75 @@ object List {
           )
           return
           
+        }
+      }
+    }
+
+    @pure def lookupUpdateNeInduct[K, V](map: Map[K, V], key1: K, key2: K, value: V): Unit = {
+      Contract(
+        Requires(key1 ≢ key2),
+        Ensures(lookup(update(map, key1, value), key2) ≡ lookup(map, key2))
+      )
+      (map: @induct) match {
+        case Cons(p, next) => {
+
+          if (p._1 ≡ key1) {
+
+            Deduce(
+              //@formatter:off
+              1 (  map ≡ Cons(p, next)                                         ) by Premise, // auto-generated
+              2 (  key1 ≢ key2                                                 ) by Premise,
+              3 (  p._1 ≡ key1                                                 ) by Premise,
+              4 (  p._1 ≢ key2                                                 ) by Auto,
+              5 (  update(map, key1, value) ≡ Cons(key1 ~> value, next)        ) by RSimpl(RS(update _)), //Auto,
+              6 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)  ) by RSimpl(RS(lookup _))  //Auto
+              //@formatter:on
+            )
+            return
+
+          } else {
+
+            if (p._1 ≡ key2) {
+              Deduce(
+                //@formatter:off
+                1 (  map ≡ Cons(p, next)                                            ) by Premise, // Auto-generated
+                2 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by Premise, // Auto-generated
+                3 (  key1 ≢ key2                                                    ) by Premise,
+                4 (  !(p._1 ≡ key1)                                                 ) by Premise,
+                5 (  p._1 ≡ key2                                                    ) by Premise,
+                6 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
+                7 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
+                //@formatter:on
+              )
+            } else {
+              Deduce(
+                //@formatter:off
+                1 (  map ≡ Cons(p, next)                                            ) by Premise, // Auto-generated
+                2 (  lookup(update(next, key1, value), key2) ≡ lookup(next, key2)   ) by Premise, // Auto-generated
+                3 (  key1 ≢ key2                                                    ) by Premise,
+                4 (  !(p._1 ≡ key1)                                                 ) by Premise,
+                5 (  !(p._1 ≡ key2)                                                 ) by Premise,
+                6 (  update(map, key1, value) ≡ Cons(p, update(next, key1, value))  ) by RSimpl(RS(update _)),
+                7 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))
+                //@formatter:on
+              )
+            }
+            return
+
+          }
+
+        }
+        case Nil() => {
+          Deduce(
+            //@formatter:off
+            1 (  map ≡ Nil[(K, V)]()                                            ) by Premise, // Auto-generated
+            2 (  key1 ≢ key2                                                    ) by Premise,
+            3 (  update(map, key1, value) ≡ Cons(key1 ~> value, Nil[(K, V)]())  ) by RSimpl(RS(update _)), //Auto,
+            4 (  lookup(update(map, key1, value), key2) ≡ lookup(map, key2)     ) by RSimpl(RS(lookup _))  //Auto,
+            //@formatter:on
+          )
+          return
+
         }
       }
     }
@@ -541,12 +610,12 @@ object List {
         )
       )
 
-      q.strategy match {
+      (q.strategy: @induct) match {
         case Queue.Strategy.DropEarliest => {
           if (q.length < q.capacity) {
             Deduce(
               //@formatter:off
-              1 (  q.strategy ≡ List.Queue.Strategy.DropEarliest  ) by Premise,
+              1 (  q.strategy ≡ List.Queue.Strategy.DropEarliest  ) by Premise, // Auto-generated
               2 (  q.length < q.capacity                          ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity                ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy                ) by Simpl
@@ -556,7 +625,7 @@ object List {
           } else {
             Deduce(
               //@formatter:off
-              1 (  q.strategy ≡ List.Queue.Strategy.DropEarliest  ) by Premise,
+              1 (  q.strategy ≡ List.Queue.Strategy.DropEarliest  ) by Premise, // Auto-generated
               2 (  !(q.length < q.capacity)                       ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity                ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy                ) by Simpl
@@ -569,7 +638,7 @@ object List {
           if (q.length < q.capacity) {
             Deduce(
               //@formatter:off
-              1 (  q.strategy ≡ List.Queue.Strategy.DropLatest  ) by Premise,
+              1 (  q.strategy ≡ List.Queue.Strategy.DropLatest  ) by Premise, // Auto-generated
               2 (  q.length < q.capacity                        ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity              ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy              ) by Simpl
@@ -579,7 +648,7 @@ object List {
           } else {
             Deduce(
               //@formatter:off
-              1 (  q.strategy ≡ List.Queue.Strategy.DropLatest  ) by Premise,
+              1 (  q.strategy ≡ List.Queue.Strategy.DropLatest  ) by Premise, // Auto-generated
               2 (  !(q.length < q.capacity)                     ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity              ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy              ) by Simpl
@@ -592,7 +661,7 @@ object List {
           if (q.length < q.capacity) {
             Deduce(
               //@formatter:off
-              1 (  q.strategy ≡ List.Queue.Strategy.Error  ) by Premise,
+              1 (  q.strategy ≡ List.Queue.Strategy.Error  ) by Premise, // Auto-generated
               2 (  q.length < q.capacity                   ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity         ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy         ) by Simpl
@@ -602,7 +671,7 @@ object List {
           } else {
             Deduce(
               //@formatter:off
-              1 (  q.strategy ≡ List.Queue.Strategy.Error  ) by Premise,
+              1 (  q.strategy ≡ List.Queue.Strategy.Error  ) by Premise, // Auto-generated
               2 (  !(q.length < q.capacity)                ) by Premise,
               3 (  q.push(a).capacity ≡ q.capacity         ) by Simpl,
               4 (  q.push(a).strategy ≡ q.strategy         ) by Simpl
@@ -614,7 +683,7 @@ object List {
         case Queue.Strategy.Unbounded => {
           Deduce(
             //@formatter:off
-            1 (  q.strategy ≡ List.Queue.Strategy.Unbounded  ) by Premise,
+            1 (  q.strategy ≡ List.Queue.Strategy.Unbounded  ) by Premise, // Auto-generated
             2 (  q.push(a).capacity ≡ q.capacity             ) by Simpl,
             3 (  q.push(a).strategy ≡ q.strategy             ) by Simpl
             //@formatter:on
@@ -630,7 +699,7 @@ object List {
         Ensures(q.push(a).buffer ≡ (q.buffer ++ List.make(a)))
       )
 
-      q.strategy match {
+      (q.strategy: @induct) match {
         case Queue.Strategy.DropEarliest => {
           Deduce(
             //@formatter:off
@@ -683,7 +752,7 @@ object List {
 
       framePush(q, a)
 
-      q.strategy match {
+      (q.strategy: @induct) match {
         case Queue.Strategy.DropEarliest => {
           if (q.length < q.capacity) {
 

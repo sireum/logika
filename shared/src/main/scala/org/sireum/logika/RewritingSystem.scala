@@ -598,7 +598,7 @@ object RewritingSystem {
                 }
                 val patterns2: ISZ[Rewriter.Pattern.Claim] =
                   (for (k <- 0 until apcs.size; apc <- toCondEquiv(th, apcs(k)._2)) yield
-                    r2l(Rewriter.Pattern.Claim(pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))) ++
+                    r2l(Rewriter.Pattern.Claim(pattern.isInObject, pattern.name :+ s"Assumption$k", F, isPermutative(apc), HashSSet.empty, apc))) ++
                     patterns
                 val o2 = Rewriter(maxCores, th, HashSMap.empty, patterns2, methodPatterns, fromStepOpt, F, F,
                   maxUnfolding, F, F, F, ISZ()).transformCoreExpBase(cache, o).getOrElse(o)
@@ -650,11 +650,14 @@ object RewritingSystem {
       @pure def toRightToLeft: Rewriter.Pattern = {
         return this
       }
+      @pure def isInObject: B
+      @pure def name: ISZ[String]
     }
 
     object Pattern {
 
-      @datatype class Claim(val name: ISZ[String],
+      @datatype class Claim(val isInObject: B,
+                            val name: ISZ[String],
                             val rightToLeft: B,
                             val isPermutative: B,
                             val localPatternSet: LocalPatternSet,
@@ -680,6 +683,7 @@ object RewritingSystem {
                              val id: String,
                              val params: ISZ[(String, AST.Typed)],
                              val exp: AST.CoreExp.Base) extends Pattern {
+        @strictpure def name: ISZ[String] = owner :+ id
         @memoize def toFun: AST.CoreExp.Fun = {
           val context = owner :+ id
           var map = HashMap.empty[AST.CoreExp, AST.CoreExp.ParamVarRef]
@@ -2832,7 +2836,7 @@ object RewritingSystem {
               case c => RewritingSystem.translateExp(th, T, c)
             }
             return for (c <- RewritingSystem.toCondEquiv(th, claim)) yield
-              Rewriter.Pattern.Claim(name, F, isPermutative(c), localPatternSet, c)
+              Rewriter.Pattern.Claim(T, name, F, isPermutative(c), localPatternSet, c)
           case info: Info.Fact =>
             var localPatternSet: RewritingSystem.LocalPatternSet = HashSSet.empty
             var r = ISZ[Rewriter.Pattern]()
@@ -2846,7 +2850,7 @@ object RewritingSystem {
                 case c => RewritingSystem.translateExp(th, T, c)
               }
               for (c <- RewritingSystem.toCondEquiv(th, claim)) {
-                r = r :+ Rewriter.Pattern.Claim(name, F, isPermutative(c), localPatternSet, c)
+                r = r :+ Rewriter.Pattern.Claim(T, name, F, isPermutative(c), localPatternSet, c)
               }
             }
             return r
@@ -2887,7 +2891,7 @@ object RewritingSystem {
             exp = AST.CoreExp.Arrow(translateExp(th, T, requires(i)), exp)
           }
           for (e <- toCondEquiv(th, exp)) {
-            r = r :+ Rewriter.Pattern.Claim(minfo.name :+ title, F, isPermutative(exp), localPatternSet, e)
+            r = r :+ Rewriter.Pattern.Claim(minfo.isInObject, minfo.name :+ title, F, isPermutative(exp), localPatternSet, e)
           }
         }
 

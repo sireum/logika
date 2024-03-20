@@ -70,9 +70,19 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       } else {
         var r1 = ISZ[Rewriter.Pattern.Claim]()
         var r2 = HashSMap.empty[(ISZ[String], B), Rewriter.Pattern.Method]
+        val (currIsInObject, currMethodName): (B, ISZ[String]) = logika.context.methodOpt match {
+          case Some(m) => (m.receiverTypeOpt.isEmpty, m.name)
+          case _ => (F, ISZ())
+        }
         for (p <- RewritingSystem.retrievePatterns(logika.th, cache, justArgs(0), HashSet.empty)) {
+          if (p.isInObject == currIsInObject && (p.name == currMethodName :+ "contract" || p.name == currMethodName)) {
+            val n: Z = if (p.name(p.name.size - 1)  == "contract") 2 else 1
+            reporter.error(step.just.id.attr.posOpt, Logika.kind, s"Cannot use ${p.name(p.name.size - n)} as a rewrite in itself")
+            return err
+          }
           p match {
-            case p: Rewriter.Pattern.Claim => r1 = r1 :+ p
+            case p: Rewriter.Pattern.Claim =>
+              r1 = r1 :+ p
             case p: Rewriter.Pattern.Method =>
               if (p.isAbs) {
                 r2 = r2 + (p.owner :+ p.id, p.isInObject) ~> p
