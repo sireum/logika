@@ -379,14 +379,16 @@ object AutoPlugin {
                     return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
                   case _ =>
                 }
-                for (pc <- normPathConditions.elements) {
-                  AutoPlugin.detectInPc(logika.th, claimNorm, step.claim, conjuncts(pc), pathConditions) match {
-                    case Some(acceptMsg) =>
-                      if (logika.config.detailedInfo) {
-                        reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
-                      }
-                      return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
-                    case _ =>
+                if (logika.config.isAuto) {
+                  for (pc <- normPathConditions.elements) {
+                    AutoPlugin.detectInPc(logika.th, claimNorm, step.claim, conjuncts(pc), pathConditions) match {
+                      case Some(acceptMsg) =>
+                        if (logika.config.detailedInfo) {
+                          reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
+                        }
+                        return logika.evalRegularStepClaimRtCheck(smt2, cache, F, state, step.claim, step.id.posOpt, reporter)
+                      case _ =>
+                    }
                   }
                 }
                 reporter.error(posOpt, Logika.kind,
