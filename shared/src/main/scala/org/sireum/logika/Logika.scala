@@ -993,9 +993,9 @@ import Util._
         }
         return s0
       }
-      if (normPCs.contains(loHiCondExp)) {
+      if (normPCs.contains(th.normalizeExp(loHiCondExp))) {
         return accept(loHiCondExp.prettyST, "is in")
-      } else if (normPCs.contains(th.normalizeExp(loCondExp)) && normPCs.contains(hiCondExp)) {
+      } else if (normPCs.contains(th.normalizeExp(loCondExp)) && normPCs.contains(th.normalizeExp(hiCondExp))) {
         return accept(st"{ ${loCondExp.prettyST}; ${hiCondExp.prettyST} }", "is a subset of")
       } else {
         val sizeCond = hiCondExp.right
