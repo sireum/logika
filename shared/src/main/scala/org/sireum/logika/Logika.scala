@@ -4548,8 +4548,8 @@ import Util._
           AST.Exp.Ident(vb.id, AST.ResolvedAttr(vb.attr.posOpt, Some(AST.ResolvedInfo.LocalVar(vb.idContext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, vb.id.value)), vb.attr.typedOpt))
         (p1, p2) match {
           case (p1: AST.Pattern.Ref, p2: AST.Pattern.Ref) if p1.attr.resOpt == p2.attr.resOpt => return Some(HashMap.empty)
-          case (p1: AST.Pattern.VarBinding, p2: AST.Pattern.VarBinding) if p1.id.value == p2.id.value && p1.idContext == p2.idContext =>
-            return Some(HashMap.empty[AST.Exp, AST.Exp] + ident(p1) ~> ident(p2))
+          case (p1: AST.Pattern.VarBinding, p2: AST.Pattern.VarBinding) if p1.idContext == p2.idContext =>
+            return Some(HashMap.empty[AST.Exp, AST.Exp] + ident(p2) ~> ident(p1))
           case (p1: AST.Pattern.Structure, p2: AST.Pattern.Structure) if p1.attr.typedOpt == p2.attr.typedOpt =>
             var m = HashMap.empty[AST.Exp, AST.Exp]
             for (i <- 0 until p1.patterns.size) {
