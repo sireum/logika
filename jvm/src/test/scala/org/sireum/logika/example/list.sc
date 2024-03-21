@@ -192,7 +192,7 @@ object List {
               2 (  !(p._1 ≡ key)                                                ) by Premise,
               3 (  update(map, key, value) ≡ Cons(p, update(next, key, value))  ) by RSimpl(RS(update _)), //Auto,
               4 (  lookup(Cons(p, update(next, key, value)), key) ≡
-                lookup(update(next, key, value), key)                     ) by RSimpl(RS(lookup _)),
+                     lookup(update(next, key, value), key)                      ) by RSimpl(RS(lookup _)),
               5 (  lookup(update(next, key, value), key) ≡ value                ) by Auto,
               6 (  lookup(update(map, key, value), key) ≡ value                 ) by Rewrite(RS(lookup _), 5)
               //@formatter:on
@@ -245,7 +245,7 @@ object List {
               3 (  !(p._1 ≡ key)                                                ) by Premise,
               4 (  update(map, key, value) ≡ Cons(p, update(next, key, value))  ) by RSimpl(RS(update _)), //Auto,
               5 (  lookup(Cons(p, update(next, key, value)), key) ≡
-                      lookup(update(next, key, value), key)                     ) by RSimpl(RS(lookup _)) and (3, 4),
+                     lookup(update(next, key, value), key)                      ) by RSimpl(RS(lookup _)) and (3, 4),
               6 (  lookup(update(map, key, value), key) ≡ value                 ) by Rewrite(RS(lookup _), 2)
               //@formatter:on
             )
@@ -758,7 +758,6 @@ object List {
         Requires(q.wellFormed),
         Ensures(q.push(a).wellFormed)
       )
-      setOptions("Logika", """--rw-eval-trace --par --par-branch --background disabled""")
 
       framePush(q, a)
 
