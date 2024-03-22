@@ -1911,11 +1911,9 @@ object RewritingSystem {
         rOpt match {
           case Some(_: AST.CoreExp.Lit) => done = T
           case Some(r) =>
-            val rOpt2 = evalBaseH(r)
-            if (rOpt2.isEmpty) {
-              done = T
-            } else {
-              rOpt = rOpt2
+            evalBaseH(r) match {
+              case rOpt2@Some(r2) if r != r2 => rOpt = rOpt2
+              case _ => done = T
             }
           case _ => done = T
         }
