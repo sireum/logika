@@ -1805,49 +1805,51 @@ object RewritingSystem {
       }
     }
 
-    val eqMap: HashMap[AST.CoreExp.Base, (AST.CoreExp.Base, AST.ProofAst.StepId)] = if (config.equivSubst) {
-      var r = HashMap.empty[AST.CoreExp.Base, (AST.CoreExp.Base, AST.ProofAst.StepId)]
-      for (p <- provenClaims.entries) {
-        val (claim, stepId) = p
-        claim match {
-          case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, _) =>
-            (left, right) match {
-              case (left: AST.CoreExp.Lit, _) => r = r + right ~> (left, stepId)
-              case (_, right: AST.CoreExp.Lit) => r = r + left ~> (right, stepId)
-              case (left: AST.CoreExp.Constructor, _) => r = r + right ~> (left, stepId)
-              case (_, right: AST.CoreExp.Constructor) => r = r + left ~> (right, stepId)
-              case (_, _) =>
-                val (key, value): (AST.CoreExp.Base, AST.CoreExp.Base) =
-                  if (left < right) (right, left) else (left, right)
-                r.get(key) match {
-                  case Some((prev, _)) =>
-                    if (value < prev) {
-                      r = r + key ~> (value, stepId)
-                    }
-                  case _ => r = r + key ~> (value, stepId)
-                }
-            }
-          case _ =>
-        }
-      }
-      r
-    } else {
-      HashMap.empty
-    }
-
     var trace = ISZ[Trace]()
-    var evalCache = HashMap.empty[AST.CoreExp.Base, AST.CoreExp.Base]
+    var evalCache = HashMap.empty[AST.CoreExp.Base, Option[AST.CoreExp.Base]]
 
-    def setCache(e: AST.CoreExp.Base, r: AST.CoreExp.Base): Unit = {
-      evalCache = evalCache + e ~> r
+    def setCache(e: AST.CoreExp.Base, rOpt: Option[AST.CoreExp.Base]): Unit = {
+      evalCache = evalCache + e ~> rOpt
     }
 
     def evalBaseH(e: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
       evalCache.get(e) match {
-        case Some(r) =>
-          trace = trace :+ Trace.Eval(st"cache", e, r)
-          return Some(r)
+        case Some(rOpt) => rOpt match {
+          case Some(r) =>
+            trace = trace :+ Trace.Eval(st"cache", e, r)
+            return Some(r)
+          case _ => return rOpt
+        }
         case _ =>
+      }
+      val eqMap: HashMap[AST.CoreExp.Base, (AST.CoreExp.Base, AST.ProofAst.StepId)] = if (config.equivSubst) {
+        var r = HashMap.empty[AST.CoreExp.Base, (AST.CoreExp.Base, AST.ProofAst.StepId)]
+        for (p <- provenClaims.entries) {
+          val (claim, stepId) = p
+          claim match {
+            case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, _) =>
+              (left, right) match {
+                case (left: AST.CoreExp.Lit, _) => r = r + right ~> (left, stepId)
+                case (_, right: AST.CoreExp.Lit) => r = r + left ~> (right, stepId)
+                case (left: AST.CoreExp.Constructor, _) => r = r + right ~> (left, stepId)
+                case (_, right: AST.CoreExp.Constructor) => r = r + left ~> (right, stepId)
+                case (_, _) =>
+                  val (key, value): (AST.CoreExp.Base, AST.CoreExp.Base) =
+                    if (left < right) (right, left) else (left, right)
+                  r.get(key) match {
+                    case Some((prev, _)) =>
+                      if (value < prev) {
+                        r = r + key ~> (value, stepId)
+                      }
+                    case _ => r = r + key ~> (value, stepId)
+                  }
+              }
+            case _ =>
+          }
+        }
+        r
+      } else {
+        HashMap.empty
       }
       var rOpt = Option.none[AST.CoreExp.Base]()
       if (e.tipe == AST.Typed.b) {
@@ -1913,23 +1915,30 @@ object RewritingSystem {
                 trace = trace :+ Trace.Eval(st"substitution using $stepId [${to.prettyST}/${e.prettyST}]", e, to)
               }
               rOpt = Some(to)
-              setCache(e, to)
             case _ =>
-              setCache(e, r)
           }
         case _ =>
       }
+      setCache(e, rOpt)
       var done = rOpt.isEmpty
       while (!done) {
         rOpt match {
           case Some(_: AST.CoreExp.Lit) => done = T
           case Some(r) =>
-            evalBaseH(r) match {
-              case rOpt2@Some(r2) if r != r2 =>
-                setCache(e, r2)
-                setCache(r, r2)
-                rOpt = rOpt2
-              case _ => done = T
+            val rOpt2 = evalBaseH(r)
+            rOpt2 match {
+              case Some(r2) =>
+                if (r != r2) {
+                  setCache(r, rOpt2)
+                  setCache(e, rOpt2)
+                  rOpt = rOpt2
+                } else {
+                  setCache(r, None())
+                  done = T
+                }
+              case _ =>
+                setCache(r, None())
+                done = T
             }
           case _ => done = T
         }
