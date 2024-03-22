@@ -1836,8 +1836,19 @@ object RewritingSystem {
     }
 
     var trace = ISZ[Trace]()
+    var evalCache = HashMap.empty[AST.CoreExp.Base, AST.CoreExp.Base]
+
+    def setCache(e: AST.CoreExp.Base, r: AST.CoreExp.Base): Unit = {
+      evalCache = evalCache + e ~> r
+    }
 
     def evalBaseH(e: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
+      evalCache.get(e) match {
+        case Some(r) =>
+          trace = trace :+ Trace.Eval(st"cache", e, r)
+          return Some(r)
+        case _ =>
+      }
       var rOpt = Option.none[AST.CoreExp.Base]()
       if (e.tipe == AST.Typed.b) {
         provenClaims.get(e) match {
@@ -1902,7 +1913,9 @@ object RewritingSystem {
                 trace = trace :+ Trace.Eval(st"substitution using $stepId [${to.prettyST}/${e.prettyST}]", e, to)
               }
               rOpt = Some(to)
+              setCache(e, to)
             case _ =>
+              setCache(e, r)
           }
         case _ =>
       }
@@ -1912,7 +1925,10 @@ object RewritingSystem {
           case Some(_: AST.CoreExp.Lit) => done = T
           case Some(r) =>
             evalBaseH(r) match {
-              case rOpt2@Some(r2) if r != r2 => rOpt = rOpt2
+              case rOpt2@Some(r2) if r != r2 =>
+                setCache(e, r2)
+                setCache(r, r2)
+                rOpt = rOpt2
               case _ => done = T
             }
           case _ => done = T
