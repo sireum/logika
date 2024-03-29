@@ -136,7 +136,7 @@ def compile(): Unit = {
 
 def test(): Unit = {
   compile()
-  println("Running shared tests ...")
+  println("Running tests ...")
   proc"java -jar $sireumJar proyek test --java -Xss2M --project $projectStandalone --packages org.sireum $home org.sireum.logika".
     console.echo.runCheck()
   println()
