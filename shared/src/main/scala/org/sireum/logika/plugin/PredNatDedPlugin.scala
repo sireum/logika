@@ -131,12 +131,13 @@ object PredNatDedPlugin {
         }
         var quantClaim = quant.fun.exp.asInstanceOf[AST.Stmt.Expr].exp
         if (quant.fun.params.size > size) {
-          quantClaim = quant.fun(
+          quantClaim = quant(fun = quant.fun(
             params = ops.ISZOps(quant.fun.params).drop(size),
-            exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
+            exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt))))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
-        if (subProof.contains(logika.th.normalizeExp(substClaim))) {
+        val substClaimNorm = logika.th.normalizeExp(substClaim)
+        if (subProof.contains(substClaimNorm)) {
           acceptedMsg =
             st"""$acceptedMsg sub-proof $subProofNo:
                 |
