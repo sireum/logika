@@ -1521,7 +1521,7 @@ import Util._
             case _ => (None(), Some(pos), None())
           }
         val r = smt2.valid(context.methodName, config, cache, T,
-          st"${implicitCheckOpt}Non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
+          st"${implicitCheckOpt}non-zero second operand of '$op' at [${pos.beginLine}, ${pos.beginColumn}]".render,
           pos, s0.claims :+ claim, State.Claim.Prop(T, sym), reporter)
         r.kind match {
           case Smt2Query.Result.Kind.Unsat => return s1.addClaim(claim)
