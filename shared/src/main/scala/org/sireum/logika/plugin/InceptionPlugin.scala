@@ -144,6 +144,14 @@ object InceptionPlugin {
               val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(te2, AST.TypedAttr(te.posOpt, te.typedOpt)),
                 AST.TypedAttr(fe.posOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F, paramTypes, fe.typedOpt.get))))
               addResult(id, fun)
+              if (!ok) {
+                te match {
+                  case te: AST.Exp.Invoke =>
+                    ok = T
+                    recInvoke(fe, te)
+                  case _ =>
+                }
+              }
             case _ =>
           }
           r.get(id) match {
