@@ -28,9 +28,8 @@ package org.sireum.logika.plugin
 import org.sireum._
 import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.TypeHierarchy
-import org.sireum.logika.{Config, Logika, Smt2, Smt2Query, State, StepProofContext}
+import org.sireum.logika.{Logika, Smt2, Smt2Query, State, StepProofContext}
 import org.sireum.logika.Logika.Reporter
-import org.sireum.logika.plugin.AutoPlugin.conjuncts
 
 object AutoPlugin {
   @record class MAlgebraChecker(var reporter: Reporter) extends AST.MTransformer {
@@ -145,11 +144,11 @@ object AutoPlugin {
     }
   }
 
-  @strictpure def conjuncts(e: AST.Exp): ISZ[AST.Exp] = {
+  @strictpure def conjuncts(th: TypeHierarchy, e: AST.Exp): ISZ[AST.Exp] = {
     e match {
       case e: AST.Exp.Binary if e.attr.resOpt.get == AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd) =>
-        conjuncts(e.left) ++ conjuncts(e.right)
-      case _ => ISZ(e)
+        conjuncts(th, e.left) ++ conjuncts(th, e.right)
+      case _ => ISZ(th.normalizeExp(e))
     }
   }
 
@@ -160,6 +159,9 @@ object AutoPlugin {
           |  ${(for (e <- pc) yield e.prettyST, ",\n")}
           |}"""
     )
+    if ((HashSet ++ conjuncts).contains(claimNorm)) {
+      return inPc
+    }
     claimNorm match {
       case claimNorm: AST.Exp.Binary =>
         claimNorm.attr.resOpt match {
@@ -381,7 +383,7 @@ object AutoPlugin {
                 }
                 if (logika.config.isAuto) {
                   for (pc <- normPathConditions.elements) {
-                    AutoPlugin.detectInPc(logika.th, claimNorm, step.claim, conjuncts(pc), pathConditions) match {
+                    AutoPlugin.detectInPc(logika.th, claimNorm, step.claim, AutoPlugin.conjuncts(logika.th, pc), pathConditions) match {
                       case Some(acceptMsg) =>
                         if (logika.config.detailedInfo) {
                           reporter.inform(pos, Logika.Reporter.Info.Kind.Verified, acceptMsg.render)
