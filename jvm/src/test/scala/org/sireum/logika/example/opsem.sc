@@ -369,9 +369,9 @@ object Spec {
   )
 }
 
-object Impl {
+object Exec {
 
-  def evalLitB(state: State, e: AST.Exp.LitB): (State, State.Value) = {
+  @pure def evalLitB(state: State, e: AST.Exp.LitB): (State, State.Value) = {
     Contract(
       Requires(state.status == State.Status.Normal),
       Ensures(Spec.evalExp(state, e) ≡ Res)
@@ -387,7 +387,7 @@ object Impl {
     return (state, State.Value.Boolean(e.value))
   }
 
-  def evalLitZ(state: State, e: AST.Exp.LitZ): (State, State.Value) = {
+  @pure def evalLitZ(state: State, e: AST.Exp.LitZ): (State, State.Value) = {
     Contract(
       Requires(state.status == State.Status.Normal),
       Ensures(Spec.evalExp(state, e) ≡ Res)
@@ -402,7 +402,7 @@ object Impl {
     return (state, State.Value.Integer(e.value))
   }
 
-  def evalVarRef(state: State, e: AST.Exp.VarRef): (State, State.Value) = {
+  @pure def evalVarRef(state: State, e: AST.Exp.VarRef): (State, State.Value) = {
     Contract(
       Requires(state.status == State.Status.Normal),
       Ensures(Spec.evalExp(state, e) ≡ Res)
@@ -428,7 +428,7 @@ object Impl {
     }
   }
 
-  def evalBinaryExp(s0: State, e: AST.Exp.Binary): (State, State.Value) = {
+  @pure def evalBinaryExp(s0: State, e: AST.Exp.Binary): (State, State.Value) = {
     Contract(
       Requires(s0.status == State.Status.Normal),
       Ensures(Spec.evalExp(s0, e) ≡ Res)
@@ -882,7 +882,7 @@ object Impl {
     }
   }
 
-  def evalExp(state: State, exp: AST.Exp): (State, State.Value) = {
+  @pure def evalExp(state: State, exp: AST.Exp): (State, State.Value) = {
     Contract(
       Ensures(Spec.evalExp(state, exp) ≡ Res)
     )
