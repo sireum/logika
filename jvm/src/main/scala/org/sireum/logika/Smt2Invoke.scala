@@ -79,8 +79,9 @@ object Smt2Invoke {
                   timeoutInMs: Z,
                   rlimit: Z): Smt2Query.Result = {
     val configs: ISZ[Smt2Config] = for (smt2Config <- smt2Configs if isSat == smt2Config.isSat) yield smt2Config
-    val start = extension.Time.currentMillis
-    val fs: ISZ[() => Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] @pure] = for (config <- configs) yield () => {
+    val fs: ISZ[() => Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type, Z)] @pure] = for (j <- configs.indices) yield () => {
+      val config = configs(j)
+      val start = extension.Time.currentMillis
       val args = Smt2.solverArgs(config.name, timeoutInMs, rlimit).get ++ config.opts
       var proc = Os.proc(config.exe +: args).input(queryString)
       proc = proc.timeout(timeoutInMs * Os.numOfProcessors * 2)
@@ -105,7 +106,7 @@ object Smt2Invoke {
       } else {
         F
       }
-      val rOpt: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type)] = {
+      val r: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type, Z)] = {
         val out = ops.StringOps(pout).split((c: C) => c == '\n')
         val firstLine: String = if (isTimeout) {
           "timeout"
@@ -124,57 +125,59 @@ object Smt2Invoke {
           }
           ops.StringOps(ops.StringOps(l).split((c: C) => c == ' ')(0)).trim
         }
+        val time = extension.Time.currentMillis - start
         firstLine match {
           case string"sat" => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, queryString,
             st"""; Result: ${if (isSat) "Sat" else "Invalid"}
                 |; Solver: ${config.exe}
-                |; Arguments: ${(args, " ")}""".render, pout, 0, F))
+                |; Arguments: ${(args, " ")}""".render, pout, time, 0, F))
           case string"unsat" => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, queryString,
             st"""; Result: ${if (isSat) "Unsat" else "Valid"}
                 |; Solver: ${config.exe}
-                |; Arguments: ${(args, " ")}""".render, pout, 0, F))
-          case string"timeout" => Either.Right((config.exe, args, Smt2Query.Result.Kind.Timeout))
-          case string"unknown" => Either.Right((config.exe, args, Smt2Query.Result.Kind.Unknown))
-          case string"cvc5 interrupted by timeout." => Either.Right((config.exe, args, Smt2Query.Result.Kind.Timeout))
+                |; Arguments: ${(args, " ")}""".render, pout, time, 0, F))
+          case string"timeout" => Either.Right((config.exe, args, Smt2Query.Result.Kind.Timeout, time))
+          case string"unknown" => Either.Right((config.exe, args, Smt2Query.Result.Kind.Unknown, time))
+          case string"cvc5 interrupted by timeout." => Either.Right((config.exe, args, Smt2Query.Result.Kind.Timeout, time))
           case _ => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, queryString,
             st"""; Result: Error (exit code ${pr.exitCode})
                 |; Solver: ${config.exe}
                 |; Arguments: ${(args, " ")}
                 |; Output:
                 |${(for (line <- ops.StringOps(pout).split((c: C) => c == '\n')) yield st"; $line", "\n")}
-                |$queryString""".render, pout, 0, F))
+                |$queryString""".render, pout, time, 0, F))
         }
       }
-      rOpt
+      r
     }
     if (fs.isEmpty) {
       return Smt2Query.Result(Smt2Query.Result.Kind.Error, "all", queryString,
         st"""; Result: Error (Ill-configuration causes no SMT2 solver found for ${if (isSat) "sat" else "validity checking"})
-            |; Time: ${Smt2Formatter.formatTime(extension.Time.currentMillis - start)}
-            |;$queryString""".render, "", 0, F)
+            |; Time: ${Smt2Formatter.formatTime(0)}
+            |;$queryString""".render, "", 0, 0, F)
     }
-    var r: Smt2Query.Result = ops.ISZOpsUtil.invokeAnyEither(fs, smt2Seq || fs.size == 1) match {
-      case Either.Left(qr) =>
+    val p: (Smt2Query.Result, Z) = ops.ISZOpsUtil.invokeAnyEither(fs, smt2Seq || fs.size == 1) match {
+      case (Either.Left(qr), t) =>
         if (haltOnError && qr.kind == Smt2Query.Result.Kind.Error) {
           halt(
             st"""${qr.info}
-                |; Time: ${Smt2Formatter.formatTime(extension.Time.currentMillis - start)}
+                |; Time: ${Smt2Formatter.formatTime(t)}
                 |${qr.query}""".render
           )
         }
-        qr
-      case Either.Right(ts) =>
-        val sortedTs = ops.ISZOps(ts).sortWith((t1: (String, ISZ[String], Smt2Query.Result.Kind.Type), t2: (String, ISZ[String], Smt2Query.Result.Kind.Type)) =>
+        (qr, t)
+      case (Either.Right(ts), t) =>
+        val sortedTs = ops.ISZOps(ts).sortWith((t1: (String, ISZ[String], Smt2Query.Result.Kind.Type, Z), t2: (String, ISZ[String], Smt2Query.Result.Kind.Type, Z)) =>
           Os.path(t1._1).name < Os.path(t2._1).name
         )
         val kinds = Set.empty[String] ++ (for (t <- sortedTs) yield t._3.string)
-        Smt2Query.Result(Smt2Query.Result.Kind.Unknown, if (ts.isEmpty) "none" else "all", queryString,
+        (Smt2Query.Result(Smt2Query.Result.Kind.Unknown, if (ts.isEmpty) "none" else "all", queryString,
           st"""; Result: ${(ops.ISZOps(kinds.elements).sortWith((s1: String, s2: String) => s1 < s2), " or ")}
               |; Solvers and arguments:
               |${(for (t <- sortedTs) yield st"; * ${t._3}: ${t._1}, ${(t._2, " ")}", "\n")}""".render,
-          "", 0, F)
+          "", t, t, F), t)
     }
-    r = r(timeMillis = extension.Time.currentMillis - start)
+    var (r, t) = p
+    r = r(totalTimeMillis = t)
     return r
   }
 

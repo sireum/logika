@@ -39,7 +39,7 @@ object Smt2Query {
       "Error"
     }
 
-    val empty: Result = Result(Kind.Error, "", "", "", "", 0, F)
+    val empty: Result = Result(Kind.Error, "", "", "", "", 0, 0, F)
   }
 
   @datatype class Result(val kind: Result.Kind.Type,
@@ -48,6 +48,7 @@ object Smt2Query {
                          val info: String,
                          val output: String,
                          val timeMillis: Z,
+                         val totalTimeMillis: Z,
                          val cached: B)
 
 }
