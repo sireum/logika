@@ -204,7 +204,7 @@ object Logika {
       val (fileUriOpt, m) = p
       m.get(OptionsUtil.logika) match {
         case Some(options) =>
-          OptionsUtil.toConfig(defaultConfig, maxCores, "file", nameExePathMap, options) match {
+          OptionsUtil.toConfig(defaultConfig, maxCores, "file", nameExePathMap, options(0)) match {
             case Either.Left(c) => sourceConfigMap = sourceConfigMap + fileUriOpt ~> c
             case Either.Right(msgs) =>
               for (msg <- msgs) {

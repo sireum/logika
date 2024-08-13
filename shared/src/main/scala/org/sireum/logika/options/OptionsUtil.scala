@@ -36,7 +36,7 @@ object OptionsUtil {
                  fileContent: String, posOpt: Option[message.Position], reporter: message.Reporter): Config = {
     val m = LibUtil.mineOptions(fileContent)
     val options: String = m.get(logika) match {
-      case Some(o) => o
+      case Some(o) => o(0)
       case _ => return defaultConfig
     }
     toConfig(defaultConfig, maxCores, title, nameExePathMap, options) match {
