@@ -401,11 +401,16 @@ object Logika {
 
     val tasks = findTasks()
 
-    val smt2 = smt2f(th)
+    checkTasks(tasks, par, nameExePathMap, maxCores, fileOptions, smt2f, cache, reporter, verifyingStartTime)
+  }
 
+  def checkTasks(tasks: ISZ[Task], par: Z,
+                 nameExePathMap: HashMap[String, String], maxCores: Z, fileOptions: LibUtil.FileOptionMap,
+                 smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache,
+                 reporter: Reporter, verifyingStartTime: Z): Unit = {
     def compute(task: Task): B = {
       val r = reporter.empty
-      val csmt2 = smt2
+      val csmt2 = smt2f(task.th)
       task.compute(nameExePathMap, maxCores, fileOptions, csmt2, cache, r)
       reporter.combine(r)
       return T
@@ -417,6 +422,7 @@ object Logika {
     if (verifyingStartTime != 0) {
       reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
     }
+
   }
 
   def checkScript(fileUriOpt: Option[String], input: String, config: Config, nameExePathMap: HashMap[String, String],
