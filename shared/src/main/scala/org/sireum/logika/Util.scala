@@ -652,7 +652,14 @@ object Util {
     }
 
     @pure def equateOpt(t: AST.Typed, e1: AST.Exp, e2: AST.Exp): Option[AST.Exp] = {
-      return if (e1 == e2) None() else Some(equate(t, e1, e2))
+      if (e1 != e2) {
+        e2 match {
+          case AST.Exp.At(_, AST.Exp.LitString(".temp"), _, _) if e1.isInstanceOf[AST.Exp.Result] =>
+          case _ =>
+            return Some(equate(t, e1, e2))
+        }
+      }
+      return None()
     }
 
     @pure def simplify(cs: ISZ[AST.Exp]): ISZ[AST.Exp] = {

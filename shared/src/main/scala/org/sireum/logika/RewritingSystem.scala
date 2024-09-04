@@ -203,20 +203,23 @@ object RewritingSystem {
                             val rewritten: AST.CoreExp.Base,
                             val evaluatedOpt: Option[AST.CoreExp.Base],
                             val assumptions: ISZ[(AST.CoreExp.Base, (AST.ProofAst.StepId, AST.CoreExp.Base))]) extends Trace {
-      @strictpure def toST: ST = {
-        val assumptionsOpt: Option[ST] = if (assumptions.isEmpty) None() else Some(
-          st"""using assumptions:
-              |${(for (a <- assumptions) yield st"${a._2._1}) ${a._2._2.prettyST}", "\n")}"""
-        )
-        val evOpt: Option[ST] = evaluatedOpt match {
-          case Some(evaluated) => Some(st"≡  ${evaluated.prettyST}")
-          case _ => None()
+      @pure def toST: ST = {
+        var desc = ISZ[ST]()
+        if (assumptions.nonEmpty) {
+          desc = desc :+
+            st"""using assumptions:
+                |${(for (a <- assumptions) yield st"${a._2._1}) ${a._2._2.prettyST}", "\n")}"""
         }
-        st"""by [rw] ${if (rightToLeft) "~" else ""}${(name, ".")}: ${pattern.prettyPatternST}
-            |   $assumptionsOpt
-            |   on ${original.prettyST}
-            |   ${if (rightToLeft) "<" else ">"}  ${rewritten.prettyST}
-            |   $evOpt"""
+        desc = desc :+ st"on ${original.prettyST}"
+        desc = desc :+ st"${if (rightToLeft) "<" else ">"}  ${rewritten.prettyST}"
+        evaluatedOpt match {
+          case Some(evaluated) => desc = desc :+ st"≡  ${evaluated.prettyST}"
+          case _ =>
+        }
+        val r =
+          st"""by [rw] ${if (rightToLeft) "~" else ""}${(name, ".")}: ${pattern.prettyPatternST}
+              |   ${(desc, "\n")}"""
+        return r
       }
     }
 
