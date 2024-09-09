@@ -37,7 +37,7 @@ object ReporterImpl {
       new AtomicLong(0), new AtomicLong(0), new AtomicLong(0), new AtomicLong(0))
 }
 
-final class ReporterImpl(val logPc: B,
+class ReporterImpl(val logPc: B,
                          val logPcRaw: B,
                          val logVc: B,
                          val logDetailedInfo: B,
