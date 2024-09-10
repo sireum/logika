@@ -27,6 +27,7 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.lang.ast.{Attr, ResolvedAttr, TypedAttr}
 import org.sireum.message.Message
 import org.sireum.logika.Logika.Reporter
 import org.sireum.logika.plugin.Plugin
@@ -206,6 +207,30 @@ object Task {
     }
   }
 
+  @record class LineCollector(var set: HashSSet[message.Position]) extends AST.MTransformer {
+    def addPosOpt(posOpt: Option[message.Position]): Unit = {
+      posOpt match {
+        case Some(pos) => set = set + pos
+        case _ =>
+      }
+    }
+
+    override def postAttr(o: Attr): MOption[Attr] = {
+      addPosOpt(o.posOpt)
+      return MNone()
+    }
+
+    override def postTypedAttr(o: TypedAttr): MOption[TypedAttr] = {
+      addPosOpt(o.posOpt)
+      return MNone()
+    }
+
+    override def postResolvedAttr(o: ResolvedAttr): MOption[ResolvedAttr] = {
+      addPosOpt(o.posOpt)
+      return MNone()
+    }
+  }
+
   @datatype class Claim(val th: TypeHierarchy,
                         val config: Config,
                         val title: String,
@@ -231,6 +256,11 @@ object Task {
       for (sv <- svs) {
         val (state, sym) = logika.value2Sym(sv._1, sv._2, exp.posOpt.get)
         logika.evalAssertH(T, csmt2, cache, title, state, sym, exp.posOpt, ISZ(), reporter)
+      }
+      val lc = LineCollector(HashSSet.empty)
+      lc.transformExp(exp)
+      for (pos <- lc.set.elements) {
+        reporter.coverage(F, conversions.Z.toU64(0), pos)
       }
       return reporter.messages
     }
