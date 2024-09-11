@@ -4867,8 +4867,10 @@ import Util._
         }
         s0 = stateMap._1(status = s0.status, nextFresh = s0.nextFresh)
         if (s0.ok) {
-          m = stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
-            th.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps))
+          if (step.steps.size > 0) {
+            m = stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
+              th.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps))
+          }
           return (s0, m)
         } else {
           return (s0, stateMap._2)
