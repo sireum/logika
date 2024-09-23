@@ -94,7 +94,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
         (r1, r2)
       }
-    val stepClaim = RewritingSystem.translateExp(logika.th, F, step.claim)
+    val stepClaim = logika.th.translateToBaseCoreExp(step.claim, F)
     val (fromOpt, fromCoreClaim): (Option[AST.ProofAst.StepId], AST.CoreExp.Base) = {
       if (isSimpl) {
         (None(), AST.CoreExp.True)

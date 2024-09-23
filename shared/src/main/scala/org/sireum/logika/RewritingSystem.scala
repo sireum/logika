@@ -469,6 +469,7 @@ object RewritingSystem {
               Some(o(exp = r0.getOrElse(o.exp)))
             else
               None()
+          case o: AST.CoreExp.Extended => halt(s"Infeasible: ${o.prettyST}")
         }
         rOpt
       }
@@ -759,14 +760,9 @@ object RewritingSystem {
     override def clearTaskValue(key: Logika.Cache.Key): Unit = {}
   }
 
-  val noCache: Logika.Cache = NoCache()
-
-  @pure def translateExp(th: TypeHierarchy, isPattern: B, exp: AST.Exp): AST.CoreExp.Base = {
-    return CoreExpTranslator(th, isPattern).translateExp(exp, Stack.empty, HashSMap.empty)
-  }
-
   @pure def translateAssignExp(th: TypeHierarchy, isPattern: B, ae: AST.AssignExp): AST.CoreExp.Base = {
-    return CoreExpTranslator(th, isPattern).translateAssignExp(ae, Stack.empty, HashSMap.empty)
+    return CoreExpTranslator(th, if (isPattern) CoreExpTranslator.Mode.BasePattern else CoreExpTranslator.Mode.Base).
+      translateAssignExp(ae, Stack.empty, HashSMap.empty)
   }
 
   @strictpure def paramId(n: String): String = s"_$n"
@@ -1496,6 +1492,7 @@ object RewritingSystem {
           case e: AST.CoreExp.Quant => evalQuant(e)
           case e: AST.CoreExp.InstanceOfExp => evalInstanceOf(e)
           case e: AST.CoreExp.Labeled => evalLabeled(e)
+          case e: AST.CoreExp.Extended => halt(s"Infeasible: ${e.prettyST}")
         }
       }
       rOpt match {
@@ -2446,8 +2443,8 @@ object RewritingSystem {
                 for (p <- params) {
                   localPatternSet = localPatternSet + (info.name, p.idOpt.get.value)
                 }
-                RewritingSystem.translateExp(th, T, c)
-              case c => RewritingSystem.translateExp(th, T, c)
+                th.translateToBaseCoreExp(c, T)
+              case c => th.translateToBaseCoreExp(c, T)
             }
             return for (c <- RewritingSystem.toCondEquiv(th, claim)) yield
               Rewriter.Pattern.Claim(T, name, F, isPermutative(c), localPatternSet, c)
@@ -2460,8 +2457,8 @@ object RewritingSystem {
                   for (p <- params) {
                     localPatternSet = localPatternSet + (info.name, p.idOpt.get.value)
                   }
-                  RewritingSystem.translateExp(th, T, c)
-                case c => RewritingSystem.translateExp(th, T, c)
+                  th.translateToBaseCoreExp(c, T)
+                case c => th.translateToBaseCoreExp(c, T)
               }
               for (c <- RewritingSystem.toCondEquiv(th, claim)) {
                 r = r :+ Rewriter.Pattern.Claim(T, name, F, isPermutative(c), localPatternSet, c)
@@ -2495,14 +2492,14 @@ object RewritingSystem {
           var exp: AST.CoreExp = if (ensures.isEmpty) {
             AST.CoreExp.True
           } else {
-            var ensure: AST.CoreExp.Base = translateExp(th, T, ensures(0))
+            var ensure: AST.CoreExp.Base = th.translateToBaseCoreExp(ensures(0), T)
             for (i <- 1 until ensures.size) {
-              ensure = AST.CoreExp.Binary(ensure, AST.Exp.BinaryOp.And, translateExp(th, T, ensures(i)), AST.Typed.b)
+              ensure = AST.CoreExp.Binary(ensure, AST.Exp.BinaryOp.And, th.translateToBaseCoreExp(ensures(i), T), AST.Typed.b)
             }
             ensure
           }
           for (i <- requires.size - 1 to 0 by -1) {
-            exp = AST.CoreExp.Arrow(translateExp(th, T, requires(i)), exp)
+            exp = AST.CoreExp.Arrow(th.translateToBaseCoreExp(requires(i), T), exp)
           }
           for (e <- toCondEquiv(th, exp)) {
             r = r :+ Rewriter.Pattern.Claim(minfo.isInObject, minfo.name :+ title, F, isPermutative(exp), localPatternSet, e)

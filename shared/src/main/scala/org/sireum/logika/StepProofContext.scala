@@ -44,7 +44,7 @@ object StepProofContext {
                           val exp: AST.Exp) extends StepProofContext {
     @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${exp.prettyST})"
     @memoize def coreExpClaim: AST.CoreExp.Base = {
-      return RewritingSystem.translateExp(th, F, exp)
+      return th.translateToBaseCoreExp(exp, F)
     }
   }
 
