@@ -69,6 +69,18 @@ import org.sireum.logika.Logika.Reporter
         case _ => return F
       }
     }
+    @pure def isUBuiltInOf(exp: AST.Exp, claim: AST.Exp, kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
+      exp match {
+        case exp: AST.Exp.Unary =>
+          exp.attr.resOpt.get match {
+            case res: AST.ResolvedInfo.BuiltIn if res.kind == kind =>
+              return logika.th.normalizeExp(exp.exp) == logika.th.normalizeExp(claim)
+            case _ =>
+          }
+        case _ =>
+      }
+      return F
+    }
     @pure def isUBuiltIn(exp: AST.Exp, kind: AST.ResolvedInfo.BuiltIn.Kind.Type): B = {
       exp match {
         case exp: AST.Exp.Unary =>
@@ -234,7 +246,7 @@ import org.sireum.logika.Logika.Reporter
       case string"PbC" =>
         val ISZ(subProofNo) = args
         val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo) match {
-          case Some(sp: StepProofContext.SubProof) if isUBuiltIn(sp.assumption, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => sp.claims
+          case Some(sp: StepProofContext.SubProof) if isUBuiltInOf(sp.assumption, step.claim, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => sp.claims
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the negation of step ${step.id}'s claim")
             return err
