@@ -427,7 +427,7 @@ object Logika {
 
   def checkScript(fileUriOpt: Option[String], input: String, config: Config, nameExePathMap: HashMap[String, String],
                   maxCores: Z, smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
-                  hasLogika: B, plugins: ISZ[Plugin], line: Z,
+                  hasLogika: B, plugins: ISZ[Plugin], thInit: Z => (TypeHierarchy, message.Reporter), line: Z,
                   skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
@@ -449,13 +449,12 @@ object Logika {
           if (!isWorksheet) {
             return
           }
-          val (tc, rep) = extension.Cancel.cancellable(() =>
-            lang.FrontEnd.checkedLibraryReporter)
+          val (th, rep) = extension.Cancel.cancellable(() => thInit(maxCores))
           val typeCheckingStartTime = extension.Time.currentMillis
           reporter.timing(libraryDesc, typeCheckingStartTime - libraryStartTime)
           reporter.reports(rep.messages)
-          val (th, p) = extension.Cancel.cancellable(() =>
-            lang.FrontEnd.checkWorksheet(config.parCores, Some(tc.typeHierarchy), program, reporter))
+          val (th2, p) = extension.Cancel.cancellable(() =>
+            lang.FrontEnd.checkWorksheet(config.parCores, Some(th), program, reporter))
           if (!reporter.hasError) {
             lang.tipe.PostTipeAttrChecker.checkProgram(p, reporter)
           }
@@ -465,13 +464,13 @@ object Logika {
           if (!reporter.hasError) {
             if (hasLogika) {
               if (config.transitionCache || config.smt2Caching) {
-                val dummy: U64 = if (config.interp) th.fingerprintKeepMethodBody else th.fingerprintNoMethodBody // init fingerprint
+                val dummy: U64 = if (config.interp) th2.fingerprintKeepMethodBody else th2.fingerprintNoMethodBody // init fingerprint
                 val dummy2 = config.fingerprint
               }
 
               var fileOptions: LibUtil.FileOptionMap = HashMap.empty
               fileOptions = fileOptions + fileUriOpt ~> LibUtil.mineOptions(input)
-              checkStmts(nameExePathMap, maxCores, fileOptions, p.body.stmts, ISZ(), config, th, smt2f, cache, reporter,
+              checkStmts(nameExePathMap, maxCores, fileOptions, p.body.stmts, ISZ(), config, th2, smt2f, cache, reporter,
                 config.parCores, plugins, verifyingStartTime, T, line, skipMethods, skipTypes)
               if (reporter.hasError) {
                 reporter.illFormed()
