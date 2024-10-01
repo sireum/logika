@@ -349,6 +349,12 @@ object RewritingSystem {
           case _: AST.CoreExp.ParamVarRef => None()
           case _: AST.CoreExp.LocalVarRef => None()
           case _: AST.CoreExp.VarRef => None()
+          case o: AST.CoreExp.StringInterpolate =>
+            val r1: Option[IS[Z, AST.CoreExp.Base]] = transformCoreExpBases(cache, o.args)
+            if (hasChanged || r1.nonEmpty)
+              Some(o(args = r1.getOrElse(o.args)))
+            else
+              None()
           case o: AST.CoreExp.Binary =>
             val r0: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.left)
             val r1: Option[AST.CoreExp.Base] = transformCoreExpBase(cache, o.right)
@@ -1476,6 +1482,7 @@ object RewritingSystem {
         rOpt = e match {
           case _: AST.CoreExp.Halt => None()
           case _: AST.CoreExp.Lit => None()
+          case e: AST.CoreExp.StringInterpolate => evalStringInterpolate(e)
           case _: AST.CoreExp.LocalVarRef => None()
           case e: AST.CoreExp.ParamVarRef => evalParamVarRef(e)
           case e: AST.CoreExp.VarRef => evalVarRef(e)
@@ -1561,6 +1568,32 @@ object RewritingSystem {
         return Some(r)
       }
       return None()
+    }
+
+    def evalStringInterpolate(e: AST.CoreExp.StringInterpolate): Option[AST.CoreExp.Base] = {
+      var changed = F
+      var args = ISZ[AST.CoreExp.Base]()
+      var hasHalt = F
+      for (arg <- e.args) {
+        evalBaseH(arg) match {
+          case Some(arg2) =>
+            if (arg2.isHalt) {
+              hasHalt = T
+            }
+            args = args :+ arg2
+            changed = T
+          case _ =>
+            args = args :+ arg
+        }
+      }
+      if (hasHalt) {
+        val r = AST.CoreExp.Abort
+        if (shouldTrace) {
+          trace = trace :+ Trace.Eval(st"halted ${e(args = args).prettyST}", e, r)
+        }
+        return Some(r)
+      }
+      return if (changed) Some(e(args = args)) else None()
     }
 
     def evalBinary(e: AST.CoreExp.Binary): Option[AST.CoreExp.Base] = {
