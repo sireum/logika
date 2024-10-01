@@ -32,7 +32,6 @@ import org.sireum.test._
 object LogikaTest {
 
   val sireumHome: Os.Path = Os.path(Os.env("SIREUM_HOME").get).canon
-  lazy val (tc, rep) = lang.FrontEnd.checkedLibraryReporterPar(Runtime.getRuntime.availableProcessors)
 
   val rlimit: Z = {
     var r: Z = 1000000
@@ -209,8 +208,7 @@ class LogikaTest extends TestSuite {
     Smt2Invoke.haltOnError = T
     val nameExePathMap = Smt2Invoke.nameExePathMap(sireumHome)
     Logika.checkScript(None(), input, config, nameExePathMap, Os.numOfProcessors, th => Smt2Impl.create(config, ISZ(),
-      th, reporter), NoTransitionSmt2Cache.create, reporter, T, Logika.defaultPlugins, _ => (tc.typeHierarchy, rep),
-      0, ISZ(), ISZ())
+      th, reporter), NoTransitionSmt2Cache.create, reporter, T, Logika.defaultPlugins, 0, ISZ(), ISZ())
     if (reporter.hasIssue) {
       msgOpt match {
         case Some(msg) =>

@@ -427,7 +427,7 @@ object Logika {
 
   def checkScript(fileUriOpt: Option[String], input: String, config: Config, nameExePathMap: HashMap[String, String],
                   maxCores: Z, smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
-                  hasLogika: B, plugins: ISZ[Plugin], thInit: Z => (TypeHierarchy, message.Reporter), line: Z,
+                  hasLogika: B, plugins: ISZ[Plugin], line: Z,
                   skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
@@ -449,12 +449,12 @@ object Logika {
           if (!isWorksheet) {
             return
           }
-          val (th, rep) = extension.Cancel.cancellable(() => thInit(maxCores))
+          val (tc, rep) = extension.Cancel.cancellable(() => lang.FrontEnd.checkedLibraryReporter)
           val typeCheckingStartTime = extension.Time.currentMillis
           reporter.timing(libraryDesc, typeCheckingStartTime - libraryStartTime)
           reporter.reports(rep.messages)
           val (th2, p) = extension.Cancel.cancellable(() =>
-            lang.FrontEnd.checkWorksheet(config.parCores, Some(th), program, reporter))
+            lang.FrontEnd.checkWorksheet(config.parCores, Some(tc.typeHierarchy), program, reporter))
           if (!reporter.hasError) {
             lang.tipe.PostTipeAttrChecker.checkProgram(p, reporter)
           }
