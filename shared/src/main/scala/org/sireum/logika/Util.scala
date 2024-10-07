@@ -2937,6 +2937,8 @@ object Util {
     if (mi.ast.isStrictPure && mi.ast.bodyOpt.nonEmpty) {
       mi.ast.bodyOpt.get.stmts match {
         case ISZ(stmt: AST.Stmt.Var, _: AST.Stmt.Return) => return stmt.initOpt
+        case ISZ(stmt: AST.Stmt.Return) => return Some(AST.Stmt.Expr(stmt.expOpt.get, stmt.attr))
+        case ISZ(stmt: AST.Stmt.Expr) => return Some(stmt)
         case stmts => halt(s"Infeasible: $stmts")
       }
     } else {
