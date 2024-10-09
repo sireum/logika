@@ -47,9 +47,15 @@ object cli {
     usage = "<option>* <slang-file>+",
     usageDescOpt = None(),
     opts = ISZ(
+      Opt(name = "feedback", longKey = "feedback", shortKey = None(),
+        tpe = Type.Path(multiple = F, default = None()),
+        description = "Feedback output directory"),
       modeOpt,
       Opt(name = "noRuntime", longKey = "no-runtime", shortKey = Some('r'),
         tpe = Type.Flag(F), description = "Do not use built-in runtime (use runtime in sourcepath)"),
+      Opt(name = "parseableMessages", longKey = "parseable-messages", shortKey = None(),
+        tpe = Type.Flag(F),
+        description = "Print parseable file messages"),
       Opt(name = "sourcepath", longKey = "sourcepath", shortKey = Some('s'),
         tpe = Type.Path(T, None()),
         description = "Sourcepath of Slang .scala files")
