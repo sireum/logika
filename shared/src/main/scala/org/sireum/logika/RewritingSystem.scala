@@ -1649,6 +1649,18 @@ object RewritingSystem {
           (left, right) match {
             case (AST.CoreExp.False, _) => return andF
             case (_, AST.CoreExp.False) => return andF
+            case (AST.CoreExp.True, _) =>
+              val r = right
+              if (shouldTrace) {
+                trace = trace :+ Trace.Eval(st"${equiv(e(left = left, right = right), r)}", e, r)
+              }
+              return Some(r)
+            case (_, AST.CoreExp.True) =>
+              val r = left
+              if (shouldTrace) {
+                trace = trace :+ Trace.Eval(st"${equiv(e(left = left, right = right), r)}", e, r)
+              }
+              return Some(r)
             case (_ , _) =>
           }
         case AST.Exp.BinaryOp.Or =>
@@ -1662,6 +1674,18 @@ object RewritingSystem {
           (left, right) match {
             case (AST.CoreExp.True, _) => return orT
             case (_, AST.CoreExp.True) => return orT
+            case (AST.CoreExp.False, _) =>
+              val r = right
+              if (shouldTrace) {
+                trace = trace :+ Trace.Eval(st"${equiv(e(left = left, right = right), r)}", e, r)
+              }
+              return Some(r)
+            case (_, AST.CoreExp.False) =>
+              val r = left
+              if (shouldTrace) {
+                trace = trace :+ Trace.Eval(st"${equiv(e(left = left, right = right), r)}", e, r)
+              }
+              return Some(r)
             case (_ , _) =>
           }
         case AST.Exp.BinaryOp.Imply =>
@@ -1674,6 +1698,13 @@ object RewritingSystem {
           }
           (left, right) match {
             case (_, AST.CoreExp.True) => return implyT
+            case (AST.CoreExp.False, _) => return implyT
+            case (AST.CoreExp.True, _) =>
+              val r = right
+              if (shouldTrace) {
+                trace = trace :+ Trace.Eval(st"${equiv(e(left = left, right = right), r)}", e, r)
+              }
+              return Some(r)
             case (_ , _) =>
           }
         case AST.Exp.BinaryOp.Mul =>
