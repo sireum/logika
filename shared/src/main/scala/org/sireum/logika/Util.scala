@@ -1455,6 +1455,8 @@ object Util {
       val rOpt = letToExpH()
       rOpt match {
         case Some(e) => e match {
+          case e: AST.Exp.Invoke if e.receiverOpt.nonEmpty && e.targs.isEmpty && e.args.size == 1 && ops.StringOps(e.ident.id.value).isScalaOp =>
+            return Some(AST.Exp.Binary(e.receiverOpt.get, e.ident.id.value, e.args(0), e.attr, e.ident.posOpt))
           case e: AST.Exp.Select => e.resOpt match {
             case Some(res: AST.ResolvedInfo.Method) if res.tpeOpt.get.isByName =>
               e(attr = e.attr(typedOpt = Some(res.tpeOpt.get.ret)))
