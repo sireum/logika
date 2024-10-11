@@ -4895,7 +4895,7 @@ import Util._
           return (s0(status = State.Status.Error), stateMap._2)
         }
         val s1 = evalRegularStepClaimRtCheck(smt2, cache, F, s0, step.claim, step.id.posOpt, reporter)
-        return (s1, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
+        return (s1, stateMap._2 + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
       case step: AST.ProofAst.Step.Let =>
         for (sub <- step.steps if s0.ok) {
           val p = evalProofStep(smt2, cache, (s0, m), sub, reporter)
