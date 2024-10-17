@@ -105,6 +105,11 @@ object InceptionPlugin {
         case (fe: AST.Exp.LitZ, te: AST.Exp.LitZ) =>
           ok = fe.value == te.value
         case (fe: AST.Exp.Ident, te) =>
+          te match {
+            case te: AST.Exp.Ident if fe.resOpt == te.resOpt =>
+              return
+            case _ =>
+          }
           if (shouldExtract(fe.resOpt)) {
             addResult(fe.id.value, te)
           } else {
@@ -166,9 +171,10 @@ object InceptionPlugin {
             case _ =>
           }
           te match {
-            case te: AST.Exp.Invoke =>
-              ok = T
-              recInvoke(fe, te)
+            case te: AST.Exp.Invoke if id == te.ident.id.value && fe.args.size == te.args.size =>
+              for (p <- ops.ISZOps(fe.args).zip(te.args)) {
+                rec(p._1, p._2)
+              }
             case _ =>
           }
         case (fe: AST.Exp.Invoke, te: AST.Exp.Invoke) => recInvoke(fe, te)
