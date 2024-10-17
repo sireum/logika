@@ -66,9 +66,9 @@ object Logika {
   @msig trait Cache {
     def clearTransition(): Unit
 
-    def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Cache.Transition, context: ISZ[String], state: State, smt2: Smt2): Option[(ISZ[State], U64)]
+    def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Cache.Transition, context: ISZ[String], state: State, smt2: Smt2): Option[(ISZ[State], U64, HashSet[String])]
 
-    def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, context: ISZ[String], state: State, nextStates: ISZ[State], smt2: Smt2): U64
+    def setTransition(th: TypeHierarchy, config: Config, transition: Cache.Transition, context: ISZ[String], state: State, nextStates: ISZ[State], smt2: Smt2, modifiables: HashSet[String]): U64
 
     def getAssignExpTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, exp: AST.AssignExp, context: ISZ[String], state: State, smt2: Smt2): Option[(ISZ[(State, State.Value)], U64)]
 
@@ -4793,7 +4793,7 @@ import Util._
         val pos = step.claim.posOpt.get
         if (config.transitionCache) {
           cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.ProofStep(step, m.values), context.methodName, s0, smt2) match {
-            case Some((ISZ(nextState), cached)) =>
+            case Some((ISZ(nextState), cached, _)) =>
               reporter.coverage(F, cached, pos)
               return (nextState, m + stepNo ~> StepProofContext.Regular(th, stepNo, step.claim))
             case _ =>
@@ -4846,7 +4846,7 @@ import Util._
           }
           val nextState = plugin.handle(this, smt2, cache, m, s0, normStep, reporter)
           if (config.transitionCache && nextState.ok && !reporter.hasError) {
-            val cached = cache.setTransition(th, config, Cache.Transition.ProofStep(step, m.values), context.methodName, s0, ISZ(nextState), smt2)
+            val cached = cache.setTransition(th, config, Cache.Transition.ProofStep(step, m.values), context.methodName, s0, ISZ(nextState), smt2, HashSet.empty)
             reporter.coverage(T, cached, pos)
           } else {
             reporter.coverage(F, zeroU64, pos)
@@ -5324,7 +5324,7 @@ import Util._
           var cacheHit = F
           if (config.transitionCache) {
             cache.getTransitionAndUpdateSmt2(th, config, Cache.Transition.Sequent(sequent), context.methodName, st0, smt2) match {
-              case Some((ISZ(nextState), cached)) =>
+              case Some((ISZ(nextState), cached, _)) =>
                 cacheHit = T
                 reporter.coverage(F, cached, pos)
                 st0 = nextState
@@ -5343,7 +5343,7 @@ import Util._
                 ISZ(), reporter)._1
             }
             if (config.transitionCache && st0.ok) {
-              val cached = cache.setTransition(th, config, Cache.Transition.Sequent(sequent), context.methodName, st00, ISZ(st0), smt2)
+              val cached = cache.setTransition(th, config, Cache.Transition.Sequent(sequent), context.methodName, st00, ISZ(st0), smt2, HashSet.empty)
               reporter.coverage(T, cached, pos)
             } else {
               reporter.coverage(F, zeroU64, pos)
@@ -5590,7 +5590,7 @@ import Util._
                 s0: State, exps: ISZ[AST.Exp], reporter: Reporter): ISZ[State] = {
     if (config.transitionCache && s0.ok) {
       cache.getTransitionAndUpdateSmt2(th, config, Logika.Cache.Transition.Exps(exps), context.methodName, s0, smt2) match {
-        case Some((nextStates, cached)) =>
+        case Some((nextStates, cached, _)) =>
           for (exp <- exps) {
             reporter.coverage(F, cached, exp.posOpt.get)
           }
@@ -5613,7 +5613,7 @@ import Util._
     }
     val r = currents ++ done
     if (config.transitionCache && !reporter.hasError) {
-      val cached = cache.setTransition(th, config, Logika.Cache.Transition.Exps(exps), context.methodName, s0, r, smt2)
+      val cached = cache.setTransition(th, config, Logika.Cache.Transition.Exps(exps), context.methodName, s0, r, smt2, HashSet.empty)
       for (exp <- exps) {
         reporter.coverage(T, cached, exp.posOpt.get)
       }

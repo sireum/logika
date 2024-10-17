@@ -714,10 +714,10 @@ object RewritingSystem {
   @record class NoCache extends Logika.Cache {
 
     override def clearTransition(): Unit = {}
-    override def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, context: ISZ[String], state: State, smt2: Smt2): Option[(ISZ[State], U64)] = {
+    override def getTransitionAndUpdateSmt2(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, context: ISZ[String], state: State, smt2: Smt2): Option[(ISZ[State], U64, HashSet[String])] = {
       return None()
     }
-    override def setTransition(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, context: ISZ[String], state: State, nextStates: ISZ[State], smt2: Smt2): U64 = {
+    override def setTransition(th: TypeHierarchy, config: Config, transition: Logika.Cache.Transition, context: ISZ[String], state: State, nextStates: ISZ[State], smt2: Smt2, modifiables: HashSet[String]): U64 = {
       return U64.fromZ(0)
     }
 
