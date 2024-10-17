@@ -165,6 +165,12 @@ object InceptionPlugin {
               ok = T
             case _ =>
           }
+          te match {
+            case te: AST.Exp.Invoke =>
+              ok = T
+              recInvoke(fe, te)
+            case _ =>
+          }
         case (fe: AST.Exp.Invoke, te: AST.Exp.Invoke) => recInvoke(fe, te)
         case (_, _) => ok = F
       }
