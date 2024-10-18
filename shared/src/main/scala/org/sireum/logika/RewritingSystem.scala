@@ -482,7 +482,7 @@ object RewritingSystem {
       val hasChanged: B = r.nonEmpty
       val o2: AST.CoreExp.Base = r.getOrElse(o)
       val shouldUnfold: B = o2 match {
-        case o2: AST.CoreExp.VarRef if methodPatterns.contains((o2.owner :+ o2.id, o2.isInObject)) => T
+        case o2: AST.CoreExp.VarRef if methodPatterns.contains((o2.owner :+ o2.id, T)) => T
         case o2: AST.CoreExp.Select =>
           val infoOpt: Option[Info.Method] = o2.exp.tipe match {
             case t: AST.Typed.Name =>
@@ -1546,19 +1546,9 @@ object RewritingSystem {
     }
 
     def evalVarRef(e: AST.CoreExp.VarRef): Option[AST.CoreExp.Base] = {
-      val minfo: Info.Method = if (e.isInObject) {
-        th.nameMap.get(e.owner :+ e.id) match {
-          case Some(info: Info.Method) => info
-          case _ => return None()
-        }
-      } else {
-        th.typeMap.get(e.owner).get match {
-          case ti: TypeInfo.Sig => ti.methods.get(e.id).get
-          case ti: TypeInfo.Adt => ti.methods.get(e.id).get
-          case ti: TypeInfo.Enum => halt(s"TODO: $ti")
-          case ti: TypeInfo.SubZ => halt(s"TODO: $ti")
-          case _ => halt("Infeasible")
-        }
+      val minfo: Info.Method = th.nameMap.get(e.owner :+ e.id) match {
+        case Some(info: Info.Method) => info
+        case _ => return None()
       }
       if (shouldUnfold(minfo)) {
         val r = unfold(minfo, None())
