@@ -1035,19 +1035,8 @@ object RewritingSystem {
       val (context, id, args, e) = pa
       m.get((context, id)) match {
         case Some(f: AST.CoreExp.Fun) =>
-          applyFun(f, args, e.tipe) match {
-            case Some((pattern, _)) =>
-              m = unifyExp(silent, th, localPatterns, pattern, e, m, pendingApplications, substMap, errorMessages)
-            case _ =>
-              if (silent) {
-                if (errorMessages.value.isEmpty) {
-                  errorMessages.value = errorMessages.value :+ ""
-                }
-              } else {
-                errorMessages.value = errorMessages.value :+
-                  st"Could not reduce '$f(${(for (arg <- args) yield arg.prettyST, ", ")})'".render
-              }
-          }
+          val (pattern, _) = applyFun(f, args, e.tipe)
+          m = unifyExp(silent, th, localPatterns, pattern, e, m, pendingApplications, substMap, errorMessages)
         case Some(f) => errorMessages.value = errorMessages.value :+ s"Expecting to infer a function, but found '$f'"
         case _ =>
       }
@@ -1298,7 +1287,7 @@ object RewritingSystem {
   @strictpure def incDeBruijnMap(deBruijnMap: HashMap[Z, AST.CoreExp.Base], inc: Z): HashMap[Z, AST.CoreExp.Base] =
     if (inc != 0) HashMap ++ (for (p <- deBruijnMap.entries) yield (p._1 + inc, p._2)) else deBruijnMap
 
-  @pure def applyFun(f: AST.CoreExp.Fun, args: ISZ[AST.CoreExp.Base], t: AST.Typed): Option[(AST.CoreExp.Base, Z)] = {
+  @pure def applyFun(f: AST.CoreExp.Fun, args: ISZ[AST.CoreExp.Base], t: AST.Typed): (AST.CoreExp.Base, Z) = {
     var params = ISZ[(String, AST.Typed)]()
     @tailrec def recParamsFun(fe: AST.CoreExp.Base): AST.CoreExp.Base = {
       fe match {
@@ -1314,20 +1303,17 @@ object RewritingSystem {
       map = map + (params.size - i) ~> args(i)
     }
     if (f.param.tipe == AST.Typed.unit && args.isEmpty) {
-      return Some((f.exp, 0))
+      return (f.exp, 0)
     }
-    ParamSubstitutor(map).transformCoreExpBase(body) match {
-      case MSome(body2) =>
-        if (args.size > params.size) {
-          return Some((AST.CoreExp.Apply(body2, ops.ISZOps(args).slice(params.size, args.size), t), params.size))
-        } else {
-          return Some((body2, args.size))
-        }
-      case _ => return None()
+    val body2 = ParamSubstitutor(map).transformCoreExpBase(body).getOrElse(body)
+    if (args.size > params.size) {
+      return (AST.CoreExp.Apply(body2, ops.ISZOps(args).slice(params.size, args.size), t), params.size)
+    } else {
+      return (body2, args.size)
     }
   }
 
-  @pure def applyQuant(q: AST.CoreExp.Quant, args: ISZ[AST.CoreExp.Base], t: AST.Typed): Option[(AST.CoreExp.Base, Z)] = {
+  @pure def applyQuant(q: AST.CoreExp.Quant, args: ISZ[AST.CoreExp.Base], t: AST.Typed): (AST.CoreExp.Base, Z) = {
     var params = ISZ[(String, AST.Typed)]()
     @tailrec def recParamsQuant(fe: AST.CoreExp.Base): AST.CoreExp.Base = {
       fe match {
@@ -1342,16 +1328,12 @@ object RewritingSystem {
     for (i <- 0 until params.size) {
       map = map + (params.size - i) ~> args(i)
     }
-    ParamSubstitutor(map).transformCoreExpBase(body) match {
-      case MSome(body2) =>
-        if (args.size > params.size) {
-          return Some((AST.CoreExp.Apply(body2, ops.ISZOps(args).slice(params.size, args.size), t), params.size))
-        } else {
-          return Some((body2, args.size))
-        }
-      case _ =>
+    val body2 = ParamSubstitutor(map).transformCoreExpBase(body).getOrElse(body)
+    if (args.size > params.size) {
+      return (AST.CoreExp.Apply(body2, ops.ISZOps(args).slice(params.size, args.size), t), params.size)
+    } else {
+      return (body2, args.size)
     }
-    return None()
   }
 
   @pure def evalBase(th: TypeHierarchy,
@@ -1946,10 +1928,7 @@ object RewritingSystem {
               if (shouldTrace) {
                 trace = trace :+ Trace.Eval(st"unfolding", e(exp = receiver), fApp)
               }
-              applyFun(f, args, t) match {
-                case Some((r, _)) => return Some(r)
-                case _ =>
-              }
+              return Some(applyFun(f, args, t)._1)
             case _ =>
           }
           halt("Infeasible")
@@ -2237,23 +2216,17 @@ object RewritingSystem {
       }
       op match {
         case f: AST.CoreExp.Fun if config.funApplication =>
-          applyFun(f, args, e.tipe) match {
-            case Some((r, paramsSize)) =>
-              if (shouldTrace) {
-                trace = trace :+ Trace.Eval(st"function application ${f.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, paramsSize)) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
-              }
-              return Some(r)
-            case _ =>
+          val (r, paramsSize) = applyFun(f, args, e.tipe)
+          if (shouldTrace) {
+            trace = trace :+ Trace.Eval(st"function application ${f.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, paramsSize)) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
           }
+          return Some(r)
         case q: AST.CoreExp.Quant if config.quantApplication && q.kind == AST.CoreExp.Quant.Kind.ForAll =>
-          applyQuant(q, args, e.tipe) match {
-            case Some((r, paramsSize)) =>
-              if (shouldTrace) {
-                trace = trace :+ Trace.Eval(st"∀-elimination ${q.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, paramsSize)) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
-              }
-              return Some(r)
-            case _ =>
+          val (r, paramsSize) = applyQuant(q, args, e.tipe)
+          if (shouldTrace) {
+            trace = trace :+ Trace.Eval(st"∀-elimination ${q.prettyST}(${(for (arg <- ops.ISZOps(args).slice(0, paramsSize)) yield arg.prettyST, ", ")}) ≡ ${r.prettyST}", e, r)
           }
+          return Some(r)
         case _ =>
       }
       return if (changed) Some(e(exp = op, args = args)) else None()
@@ -2368,7 +2341,7 @@ object RewritingSystem {
           }
         case e: AST.CoreExp.Quant if e.kind == AST.CoreExp.Quant.Kind.ForAll =>
           return toCondEquivH(applyQuant(e, ISZ(AST.CoreExp.LocalVarRef(T, ISZ(), paramId(e.param.id), e.param.tipe)),
-            AST.Typed.b).get._1)
+            AST.Typed.b)._1)
         case e: AST.CoreExp.If =>
           return (for (t <- toCondEquivH(e.tExp)) yield AST.CoreExp.Arrow(e.cond, t).asInstanceOf[AST.CoreExp]) ++
             (for (f <- toCondEquivH(e.fExp)) yield AST.CoreExp.Arrow(e.cond, f).asInstanceOf[AST.CoreExp])
