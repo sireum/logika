@@ -348,7 +348,7 @@ object RewritingSystem {
           case _: AST.CoreExp.Lit => None()
           case _: AST.CoreExp.ParamVarRef => None()
           case _: AST.CoreExp.LocalVarRef => None()
-          case _: AST.CoreExp.VarRef => None()
+          case _: AST.CoreExp.ObjectVarRef => None()
           case o: AST.CoreExp.StringInterpolate =>
             val r1: Option[IS[Z, AST.CoreExp.Base]] = transformCoreExpBases(cache, o.args)
             if (hasChanged || r1.nonEmpty)
@@ -482,7 +482,7 @@ object RewritingSystem {
       val hasChanged: B = r.nonEmpty
       val o2: AST.CoreExp.Base = r.getOrElse(o)
       val shouldUnfold: B = o2 match {
-        case o2: AST.CoreExp.VarRef if methodPatterns.contains((o2.owner :+ o2.id, T)) => T
+        case o2: AST.CoreExp.ObjectVarRef if methodPatterns.contains((o2.owner :+ o2.id, T)) => T
         case o2: AST.CoreExp.Select =>
           val infoOpt: Option[Info.Method] = o2.exp.tipe match {
             case t: AST.Typed.Name =>
@@ -896,7 +896,7 @@ object RewritingSystem {
           if (p.deBruijn != e.deBruijn) {
             err(p, e)
           }
-        case (p: AST.CoreExp.VarRef, e: AST.CoreExp.VarRef) =>
+        case (p: AST.CoreExp.ObjectVarRef, e: AST.CoreExp.ObjectVarRef) =>
           if (!(p.id == e.id && p.owner == e.owner)) {
             err(p, e)
           }
@@ -1467,7 +1467,7 @@ object RewritingSystem {
           case e: AST.CoreExp.StringInterpolate => evalStringInterpolate(e)
           case _: AST.CoreExp.LocalVarRef => None()
           case e: AST.CoreExp.ParamVarRef => evalParamVarRef(e)
-          case e: AST.CoreExp.VarRef => evalVarRef(e)
+          case e: AST.CoreExp.ObjectVarRef => evalVarRef(e)
           case e: AST.CoreExp.Binary => evalBinary(e)
           case e: AST.CoreExp.Unary => evalUnary(e)
           case e: AST.CoreExp.Select => evalSelect(e)
@@ -1527,7 +1527,7 @@ object RewritingSystem {
       return None()
     }
 
-    def evalVarRef(e: AST.CoreExp.VarRef): Option[AST.CoreExp.Base] = {
+    def evalVarRef(e: AST.CoreExp.ObjectVarRef): Option[AST.CoreExp.Base] = {
       val minfo: Info.Method = th.nameMap.get(e.owner :+ e.id) match {
         case Some(info: Info.Method) => info
         case _ => return None()
