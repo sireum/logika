@@ -2547,7 +2547,7 @@ object RewritingSystem {
               addContract(label, cas.requires, cas.ensures)
             }
         }
-      } else {
+      } else if (minfo.ast.isStrictPure) {
         r = r :+ methodPatternOf(th, cache, minfo)
       }
       return r
