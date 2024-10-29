@@ -222,12 +222,24 @@ object cli {
     )
   )
 
+  val logikaConfig: Tool = Tool(
+    name = "logikaConfig",
+    command = "config",
+    description = "Logika Config",
+    header = "Sireum Logika Config",
+    usage = "<option>* <file.sc>",
+    usageDescOpt = None(),
+    opts = ISZ(),
+    groups = ISZ()
+  )
+
+
   val group: Group = Group(
     name = "logika",
     description = "Logika tools",
     header = "Logika Tools for Slang",
     unlisted = F,
-    subs = ISZ(logikaVerifier)
+    subs = ISZ(logikaConfig, logikaVerifier)
   )
 
 }
