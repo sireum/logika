@@ -229,7 +229,11 @@ object cli {
     header = "Sireum Logika Config",
     usage = "<option>* <file.sc>",
     usageDescOpt = None(),
-    opts = ISZ(),
+    opts = ISZ(
+      Opt(name = "theme", longKey = "theme", shortKey = Some('t'),
+        tpe = Type.Choice(name = "Theme", sep = None(), elements = ISZ("dark", "light")),
+        description = "Form color theme")
+    ),
     groups = ISZ()
   )
 
