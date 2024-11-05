@@ -46,7 +46,7 @@ object Logika {
 
   type Bindings = Map[String, (State.Value.Sym, AST.Typed, Position)]
 
-  type LeafClaims = ISZ[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])]
+  type LeafClaims = ISZ[(State.Claim.And, ISZ[(State.Status.Type, ISZ[State.Claim])])]
 
   type Assignment = ISZ[B]
 
@@ -4326,7 +4326,7 @@ import Util._
 
   def evalBranch(isMatch: B, split: Split.Type, smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State,
                  lcontext: ISZ[String], branches: ISZ[Branch], i: Z, rOpt: Option[State.Value.Sym],
-                 reporter: Reporter): (Z, Option[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])]) = {
+                 reporter: Reporter): (Z, Option[(State.Claim.And, ISZ[(State.Status.Type, ISZ[State.Claim])])]) = {
     val shouldSplit: B = split match {
       case Split.Default => config.splitAll || (isMatch && config.splitMatch)
       case Split.Enabled => T
@@ -4339,7 +4339,7 @@ import Util._
         State.Claim.Prop(T, sym))
     val pos = sym.pos
     val posOpt: Option[Position] = Some(pos)
-    val s1 = s0.addClaim(cond)
+    val s1 = s0.addClaims(cond.claims)
     if (s1.ok) {
       if (smt2.sat(context.methodName, config, cache, T,
         s"$title at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims, reporter)) {
@@ -4378,7 +4378,7 @@ import Util._
       (allReturns && config.branchPar == Config.BranchPar.OnlyAllReturns))) {
       val inputs: ISZ[Z] = branches.indices
 
-      def computeBranch(i: Z): (Option[(State.Claim, ISZ[(State.Status.Type, ISZ[State.Claim])])], Z, Smt2) = {
+      def computeBranch(i: Z): (Option[(State.Claim.And, ISZ[(State.Status.Type, ISZ[State.Claim])])], Z, Smt2) = {
         val rep = reporter.empty
         val lsmt2 = smt2
         val (nextFresh, lcsOpt) = evalBranch(isMatch, split, lsmt2, cache, rtCheck, s0, lcontext, branches, i, rOpt, rep)
@@ -4409,7 +4409,7 @@ import Util._
               assert(gap >= 0)
               if ((!allReturns || config.interp || context.hasInline) && gap > 0) {
                 val rw = Util.SymAddRewriter(s0.nextFresh, nextFreshGap, jescmPlugins._4)
-                val newCond = rw.transformStateClaim(cond).getOrElseEager(cond)
+                val newCond = rw.transformStateClaim(cond).getOrElseEager(cond).asInstanceOf[State.Claim.And]
                 var newClaimss = ISZ[(State.Status.Type, ISZ[State.Claim])]()
                 for (statusClaims <- claimss) {
                   newClaimss = newClaimss :+ ((statusClaims._1, for (claim <- statusClaims._2) yield
@@ -4458,7 +4458,7 @@ import Util._
             newScss = newScss :+ (scs :+ ((cond, claims)))
           } else {
             r = r :+ s0(status = status, claims = (ops.ISZOps(claims).slice(0, s0.claims.size) :+ cond) ++
-              ops.ISZOps(claims).slice(s0.claims.size + 1, claims.size))
+              ops.ISZOps(claims).slice(s0.claims.size + cond.claims.size, claims.size))
           }
         }
       }
