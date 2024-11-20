@@ -473,7 +473,7 @@ object AutoPlugin {
       if (s2.ok) {
         val s3 = checkValid(smt2, s2, State.Claim.Prop(T, conclusion))
         if (s3.ok) {
-          return logika.evalAssume(smt2, cache, T, "", state, step.claim, step.id.posOpt, reporter)._1
+          return state(claims = state.claims ++ ops.ISZOps(s3.claims).slice(s0.claims.size, s3.claims.size), nextFresh = s3.nextFresh)
         }
       }
       return err
@@ -502,7 +502,7 @@ object AutoPlugin {
       if (s6.ok) {
         val r = checkValid(psmt2, s6, State.Claim.Prop(T, conclusion))
         if (r.ok) {
-          return logika.evalAssume(smt2, cache, T, "", state, step.claim, step.id.posOpt, reporter)._1
+          return state(claims = state.claims ++ ops.ISZOps(r.claims).slice(s1.claims.size, r.claims.size), nextFresh = r.nextFresh)
         }
       }
       return err

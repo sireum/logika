@@ -157,12 +157,12 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
       if (s6.ok) {
         val s7 = checkValid(s6, conclusion)
         if (s7.ok) {
-          return logika.evalAssume(smt2, cache, T, "", state, step.claim, step.id.posOpt, reporter)._1
+          return s7(claims = state.claims ++ ops.ISZOps(s7.claims).slice(s0.claims.size, s7.claims.size), nextFresh = s7.nextFresh)
         }
       }
       return err
     } else {
-      val (suc, m) = state.unconstrainedClaims
+      val (suc, _) = state.unconstrainedClaims
       var s0 = suc
       var ok = T
       for (arg <- just.witnesses) {
@@ -184,7 +184,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
       if (s6.ok) {
         val s7 = checkValid(s6, conclusion)
         if (s7.ok) {
-          return logika.evalAssume(smt2, cache, T, "", state, step.claim, step.id.posOpt, reporter)._1
+          return s7(claims = state.claims ++ ops.ISZOps(s7.claims).slice(s0.claims.size, s7.claims.size), nextFresh = s7.nextFresh)
         }
       }
       return err
