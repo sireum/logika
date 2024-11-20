@@ -16,7 +16,7 @@ import org.sireum.justification._
       5 (  q           ) by Auto,
       6 (  r           ) by Auto
     ),
-    7 (  p __>: r         ) by Auto and 3
+    7 (  p __>: r         ) by Smt2("z3", 2000, 2000000) and 3
   )
 }
 
@@ -31,7 +31,7 @@ import org.sireum.justification._
       3 (  q               ) by Premise,
       4 (  r               ) by Premise
     )},
-    5 (  All{(x: Z) => q}  ) by Auto and 2
+    5 (  All{(x: Z) => q}  ) by Smt2("z3", 2000, 2000000) and 2
   )
 }
 
@@ -47,6 +47,6 @@ import org.sireum.justification._
       4 (  q             ) by Auto,
       5 (  r             ) by Premise
     )},
-    6 (  q               ) by Auto and (1, 2)
+    6 (  q               ) by Smt2("z3", 2000, 2000000) and (1, 2)
   )
 }

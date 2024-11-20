@@ -470,13 +470,19 @@ object AutoPlugin {
         }
       }
       val (s2, conclusion) = l.evalRegularStepClaimValue(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
-      return checkValid(smt2, s2, State.Claim.Prop(T, conclusion))
+      if (s2.ok) {
+        val s3 = checkValid(smt2, s2, State.Claim.Prop(T, conclusion))
+        if (s3.ok) {
+          return logika.evalAssume(smt2, cache, T, "", state, step.claim, step.id.posOpt, reporter)._1
+        }
+      }
+      return err
     } else {
       val psmt2 = smt2.emptyCache(logika.config)
       val (suc, m) = state.unconstrainedClaims
       var s1 = suc
       var ok = T
-      val provenClaimMap = HashMap ++ (for (p <- provenClaims.entries) yield p._2._1 ~> p._1)
+      val provenClaimMap = HashMap ++ (for (p <- provenClaims.entries) yield p._2._1 ~> p._2._3)
       for (arg <- just.witnesses if ok) {
         val stepNo = arg
         provenClaimMap.get(stepNo) match {
@@ -491,16 +497,15 @@ object AutoPlugin {
       if (!ok) {
         return err
       }
-      val (s5, exp) = logika.rewriteAt(atMap, s1, step.claim, reporter)
+      val (s5, exp) = l.rewriteAt(atMap, s1, step.claim, reporter)
       val (s6, conclusion) = l.evalRegularStepClaimValue(psmt2, cache, s5, exp, step.id.posOpt, reporter)
-      val r = checkValid(psmt2, s6, State.Claim.Prop(T, conclusion))
-      smt2.combineWith(psmt2)
-      val sClaims = state.claims.toMS
-      for (p <- m) {
-        val (i, j) = p
-        sClaims(i) = r.claims(j)
+      if (s6.ok) {
+        val r = checkValid(psmt2, s6, State.Claim.Prop(T, conclusion))
+        if (r.ok) {
+          return logika.evalAssume(smt2, cache, T, "", state, step.claim, step.id.posOpt, reporter)._1
+        }
       }
-      return if (r.ok) r(claims = sClaims.toISZ[State.Claim] ++ ops.ISZOps(r.claims).slice(suc.claims.size, r.claims.size)) else err
+      return err
     }
   }
 
