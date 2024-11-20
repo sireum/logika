@@ -4788,6 +4788,16 @@ import Util._
     }
     val stepNo = step.id
     var (s0, m) = stateMap
+    def extractSpcs(start: Z, steps: ISZ[AST.ProofAst.Step]): ISZ[StepProofContext] = {
+      var r = ISZ[StepProofContext]()
+      for (i <- start until steps.size) {
+        m.get(steps(i).id) match {
+          case Some(spc) => r = r :+ spc
+          case _ =>
+        }
+      }
+      return r
+    }
     step match {
       case step: AST.ProofAst.Step.Regular =>
         val pos = step.claim.posOpt.get
@@ -4868,7 +4878,8 @@ import Util._
         if (s0.ok) {
           if (step.steps.size > 0) {
             m = stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
-              th.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps))
+              th.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps),
+              extractSpcs(1, step.steps))
           }
           return (s0, m)
         } else {
@@ -4906,12 +4917,13 @@ import Util._
         if (s0.ok) {
           if (step.steps.nonEmpty && step.steps(0).isInstanceOf[AST.ProofAst.Step.Assume]) {
             return (s0,
-              stateMap._2 + stepNo ~> StepProofContext.FreshAssumeSubProof(stepNo, step.params,
+              stateMap._2 + stepNo ~> StepProofContext.FreshAssumeSubProof(stepNo, step.context, step.params,
                 th.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim),
-                extractClaims(step.steps)))
+                extractClaims(step.steps), extractSpcs(1, step.steps)))
           } else {
             return (s0,
-              stateMap._2 + stepNo ~> StepProofContext.FreshSubProof(stepNo, step.params, extractClaims(step.steps)))
+              stateMap._2 + stepNo ~> StepProofContext.FreshSubProof(stepNo, step.context, step.params,
+                extractClaims(step.steps), extractSpcs(0, step.steps)))
           }
         } else {
           return (s0, stateMap._2)

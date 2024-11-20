@@ -50,20 +50,25 @@ object StepProofContext {
 
   @datatype class SubProof(val stepNo: AST.ProofAst.StepId,
                            val assumption: AST.Exp,
-                           val claims: ISZ[AST.Exp]) extends StepProofContext {
+                           val claims: ISZ[AST.Exp],
+                           val spcs: ISZ[StepProofContext]) extends StepProofContext {
     @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${assumption.prettyST}, ${(for (claim <- claims) yield claim.prettyST, ", ")})"
   }
 
   @datatype class FreshSubProof(val stepNo: AST.ProofAst.StepId,
+                                val context: ISZ[String],
                                 val params: ISZ[AST.ProofAst.Step.Let.Param],
-                                val claims: ISZ[AST.Exp]) extends StepProofContext {
+                                val claims: ISZ[AST.Exp],
+                                val spcs: ISZ[StepProofContext]) extends StepProofContext {
     @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${(for (param <- params) yield param.prettyST, ", ")}, ${(for (claim <- claims) yield claim.prettyST, ", ")})"
   }
 
   @datatype class FreshAssumeSubProof(val stepNo: AST.ProofAst.StepId,
+                                      val context: ISZ[String],
                                       val params: ISZ[AST.ProofAst.Step.Let.Param],
                                       val assumption: AST.Exp,
-                                      val claims: ISZ[AST.Exp]) extends StepProofContext {
+                                      val claims: ISZ[AST.Exp],
+                                      val spcs: ISZ[StepProofContext]) extends StepProofContext {
     @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${(for (param <- params) yield param.prettyST, ", ")}, ${assumption.prettyST}, ${(for (claim <- claims) yield claim.prettyST, ", ")})"
   }
 

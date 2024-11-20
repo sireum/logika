@@ -169,13 +169,13 @@ import org.sireum.logika.Logika.Reporter
             return err
         }
         val leftSubProof: HashSet[AST.Exp] = spcMap.get(leftSubProofNo) match {
-          case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == logika.th.normalizeExp(orClaim.left) => HashSet ++ sp.claims
+          case Some(sp@StepProofContext.SubProof(_, exp, _, _)) if exp == logika.th.normalizeExp(orClaim.left) => HashSet ++ sp.claims
           case _ =>
             reporter.error(leftSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the left-operand of $orClaimNo's claim")
             return err
         }
         val rightSubProof: HashSet[AST.Exp] = spcMap.get(rightSubProofNo) match {
-          case Some(sp@StepProofContext.SubProof(_, exp, _)) if exp == logika.th.normalizeExp(orClaim.right) => HashSet ++ sp.claims
+          case Some(sp@StepProofContext.SubProof(_, exp, _, _)) if exp == logika.th.normalizeExp(orClaim.right) => HashSet ++ sp.claims
           case _ =>
             reporter.error(rightSubProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the right-operand of $orClaimNo's claim")
             return err
