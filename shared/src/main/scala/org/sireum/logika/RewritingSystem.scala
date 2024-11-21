@@ -56,6 +56,45 @@ object RewritingSystem {
     val none: EvalConfig = EvalConfig(F, F, F, F, F, F, F, F, F, F, F)
   }
 
+  @record class BacktrackingSchedule(val backtracking: B, var schedule: ISZ[B], var index: Z) {
+    def done: B = {
+      return !backtracking || schedule.isEmpty || schedule(0)
+    }
+    def choose(): B = {
+      if (index >= schedule.size) {
+        schedule = schedule :+ F
+        index = index + 1
+        return F
+      } else if (index == schedule.size - 1) {
+        schedule = schedule(index ~> T)
+        return T
+      } else {
+        assert(!schedule(index))
+        var i = index + 1
+        var restT = T
+        while (restT & i < schedule.size) {
+          if (!schedule(i)) {
+            restT = F
+          }
+          i = i + 1
+        }
+        index = index + 1
+        if (restT) {
+          for (j <- index until schedule.size) {
+            schedule = schedule(j ~> F)
+          }
+          return T
+        } else {
+          return F
+        }
+      }
+    }
+  }
+
+  object BacktrackingSchedule {
+    @strictpure def empty(backtracking: B): BacktrackingSchedule = BacktrackingSchedule(backtracking, ISZ(), 0)
+  }
+
   @record class Substitutor(var map: HashMap[AST.CoreExp, AST.CoreExp.ParamVarRef]) extends AST.MCoreExpTransformer {
     override def transformCoreExpBase(o: AST.CoreExp.Base): MOption[AST.CoreExp.Base] = {
       map.get(o) match {
@@ -462,7 +501,7 @@ object RewritingSystem {
               case _ =>
                 if (r0.isEmpty && labeledOnly) {
                   evalBase(th, EvalConfig.all, cache, methodPatterns, unfoldingMap, 0,
-                    provenClaimStepIdMapEval, o, F, shouldTraceEval) match {
+                    provenClaimStepIdMapEval, o, F, shouldTraceEval, BacktrackingSchedule.empty(F)) match {
                     case Some((r1, t)) =>
                       trace = trace ++ t
                       done = T
@@ -500,7 +539,8 @@ object RewritingSystem {
         case _ => F
       }
       if (shouldUnfold && (!labeledOnly || inLabel)) {
-        evalBase(th, EvalConfig.none, cache, methodPatterns, unfoldingMap, 1, HashSMap.empty, o2, F, shouldTraceEval) match {
+        evalBase(th, EvalConfig.none, cache, methodPatterns, unfoldingMap, 1, HashSMap.empty, o2, F, shouldTraceEval,
+          BacktrackingSchedule.empty(F)) match {
           case Some((o3, t)) =>
             trace = trace ++ t
             return Some(o3)
@@ -559,7 +599,7 @@ object RewritingSystem {
             }
             val (o3Opt, t): (Option[AST.CoreExp.Base], ISZ[Trace]) =
               evalBase(th, EvalConfig.all, cache, methodPatterns, unfoldingMap, 0,
-                provenClaimStepIdMapEval, o2, F, shouldTraceEval) match {
+                provenClaimStepIdMapEval, o2, F, shouldTraceEval, BacktrackingSchedule.empty(F)) match {
                 case Some((o3o, t)) => (Some(o3o), t)
                 case _ => (None(),  ISZ())
               }
@@ -1247,13 +1287,14 @@ object RewritingSystem {
                  provenClaims: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId],
                  exp: AST.CoreExp,
                  removeLabels: B,
-                 shouldTrace: B): Option[(AST.CoreExp, ISZ[Trace])] = {
+                 shouldTrace: B,
+                 backtrackingSchedule: BacktrackingSchedule): Option[(AST.CoreExp, ISZ[Trace])] = {
     exp match {
       case exp: AST.CoreExp.Arrow =>
         var changed = F
         var trace = ISZ[Trace]()
         val left: AST.CoreExp.Base = evalBase(th, config, cache, methodPatterns, unfoldingMap, maxUnfolding,
-          provenClaims, exp.left, removeLabels, shouldTrace) match {
+          provenClaims, exp.left, removeLabels, shouldTrace, backtrackingSchedule) match {
           case Some((l, t)) =>
             trace = trace ++ t
             changed = T
@@ -1261,7 +1302,7 @@ object RewritingSystem {
           case _ => exp.left
         }
         val right: AST.CoreExp = eval(th, config, cache, methodPatterns, unfoldingMap, maxUnfolding, provenClaims,
-          exp.right, removeLabels, shouldTrace) match {
+          exp.right, removeLabels, shouldTrace, backtrackingSchedule) match {
           case Some((r, t)) =>
             trace = trace ++ t
             changed = T
@@ -1270,7 +1311,7 @@ object RewritingSystem {
         }
         return if (changed) Some((AST.CoreExp.Arrow(left, right), trace)) else None()
       case exp: AST.CoreExp.Base => evalBase(th, config, cache, methodPatterns, unfoldingMap, maxUnfolding,
-        provenClaims, exp, removeLabels, shouldTrace) match {
+        provenClaims, exp, removeLabels, shouldTrace, backtrackingSchedule) match {
         case Some((e, t)) => return Some((e, t))
         case _ => return None()
       }
@@ -1278,7 +1319,8 @@ object RewritingSystem {
   }
 
   @pure def simplify(th: TypeHierarchy, exp: AST.CoreExp.Base): Option[AST.CoreExp.Base] = {
-    evalBase(th, EvalConfig.all, NoCache(), HashSMap.empty, MBox(HashSMap.empty), 1, HashSMap.empty, exp, T, F) match {
+    evalBase(th, EvalConfig.all, NoCache(), HashSMap.empty, MBox(HashSMap.empty), 1, HashSMap.empty,
+      exp, T, F, BacktrackingSchedule.empty(F)) match {
       case Some((r, _)) => return Some(r)
       case _ => return None()
     }
@@ -1345,7 +1387,8 @@ object RewritingSystem {
                      provenClaims: HashSMap[AST.CoreExp.Base, AST.ProofAst.StepId],
                      exp: AST.CoreExp.Base,
                      removeLabels: B,
-                     shouldTrace: B): Option[(AST.CoreExp.Base, ISZ[Trace])] = {
+                     shouldTrace: B,
+                     backtrackingSchedule: BacktrackingSchedule): Option[(AST.CoreExp.Base, ISZ[Trace])] = {
     @strictpure def equivST(left: AST.CoreExp.Base, right: AST.CoreExp.Base): ST =
       AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, AST.Typed.b).prettyST
 
@@ -1430,11 +1473,13 @@ object RewritingSystem {
       if (e.tipe == AST.Typed.b) {
         provenClaims.get(e) match {
           case Some(stepId) =>
-            val r = AST.CoreExp.True
-            if (shouldTrace) {
-              trace = trace :+ Trace.Eval(st"using $stepId", e, r)
+            if (!backtrackingSchedule.choose()) {
+              val r = AST.CoreExp.True
+              if (shouldTrace) {
+                trace = trace :+ Trace.Eval(st"using $stepId", e, r)
+              }
+              rOpt = Some(r)
             }
-            rOpt = Some(r)
           case _ =>
         }
         if (rOpt.isEmpty) {
@@ -1453,10 +1498,12 @@ object RewritingSystem {
         val r = eqMap.get(e)
         r match {
           case Some((to, stepId)) =>
-            if (shouldTrace) {
-              trace = trace :+ Trace.Eval(st"substitution using $stepId [${to.prettyST}/${e.prettyST}]", e, to)
+            if (!backtrackingSchedule.choose()) {
+              if (shouldTrace) {
+                trace = trace :+ Trace.Eval(st"substitution using $stepId [${to.prettyST}/${e.prettyST}]", e, to)
+              }
+              rOpt = Some(to)
             }
-            rOpt = Some(to)
           case _ =>
         }
       }

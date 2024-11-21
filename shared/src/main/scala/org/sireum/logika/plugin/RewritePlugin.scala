@@ -29,7 +29,7 @@ package org.sireum.logika.plugin
 import org.sireum._
 import org.sireum.lang.{ast => AST}
 import org.sireum.logika.Logika.Reporter
-import org.sireum.logika.RewritingSystem.{Rewriter, toCondEquiv}
+import org.sireum.logika.RewritingSystem.{BacktrackingSchedule, Rewriter, toCondEquiv}
 import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext}
 
 @datatype class RewritePlugin extends JustificationPlugin {
@@ -41,7 +41,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
   override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
     just match {
       case just: AST.ProofAst.Step.Justification.Ref =>
-        return just.id.value == "Simpl" && just.isOwnedBy(justificationName)
+        return (just.id.value == "Simpl" || just.id.value == "ESimpl") && just.isOwnedBy(justificationName)
       case just: AST.ProofAst.Step.Justification.Apply =>
         just.invoke.ident.attr.resOpt match {
           case Some(res: AST.ResolvedInfo.Method) if (res.id == "Rewrite" || res.id == "RSimpl" || res.id == "Eval") && res.owner == justificationName => return T
@@ -61,7 +61,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
                       step: AST.ProofAst.Step.Regular, reporter: Logika.Reporter): State = {
     @strictpure def err: State = state(status = State.Status.Error)
     @strictpure def justArgs: ISZ[AST.Exp] = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply].args
-    val isSimpl = step.just.id.value == "Simpl"
+    val isESimpl = step.just.id.value == "ESimpl"
+    val isSimpl = isESimpl | step.just.id.value == "Simpl"
     val isEval = step.just.id.value == "Eval"
     val isRSimpl = step.just.id.value == "RSimpl"
     val (patterns, methodPatterns): (ISZ[Rewriter.Pattern.Claim], HashSMap[(ISZ[String], B), Rewriter.Pattern.Method]) =
@@ -150,13 +151,27 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
       rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("simplifying", stepClaim)
     }
 
-    val stepClaimEv: AST.CoreExp.Base = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache,
+    val schedule = BacktrackingSchedule.empty(isESimpl)
+
+    var stepClaimEv: AST.CoreExp.Base = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache,
       rwPc.methodPatterns, MBox(HashSMap.empty), logika.config.rwMax, rwPc.provenClaimStepIdMapEval, stepClaim, T,
-      logika.config.rwEvalTrace) match {
+      logika.config.rwEvalTrace, schedule) match {
       case Some((e, t)) =>
         rwPc.trace = t
         e
       case _ => stepClaim
+    }
+
+    while (stepClaimEv != AST.CoreExp.True && !schedule.done) {
+      schedule.index = 0
+      stepClaimEv = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache,
+        rwPc.methodPatterns, MBox(HashSMap.empty), logika.config.rwMax, rwPc.provenClaimStepIdMapEval, stepClaim, T,
+        logika.config.rwEvalTrace, schedule) match {
+        case Some((e, t)) =>
+          rwPc.trace = t
+          e
+        case _ => stepClaim
+      }
     }
 
     if (logika.config.rwEvalTrace) {
@@ -201,7 +216,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
           rwPc.trace = rwPc.trace :+ RewritingSystem.Trace.Begin("evaluating", fromCoreClaim)
         }
         rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache, rwPc.methodPatterns,
-          MBox(HashSMap.empty), logika.config.rwMax, rwPc.provenClaimStepIdMapEval, rwClaim, T, logika.config.rwEvalTrace) match {
+          MBox(HashSMap.empty), logika.config.rwMax, rwPc.provenClaimStepIdMapEval, rwClaim, T, logika.config.rwEvalTrace,
+          BacktrackingSchedule.empty(F)) match {
           case Some((c, t)) =>
             rwPc.trace = rwPc.trace ++ t
             c
@@ -236,7 +252,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
           }
           if (continu && !rwPc.labeledOnly) {
             rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache, rwPc.methodPatterns,
-              MBox(HashSMap.empty), 0, rwPc.provenClaimStepIdMapEval, rwClaim, T, T) match {
+              MBox(HashSMap.empty), 0, rwPc.provenClaimStepIdMapEval, rwClaim, T, T, BacktrackingSchedule.empty(F)) match {
               case Some((r, t)) =>
                 rwPc.trace = rwPc.trace ++ t
                 r
@@ -247,7 +263,8 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
         if (continu && !rwPc.labeledOnly) {
           rwClaim = RewritingSystem.evalBase(logika.th, RewritingSystem.EvalConfig.all, cache, rwPc.methodPatterns,
-            MBox(HashSMap.empty), logika.config.rwMax, rwPc.provenClaimStepIdMapEval, rwClaim, T, T) match {
+            MBox(HashSMap.empty), logika.config.rwMax, rwPc.provenClaimStepIdMapEval, rwClaim, T, T,
+            BacktrackingSchedule.empty(F)) match {
             case Some((r, t)) =>
               rwPc.trace = rwPc.trace ++ t
               r
