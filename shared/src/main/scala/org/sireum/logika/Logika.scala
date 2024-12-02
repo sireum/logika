@@ -1836,6 +1836,11 @@ import Util._
     def evalSelect(exp: AST.Exp.Select): ISZ[(State, State.Value)] = {
       val pos = exp.id.attr.posOpt.get
       exp.attr.resOpt.get match {
+        case res: AST.ResolvedInfo.Method if res.tpeOpt.isEmpty =>
+          println("Here")
+        case _ =>
+      }
+      exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.IsInstanceOf ||
           res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf =>
           return evalInstanceOfAs(res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf, exp.receiverOpt,
@@ -4878,7 +4883,7 @@ import Util._
         if (s0.ok) {
           if (step.steps.size > 0) {
             m = stateMap._2 + stepNo ~> StepProofContext.SubProof(stepNo,
-              th.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim), extractClaims(step.steps),
+              step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim, extractClaims(step.steps),
               extractSpcs(1, step.steps))
           }
           return (s0, m)
@@ -4918,7 +4923,7 @@ import Util._
           if (step.steps.nonEmpty && step.steps(0).isInstanceOf[AST.ProofAst.Step.Assume]) {
             return (s0,
               stateMap._2 + stepNo ~> StepProofContext.FreshAssumeSubProof(stepNo, step.context, step.params,
-                th.normalizeExp(step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim),
+                step.steps(0).asInstanceOf[AST.ProofAst.Step.Assume].claim,
                 extractClaims(step.steps), extractSpcs(1, step.steps)))
           } else {
             return (s0,

@@ -356,7 +356,7 @@ object AutoPlugin {
             r = r + logika.th.normalizeExp(claim) ~> (spc.stepNo, T, claim)
           case spc: StepProofContext.SubProof =>
             val claims: ISZ[AST.Exp] = for (p <- computeProvenClaims(spc.spcs).entries) yield p._2._3
-            val claim = AST.Util.bigImply(F, ISZ(spc.assumption, AST.Util.bigAnd(claims, spc.stepNo.posOpt)), spc.stepNo.posOpt)
+            val claim = AST.Util.bigImply(T, ISZ(spc.assumption, AST.Util.bigAnd(claims, spc.stepNo.posOpt)), spc.stepNo.posOpt)
             r = r + logika.th.normalizeExp(claim) ~> (spc.stepNo, F, claim)
           case spc: StepProofContext.FreshSubProof =>
             val claims: ISZ[AST.Exp] = for (p <- computeProvenClaims(spc.spcs).entries) yield p._2._3
@@ -376,7 +376,7 @@ object AutoPlugin {
               params = params :+ AST.Exp.Fun.Param(Some(p.id), p.tipeOpt, p.tipeOpt.get.typedOpt)
             }
             val claim = AST.Exp.QuantType(F, AST.Exp.Fun(spc.context, params,
-              AST.Stmt.Expr(AST.Util.bigImply(F, ISZ(spc.assumption, AST.Util.bigAnd(claims, spc.stepNo.posOpt)),
+              AST.Stmt.Expr(AST.Util.bigImply(T, ISZ(spc.assumption, AST.Util.bigAnd(claims, spc.stepNo.posOpt)),
               spc.stepNo.posOpt), tattr), tattr), AST.Attr(spc.stepNo.posOpt))
             r = r + logika.th.normalizeExp(claim) ~> (spc.stepNo, F, claim)
         }
@@ -465,8 +465,8 @@ object AutoPlugin {
       var s0 = state
       for (p <- provenClaims.entries) {
         if (!p._2._2) {
-          val (s1, exp) = l.rewriteAt(atMap, s0, p._1, reporter)
-          s0 = l.evalAssume(smt2, cache, T, "", s1, exp, p._1.posOpt, reporter)._1
+          val (s1, exp) = l.rewriteAt(atMap, s0, p._2._3, reporter)
+          s0 = l.evalAssume(smt2, cache, T, "", s1, exp, p._2._3.posOpt, reporter)._1
         }
       }
       val (s2, conclusion) = l.evalRegularStepClaimValue(smt2, cache, s0, step.claim, step.id.posOpt, reporter)
@@ -478,8 +478,7 @@ object AutoPlugin {
       }
       return err
     } else {
-      val psmt2 = smt2.emptyCache(logika.config)
-      val (suc, m) = state.unconstrainedClaims
+      val (suc, _) = state.unconstrainedClaims
       var s1 = suc
       var ok = T
       val provenClaimMap = HashMap ++ (for (p <- provenClaims.entries) yield p._2._1 ~> p._2._3)
@@ -498,9 +497,9 @@ object AutoPlugin {
         return err
       }
       val (s5, exp) = l.rewriteAt(atMap, s1, step.claim, reporter)
-      val (s6, conclusion) = l.evalRegularStepClaimValue(psmt2, cache, s5, exp, step.id.posOpt, reporter)
+      val (s6, conclusion) = l.evalRegularStepClaimValue(smt2, cache, s5, exp, step.id.posOpt, reporter)
       if (s6.ok) {
-        val r = checkValid(psmt2, s6, State.Claim.Prop(T, conclusion))
+        val r = checkValid(smt2, s6, State.Claim.Prop(T, conclusion))
         if (r.ok) {
           return state(claims = state.claims ++ ops.ISZOps(r.claims).slice(s1.claims.size, r.claims.size), nextFresh = r.nextFresh)
         }

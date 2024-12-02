@@ -125,7 +125,7 @@ import org.sireum.logika.Logika.Reporter
       }
       val ISZ(subProofNo) = args
       val subProof: HashSet[AST.Exp] = spcMap.get(subProofNo) match {
-        case Some(sp: StepProofContext.SubProof) if sp.assumption == logika.th.normalizeExp(claim.left) => HashSet ++ sp.claims + sp.assumption
+        case Some(sp: StepProofContext.SubProof) if logika.th.normalizeExp(sp.assumption) == logika.th.normalizeExp(claim.left) => HashSet ++ sp.claims + sp.assumption
         case _ =>
           reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the antecedent of step ${step.id}'s claim")
           return F
@@ -215,7 +215,7 @@ import org.sireum.logika.Logika.Reporter
         }
         val ISZ(subProofNo) = args
         val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo) match {
-          case Some(sp: StepProofContext.SubProof) if sp.assumption == logika.th.normalizeExp(claim.exp) => sp.claims
+          case Some(sp: StepProofContext.SubProof) if logika.th.normalizeExp(sp.assumption) == logika.th.normalizeExp(claim.exp) => sp.claims
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a sub-proof step assuming the operand of step ${step.id}'s claim")
             return err

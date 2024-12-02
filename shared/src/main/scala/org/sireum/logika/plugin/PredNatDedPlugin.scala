@@ -170,7 +170,7 @@ object PredNatDedPlugin {
           return err
         }
         val (params, assumption, subProof): (ISZ[AST.ProofAst.Step.Let.Param], AST.Exp, HashSet[AST.Exp]) = spcMap.get(subProofNo) match {
-          case Some(sp@StepProofContext.FreshAssumeSubProof(_, _, ps, ac, _, _)) => (ps, ac, HashSet ++ sp.claims)
+          case Some(sp@StepProofContext.FreshAssumeSubProof(_, _, ps, ac, _, _)) => (ps, logika.th.normalizeExp(ac), HashSet ++ sp.claims)
           case _ =>
             reporter.error(subProofNo.posOpt, Logika.kind, s"Expecting a parameterized let sub-proof assume step")
             return err
