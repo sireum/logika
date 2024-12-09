@@ -435,7 +435,7 @@ object AutoPlugin {
                   }
                 }
                 reporter.error(posOpt, Logika.kind,
-                  st"""The stated claim has not been proven before nor is a premise in the path conditions:
+                  st"""The stated claim has not been proven before nor is a premise in the path conditions.
                       |{
                       |  ${(for (e <- pathConditions) yield e.prettyST, ";\n")}
                       |}""".render)
