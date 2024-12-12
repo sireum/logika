@@ -39,23 +39,23 @@ object OptionsCli {
   @datatype class HelpOption extends LogikaTopOption
 
   @enum object LogikaBackground {
-    'Type
-    'Save
-    'Disabled
+    "Type"
+    "Save"
+    "Disabled"
   }
 
   @enum object LogikaFPRoundingMode {
-    'NearestTiesToEven
-    'NearestTiesToAway
-    'TowardPositive
-    'TowardNegative
-    'TowardZero
+    "NearestTiesToEven"
+    "NearestTiesToAway"
+    "TowardPositive"
+    "TowardNegative"
+    "TowardZero"
   }
 
   @enum object LogikaStrictPureMode {
-    'Default
-    'Flip
-    'Uninterpreted
+    "Default"
+    "Flip"
+    "Uninterpreted"
   }
 
   @datatype class LogikaOption(

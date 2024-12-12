@@ -428,26 +428,26 @@ object Logika {
   def checkScript(fileUriOpt: Option[String], input: String, config: Config, nameExePathMap: HashMap[String, String],
                   maxCores: Z, smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
                   hasLogika: B, plugins: ISZ[Plugin], line: Z,
-                  skipMethods: ISZ[String], skipTypes: ISZ[String]): Unit = {
+                  skipMethods: ISZ[String], skipTypes: ISZ[String]): Option[AST.TopUnit] = {
     val parsingStartTime = extension.Time.currentMillis
     val isWorksheet: B = fileUriOpt match {
       case Some(p) => !ops.StringOps(p).endsWith(".scala") && !ops.StringOps(p).endsWith(".slang")
       case _ => T
     }
 
-    def checkScriptH(): Unit = {
+    def checkScriptH(): Option[AST.TopUnit] = {
       val topUnitOpt = lang.parser.Parser(input).parseTopUnit[AST.TopUnit](
         isWorksheet = isWorksheet, isDiet = F, fileUriOpt = fileUriOpt, reporter = reporter)
       val libraryStartTime = extension.Time.currentMillis
       reporter.timing(parsingDesc, libraryStartTime - parsingStartTime)
       if (reporter.hasError) {
         reporter.illFormed()
-        return
+        return topUnitOpt
       }
       topUnitOpt match {
         case Some(program: AST.TopUnit.Program) =>
           if (!isWorksheet) {
-            return
+            return topUnitOpt
           }
           val (tc, rep) = extension.Cancel.cancellable(() => lang.FrontEnd.checkedLibraryReporter)
           val typeCheckingStartTime = extension.Time.currentMillis
@@ -486,9 +486,10 @@ object Logika {
           }
         case _ =>
       }
+      return topUnitOpt
     }
 
-    extension.Cancel.cancellable(checkScriptH _)
+    return extension.Cancel.cancellable(checkScriptH _)
   }
 
   @pure def shouldCheck(fileSet: HashSSet[String], line: Z, posOpt: Option[Position]): B = {
