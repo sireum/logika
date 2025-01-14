@@ -92,6 +92,8 @@ object OptionsCli {
     val par: Option[Z],
     val branchPar: B,
     val branchParReturn: B,
+    val branchPredNum: Z,
+    val branchPredComplexity: Z,
     val rwPar: B,
     val dontSplitFunQuant: B,
     val splitAll: B,
@@ -256,6 +258,12 @@ import OptionsCli._
           |                           100; default is 100)
           |    --par-branch         Enable branch parallelization
           |    --par-branch-return  Only use branch parallelization if all branches return
+          |    --par-branch-pred-num
+          |                          Enable branch parallelization (expects an integer;
+          |                           min is 2; default is 2)
+          |    --par-branch-pred-complexity
+          |                          Enable branch parallelization (expects an integer;
+          |                           min is 0; default is 10)
           |    --par-rw             Enable rewriting parallelization
           |
           |Path Splitting Options:
@@ -322,6 +330,8 @@ import OptionsCli._
     var par: Option[Z] = None()
     var branchPar: B = false
     var branchParReturn: B = false
+    var branchPredNum: Z = 2
+    var branchPredComplexity: Z = 10
     var rwPar: B = true
     var dontSplitFunQuant: B = false
     var splitAll: B = false
@@ -538,6 +548,18 @@ import OptionsCli._
              case Some(v) => branchParReturn = v
              case _ => return None()
            }
+         } else if (arg == "--par-branch-pred-num") {
+           val o: Option[Z] = parseNum(args, j + 1, Some(2), None())
+           o match {
+             case Some(v) => branchPredNum = v
+             case _ => return None()
+           }
+         } else if (arg == "--par-branch-pred-complexity") {
+           val o: Option[Z] = parseNum(args, j + 1, Some(0), None())
+           o match {
+             case Some(v) => branchPredComplexity = v
+             case _ => return None()
+           }
          } else if (arg == "--par-rw") {
            val o: Option[B] = { j = j - 1; Some(!rwPar) }
            o match {
@@ -661,7 +683,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchPar, branchParReturn, rwPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, rwMax, rwTrace, rwEvalTrace, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
+    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchPar, branchParReturn, branchPredNum, branchPredComplexity, rwPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, rwMax, rwTrace, rwEvalTrace, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

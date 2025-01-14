@@ -176,7 +176,9 @@ object OptionsUtil {
       rwTrace = o.rwTrace,
       rwMax = o.rwMax,
       rwPar = o.rwPar,
-      rwEvalTrace = o.rwEvalTrace
+      rwEvalTrace = o.rwEvalTrace,
+      branchParPredNum = o.branchPredNum,
+      branchParPredComp = o.branchPredComplexity
     )
     return Either.Left(config)
   }
@@ -336,6 +338,12 @@ object OptionsUtil {
       }
       if (config.rwEvalTrace != defaultConfig.rwEvalTrace) {
         r = r :+ "--rw-eval-trace"
+      }
+      if (config.branchParPredNum != defaultConfig.branchParPredNum) {
+        r = r ++ ISZ[String]("--par-branch-pred-num", config.branchParPredNum.string)
+      }
+      if (config.branchParPredComp != defaultConfig.branchParPredComp) {
+        r = r ++ ISZ[String]("--par-branch-pred-complexity", config.branchParPredComp.string)
       }
     }
     config.background match {

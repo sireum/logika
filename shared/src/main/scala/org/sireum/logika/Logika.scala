@@ -4393,11 +4393,11 @@ import Util._
       }
 
       @pure def shouldPar: B = {
-        if (branches.size > 2) {
-          return T
-        }
         if (branches.size == 1) {
           return F
+        }
+        if (branches.size >= config.branchParPredNum) {
+          return T
         }
 
         var compNum = 0
@@ -4408,7 +4408,7 @@ import Util._
           }
         }
 
-        if (compNum < 10) {
+        if (compNum < config.branchParPredComp) {
           return F
         }
 

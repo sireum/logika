@@ -148,6 +148,12 @@ object cli {
         Opt(name = "branchParReturn", longKey = "par-branch-return", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Only use branch parallelization if all branches return"),
+        Opt(name = "branchPredNum", longKey = "par-branch-pred-num", shortKey = None(),
+          tpe = Type.Num(sep = None(), default = 2, min = Some(2), max = None()),
+          description = "Branch parallelization prediction minimum number of branches"),
+        Opt(name = "branchPredComplexity", longKey = "par-branch-pred-complexity", shortKey = None(),
+          tpe = Type.Num(sep = None(), default = 10, min = Some(0), max = None()),
+          description = "Branch parallelization prediction statement complexity"),
         Opt(name = "rwPar", longKey = "par-rw", shortKey = None(),
           tpe = Type.Flag(T),
           description = "Enable rewriting parallelization")

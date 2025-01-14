@@ -70,7 +70,9 @@ import org.sireum._
                        val rwTrace: B,
                        val rwMax: Z,
                        val rwPar: B,
-                       val rwEvalTrace: B) {
+                       val rwEvalTrace: B,
+                       val branchParPredNum: Z,
+                       val branchParPredComp: Z) {
 
   @memoize def fingerprint: U64 = {
     return ops.StringOps(string).sha3U64(T, T)
