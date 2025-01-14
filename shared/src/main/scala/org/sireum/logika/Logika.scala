@@ -4400,7 +4400,7 @@ import Util._
           return T
         }
 
-        var compNum = 0
+        var compNum: Z = 0
         for (b <- branches) {
           val stmts = b.body.stmts
           for (stmt <- stmts) {
