@@ -4392,7 +4392,30 @@ import Util._
         return (lcsOpt, nextFresh, lsmt2)
       }
 
-      if (!(branches.size == 2 && (branches(1).body.stmts.isEmpty || branches(0).body.stmts.isEmpty))) {
+      @pure def shouldPar: B = {
+        if (branches.size > 2) {
+          return T
+        }
+        if (branches.size == 1) {
+          return F
+        }
+
+        var compNum = 0
+        for (b <- branches) {
+          val stmts = b.body.stmts
+          for (stmt <- stmts) {
+            compNum = compNum + stmt.compNum
+          }
+        }
+
+        if (compNum < 10) {
+          return F
+        }
+
+        return T
+      }
+
+      if (shouldPar) {
         var first: Z = -1
         val outputs = ops.MSZOps(inputs.toMS).mParMapCores(computeBranch _, config.parCores)
         for (i <- 0 until outputs.size) {
