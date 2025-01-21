@@ -4396,7 +4396,7 @@ import Util._
         if (branches.size == 1) {
           return F
         }
-        if (branches.size >= config.branchParPredNum) {
+        if (branches.size > config.branchParPredNum) {
           return T
         }
 

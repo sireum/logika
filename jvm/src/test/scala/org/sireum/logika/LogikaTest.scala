@@ -100,8 +100,8 @@ object LogikaTest {
       rwMax = 100,
       rwPar = T,
       rwEvalTrace = T,
-      branchParPredNum = 2,
-      branchParPredComp = 10
+      branchParPredNum = 3,
+      branchParPredComp = 16
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty
