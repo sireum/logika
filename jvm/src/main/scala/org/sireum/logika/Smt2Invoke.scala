@@ -55,7 +55,7 @@ object Smt2Invoke {
     return HashMap.empty[String, String] ++ ISZ[(String, String)](
       "cvc4" ~> (platformHome / "cvc").string,
       "cvc5" ~> (platformHome / "cvc5").string,
-      "z3" ~> (platformHome / "z3" / "bin" / "z3").string
+      "z3" ~> (sireumHome / "bin" / "z3" / "bin" / "z3.com").string
     ) ++ (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
       "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
   }
