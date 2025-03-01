@@ -27,7 +27,7 @@ package org.sireum.logika
 
 import org.sireum._
 import org.sireum.lang.tipe.TypeHierarchy
-import org.sireum.lang.{ast => AST}
+import org.sireum.lang.{CoreExpTranslator, ast => AST}
 
 @datatype trait StepProofContext {
   @pure def stepNo: AST.ProofAst.StepId
@@ -44,7 +44,7 @@ object StepProofContext {
                           val exp: AST.Exp) extends StepProofContext {
     @strictpure override def prettyST: ST = st"(${stepNo.prettyST}, ${exp.prettyST})"
     @memoize def coreExpClaim: AST.CoreExp.Base = {
-      return th.translateToBaseCoreExp(exp, F)
+      return CoreExpTranslator.translateToBaseCoreExp(th, exp, F)
     }
   }
 

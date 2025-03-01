@@ -27,9 +27,9 @@
 package org.sireum.logika.plugin
 
 import org.sireum._
-import org.sireum.lang.{ast => AST}
+import org.sireum.lang.{CoreExpTranslator, ast => AST}
 import org.sireum.logika.Logika.Reporter
-import org.sireum.logika.RewritingSystem.{BacktrackingSchedule, Rewriter, toCondEquiv}
+import org.sireum.logika.RewritingSystem.{BacktrackingSchedule, Rewriter}
 import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext}
 
 @datatype class RewritePlugin extends JustificationPlugin {
@@ -95,7 +95,7 @@ import org.sireum.logika.{Logika, RewritingSystem, Smt2, State, StepProofContext
         }
         (r1, r2)
       }
-    val stepClaim = logika.th.translateToBaseCoreExp(step.claim, F)
+    val stepClaim = CoreExpTranslator.translateToBaseCoreExp(logika.th, step.claim, F)
     val (fromOpt, fromCoreClaim): (Option[AST.ProofAst.StepId], AST.CoreExp.Base) = {
       if (isSimpl) {
         (None(), AST.CoreExp.True)
