@@ -5185,7 +5185,7 @@ import Util._
             }
             srw
           }
-          for (p <- evalExp(split, smt2, cache, rtCheck, s1, whileStmt.cond, reporter)) {
+          for (p <- evalExp(split, smt2, cache, rtCheck, s0w, whileStmt.cond, reporter)) {
             val (s2, v) = p
             if (s2.ok) {
               val pos = whileStmt.cond.posOpt.get
@@ -5204,10 +5204,11 @@ import Util._
               }
               thisL = thisL(context = context(modifiableIds = modifiableIds))
               if (thenSat) {
-                for (s4 <- assumeExps(split, smt2, cache, rtCheck, s3(claims = thenClaims), whileStmt.invariants, reporter);
-                     s5 <- evalStmts(thisL, split, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
-                  if (s5.ok) {
-                    checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop", s5,
+                for (s4 <- assumeExps(split, smt2, cache, rtCheck, s1, whileStmt.invariants, reporter);
+                     s5 <- assumeExp(split, smt2, cache, rtCheck, s4, whileStmt.cond, reporter);
+                     s6 <- evalStmts(thisL, split, smt2, cache, None(), rtCheck, s5, whileStmt.body.stmts, reporter)) {
+                  if (s6.ok) {
+                    checkExps(split, smt2, cache, F, "Loop invariant", " at the end of while-loop", s6,
                       whileStmt.invariants, reporter)
                   }
                 }
@@ -5216,9 +5217,13 @@ import Util._
               val elseClaims = s3.claims :+ negProp
               val elseSat = smt2.sat(context.methodName, config, cache, T,
                 s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
-              val s4 = s3(status = State.statusOf(elseSat), claims = elseClaims)
+              val s4 = s1(status = State.statusOf(elseSat))
               if (elseSat) {
-                r = r ++ assumeExps(split, smt2, cache, rtCheck, s4, whileStmt.invariants, reporter)
+                for (s5 <- assumeExps(split, smt2, cache, rtCheck, s4, whileStmt.invariants, reporter);
+                     s6v <- evalExp(split, smt2, cache, rtCheck, s5, whileStmt.cond, reporter)) {
+                  val (s6, sym) = value2Sym(s6v._1, s6v._2, whileStmt.cond.posOpt.get)
+                  r = r :+ s6.addClaim(State.Claim.Prop(F, sym))
+                }
               } else {
                 r = r :+ s4
               }
