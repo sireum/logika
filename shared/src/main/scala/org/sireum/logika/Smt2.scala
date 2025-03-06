@@ -968,7 +968,8 @@ object Smt2 {
               }
             }
           }
-          if (!hasChild && children.isEmpty && t != AST.Typed.nothing && t != AST.Typed.string && t != AST.Typed.st) {
+          if (!hasChild && children.isEmpty && t != AST.Typed.nothing && t != AST.Typed.string && t != AST.Typed.st &&
+            t != AST.Typed.unit) {
             reporter.warn(posOpt, Logika.kind, s"$t does not have any concrete implementation")
           }
           posetUp(poset.addChildren(t, children))
