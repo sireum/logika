@@ -5222,6 +5222,8 @@ import Util._
               } else {
                 r = r :+ s4
               }
+            } else {
+              r = r :+ s2
             }
           }
         } else {
