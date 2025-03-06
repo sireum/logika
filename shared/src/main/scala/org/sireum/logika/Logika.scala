@@ -4670,22 +4670,24 @@ import Util._
           branches = branches :+ Branch("match case pattern", sym, c.body, m, bidMap)
         }
         val stmtPos = stmt.posOpt.get
-        if (!config.interp && !context.hasInline && config.patternExhaustive &&
-          smt2.satResult(context.methodName, config, cache, config.timeoutInMs, T,
+        if (!config.interp && !context.hasInline && config.patternExhaustive) {
+          if (smt2.satResult(context.methodName, config, cache, config.timeoutInMs, T,
             s"pattern match inexhaustiveness at [${stmtPos.beginLine}, ${stmtPos.beginColumn}]",
             stmtPos, s1.claims :+ State.Claim.And(for (p <- branches) yield State.Claim.Prop(F, p.sym)), reporter).
             _2.kind == Smt2Query.Result.Kind.Sat) {
-          error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
-          r = r :+ s1(status = State.Status.Error)
-        } else {
-          val (s3, leafClaims) = evalBranches(T, split, smt2, cache, rtCheck, rOpt, lcontext, s1, branches, reporter)
-          val shouldSplit: B = split match {
-            case Split.Default => config.splitAll || config.splitMatch
-            case Split.Enabled => T
-            case Split.Disabled => F
+            error(stmt.exp.posOpt, "Inexhaustive pattern match", reporter)
+            r = r :+ s1(status = State.Status.Error)
+          } else {
+            s1 = s1.addClaim(State.Claim.Or(for (p <- branches) yield State.Claim.Prop(T, p.sym)))
           }
-          r = r ++ mergeBranches(shouldSplit, s3, leafClaims)
         }
+        val (s3, leafClaims) = evalBranches(T, split, smt2, cache, rtCheck, rOpt, lcontext, s1, branches, reporter)
+        val shouldSplit: B = split match {
+          case Split.Default => config.splitAll || config.splitMatch
+          case Split.Enabled => T
+          case Split.Disabled => F
+        }
+        r = r ++ mergeBranches(shouldSplit, s3, leafClaims)
       } else {
         r = r :+ s0
       }
