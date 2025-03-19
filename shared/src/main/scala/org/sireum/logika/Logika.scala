@@ -5187,10 +5187,10 @@ import Util._
             }
             srw
           }
+          val pos = whileStmt.cond.posOpt.get
           for (p <- evalExp(split, smt2, cache, rtCheck, s0w, whileStmt.cond, reporter)) {
             val (s2, v) = p
             if (s2.ok) {
-              val pos = whileStmt.cond.posOpt.get
               val (s3, cond) = value2Sym(s2, v, pos)
               val prop = State.Claim.Prop(T, cond)
               val thenClaims = s3.claims :+ prop
@@ -5215,23 +5215,17 @@ import Util._
                   }
                 }
               }
-              val negProp = State.Claim.Prop(F, cond)
-              val elseClaims = s3.claims :+ negProp
-              val elseSat = smt2.sat(context.methodName, config, cache, T,
-                s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, elseClaims, reporter)
-              val s4 = s1(status = State.statusOf(elseSat))
-              if (elseSat) {
-                for (s5 <- assumeExps(split, smt2, cache, rtCheck, s4, whileStmt.invariants, reporter);
-                     s6v <- evalExp(split, smt2, cache, rtCheck, s5, whileStmt.cond, reporter)) {
-                  val (s6, sym) = value2Sym(s6v._1, s6v._2, whileStmt.cond.posOpt.get)
-                  r = r :+ s6.addClaim(State.Claim.Prop(F, sym))
-                }
-              } else {
-                r = r :+ s4
-              }
             } else {
               r = r :+ s2
             }
+          }
+          for (s5 <- assumeExps(split, smt2, cache, rtCheck, s1, whileStmt.invariants, reporter);
+               s6v <- evalExp(split, smt2, cache, rtCheck, s5, whileStmt.cond, reporter)) {
+            val (s6, sym) = value2Sym(s6v._1, s6v._2, whileStmt.cond.posOpt.get)
+            val s7 = s6.addClaim(State.Claim.Prop(F, sym))
+            val elseSat = smt2.sat(context.methodName, config, cache, T,
+              s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s7.claims, reporter)
+            r = r :+ s7(status = State.statusOf(elseSat))
           }
         } else {
           r = r :+ s0w
