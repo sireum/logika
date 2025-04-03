@@ -4064,8 +4064,7 @@ import Util._
           case res: AST.ResolvedInfo.LocalVar =>
             context.methodOpt match {
               case Some(mctx) if !config.interp && !context.hasInline && res.context == mctx.name =>
-                val isParam = mctx.paramIds.contains(res.id)
-                if (isParam && !mctx.modLocalIds.contains(res.id) || !isParam && !context.modifiableIds.contains(res.id)) {
+                if (!context.modifiableIds.contains(res.id)) {
                   reporter.error(lhs.posOpt, kind, s"Missing Modifies clause for ${res.id}")
                 }
               case _ =>
