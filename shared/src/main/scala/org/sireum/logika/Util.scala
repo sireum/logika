@@ -1954,9 +1954,11 @@ object Util {
     }
     var modifiableIds = HashSet.empty[String]
     for (v <- mctx.localMap(TypeChecker.emptySubstMap).values) {
-      val (isVal, mname, id, t) = v
+      val (isVal, isMod, mname, id, t) = v
       val posOpt = id.attr.posOpt
-      modifiableIds = modifiableIds + id.value
+      if (isMod) {
+        modifiableIds = modifiableIds + id.value
+      }
       if (id.value != "this") {
         val (s1, sym) = idIntro(posOpt.get, s0, mname, id.value, t, posOpt)
         s0 = if (isVal && !l.th.isModifiable(t)) s1 else s1.addClaim(State.Claim.Input(T, F, mname, id.value, sym, sym.pos))
