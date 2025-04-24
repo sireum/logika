@@ -125,7 +125,7 @@ object Smt2Invoke {
           }
           val lines = ops.StringOps(l).split((c: C) => c == ' ')
           if (lines.isEmpty) {
-            "unknown"
+            ""
           } else {
             ops.StringOps(lines(0)).trim
           }
