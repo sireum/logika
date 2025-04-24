@@ -123,7 +123,12 @@ object Smt2Invoke {
             }
             i = i + 1
           }
-          ops.StringOps(ops.StringOps(l).split((c: C) => c == ' ')(0)).trim
+          val lines = ops.StringOps(l).split((c: C) => c == ' ')
+          if (lines.isEmpty) {
+            "unknown"
+          } else {
+            ops.StringOps(lines(0)).trim
+          }
         }
         val time = extension.Time.currentMillis - start
         firstLine match {
