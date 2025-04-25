@@ -19,7 +19,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bin/linux/java
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java-amd64
       - name: Cache Scala
         id: cache-scala
         uses: actions/cache@v4
@@ -59,7 +59,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bin/linux/arm/java
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java-arm64
       - name: Cache Scala
         id: cache-scala
         uses: actions/cache@v4
@@ -99,7 +99,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bin/mac/java
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java-amd64
       - name: Cache Scala
         id: cache-scala
         uses: actions/cache@v4
@@ -133,7 +133,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bin/mac/java
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java-arm64
       - name: Cache Scala
         id: cache-scala
         uses: actions/cache@v4
@@ -167,7 +167,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bin\win\java
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java-amd64
       - name: Cache Scala
         id: cache-scala
         uses: actions/cache@v4
@@ -202,7 +202,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bin\win\java
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java-arm64
       - name: Cache Scala
         id: cache-scala
         uses: actions/cache@v4
