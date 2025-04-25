@@ -89,22 +89,24 @@ object Smt2Invoke {
       val pout: String = st"${pr.err}${pr.out}".render
       val isTimeout: B = timeoutCodes.contains(pr.exitCode) ||
         (config.name == "cvc5" && ops.StringOps(pout).contains("cvc5 interrupted by timeout."))
-      val isUnknown: B = if (pr.exitCode == 1) {
-        config.name match {
-          case string"cvc5" =>
-            val poutOps = ops.StringOps(pout)
-            poutOps.contains("Array theory solver does not yet support write-chains connecting two different constant arrays")
-          case string"alt-ergo" => T
-          case _ => F
-        }
-      } else if (pr.exitCode == 2) {
-        val poutOps = ops.StringOps(pout)
-        config.name match {
-          case string"alt-ergo" if poutOps.contains("exception Psmt2Frontend__Smtlib_parser.MenhirBasics.Error") => T
-          case _ => F
-        }
-      } else {
-        F
+      val isUnknown: B = pr.exitCode match {
+        case z"1" =>
+          config.name match {
+            case string"cvc5" => ops.StringOps(pout).contains("Array theory solver")
+            case string"alt-ergo" => T
+            case _ => F
+          }
+        case z"2" =>
+          config.name match {
+            case string"alt-ergo" => ops.StringOps(pout).contains("exception")
+            case _ => F
+          }
+        case z"4" =>
+          config.name match {
+            case string"cvc5" => Os.isWinArm
+            case  _ => F
+          }
+        case _ => F
       }
       val r: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type, Z)] = {
         val out = ops.StringOps(pout).split((c: C) => c == '\n')
