@@ -4,7 +4,7 @@ on: [push]
 
 jobs:
 
-  build-ubuntu:
+  test-ubuntu-amd64:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -44,7 +44,81 @@ jobs:
           cd $GITHUB_WORKSPACE
           bin/build.cmd test
 
-  build-mac:
+  test-ubuntu-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Retrieve versions.properties
+        run: |
+          wget -q https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
+      - name: Cache Java
+        id: cache-java
+        uses: actions/cache@v4
+        with:
+          path: bin/linux/arm/java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+      - name: Cache Scala
+        id: cache-scala
+        uses: actions/cache@v4
+        with:
+          path: bin/scala
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
+      - name: Cache Coursier
+        id: cache-coursier
+        uses: actions/cache@v4
+        with:
+          path: cache/coursier
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+      - name: Setup APE binfmt
+        run: |
+          sudo wget -O /usr/bin/ape https://cosmo.zip/pub/cosmos/bin/ape-$(uname -m).elf
+          sudo chmod +x /usr/bin/ape
+          sudo sh -c "echo ':APE:M::MZqFpD::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/register" || true
+          sudo sh -c "echo ':APE-jart:M::jartsr::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/register" || true
+      - name: Test
+        run: |
+          export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
+          cd $GITHUB_WORKSPACE
+          bin/build.cmd test
+
+  test-mac-amd64:
+    runs-on: macOS-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Retrieve versions.properties
+        run: |
+          curl -JLOs https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
+      - name: Cache Java
+        id: cache-java
+        uses: actions/cache@v4
+        with:
+          path: bin/mac/java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+      - name: Cache Scala
+        id: cache-scala
+        uses: actions/cache@v4
+        with:
+          path: bin/scala
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
+      - name: Cache Coursier
+        id: cache-coursier
+        uses: actions/cache@v4
+        with:
+          path: cache/coursier
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+      - name: Test
+        run: |
+          export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
+          cd $GITHUB_WORKSPACE
+          bin/build.cmd test
+
+  test-mac-arm64:
     runs-on: macOS-latest
     steps:
       - name: Checkout
@@ -78,8 +152,43 @@ jobs:
           cd $GITHUB_WORKSPACE
           bin/build.cmd test
 
-  build-windows:
+  test-windows-amd64:
     runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Retrieve versions.properties
+        run: |
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties" -OutFile "versions.properties"
+      - name: Cache Java
+        id: cache-java
+        uses: actions/cache@v4
+        with:
+          path: bin\win\java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+      - name: Cache Scala
+        id: cache-scala
+        uses: actions/cache@v4
+        with:
+          path: bin\scala
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
+      - name: Cache Coursier
+        id: cache-coursier
+        uses: actions/cache@v4
+        with:
+          path: cache\coursier
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+      - name: Test
+        shell: cmd
+        run: |
+          set COURSIER_CACHE=%GITHUB_WORKSPACE%\cache\coursier
+          cd /d %GITHUB_WORKSPACE%
+          call bin\build.cmd test
+
+  test-windows-arm64:
+    runs-on: windows-11-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v3
