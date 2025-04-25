@@ -49,12 +49,10 @@ class LogikaRcTest extends SireumRcSpec {
     ignoreOnLinuxArm.contains(name)
   } else {
     name match {
-    case "opsem.sc" | "opsem-alt.sc" => Os.isMac && isInGithubAction
+    case "opsem.sc" | "opsem-alt.sc" => (Os.isMac && isInGithubAction) || Os.isWinArm
     case "collection.sc" => Os.isWinArm
     case "count.sc" => Os.isWinArm
     case "count2.sc" => Os.isWinArm
-    case "opsem.sc" => Os.isWinArm
-    case "opsem-alt.sc" => Os.isWinArm
     case "conformance-swap.sc" => isSimplified
     case "strictpure.sc" => Os.isWin && isInGithubAction && !isSimplified
     case _ => false
