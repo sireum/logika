@@ -1380,6 +1380,49 @@ import Util._
             val (s2, sym) = value2Sym(s1, r, pos)
             return (Util.assumeValueInv(this, smt2, cache, rtCheck, s2, sym, pos, reporter), sym)
           }
+        case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Min || res.kind == AST.ResolvedInfo.BuiltIn.Kind.Max =>
+          val tn = t.asInstanceOf[AST.Typed.Name]
+          th.typeMap.get(tn.ids) match {
+            case Some(info: TypeInfo.SubZ) =>
+              res.kind match {
+                case AST.ResolvedInfo.BuiltIn.Kind.Min =>
+                  if (info.ast.isBitVector) {
+                    (info.ast.isSigned, info.ast.bitWidth) match {
+                      case (F, z"8") => return (s0, State.Value.U8(conversions.Z.toU8(info.ast.min), tn, pos))
+                      case (F, z"16") => return (s0, State.Value.U16(conversions.Z.toU16(info.ast.min), tn, pos))
+                      case (F, z"32") => return (s0, State.Value.U32(conversions.Z.toU32(info.ast.min), tn, pos))
+                      case (F, z"64") => return (s0, State.Value.U64(conversions.Z.toU64(info.ast.min), tn, pos))
+                      case (T, z"8") => return (s0, State.Value.S8(conversions.Z.toS8(info.ast.min), tn, pos))
+                      case (T, z"16") => return (s0, State.Value.S16(conversions.Z.toS16(info.ast.min), tn, pos))
+                      case (T, z"32") => return (s0, State.Value.S32(conversions.Z.toS32(info.ast.min), tn, pos))
+                      case (T, z"64") => return (s0, State.Value.S64(conversions.Z.toS64(info.ast.min), tn, pos))
+                      case (_, _) => halt(s"Infeasible: $info")
+                    }
+                  } else {
+                    return (s0, State.Value.Range(info.ast.min, tn, pos))
+                  }
+                case AST.ResolvedInfo.BuiltIn.Kind.Max =>
+                  if (info.ast.isBitVector) {
+                    (info.ast.isSigned, info.ast.bitWidth) match {
+                      case (F, z"8") => return (s0, State.Value.U8(conversions.Z.toU8(info.ast.max), tn, pos))
+                      case (F, z"16") => return (s0, State.Value.U16(conversions.Z.toU16(info.ast.max), tn, pos))
+                      case (F, z"32") => return (s0, State.Value.U32(conversions.Z.toU32(info.ast.max), tn, pos))
+                      case (F, z"64") => return (s0, State.Value.U64(conversions.Z.toU64(info.ast.max), tn, pos))
+                      case (T, z"8") => return (s0, State.Value.S8(conversions.Z.toS8(info.ast.max), tn, pos))
+                      case (T, z"16") => return (s0, State.Value.S16(conversions.Z.toS16(info.ast.max), tn, pos))
+                      case (T, z"32") => return (s0, State.Value.S32(conversions.Z.toS32(info.ast.max), tn, pos))
+                      case (T, z"64") => return (s0, State.Value.S64(conversions.Z.toS64(info.ast.max), tn, pos))
+                      case (_, _) => halt(s"Infeasible: $info")
+                    }
+                  } else {
+                    return (s0, State.Value.Range(info.ast.max, tn, pos))
+                  }
+                case _ =>
+              }
+            case _ =>
+          }
+          reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
+          return (s0(status = State.Status.Error), State.errorValue)
         case _ =>
           reporter.warn(e.posOpt, kind, s"Not currently supported: $e")
           return (s0(status = State.Status.Error), State.errorValue)
@@ -1846,6 +1889,8 @@ import Util._
           res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf =>
           return evalInstanceOfAs(res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf, exp.receiverOpt,
             exp.targs(0).typedOpt.get, exp.posOpt.get)
+        case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.Min || res.kind == AST.ResolvedInfo.BuiltIn.Kind.Max =>
+          return ISZ(evalIdentH(state, res, exp.typedOpt.get, exp.posOpt.get))
         case res: AST.ResolvedInfo.Method if (res.mode == AST.MethodMode.Method || res.mode == AST.MethodMode.Ext) &&
           res.tpeOpt.get.isByName && !Logika.builtInByNameMethods.contains((res.isInObject, res.owner, res.id)) =>
           val mType = res.tpeOpt.get
