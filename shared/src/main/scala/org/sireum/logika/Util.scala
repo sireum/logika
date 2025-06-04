@@ -1419,7 +1419,7 @@ object Util {
                 case _ => return None()
               }
             }
-            assert(let.isLocal && let.context == context, s"${let.isLocal}: ${let.context} == ${context}")
+            assert(let.isLocal && let.context == context || ops.ISZOps(let.context).slice(0, context.size) == context, s"${let.isLocal}: ${let.context} == ${context}")
             val ident = AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt,
               Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, let.id)),
               Some(let.tipe)))
