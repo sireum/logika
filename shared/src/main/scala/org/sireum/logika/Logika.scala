@@ -2197,7 +2197,7 @@ import Util._
           val id = p.idOpt.get
           val res = AST.ResolvedInfo.LocalVar(quant.fun.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
           val pos = id.attr.posOpt.get
-          val (s3, v) = evalIdentH(s0, res, p.typedOpt.get, pos)
+          val (s3, v) = evalIdentH(s2, res, p.typedOpt.get, pos)
           val (s4, sym) = value2Sym(s3, v, pos)
           val (s5, conds) = Util.addValueInv(this, smt2, cache, rtCheck, s4, sym, pos, reporter)
           if (conds.nonEmpty) {
@@ -2872,11 +2872,15 @@ import Util._
         pfOpt match {
           case Some(pf) =>
             val (cs6, sym) = cs5.freshSym(pf.returnType, pos)
+            val (cs7, invSyms) = Util.addValueInv(this, smt2, cache, rtCheck, cs6, sym, pos, reporter)
             var args: ISZ[State.Value] = if (pf.receiverTypeOpt.nonEmpty) ISZ[State.Value](receiverOpt.get) else ISZ()
             for (pa <- paramArgs) {
               args = args :+ pa._4
             }
-            cs5 = cs6.addClaims(ISZ(State.Claim.Let.ProofFunApply(sym, pf, args), State.Claim.Eq(result, sym)))
+            cs5 = cs7.addClaims(ISZ(State.Claim.Let.ProofFunApply(sym, pf, args), State.Claim.Eq(result, sym)))
+            for (invSym <- invSyms) {
+              cs5 = cs5.addClaim(State.Claim.Prop(T, invSym))
+            }
           case _ =>
         }
 
@@ -3071,7 +3075,10 @@ import Util._
         case Some(receiver) => args = receiver +: args
         case _ =>
       }
-      r = r :+ ((s3.addClaim(State.Claim.Let.ProofFunApply(re, pf, args)), re))
+      val (s4, syms) = Util.addValueInv(this, smt2, cache, rtCheck, s3, re, pos, reporter)
+      r = r :+ ((s4.addClaim(State.Claim.Let.ProofFunApply(re, pf, args)).addClaims(
+        for (sym <- syms) yield State.Claim.Prop(T, sym)
+      ), re))
       return r
     }
 
