@@ -2299,13 +2299,27 @@ object Smt2 {
         case tipe: AST.Typed.Tuple =>
           st"""(declare-const $n ${typeId(tipe)})
               |(assert (= (${tupleTypeOfName(tipe)} $n) ${typeHierarchyId(tipe)}))"""
-        case _ =>
-          if (typeHierarchy.isAdtType(tipe)) {
-            st"""(declare-const $n ${typeId(tipe)})
-                |(assert (${if (typeHierarchy.isAdtLeafType(tipe)) "=" else "sub-type"} (type-of $n) ${typeHierarchyId(tipe)}))"""
-          } else {
-            st"(declare-const $n ${typeId(tipe)})"
+        case tipe: AST.Typed.Name =>
+          typeHierarchy.typeMap.get(tipe.ids) match {
+            case Some(info: TypeInfo.SubZ) =>
+              var sts = ISZ[ST]()
+              if (info.ast.hasMin) {
+                sts = sts :+ st"(assert (>= $n ${toVal(config, tipe, info.ast.min)}))"
+              }
+              if (info.ast.hasMax) {
+                sts = sts :+ st"(assert (<= $n ${toVal(config, tipe, info.ast.max)}))"
+              }
+              st"""(declare-const $n ${typeId(tipe)})
+                  |${(sts, "\n")}"""
+            case _ =>
+              if (typeHierarchy.isAdtType(tipe)) {
+                st"""(declare-const $n ${typeId(tipe)})
+                    |(assert (${if (typeHierarchy.isAdtLeafType(tipe)) "=" else "sub-type"} (type-of $n) ${typeHierarchyId(tipe)}))"""
+              } else {
+                st"(declare-const $n ${typeId(tipe)})"
+              }
           }
+        case _ => st"(declare-const $n ${typeId(tipe)})"
       }
 
       return r
