@@ -571,8 +571,8 @@ object Util {
       for (p <- atPossMap.entries) {
         val ((ctx, id, t), m) = p
         for (p2 <- m.entries) {
-          val (poss, m) = p2
-          for (p3 <- m.entries) {
+          val (poss, m2) = p2
+          for (p3 <- m2.entries) {
             val (num, (n, sym)) = p3
             val key = (ctx, id, t, n)
             if (r.get(key).isEmpty) {
@@ -1239,7 +1239,7 @@ object Util {
                         val info = ti.methods.get(let.id).get
                         val tOpt: Option[AST.Typed.Fun] = info.typedOpt match {
                           case Some(_: AST.Typed.Method) => Some(AST.Typed.Fun(AST.Purity.Pure, T, ISZ(), sym.tipe))
-                          case Some(t) => halt(s"Infeasible: $t")
+                          case Some(tpe) => halt(s"Infeasible: $tpe")
                           case _ => None()
                         }
                         return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
@@ -2258,10 +2258,10 @@ object Util {
           if (s.ok) {
             status = T
           }
-          val (s2, sym) = logika.value2Sym(s, v, pos)
-          sss = sss :+ ((s2, sym))
-          if (maxFresh < s2.nextFresh) {
-            maxFresh = s2.nextFresh
+          val (s3, sym) = logika.value2Sym(s, v, pos)
+          sss = sss :+ ((s3, sym))
+          if (maxFresh < s3.nextFresh) {
+            maxFresh = s3.nextFresh
           }
         }
         assert(svs.isEmpty || maxFresh >= 0)

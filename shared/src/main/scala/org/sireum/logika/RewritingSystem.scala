@@ -852,7 +852,7 @@ object RewritingSystem {
           st"Could not unify local pattern '$id' with both '${e1.prettyST}' and '${e2.prettyST}'".render
       }
     }
-    def matchType(t1: AST.Typed, t2: AST.Typed, p: AST.CoreExp, e: AST.CoreExp): Unit = {
+    def matchType(tpe1: AST.Typed, tpe2: AST.Typed, p: AST.CoreExp, e: AST.CoreExp): Unit = {
       def errType(et1: AST.Typed, et2: AST.Typed): Unit = {
         if (silent) {
           errorMessages.value = errorMessages.value :+ ""
@@ -861,7 +861,7 @@ object RewritingSystem {
             st"Could not unify types '$et1' and '$et2' in '${p.prettyST}' and '${e.prettyST}'".render
         }
       }
-      (t1, t2) match {
+      (tpe1, tpe2) match {
         case (t1: AST.Typed.TypeVar, t2) =>
           substMap.value.get(t1.id) match {
             case Some(prevType) =>
@@ -897,16 +897,16 @@ object RewritingSystem {
             matchType(t1.ret, t2.ret, p, e)
           }
         case (_, _) =>
-          if (t1 != t2) {
-            errType(t1, t2)
+          if (tpe1 != tpe2) {
+            errType(tpe1, tpe2)
           }
       }
     }
-    def matchPatternLocals(p: AST.CoreExp.Base, e: AST.CoreExp.Base): Unit = {
+    def matchPatternLocals(pbase: AST.CoreExp.Base, ebase: AST.CoreExp.Base): Unit = {
       if (errorMessages.value.nonEmpty) {
         return
       }
-      (p, e) match {
+      (pbase, ebase) match {
         case (p: AST.CoreExp.Lit, e) =>
           if (p != e) {
             err(p, e)
@@ -1014,7 +1014,7 @@ object RewritingSystem {
                   }
                   val key = (context, id)
                   map.get(key) match {
-                    case Some(f) if f != r => err2(id, f, r)
+                    case Some(f2) if f2 != r => err2(id, f2, r)
                     case _ => map = map + key ~> r
                   }
                 }
@@ -1049,7 +1049,7 @@ object RewritingSystem {
             matchPatternLocals(p.exp, e.exp)
           }
         case (_, _) =>
-          err(p, e)
+          err(pbase, ebase)
       }
     }
 
@@ -1443,15 +1443,15 @@ object RewritingSystem {
         for (p <- provenClaims.entries) {
           val (claim, stepId) = p
           claim match {
-            case AST.CoreExp.Binary(left, AST.Exp.BinaryOp.EquivUni, right, _) =>
-              (left, right) match {
-                case (left: AST.CoreExp.Lit, _) => r = r + right ~> (left, stepId)
-                case (_, right: AST.CoreExp.Lit) => r = r + left ~> (right, stepId)
-                case (left: AST.CoreExp.Constructor, _) => r = r + right ~> (left, stepId)
-                case (_, right: AST.CoreExp.Constructor) => r = r + left ~> (right, stepId)
+            case AST.CoreExp.Binary(le, AST.Exp.BinaryOp.EquivUni, re, _) =>
+              (le, re) match {
+                case (left: AST.CoreExp.Lit, _) => r = r + re ~> (left, stepId)
+                case (_, right: AST.CoreExp.Lit) => r = r + le ~> (right, stepId)
+                case (left: AST.CoreExp.Constructor, _) => r = r + re ~> (left, stepId)
+                case (_, right: AST.CoreExp.Constructor) => r = r + le ~> (right, stepId)
                 case (_, _) =>
                   val (key, value): (AST.CoreExp.Base, AST.CoreExp.Base) =
-                    if (left < right) (right, left) else (left, right)
+                    if (le < re) (re, le) else (le, re)
                   r.get(key) match {
                     case Some((prev, _)) =>
                       if (value < prev) {
@@ -1643,10 +1643,10 @@ object RewritingSystem {
       }
       if (config.constant) {
         (left, right) match {
-          case (left: AST.CoreExp.Lit, right: AST.CoreExp.Lit) =>
-            val r = evalBinaryLit(left, e.op, right)
+          case (le: AST.CoreExp.Lit, re: AST.CoreExp.Lit) =>
+            val r = evalBinaryLit(le, e.op, re)
             if (shouldTrace) {
-              trace = trace :+ Trace.Eval(st"constant binop ${equivST(AST.CoreExp.Binary(left, e.op, right, r.tipe), r)}", e, r)
+              trace = trace :+ Trace.Eval(st"constant binop ${equivST(AST.CoreExp.Binary(le, e.op, re, r.tipe), r)}", e, r)
             }
             return Some(r)
           case _ =>

@@ -872,7 +872,7 @@ object State {
           var leftParen = F
           left match {
             case left: Value.Sym => defs.get(left.num) match {
-              case Some(defs) if checkLevel(defs) => leftParen = T
+              case Some(defs2) if checkLevel(defs2) => leftParen = T
               case _ =>
             }
             case _ =>
@@ -880,7 +880,7 @@ object State {
           var rightParen = F
           right match {
             case right: Value.Sym => defs.get(right.num) match {
-              case Some(defs) if checkLevel(defs) => rightParen = T
+              case Some(defs2) if checkLevel(defs2) => rightParen = T
               case _ =>
             }
             case _ =>

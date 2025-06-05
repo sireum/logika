@@ -935,16 +935,16 @@ object Smt2 {
           var children = ISZ[AST.Typed.Name]()
           var hasChild = F
           for (sub <- sortName(typeHierarchy.poset.childrenOf(t.ids).elements)) {
-            val (parents, tpSize, tipe): (ISZ[AST.Typed.Name], Z, AST.Typed.Name) = typeHierarchy.typeMap.get(sub).get match {
+            val (parents2, tpSize, tpe): (ISZ[AST.Typed.Name], Z, AST.Typed.Name) = typeHierarchy.typeMap.get(sub).get match {
               case childTi: TypeInfo.Adt => (childTi.parents, childTi.ast.typeParams.size, childTi.tpe)
               case childTi: TypeInfo.Sig => (childTi.parents, childTi.ast.typeParams.size, childTi.tpe)
               case _ => halt(s"Infeasible: $sub")
             }
-            for (parent <- parents if parent.ids == t.ids) {
+            for (parent <- parents2 if parent.ids == t.ids) {
               if (tpSize > 0) {
                 val sm = TypeChecker.unify(typeHierarchy, None(), TypeChecker.TypeRelation.Equal, t, parent, reporter).get
                 assert(sm.size == tpSize)
-                val childT = tipe.subst(sm)
+                val childT = tpe.subst(sm)
                 children = children :+ childT
                 addTypeH(childT)
                 val childThId = typeHierarchyId(childT)
@@ -964,7 +964,7 @@ object Smt2 {
                 )
               } else {
                 hasChild = T
-                addTypeH(tipe)
+                addTypeH(tpe)
               }
             }
           }

@@ -1143,7 +1143,7 @@ import Util._
     th.typeMap.get(owner) match {
       case Some(info: TypeInfo.Adt) =>
         info.vars.get(id) match {
-          case Some(info) => return evalConstantVar(smt2, cache, rtCheck, s0, info, reporter)
+          case Some(info2) => return evalConstantVar(smt2, cache, rtCheck, s0, info2, reporter)
           case _ =>
         }
       case _ =>
@@ -1232,8 +1232,8 @@ import Util._
       atMap.get(key) match {
         case Some((poss, _, sym)) =>
           if (poss.size > 0) {
-            val (s0, sym) = state.freshSym(t, pos)
-            return (s0.addClaim(State.Claim.Let.Random(sym, F, poss(0))), sym)
+            val (s0, sym2) = state.freshSym(t, pos)
+            return (s0.addClaim(State.Claim.Let.Random(sym2, F, poss(0))), sym2)
           } else {
             return (state, sym)
           }
@@ -1246,10 +1246,10 @@ import Util._
     def local(res: AST.ResolvedInfo.LocalVar, num: Z): (State, State.Value) = {
       val key: ClaimsToExps.AtKey = (ISZ(), st"${(res.context :+ res.id, ".")}".render, t, exp.num.value)
       atMap.get(key) match {
-        case Some((poss, num, sym)) =>
+        case Some((poss, num2, sym)) =>
           if (poss.size > 0) {
-            val (s0, sym) = state.freshSym(t, pos)
-            return (s0.addClaim(State.Claim.Let.Id(sym, T, res.context, res.id, num, poss)), sym)
+            val (s0, sym2) = state.freshSym(t, pos)
+            return (s0.addClaim(State.Claim.Let.Id(sym2, T, res.context, res.id, num2, poss)), sym2)
           } else {
             return (state, sym)
           }
@@ -1262,10 +1262,10 @@ import Util._
     def global(res: AST.ResolvedInfo.Var, num: Z): (State, State.Value) = {
       val key: ClaimsToExps.AtKey = (res.owner :+ res.id, "", t, exp.num.value)
       atMap.get(key) match {
-        case Some((poss, num, sym)) =>
+        case Some((poss, num2, sym)) =>
           if (poss.size > 0) {
-            val (s0, sym) = state.freshSym(t, pos)
-            return (s0.addClaim(State.Claim.Let.Name(sym, key._1, num, poss)), sym)
+            val (s0, sym2) = state.freshSym(t, pos)
+            return (s0.addClaim(State.Claim.Let.Name(sym2, key._1, num2, poss)), sym2)
           } else {
             return (state, sym)
           }
@@ -1993,9 +1993,9 @@ import Util._
                     val receiver = receiverOpt.get
                     val param = params(i)
                     val pt = param.tipe.typedOpt.get.subst(sm)
-                    val (s4, sym) = s3.freshSym(pt, param.id.attr.posOpt.get)
-                    s3 = s4.addClaim(State.Claim.Let.FieldLookup(sym, receiver, param.id.value))
-                    args(i) = Some(sym)
+                    val (s4, sym2) = s3.freshSym(pt, param.id.attr.posOpt.get)
+                    s3 = s4.addClaim(State.Claim.Let.FieldLookup(sym2, receiver, param.id.value))
+                    args(i) = Some(sym2)
                   }
                 }
               case _ =>
@@ -2198,8 +2198,8 @@ import Util._
           val res = AST.ResolvedInfo.LocalVar(quant.fun.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
           val pos = id.attr.posOpt.get
           val (s3, v) = evalIdentH(s2, res, p.typedOpt.get, pos)
-          val (s4, sym) = value2Sym(s3, v, pos)
-          val (s5, conds) = Util.addValueInv(this, smt2, cache, rtCheck, s4, sym, pos, reporter)
+          val (s4, sym2) = value2Sym(s3, v, pos)
+          val (s5, conds) = Util.addValueInv(this, smt2, cache, rtCheck, s4, sym2, pos, reporter)
           if (conds.nonEmpty) {
             s2 = s5.addClaims(for (cond <- conds) yield State.Claim.Prop(T, cond))
           }
@@ -2575,10 +2575,10 @@ import Util._
                 case _ =>
               }
               for (paramArg <- paramArgs) {
-                val (l, _, e, v) = paramArg
+                val (lcl, _, le, v) = paramArg
                 if (th.isMutable(v.tipe)) {
-                  val (s4, sym) = idIntro(pos, s3, ctx, l.id, v.tipe, None())
-                  assigns = assigns :+ ((e, sym))
+                  val (s4, sym) = idIntro(pos, s3, ctx, lcl.id, v.tipe, None())
+                  assigns = assigns :+ ((le, sym))
                   s3 = s4
                 }
               }
@@ -2689,8 +2689,8 @@ import Util._
               val (s5, thiz) = idIntro(mctx.posOpt.get, s1, mctx.name, "this", receiverType, mctx.posOpt)
               s1 = s5
               for (p <- mctx.fieldVarMap(typeSubstMap).entries) {
-                val (id, (t, posOpt)) = p
-                val (s6, sym) = s1.freshSym(t, posOpt.get)
+                val (id, (t, pposOpt)) = p
+                val (s6, sym) = s1.freshSym(t, pposOpt.get)
                 s1 = s6.addClaim(State.Claim.Let.FieldLookup(sym, thiz, id))
                 fieldVarInMap = fieldVarInMap + id ~> sym
               }
@@ -2699,8 +2699,8 @@ import Util._
         }
         var localInMap = mctx.localInMap
         for (p <- mctx.localMap(typeSubstMap).entries) {
-          val (id, (_, _, ctx, _, t)) = p
-          val (s7, sym): (State, State.Value.Sym) = idIntro(pos, s1, ctx, id, t, None())
+          val (id, (_, _, lctx, _, t)) = p
+          val (s7, sym): (State, State.Value.Sym) = idIntro(pos, s1, lctx, id, t, None())
           localInMap = localInMap + id ~> sym
           s1 = s7
         }
@@ -2732,28 +2732,28 @@ import Util._
           val modObjectVars = contract.modifiedObjectVars
           val mpos = mposOpt.get
           for (p <- modObjectVars.entries) {
-            val (res, (t, pos)) = p
-            val (ms2, sym) = nameIntro(mpos, ms1, res.owner :+ res.id, t, None())
-            ms1 = ms2.addClaim(State.Claim.Old(F, res.isSpec, res.owner, res.id, sym, pos))
+            val (res2, (t, vpos)) = p
+            val (ms2, sym) = nameIntro(mpos, ms1, res2.owner :+ res2.id, t, None())
+            ms1 = ms2.addClaim(State.Claim.Old(F, res2.isSpec, res2.owner, res2.id, sym, vpos))
           }
           ms1 = rewriteObjectVars(logikaComp, smt2, cache, rtCheck, ms1, modObjectVars, mpos, reporter)
           var oldIdMap = HashMap.empty[ISZ[String], State.Value.Sym]
           for (pair <- modLocals.entries) {
-            val (info, (t, _)) = pair
-            val (ls0, sym) = idIntro(pos, ms1, info.context, info.id, t, None())
+            val (linfo, (t, _)) = pair
+            val (ls0, sym) = idIntro(pos, ms1, linfo.context, linfo.id, t, None())
             ms1 = ls0
-            oldIdMap = oldIdMap + (info.context :+ info.id) ~> sym
+            oldIdMap = oldIdMap + (linfo.context :+ linfo.id) ~> sym
           }
           ms1 = rewriteLocalVars(logikaComp, ms1, T, modLocals.keys, mposOpt, reporter)
           for (pair <- modLocals.entries) {
-            val (info, (t, pos)) = pair
-            val oldSym = oldIdMap.get(info.context :+ info.id).get
-            val (ls1, newSym) = idIntro(pos, ms1, info.context, info.id, t, Some(pos))
-            val ls2 = Util.assumeValueInv(this, smt2, cache, rtCheck, ls1, newSym, pos, reporter)
+            val (linfo, (t, lpos)) = pair
+            val oldSym = oldIdMap.get(linfo.context :+ linfo.id).get
+            val (ls1, newSym) = idIntro(lpos, ms1, linfo.context, linfo.id, t, Some(lpos))
+            val ls2 = Util.assumeValueInv(this, smt2, cache, rtCheck, ls1, newSym, lpos, reporter)
             if (AST.Util.isSeq(t)) {
-              val (ls5, size1) = ls2.freshSym(AST.Typed.z, pos)
-              val (ls6, size2) = ls5.freshSym(AST.Typed.z, pos)
-              val (ls7, cond) = ls6.freshSym(AST.Typed.b, pos)
+              val (ls5, size1) = ls2.freshSym(AST.Typed.z, lpos)
+              val (ls6, size2) = ls5.freshSym(AST.Typed.z, lpos)
+              val (ls7, cond) = ls6.freshSym(AST.Typed.b, lpos)
               val ls8 = ls7.addClaims(ISZ[State.Claim](
                 State.Claim.Let.FieldLookup(size1, oldSym, "size"),
                 State.Claim.Let.FieldLookup(size2, newSym, "size"),
@@ -2896,8 +2896,8 @@ import Util._
               if (isUnit) {
                 (cs7, Some(rcv))
               } else {
-                val (cs8, res) = resIntro(pos, cs7, ctx, retType, None())
-                val cs9 = assumeValueInv(logikaComp, smt2, cache, rtCheck, cs8, res, pos, reporter)
+                val (cs8, res2) = resIntro(pos, cs7, ctx, retType, None())
+                val cs9 = assumeValueInv(logikaComp, smt2, cache, rtCheck, cs8, res2, pos, reporter)
                 (cs9, Some(rcv))
               }
             case _ => (cs5, receiverOpt)
@@ -3400,8 +3400,8 @@ import Util._
               case Either.Left(args) =>
                 var i = 0
                 for (pArg <- ops.ISZOps(ops.ISZOps(info.sig.params).zip(args)).zip(vs)) {
-                  val ((p, arg), vOpt) = pArg
-                  val id = p.id.value
+                  val ((param, arg), vOpt) = pArg
+                  val id = param.id.value
                   val argType: AST.Typed = arg.typedOpt.get match {
                     case t: AST.Typed.Method if t.tpe.isByName => t.tpe.ret
                     case t => t
@@ -3672,9 +3672,9 @@ import Util._
         val exp = Util.Substitutor(HashMap.empty, cond.fun.context, paramMap, reporter).
           transformExp(cond.fun.exp.asInstanceOf[AST.Stmt.Expr].exp).get
         for (p <- evalExp(split, smt2, cache, rtCheck, s1.addClaim(State.Claim.Prop(T, antecedent)), exp, reporter)) {
-          val (s5, e) = p
+          val (s5, ev) = p
           val (s6, res) = s5.freshSym(AST.Typed.b, pos)
-          val s7 = s6.addClaim(State.Claim.Let.Binary(res, antecedent, AST.Exp.BinaryOp.Imply, e, AST.Typed.b))
+          val s7 = s6.addClaim(State.Claim.Let.Binary(res, antecedent, AST.Exp.BinaryOp.Imply, ev, AST.Typed.b))
           if (nextFresh < s7.nextFresh) {
             nextFresh = s7.nextFresh
           }
@@ -4277,9 +4277,9 @@ import Util._
               val sub = pattern.patterns(i)
               val subPos = sub.posOpt.get
               val (s7, sym) = s6.freshSym(et, subPos)
-              val (s8, cond, subM) = evalPattern(smt2, cache, rtCheck, s7.addClaim(
+              val (s8, pcond, subM) = evalPattern(smt2, cache, rtCheck, s7.addClaim(
                 State.Claim.Let.SeqLookup(sym, v, State.Value.Z(offset + i, subPos))), sym, sub, reporter)
-              conds = conds :+ cond
+              conds = conds :+ pcond
               s6 = s8
               m = m ++ subM.entries
             }
@@ -4628,10 +4628,10 @@ import Util._
       return (s9, sym, m, HashMap.empty[String, (Z, ISZ[Position])] ++ (for (p <- locals.entries) yield (p._1._2, (p._2._2, p._2._1))))
     }
     def evalInductMatch(): ISZ[State] = {
-      @pure def unifyPattern(p1: AST.Pattern, p2: AST.Pattern): Option[HashMap[AST.Exp, AST.Exp]] = {
+      @pure def unifyPattern(pat1: AST.Pattern, pat2: AST.Pattern): Option[HashMap[AST.Exp, AST.Exp]] = {
         @strictpure def ident(vb: AST.Pattern.VarBinding): AST.Exp =
           AST.Exp.Ident(vb.id, AST.ResolvedAttr(vb.attr.posOpt, Some(AST.ResolvedInfo.LocalVar(vb.idContext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, vb.id.value)), vb.attr.typedOpt))
-        (p1, p2) match {
+        (pat1, pat2) match {
           case (p1: AST.Pattern.Ref, p2: AST.Pattern.Ref) if p1.attr.resOpt == p2.attr.resOpt => return Some(HashMap.empty)
           case (p1: AST.Pattern.VarBinding, p2: AST.Pattern.VarBinding) if p1.idContext == p2.idContext =>
             return Some(HashMap.empty[AST.Exp, AST.Exp] + ident(p2) ~> ident(p1))

@@ -66,10 +66,10 @@ object InceptionPlugin {
         rec(farg, targ)
       }
     }
-    def rec(fe: AST.Exp, te: AST.Exp): Unit = {
+    def rec(fexp: AST.Exp, texp: AST.Exp): Unit = {
       def recAssignExp(fae: AST.AssignExp, tae: AST.AssignExp): Unit = {
         (fae, tae) match {
-          case (fae: AST.Stmt.Expr, tae: AST.Stmt.Expr) => rec(fae.exp, tae.exp)
+          case (faexpr: AST.Stmt.Expr, taexpr: AST.Stmt.Expr) => rec(faexpr.exp, taexpr.exp)
           case _ =>
             ok = F
         }
@@ -99,7 +99,7 @@ object InceptionPlugin {
       if (!ok) {
         return
       }
-      (fe, te) match {
+      (fexp, texp) match {
         case (fe: AST.Exp.LitB, te: AST.Exp.LitB) =>
           ok = fe.value == te.value
         case (fe: AST.Exp.LitZ, te: AST.Exp.LitZ) =>
@@ -164,7 +164,7 @@ object InceptionPlugin {
               val paramRefArgMap = HashMap ++ (for (p <- argParamRefMap.entries) yield (p._2, p._1))
               val e2 = AST.Util.ExpSubstitutor(paramRefArgMap).transformExp(e.exp).getOrElseEager(e.exp)
               (e2, te) match {
-                case (e2: AST.Exp.Invoke, te: AST.Exp.Invoke) => recInvoke(e2, te)
+                case (ie2: AST.Exp.Invoke, ite: AST.Exp.Invoke) => recInvoke(ie2, ite)
                 case _ => rec(e2, te)
               }
               ok = T
