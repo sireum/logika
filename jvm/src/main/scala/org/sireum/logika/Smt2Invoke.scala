@@ -54,8 +54,8 @@ object Smt2Invoke {
     val platformHome = sireumHome / "bin" / platform
     return HashMap.empty[String, String] ++ ISZ[(String, String)](
       "cvc4" ~> (platformHome / "cvc").string,
-      "cvc5" ~> (sireumHome / "bin" / "cvc5.com").string,
-      "z3" ~> (sireumHome / "bin" / "z3" / "bin" / "z3.com").string
+      "cvc5" ~> (platformHome / "cvc5").string,
+      "z3" ~> (platformHome / "z3" / "bin" / "z3").string
     ) ++ (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
       "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
   }
