@@ -85,7 +85,7 @@ jobs:
           bin/build.cmd test
 
   test-mac-amd64:
-    runs-on: macOS-13
+    runs-on: macos-15-intel
     steps:
       - name: Checkout
         uses: actions/checkout@v3
