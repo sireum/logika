@@ -52,12 +52,17 @@ object Smt2Invoke {
       case _ => halt("Unsupported platform")
     }
     val platformHome = sireumHome / "bin" / platform
-    return HashMap.empty[String, String] ++ ISZ[(String, String)](
-      "cvc4" ~> (platformHome / "cvc").string,
+    var r = HashMap.empty[String, String]
+    if (!(Os.isWinArm || Os.isLinuxArm)) {
+      r = r + "cvc4" ~> (platformHome / "cvc").string
+    }
+    r = r ++ ISZ[(String, String)](
       "cvc5" ~> (platformHome / "cvc5").string,
       "z3" ~> (platformHome / "z3" / "bin" / "z3").string
-    ) ++ (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
+    )
+    r = r ++ (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
       "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
+    return r
   }
 
   @pure def queryDefault(sireumHome: Os.Path,
