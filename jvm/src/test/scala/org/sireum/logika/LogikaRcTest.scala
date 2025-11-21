@@ -54,6 +54,7 @@ class LogikaRcTest extends SireumRcSpec {
     case "count.sc" => Os.isWinArm
     case "count2.sc" => Os.isWinArm
     case "conformance-swap.sc" => isSimplified
+    case "realfloats.sc" => Os.isWinArm && isInGithubAction
     case "strictpure.sc" => Os.isWin && isInGithubAction && !isSimplified
     case _ => false
   }
