@@ -54,7 +54,7 @@ def bar(): Unit = {
     ),
     Ensures(T)
   )
-  setOptions("Logika", """--par --par-branch --rlimit 500000 --timeout 7 --sat-timeout --solver-sat cvc4""")
+  setOptions("Logika", """--par --par-branch --rlimit 500000 --timeout 7 --sat-timeout --solver-sat cvc5""")
   if (c < l || c > u) {
     assert(T)
   } else if ((c >= l && c < l + 0.5f) || (c > (u - 0.5f) && c <= u)) {
