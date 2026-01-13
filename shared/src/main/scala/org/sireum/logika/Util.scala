@@ -2170,7 +2170,7 @@ object Util {
       val (s2, sym) = nameIntro(pos, current, name, t, Some(namePos))
       current = assumeValueInv(logika, smt2, cache, rtCheck, s2, sym, namePos, reporter)
       val tipe = sym.tipe
-      if (AST.Util.isSeq(tipe)) {
+      if (x.isVal && AST.Util.isSeq(tipe)) {
         val (s4, size1) = current.freshSym(AST.Typed.z, pos)
         val (s5, size2) = s4.freshSym(AST.Typed.z, pos)
         val (s6, cond) = s5.freshSym(AST.Typed.b, pos)

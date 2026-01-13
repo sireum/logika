@@ -2750,7 +2750,7 @@ import Util._
             val oldSym = oldIdMap.get(linfo.context :+ linfo.id).get
             val (ls1, newSym) = idIntro(lpos, ms1, linfo.context, linfo.id, t, Some(lpos))
             val ls2 = Util.assumeValueInv(this, smt2, cache, rtCheck, ls1, newSym, lpos, reporter)
-            if (AST.Util.isSeq(t)) {
+            if (linfo.isVal && AST.Util.isSeq(t)) {
               val (ls5, size1) = ls2.freshSym(AST.Typed.z, lpos)
               val (ls6, size2) = ls5.freshSym(AST.Typed.z, lpos)
               val (ls7, cond) = ls6.freshSym(AST.Typed.b, lpos)
@@ -4027,7 +4027,7 @@ import Util._
     return s2.addClaim(State.Claim.Eq(lhs, rhs))
   }
 
-  def evalAssignObjectVarH(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, ids: ISZ[String], t: AST.Typed,
+  def evalAssignObjectVarH(smt2: Smt2, cache: Logika.Cache, rtCheck: B, s0: State, isVal: B, ids: ISZ[String], t: AST.Typed,
                            rhs: State.Value.Sym, namePosOpt: Option[Position], reporter: Reporter): State = {
     val poss = StateTransformer(CurrentNamePossCollector(ids)).transformState(ISZ(), s0).ctx
     if (poss.isEmpty && !config.interp && !context.hasInline) {
@@ -4043,7 +4043,7 @@ import Util._
     val (s4, lhs) = nameIntro(namePosOpt.get, s3, ids, rhs.tipe, namePosOpt)
     val s5 = s4.addClaim(State.Claim.Eq(lhs, rhs))
     val tipe = rhs.tipe
-    val s9: State = if (AST.Util.isSeq(tipe)) {
+    val s9: State = if (isVal && AST.Util.isSeq(tipe)) {
       val (s6, size1) = s5.freshSym(AST.Typed.z, pos)
       val (s7, size2) = s6.freshSym(AST.Typed.z, pos)
       val (s8, cond) = s7.freshSym(AST.Typed.b, pos)
@@ -4128,7 +4128,7 @@ import Util._
             if (res.isInObject) {
               val (s1, sym) = nameIntro(lhs.posOpt.get, s0, res.owner :+ res.id, lhs.typedOpt.get, None())
               val s2 = s1.addClaim(State.Claim.Old(F, res.isSpec, res.owner, res.id, sym, lhs.posOpt.get))
-              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s2, res.owner :+ res.id, lhs.typedOpt.get, rhs,
+              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s2, res.isVal, res.owner :+ res.id, lhs.typedOpt.get, rhs,
                 lhs.posOpt, reporter))
             } else {
               val (s1, sym) = idIntro(lhs.posOpt.get, s0, context.methodName, "this", context.receiverTypeOpt.get, None())
@@ -4165,7 +4165,7 @@ import Util._
             if (res.isInObject) {
               val (s1, sym) = nameIntro(lhs.posOpt.get, s0, res.owner :+ res.id, lhs.typedOpt.get, None())
               val s2 = s1.addClaim(State.Claim.Old(F, res.isSpec, res.owner, res.id, sym, lhs.posOpt.get))
-              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s2, res.owner :+ res.id, lhs.typedOpt.get, rhs,
+              return ISZ(evalAssignObjectVarH(smt2, cache, rtCheck, s2, res.isVal, res.owner :+ res.id, lhs.typedOpt.get, rhs,
                 lhs.posOpt, reporter))
             } else {
               lhs.receiverOpt match {
