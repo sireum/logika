@@ -224,7 +224,8 @@ import FoldUnfoldPlugin._
       }
 
       val newBody = substAssignExpLocalVarContext(body, oldContext, newContext, thisIdentOpt).asStmt
-      val unfoldFromSpBlock = AST.Exp.StrictPureBlock(AST.Stmt.Block(AST.Body(vals :+ newBody, locals),
+      val unfoldFromSpBlock = AST.Exp.StrictPureBlock(AST.Stmt.Block(AST.MethodContract.Simple.empty,
+        AST.Body(vals :+ newBody, locals),
         AST.Attr(unfoldFrom.posOpt)), AST.TypedAttr(unfoldFrom.posOpt, unfoldFrom.typedOpt))
 
       val unfoldToNorm = logika.th.normalizeExp(unfoldTo)

@@ -147,6 +147,7 @@ object ValIntroElimPlugin {
           case init =>
             val stmt = init.asStmt
             lvMap = lvMap + (res.context :+ res.id) ~> (index, v.posOpt.get, AST.Exp.StrictPureBlock(AST.Stmt.Block(
+              AST.MethodContract.Simple.empty,
               AST.Body(ISZ(stmt), ISZ()), AST.Attr(stmt.posOpt)), AST.TypedAttr(stmt.posOpt, v.attr.typedOpt)))
         }
       }
