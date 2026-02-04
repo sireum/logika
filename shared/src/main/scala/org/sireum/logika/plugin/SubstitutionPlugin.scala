@@ -46,12 +46,13 @@ import org.sireum.ops.ISZOps
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification")
 
   override def canHandle(logika: Logika, just: Step.Justification): B = {
+    @strictpure def canHandleH(res: AST.ResolvedInfo): B = res match {
+      case res: AST.ResolvedInfo.Method => justificationIds.contains(res.id) && res.owner == justificationName
+      case _ => F
+    }
     just match {
-      case just: AST.ProofAst.Step.Justification.Apply =>
-        just.invokeIdent.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Method => return justificationIds.contains(res.id) && res.owner == justificationName
-          case _ => return F
-        }
+      case just: AST.ProofAst.Step.Justification.Ref if canHandleH(just.ref.resOpt.get) => return T
+      case just: AST.ProofAst.Step.Justification.Apply if canHandleH(just.invokeIdent.resOpt.get) => return T
       case _ => return F
     }
   }
@@ -65,9 +66,23 @@ import org.sireum.ops.ISZOps
                       reporter: Logika.Reporter): State = {
     @strictpure def err: State = state(status = State.Status.Error)
 
-    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-    val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-    val ISZ(x, y) = AST.Util.toStepIds(just.args, Logika.kind, reporter).get
+    val just = step.just
+    val (res, args): (AST.ResolvedInfo.Method, ISZ[AST.ProofAst.StepId]) = just match {
+      case just: AST.ProofAst.Step.Justification.Ref =>
+        (just.ref.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], just.witnesses)
+      case just: AST.ProofAst.Step.Justification.Apply =>
+        val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
+        if (argsOpt.isEmpty) {
+          return err
+        }
+        (just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], argsOpt.get)
+      case _ => halt(s"Infeasible")
+    }
+    if (args.size != 2) {
+      reporter.error(just.id.attr.posOpt, Logika.kind, s"${res.id} requires 2 arguments")
+      return err
+    }
+    val ISZ(x, y) = args
 
     spcMap.get(x) match {
       case Some(xSpc: StepProofContext.Regular) =>

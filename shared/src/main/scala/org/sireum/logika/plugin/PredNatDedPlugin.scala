@@ -56,12 +56,13 @@ object PredNatDedPlugin {
   val justificationName: ISZ[String] = ISZ("org", "sireum", "justification", "natded", "pred")
 
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
+    @strictpure def canHandleH(res: AST.ResolvedInfo): B = res match {
+      case res: AST.ResolvedInfo.Method => justificationIds.contains(res.id) && res.owner == justificationName
+      case _ => F
+    }
     just match {
-      case just: AST.ProofAst.Step.Justification.Apply if !just.hasWitness =>
-        just.invokeIdent.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Method => return justificationIds.contains(res.id) && res.owner == justificationName
-          case _ => return F
-        }
+      case just: AST.ProofAst.Step.Justification.Ref if canHandleH(just.ref.resOpt.get) => return T
+      case just: AST.ProofAst.Step.Justification.Apply if canHandleH(just.invokeIdent.resOpt.get) => return T
       case _ => return F
     }
   }
@@ -78,8 +79,18 @@ object PredNatDedPlugin {
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): State = {
     @strictpure def err: State = state(status = State.Status.Error)
-    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-    val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
+    val just = step.just
+    val (res, args, targs): (AST.ResolvedInfo.Method, ISZ[AST.ProofAst.StepId], ISZ[AST.Type]) = just match {
+      case just: AST.ProofAst.Step.Justification.Ref =>
+        (just.ref.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], just.witnesses, just.ref.targs)
+      case just: AST.ProofAst.Step.Justification.Apply =>
+        val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
+        if (argsOpt.isEmpty) {
+          return err
+        }
+        (just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], argsOpt.get, just.invoke.targs)
+      case _ => halt(s"Infeasible")
+    }
     var acceptedMsg = st"""Accepted by using the ${res.id}, because"""
     res.id match {
       case string"AllI" =>
@@ -92,15 +103,11 @@ object PredNatDedPlugin {
             reporter.error(step.claim.posOpt, Logika.kind, "Expecting a simple universal quantified type/range claim")
             return err
         }
-        val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
-        if (argsOpt.isEmpty) {
+        if (quant.fun.params(0).typedOpt != targs(0).typedOpt) {
+          reporter.error(targs(0).posOpt, Logika.kind, s"Expecting type '${quant.fun.params(0).typedOpt.get}', but '${targs(0).typedOpt.get}' found")
           return err
         }
-        if (quant.fun.params(0).typedOpt != just.invoke.targs(0).typedOpt) {
-          reporter.error(just.invoke.targs(0).posOpt, Logika.kind, s"Expecting type '${quant.fun.params(0).typedOpt.get}', but '${just.invoke.targs(0).typedOpt.get}' found")
-          return err
-        }
-        val ISZ(subProofNo) = argsOpt.get
+        val ISZ(subProofNo) = args
         val (params, subProof): (ISZ[AST.ProofAst.Step.Let.Param], HashSet[AST.Exp]) = spcMap.get(subProofNo) match {
           case Some(sp@StepProofContext.FreshSubProof(_, _, ps, _, _)) => (ps, HashSet ++ sp.claims)
           case _ =>
@@ -147,15 +154,11 @@ object PredNatDedPlugin {
                 |  using the fresh value holds, i.e., ${substClaim.prettyST}
                 |"""
         } else {
-          reporter.error(step.claim.posOpt, Logika.kind, s"Could not infer the stated claim using ${just.invokeIdent.id.value}")
+          reporter.error(step.claim.posOpt, Logika.kind, s"Could not infer the stated claim using ${just.id.value}")
           return err
         }
       case string"ExistsE" =>
-        val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
-        if (argsOpt.isEmpty) {
-          return err
-        }
-        val ISZ(existsP, subProofNo) = argsOpt.get
+        val ISZ(existsP, subProofNo) = args
         val quant: AST.Exp.QuantType = spcMap.get(existsP) match {
           case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)))) =>
             logika.th.normalizeQuantType(q).asInstanceOf[AST.Exp.QuantType]
@@ -165,8 +168,8 @@ object PredNatDedPlugin {
             reporter.error(existsP.posOpt, Logika.kind, "Expecting a simple existential quantified type/range claim")
             return err
         }
-        if (quant.fun.params(0).typedOpt != just.invoke.targs(0).typedOpt) {
-          reporter.error(just.invoke.targs(0).posOpt, Logika.kind, s"Expecting type '${quant.fun.params(0).typedOpt.get}', but '${just.invoke.targs(0).typedOpt.get}' found")
+        if (quant.fun.params(0).typedOpt != targs(0).typedOpt) {
+          reporter.error(targs(0).posOpt, Logika.kind, s"Expecting type '${quant.fun.params(0).typedOpt.get}', but '${targs(0).typedOpt.get}' found")
           return err
         }
         val (params, assumption, subProof): (ISZ[AST.ProofAst.Step.Let.Param], AST.Exp, HashSet[AST.Exp]) = spcMap.get(subProofNo) match {

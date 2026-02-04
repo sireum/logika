@@ -207,6 +207,7 @@ import InceptionPlugin._
       return r
     }
     just match {
+      case just: AST.ProofAst.Step.Justification.Ref => return canHandleRes(just.ref.resOpt.get)
       case just: AST.ProofAst.Step.Justification.Apply => return canHandleRes(just.invokeIdent.attr.resOpt.get)
       case just: AST.ProofAst.Step.Justification.ApplyEta => return canHandleRes(just.eta.ref.resOpt.get)
       case _ => return F
@@ -515,6 +516,14 @@ import InceptionPlugin._
       }
     }
     just match {
+      case just: AST.ProofAst.Step.Justification.Ref =>
+        val args: ISZ[AST.Exp] = for (w <- just.witnesses) yield w.asInstanceOf[AST.Exp]
+        just.ref.resOpt.get match {
+          case res: AST.ResolvedInfo.Method => return handleMethod(T, res, just.ref.posOpt, args)
+          case res: AST.ResolvedInfo.Fact => return handleFactTheorem(res.name, just.ref.posOpt, args)
+          case res: AST.ResolvedInfo.Theorem => return handleFactTheorem(res.name, just.ref.posOpt, args)
+          case _ => halt("Infeasible")
+        }
       case just: AST.ProofAst.Step.Justification.Apply =>
         just.invoke.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Method => return handleMethod(F, res, just.invoke.ident.posOpt, just.args)

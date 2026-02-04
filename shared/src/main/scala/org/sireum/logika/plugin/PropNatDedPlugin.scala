@@ -41,12 +41,13 @@ import org.sireum.logika.Logika.Reporter
   val bottom: AST.Exp = AST.Exp.LitB(F, AST.Attr(None()))
 
   @pure override def canHandle(logika: Logika, just: AST.ProofAst.Step.Justification): B = {
+    @strictpure def canHandleH(res: AST.ResolvedInfo): B = res match {
+      case res: AST.ResolvedInfo.Method => justificationIds.contains(res.id) && res.owner == justificationName
+      case _ => F
+    }
     just match {
-      case just: AST.ProofAst.Step.Justification.Apply if !just.hasWitness =>
-        just.invokeIdent.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Method => return justificationIds.contains(res.id) && res.owner == justificationName
-          case _ => return F
-        }
+      case just: AST.ProofAst.Step.Justification.Ref if canHandleH(just.ref.resOpt.get) => return T
+      case just: AST.ProofAst.Step.Justification.Apply if canHandleH(just.invokeIdent.resOpt.get) => return T
       case _ => return F
     }
   }
@@ -105,18 +106,29 @@ import org.sireum.logika.Logika.Reporter
         case _ => return F
       }
     }
-    val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
-    val res = just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method]
-    val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
-    if (argsOpt.isEmpty) {
-      return err
+    val just = step.just
+    val (res, args): (AST.ResolvedInfo.Method, ISZ[AST.ProofAst.StepId]) = just match {
+      case just: AST.ProofAst.Step.Justification.Ref =>
+        (just.ref.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], just.witnesses)
+      case just: AST.ProofAst.Step.Justification.Apply =>
+        val argsOpt = AST.Util.toStepIds(just.args, Logika.kind, reporter)
+        if (argsOpt.isEmpty) {
+          return err
+        }
+        (just.invokeIdent.attr.resOpt.get.asInstanceOf[AST.ResolvedInfo.Method], argsOpt.get)
+      case _ => halt(s"Infeasible")
     }
-    val args = argsOpt.get
+
     var acceptedMsg: ST =
       st"""Accepted by using the ${res.id} proof tactic implemented in the $name,
           |because"""
 
     def implyH(opKind: AST.ResolvedInfo.BuiltIn.Kind.Type, opDesc: String): B = {
+      if (args.size != 1) {
+        reporter.error(just.id.attr.posOpt, Logika.kind, s"${res.id} requires 1 argument")
+        return F
+      }
+
       val claim: AST.Exp.Binary = step.claim match {
         case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, opKind) => stepClaim
         case _ =>
@@ -146,6 +158,10 @@ import org.sireum.logika.Logika.Reporter
 
     res.id match {
       case string"OrE" =>
+        if (args.size != 3) {
+          reporter.error(just.id.attr.posOpt, Logika.kind, s"${res.id} requires 3 arguments")
+          return err
+        }
         val ISZ(orClaimNo, leftSubProofNo, rightSubProofNo) = args
         val orClaim: AST.Exp.Binary = spcMap.get(orClaimNo) match {
           case Some(StepProofContext.Regular(_, _, exp: AST.Exp.Binary)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) =>
@@ -194,7 +210,7 @@ import org.sireum.logika.Logika.Reporter
           stepClaim match {
             case stepClaim: AST.Exp.Binary if isBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.BinaryOr) && leftSubProof.contains(logika.th.normalizeExp(stepClaim.left)) && rightSubProof.contains(logika.th.normalizeExp(stepClaim.right)) =>
             case _ =>
-              reporter.error(step.id.posOpt, Logika.kind, s"Could not infer the stated claim from both sub-proofs $leftSubProofNo and $rightSubProofNo using ${just.invokeIdent.id.value}")
+              reporter.error(step.id.posOpt, Logika.kind, s"Could not infer the stated claim from both sub-proofs $leftSubProofNo and $rightSubProofNo using ${just.id.value}")
               return err
           }
         }
@@ -207,6 +223,10 @@ import org.sireum.logika.Logika.Reporter
           return err
         }
       case string"NegI" =>
+        if (args.size != 1) {
+          reporter.error(just.id.attr.posOpt, Logika.kind, s"${res.id} requires 1 argument")
+          return err
+        }
         val claim: AST.Exp.Unary = step.claim match {
           case stepClaim: AST.Exp.Unary if isUBuiltIn(stepClaim, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => stepClaim
           case _ =>
@@ -233,6 +253,10 @@ import org.sireum.logika.Logika.Reporter
           return err
         }
       case string"BottomE" =>
+        if (args.size != 1) {
+          reporter.error(just.id.attr.posOpt, Logika.kind, s"${res.id} requires 1 argument")
+          return err
+        }
         val ISZ(bottomNo) = args
         spcMap.get(bottomNo) match {
           case Some(sp: StepProofContext.Regular) if isBottom(sp.exp) =>
@@ -244,6 +268,10 @@ import org.sireum.logika.Logika.Reporter
             return err
         }
       case string"PbC" =>
+        if (args.size != 1) {
+          reporter.error(just.id.attr.posOpt, Logika.kind, s"${res.id} requires 1 argument")
+          return err
+        }
         val ISZ(subProofNo) = args
         val subProof: ISZ[AST.Exp] = spcMap.get(subProofNo) match {
           case Some(sp: StepProofContext.SubProof) if isUBuiltInOf(sp.assumption, step.claim, AST.ResolvedInfo.BuiltIn.Kind.UnaryNot) => sp.claims
