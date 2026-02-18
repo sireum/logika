@@ -425,6 +425,29 @@ object Logika {
 
   }
 
+  def checkTasksH(tasks: MSZ[(Task, Reporter)], par: Z,
+                  nameExePathMap: HashMap[String, String], maxCores: Z, fileOptions: LibUtil.FileOptionMap,
+                  smt2f: (lang.tipe.TypeHierarchy, Reporter) => Smt2, cache: Logika.Cache,
+                  reporter: Reporter, verifyingStartTime: Z): Unit = {
+    def compute(task: (Task, Reporter)): B = {
+      val r = task._2.empty
+      val csmt2 = smt2f(task._1.th, r)
+      task._1.compute(nameExePathMap, maxCores, fileOptions, csmt2, cache, r)
+      task._2.combine(r)
+      reporter.combine(task._2)
+      return T
+    }
+
+    extension.Cancel.cancellable { () =>
+      ops.MSZOps(tasks).mParMapCores[B](compute _, par)
+    }
+
+    if (verifyingStartTime != 0) {
+      reporter.timing(verifyingDesc, extension.Time.currentMillis - verifyingStartTime)
+    }
+
+  }
+
   def checkScript(fileUriOpt: Option[String], input: String, config: Config, nameExePathMap: HashMap[String, String],
                   maxCores: Z, smt2f: lang.tipe.TypeHierarchy => Smt2, cache: Logika.Cache, reporter: Reporter,
                   hasLogika: B, plugins: ISZ[Plugin], line: Z,
