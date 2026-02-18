@@ -62,6 +62,10 @@ object Smt2Invoke {
     )
     r = r ++ (for (p <- (platformHome / ".opam").list if (p / "bin" / "alt-ergo").exists) yield
       "alt-ergo" ~> (p / "bin" / "alt-ergo").string)
+    val wasmPath = sireumHome / "lib" / "cvc5_server.wasm"
+    if (wasmPath.exists && Smt2WasmInvoke.hasJvmci) {
+      r = r + "cvc5.wasm" ~> wasmPath.string
+    }
     return r
   }
 
@@ -86,80 +90,84 @@ object Smt2Invoke {
     val configs: ISZ[Smt2Config] = for (smt2Config <- smt2Configs if isSat == smt2Config.isSat) yield smt2Config
     val fs: ISZ[() => Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type, Z)] @pure] = for (j <- configs.indices) yield () => {
       val config = configs(j)
-      val start = extension.Time.currentMillis
-      val args = Smt2.solverArgs(config.name, timeoutInMs, rlimit).get ++ config.opts
-      var proc = Os.proc(config.exe +: args).input(queryString)
-      proc = proc.timeout(timeoutInMs * Os.numOfProcessors * 2)
-      val pr = proc.run()
-      val pout: String = st"${pr.err}${pr.out}".render
-      val isTimeout: B = timeoutCodes.contains(pr.exitCode) ||
-        (config.name == "cvc5" && ops.StringOps(pout).contains("cvc5 interrupted by timeout."))
-      val isUnknown: B = pr.exitCode match {
-        case z"1" =>
-          config.name match {
-            case string"cvc5" => ops.StringOps(pout).contains("Array theory solver")
-            case string"alt-ergo" => T
-            case _ => F
-          }
-        case z"2" =>
-          config.name match {
-            case string"alt-ergo" => ops.StringOps(pout).contains("exception")
-            case _ => F
-          }
-        case z"4" =>
-          config.name match {
-            case string"cvc5" => Os.isWinArm
-            case  _ => F
-          }
-        case _ => F
-      }
-      val r: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type, Z)] = {
-        val out = ops.StringOps(pout).split((c: C) => c == '\n')
-        val firstLine: String = if (isTimeout) {
-          "timeout"
-        } else if (isUnknown) {
-          "unknown"
-        } else {
-          var l: String = ""
-          var i: Z = 0
-          while (i < out.size) {
-            val lineOps = ops.StringOps(out(i))
-            if (!(lineOps.startsWith(";") || lineOps.trim.size == 0)) {
-              l = out(i)
-              i = out.size
+      if (config.name == "cvc5.wasm") {
+        Smt2WasmInvoke.querySingle(config, isSat, queryString, timeoutInMs, rlimit)
+      } else {
+        val start = extension.Time.currentMillis
+        val args = Smt2.solverArgs(config.name, timeoutInMs, rlimit).get ++ config.opts
+        var proc = Os.proc(config.exe +: args).input(queryString)
+        proc = proc.timeout(timeoutInMs * Os.numOfProcessors * 2)
+        val pr = proc.run()
+        val pout: String = st"${pr.err}${pr.out}".render
+        val isTimeout: B = timeoutCodes.contains(pr.exitCode) ||
+          (config.name == "cvc5" && ops.StringOps(pout).contains("cvc5 interrupted by timeout."))
+        val isUnknown: B = pr.exitCode match {
+          case z"1" =>
+            config.name match {
+              case string"cvc5" => ops.StringOps(pout).contains("Array theory solver")
+              case string"alt-ergo" => T
+              case _ => F
             }
-            i = i + 1
-          }
-          val lines = ops.StringOps(l).split((c: C) => c == ' ')
-          if (lines.isEmpty) {
-            ""
+          case z"2" =>
+            config.name match {
+              case string"alt-ergo" => ops.StringOps(pout).contains("exception")
+              case _ => F
+            }
+          case z"4" =>
+            config.name match {
+              case string"cvc5" => Os.isWinArm
+              case  _ => F
+            }
+          case _ => F
+        }
+        val r: Either[Smt2Query.Result, (String, ISZ[String], Smt2Query.Result.Kind.Type, Z)] = {
+          val out = ops.StringOps(pout).split((c: C) => c == '\n')
+          val firstLine: String = if (isTimeout) {
+            "timeout"
+          } else if (isUnknown) {
+            "unknown"
           } else {
-            ops.StringOps(lines(0)).trim
+            var l: String = ""
+            var i: Z = 0
+            while (i < out.size) {
+              val lineOps = ops.StringOps(out(i))
+              if (!(lineOps.startsWith(";") || lineOps.trim.size == 0)) {
+                l = out(i)
+                i = out.size
+              }
+              i = i + 1
+            }
+            val lines = ops.StringOps(l).split((c: C) => c == ' ')
+            if (lines.isEmpty) {
+              ""
+            } else {
+              ops.StringOps(lines(0)).trim
+            }
+          }
+          val time = extension.Time.currentMillis - start
+          firstLine match {
+            case string"sat" => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, queryString,
+              st"""; Result: ${if (isSat) "Sat" else "Invalid"}
+                  |; Solver: ${config.exe}
+                  |; Arguments: ${(args, " ")}""".render, pout, time, 0, F))
+            case string"unsat" => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, queryString,
+              st"""; Result: ${if (isSat) "Unsat" else "Valid"}
+                  |; Solver: ${config.exe}
+                  |; Arguments: ${(args, " ")}""".render, pout, time, 0, F))
+            case string"timeout" => Either.Right((config.exe, args, Smt2Query.Result.Kind.Timeout, time))
+            case string"unknown" => Either.Right((config.exe, args, Smt2Query.Result.Kind.Unknown, time))
+            case string"cvc5 interrupted by timeout." => Either.Right((config.exe, args, Smt2Query.Result.Kind.Timeout, time))
+            case _ => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, queryString,
+              st"""; Result: Error (exit code ${pr.exitCode})
+                  |; Solver: ${config.exe}
+                  |; Arguments: ${(args, " ")}
+                  |; Output:
+                  |${(for (line <- ops.StringOps(pout).split((c: C) => c == '\n')) yield st"; $line", "\n")}
+                  |$queryString""".render, pout, time, 0, F))
           }
         }
-        val time = extension.Time.currentMillis - start
-        firstLine match {
-          case string"sat" => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Sat, config.name, queryString,
-            st"""; Result: ${if (isSat) "Sat" else "Invalid"}
-                |; Solver: ${config.exe}
-                |; Arguments: ${(args, " ")}""".render, pout, time, 0, F))
-          case string"unsat" => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Unsat, config.name, queryString,
-            st"""; Result: ${if (isSat) "Unsat" else "Valid"}
-                |; Solver: ${config.exe}
-                |; Arguments: ${(args, " ")}""".render, pout, time, 0, F))
-          case string"timeout" => Either.Right((config.exe, args, Smt2Query.Result.Kind.Timeout, time))
-          case string"unknown" => Either.Right((config.exe, args, Smt2Query.Result.Kind.Unknown, time))
-          case string"cvc5 interrupted by timeout." => Either.Right((config.exe, args, Smt2Query.Result.Kind.Timeout, time))
-          case _ => Either.Left(Smt2Query.Result(Smt2Query.Result.Kind.Error, config.name, queryString,
-            st"""; Result: Error (exit code ${pr.exitCode})
-                |; Solver: ${config.exe}
-                |; Arguments: ${(args, " ")}
-                |; Output:
-                |${(for (line <- ops.StringOps(pout).split((c: C) => c == '\n')) yield st"; $line", "\n")}
-                |$queryString""".render, pout, time, 0, F))
-        }
+        r
       }
-      r
     }
     if (fs.isEmpty) {
       return Smt2Query.Result(Smt2Query.Result.Kind.Error, "all", queryString,
