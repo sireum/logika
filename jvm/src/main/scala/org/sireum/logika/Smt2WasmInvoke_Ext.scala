@@ -25,11 +25,9 @@
 package org.sireum.logika
 
 import org.sireum._
+import org.sireum.WasmServer
 
-import java.io.{InputStream, OutputStream}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Path}
-import java.util.concurrent.locks.ReentrantLock
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
@@ -37,301 +35,68 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 object Smt2WasmInvoke_Ext {
 
-  /** Check if GraalVM Polyglot (WASM) is available and JVMCI compiler is active. */
-  val hasJvmci: B = {
-    try {
-      Class.forName("org.graalvm.polyglot.Context")
-      val args = java.lang.management.ManagementFactory.getRuntimeMXBean.getInputArguments
-      var jvmciEnabled = false
-      val it = args.iterator()
-      while (it.hasNext) {
-        val arg = it.next()
-        if (arg.contains("EnableJVMCI") || arg.contains("upgrade-module-path")) {
-          jvmciEnabled = true
-        }
-      }
-      jvmciEnabled
-    } catch {
-      case _: ClassNotFoundException => false
-    }
-  }
+  /** Delegate to WasmServer.hasJvmci to avoid duplicating the JVMCI detection logic. */
+  val hasJvmci: B = WasmServer.hasJvmci
 
   /**
-   * Ring buffer with ReentrantLock + Condition, replacing Java's PipedInputStream
-   * which has a 1-second polling delay.
+   * Persistent GraalWasm cvc5 server. Extends WasmServer for lifecycle management,
+   * FastPipe I/O, and protocol helpers (writeU32/readU32).
    */
-  private class FastPipe(capacity: Int = 1024 * 1024) {
-    private val buf = new Array[Byte](capacity)
-    private var readPos = 0
-    private var writePos = 0
-    private var count = 0
-    private var closed = false
-    private val lock = new ReentrantLock()
-    private val notEmpty = lock.newCondition()
-    private val notFull = lock.newCondition()
-
-    val inputStream: InputStream = new InputStream {
-      override def read(): Int = {
-        lock.lock()
-        try {
-          while (count == 0 && !closed) notEmpty.await()
-          if (count == 0) return -1
-          val b = buf(readPos) & 0xFF
-          readPos = (readPos + 1) % capacity
-          count -= 1
-          notFull.signal()
-          b
-        } finally {
-          lock.unlock()
-        }
-      }
-
-      override def read(b: Array[Byte], off: Int, len: Int): Int = {
-        if (len == 0) return 0
-        lock.lock()
-        try {
-          while (count == 0 && !closed) notEmpty.await()
-          if (count == 0) return -1
-          val n = math.min(len, count)
-          var i = 0
-          while (i < n) {
-            b(off + i) = buf(readPos)
-            readPos = (readPos + 1) % capacity
-            i += 1
-          }
-          count -= n
-          notFull.signal()
-          n
-        } finally {
-          lock.unlock()
-        }
-      }
-    }
-
-    val outputStream: OutputStream = new OutputStream {
-      override def write(b: Int): Unit = {
-        lock.lock()
-        try {
-          while (count == capacity && !closed) notFull.await()
-          if (closed) throw new java.io.IOException("Pipe closed")
-          buf(writePos) = b.toByte
-          writePos = (writePos + 1) % capacity
-          count += 1
-          notEmpty.signal()
-        } finally {
-          lock.unlock()
-        }
-      }
-
-      override def write(b: Array[Byte], off: Int, len: Int): Unit = {
-        if (len == 0) return
-        lock.lock()
-        try {
-          var written = 0
-          while (written < len) {
-            while (count == capacity && !closed) notFull.await()
-            if (closed) throw new java.io.IOException("Pipe closed")
-            val space = capacity - count
-            val n = math.min(len - written, space)
-            var i = 0
-            while (i < n) {
-              buf(writePos) = b(off + written + i)
-              writePos = (writePos + 1) % capacity
-              i += 1
-            }
-            count += n
-            written += n
-            notEmpty.signal()
-          }
-        } finally {
-          lock.unlock()
-        }
-      }
-
-      override def flush(): Unit = {}
-    }
-
-    def close(): Unit = {
-      lock.lock()
-      try {
-        closed = true
-        notEmpty.signalAll()
-        notFull.signalAll()
-      } finally {
-        lock.unlock()
-      }
-    }
-
-    def reset(): Unit = {
-      lock.lock()
-      try {
-        readPos = 0
-        writePos = 0
-        count = 0
-        closed = false
-      } finally {
-        lock.unlock()
-      }
-    }
-  }
-
-  /**
-   * Persistent GraalWasm cvc5 instance. Loads the WASM binary, creates a GraalVM
-   * Context, and runs _start in a daemon thread communicating via FastPipe stdin/stdout.
-   * Options are sent before each query (per-query protocol).
-   */
-  private class Cvc5WasmServer(wasmPath: Predef.String) {
-    private val wasmBytes = Files.readAllBytes(Path.of(wasmPath))
-    private val stdinPipe = new FastPipe()
-    private val stdoutPipe = new FastPipe()
-    @volatile private var alive = false
-    @volatile private var error: Predef.String = _
-    private var thread: Thread = _
-
-    start()
-
-    private def start(): Unit = {
-      stdinPipe.reset()
-      stdoutPipe.reset()
-      alive = false
-      error = null
-
-      thread = new Thread(() => {
-        var context: org.graalvm.polyglot.Context = null
-        try {
-          val source = org.graalvm.polyglot.Source.newBuilder(
-            "wasm",
-            org.graalvm.polyglot.io.ByteSequence.create(wasmBytes),
-            "cvc5_server"
-          ).build()
-
-          context = org.graalvm.polyglot.Context.newBuilder("wasm")
-            .option("wasm.Builtins", "wasi_snapshot_preview1")
-            .option("wasm.WasiConstantRandomGet", "true")
-            .option("engine.WarnInterpreterOnly", "false")
-            .arguments("wasm", Array("cvc5_server"))
-            .in(stdinPipe.inputStream)
-            .out(stdoutPipe.outputStream)
-            .err(System.err)
-            .allowAllAccess(true)
-            .build()
-
-          alive = true
-
-          val module = context.eval(source)
-          val instance = module.newInstance()
-          val exports = instance.getMember("exports")
-          val startFn = exports.getMember("_start")
-          try {
-            startFn.executeVoid()
-          } catch {
-            case e: org.graalvm.polyglot.PolyglotException if e.isExit && e.getExitStatus == 0 => // normal shutdown
-            case e: org.graalvm.polyglot.PolyglotException if e.isExit =>
-              error = s"cvc5 exited with code ${e.getExitStatus}"
-            case e: Throwable =>
-              error = s"WASM error: ${e.getMessage}"
-          }
-        } catch {
-          case e: Throwable =>
-            error = s"Context error: ${e.getMessage}"
-        } finally {
-          alive = false
-          try { stdoutPipe.close() } catch { case _: Throwable => }
-          if (context != null) {
-            try { context.close() } catch { case _: Throwable => }
-          }
-        }
-      })
-      thread.setDaemon(true)
-      thread.setName(s"cvc5-wasm-${thread.getId}")
-      thread.start()
-
-      // Wait for the WASM server to initialize
-      val deadline = System.currentTimeMillis() + 10000
-      while (!alive && error == null && System.currentTimeMillis() < deadline) {
-        Thread.sleep(50)
-      }
-    }
-
-    def isAlive: Boolean = alive && error == null
-
-    def restart(): Unit = {
-      shutdown()
-      start()
-    }
-
-    def shutdown(): Unit = {
-      if (thread != null) {
-        try {
-          // Send shutdown (zero-length options message)
-          writeU32(stdinPipe.outputStream, 0)
-          stdinPipe.outputStream.flush()
-        } catch { case _: Throwable => }
-        stdinPipe.close()
-        stdoutPipe.close()
-        try { thread.join(5000) } catch { case _: Throwable => }
-        if (thread.isAlive) thread.interrupt()
-      }
-    }
+  private class Cvc5Server(wasmPath: Predef.String) extends WasmServer(
+    java.nio.file.Files.readAllBytes(java.nio.file.Path.of(wasmPath)),
+    "cvc5_server",
+    Array("cvc5_server"),
+    _.option("wasm.WasiConstantRandomGet", "true")
+  ) {
+    start() // auto-start on construction (matching original behavior)
 
     def query(optsBytes: Array[Byte], queryBytes: Array[Byte]): Predef.String = {
       // Send options
-      writeU32(stdinPipe.outputStream, optsBytes.length)
-      stdinPipe.outputStream.write(optsBytes)
-      stdinPipe.outputStream.flush()
+      writeU32(stdinStream, optsBytes.length)
+      stdinStream.write(optsBytes)
+      stdinStream.flush()
 
       // Send query
-      writeU32(stdinPipe.outputStream, queryBytes.length)
-      stdinPipe.outputStream.write(queryBytes)
-      stdinPipe.outputStream.flush()
+      writeU32(stdinStream, queryBytes.length)
+      stdinStream.write(queryBytes)
+      stdinStream.flush()
 
       // Read response
-      val len = readU32(stdoutPipe.inputStream)
+      val len = readU32(stdoutStream)
       if (len <= 0) return ""
       val result = new Array[Byte](len)
       var n = 0
       while (n < len) {
-        val r = stdoutPipe.inputStream.read(result, n, len - n)
+        val r = stdoutStream.read(result, n, len - n)
         if (r < 0) return new Predef.String(result, 0, n, StandardCharsets.UTF_8)
         n += r
       }
       new Predef.String(result, StandardCharsets.UTF_8)
     }
-  }
 
-  private def writeU32(os: OutputStream, v: Int): Unit = {
-    os.write((v >> 24) & 0xFF)
-    os.write((v >> 16) & 0xFF)
-    os.write((v >> 8) & 0xFF)
-    os.write(v & 0xFF)
-    os.flush()
-  }
-
-  private def readU32(is: InputStream): Int = {
-    val buf = new Array[Byte](4)
-    var n = 0
-    while (n < 4) {
-      val r = is.read(buf, n, 4 - n)
-      if (r < 0) return -1
-      n += r
+    override def shutdown(): Unit = {
+      try {
+        // Send shutdown (zero-length options message)
+        writeU32(stdinStream, 0)
+        stdinStream.flush()
+      } catch { case _: Throwable => }
+      super.shutdown()
     }
-    ((buf(0) & 0xFF) << 24) | ((buf(1) & 0xFF) << 16) |
-      ((buf(2) & 0xFF) << 8) | (buf(3) & 0xFF)
   }
 
-  /** Thread-local Cvc5WasmServer instance (one per thread per WASM path). */
-  private val servers = new ThreadLocal[java.util.HashMap[Predef.String, Cvc5WasmServer]] {
-    override def initialValue(): java.util.HashMap[Predef.String, Cvc5WasmServer] =
+  /** Thread-local Cvc5Server instance (one per thread per WASM path). */
+  private val servers = new ThreadLocal[java.util.HashMap[Predef.String, Cvc5Server]] {
+    override def initialValue(): java.util.HashMap[Predef.String, Cvc5Server] =
       new java.util.HashMap()
   }
 
-  private def getServer(wasmPath: Predef.String): Cvc5WasmServer = {
+  private def getServer(wasmPath: Predef.String): Cvc5Server = {
     val map = servers.get()
     var server = map.get(wasmPath)
     if (server == null || !server.isAlive) {
       if (server != null) server.restart()
       else {
-        server = new Cvc5WasmServer(wasmPath)
+        server = new Cvc5Server(wasmPath)
         map.put(wasmPath, server)
       }
     }
