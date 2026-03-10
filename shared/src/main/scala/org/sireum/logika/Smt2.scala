@@ -160,6 +160,10 @@ object Smt2 {
 
   val cvc5DefaultSatOpts: String = "cvc5,--finite-model-find"
 
+  val cvc5WasmDefaultValidOpts: String = "cvc5.wasm,--full-saturate-quant"
+
+  val cvc5WasmDefaultSatOpts: String = "cvc5.wasm,--finite-model-find"
+
   val altErgoDefaultValidOpts: String = "alt-ergo"
 
   val altErgoDefaultSatOpts: String = "alt-ergo"
@@ -178,6 +182,7 @@ object Smt2 {
     "alt-ergo" ~> ISZ[String]("-i", "smtlib2") +
     "cvc4" ~> ISZ[String]("--lang=smt2.6") +
     "cvc5" ~> ISZ[String]("--lang=smt2.6") +
+    "cvc5.wasm" ~> ISZ[String]() +
     "z3" ~> ISZ("-smt2", "-in")
 
   def solverArgs(name: String, timeoutInMs: Z, rlimit: Z): Option[ISZ[String]] = {
@@ -190,6 +195,7 @@ object Smt2 {
         return Some(solverArgsMap.get(name).get ++ ISZ("--steps-bound", rlimit.string, "--timelimit", timeoutInS.string))
       case string"cvc4" => return Some(solverArgsMap.get(name).get ++ ISZ(s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
       case string"cvc5" => return Some(solverArgsMap.get(name).get ++ ISZ(s"--rlimit=$rlimit", s"--tlimit=$timeoutInMs"))
+      case string"cvc5.wasm" => return Some(ISZ())
       case string"z3" => return Some(solverArgsMap.get(name).get ++ ISZ(s"rlimit=$rlimit", s"-t:$timeoutInMs"))
       case _ => return None()
     }
