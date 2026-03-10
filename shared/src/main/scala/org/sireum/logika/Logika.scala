@@ -1095,6 +1095,9 @@ import Util._
 
   def text2SubZVal(ti: TypeInfo.SubZ, text: String, pos: Position): State.Value = {
     val t = ti.typedOpt.get.asInstanceOf[AST.Typed.Name]
+    if (config.useInt) {
+      return State.Value.Z(org.sireum.Z(text).get, pos)
+    }
     if (ti.ast.isBitVector) {
       ti.ast.bitWidth match {
         case 8 => return State.Value.S8(org.sireum.S8(text).get, t, pos)
@@ -1333,6 +1336,9 @@ import Util._
     }
 
     def checkRange(s0: State, value: State.Value, pos: Position): State = {
+      if (!rtCheck) {
+        return s0
+      }
       val t = value.tipe
       t match {
         case t: AST.Typed.Name =>
@@ -1902,11 +1908,6 @@ import Util._
 
     def evalSelect(exp: AST.Exp.Select): ISZ[(State, State.Value)] = {
       val pos = exp.id.attr.posOpt.get
-      exp.attr.resOpt.get match {
-        case res: AST.ResolvedInfo.Method if res.tpeOpt.isEmpty =>
-          println("Here")
-        case _ =>
-      }
       exp.attr.resOpt.get match {
         case res: AST.ResolvedInfo.BuiltIn if res.kind == AST.ResolvedInfo.BuiltIn.Kind.IsInstanceOf ||
           res.kind == AST.ResolvedInfo.BuiltIn.Kind.AsInstanceOf =>
@@ -2561,7 +2562,12 @@ import Util._
         )
         var s2vs = ISZ[(State, State.Value)]()
         info.strictPureBodyOpt match {
-          case Some(body) => s2vs = l.evalAssignExpValue(split, smt2, cache, retType, rtCheck, s1, body, reporter)
+          case Some(body) =>
+            if (config.strictPureMode == Config.StrictPureMode.Uninterpreted) {
+              s2vs = ISZ(idIntro(pos, s1, ctx, "Res", retType, None()))
+            } else {
+              s2vs = l.evalAssignExpValue(split, smt2, cache, retType, rtCheck, s1, body, reporter)
+            }
           case _ =>
             if (retType == AST.Typed.unit) {
               val unit = State.Value.Unit(pos)
@@ -3126,21 +3132,33 @@ import Util._
                 State.Claim.Let.Binary(symGe, arg, AST.Exp.BinaryOp.Le, State.Value.Z(max, pos), AST.Typed.z),
                 State.Claim.Let.Binary(symCond, symLe, AST.Exp.BinaryOp.And, symGe, AST.Typed.b)
               ))
-              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s4, symCond, Some(pos), ISZ(), reporter)
+              if (rtCheck) {
+                evalAssertH(T, smt2, cache, s"$t.fromZ range check", s4, symCond, Some(pos), ISZ(), reporter)
+              } else {
+                evalAssumeH(T, smt2, cache, s"$t.fromZ range check", s4, symCond, Some(pos), reporter)
+              }
               p._1
             case (Some(min), _) =>
               val (s1, symCond) = p._1.freshSym(AST.Typed.b, pos)
               val s2 = s1.addClaim(
                 State.Claim.Let.Binary(symCond, State.Value.Z(min, pos), AST.Exp.BinaryOp.Le, arg, AST.Typed.z)
               )
-              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), ISZ(), reporter)
+              if (rtCheck) {
+                evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), ISZ(), reporter)
+              } else {
+                evalAssumeH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), reporter)
+              }
               p._1
             case (_, Some(max)) =>
               val (s1, symCond) = p._1.freshSym(AST.Typed.b, pos)
               val s2 = s1.addClaim(
                 State.Claim.Let.Binary(symCond, arg, AST.Exp.BinaryOp.Le, State.Value.Z(max, pos), AST.Typed.z)
               )
-              evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), ISZ(), reporter)
+              if (rtCheck) {
+                evalAssertH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), ISZ(), reporter)
+              } else {
+                evalAssumeH(T, smt2, cache, s"$t.fromZ range check", s2, symCond, Some(pos), reporter)
+              }
               p._1
             case (_, _) => p._1
           }
@@ -3534,9 +3552,9 @@ import Util._
           val (s1, sym) = value2Sym(s0, cond, ifExp.cond.posOpt.get)
           val prop = State.Claim.Prop(T, sym)
           val negProp = State.Claim.Prop(F, sym)
-          val thenBranch = smt2.sat(context.methodName, config, cache, T,
+          val thenBranch = config.branchSat || smt2.sat(context.methodName, config, cache, T,
             s"$construct-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ prop, reporter)
-          val elseBranch = smt2.sat(context.methodName, config, cache, T,
+          val elseBranch = config.branchSat || smt2.sat(context.methodName, config, cache, T,
             s"$construct-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s1.claims :+ negProp, reporter)
           (thenBranch, elseBranch) match {
             case (T, T) =>
@@ -5268,7 +5286,7 @@ import Util._
               val (s3, cond) = value2Sym(s2, v, pos)
               val prop = State.Claim.Prop(T, cond)
               val thenClaims = s3.claims :+ prop
-              val thenSat = smt2.sat(context.methodName, config, cache, T,
+              val thenSat = config.branchSat || smt2.sat(context.methodName, config, cache, T,
                 s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, thenClaims, reporter)
               var thisL = this
               var modifiableIds = HashSet.empty[String]
@@ -5297,7 +5315,7 @@ import Util._
                s6v <- evalExp(split, smt2, cache, rtCheck, s5, whileStmt.cond, reporter)) {
             val (s6, sym) = value2Sym(s6v._1, s6v._2, whileStmt.cond.posOpt.get)
             val s7 = s6.addClaim(State.Claim.Prop(F, sym))
-            val elseSat = smt2.sat(context.methodName, config, cache, T,
+            val elseSat = config.branchSat || smt2.sat(context.methodName, config, cache, T,
               s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s7.claims, reporter)
             r = r :+ s7(status = State.statusOf(elseSat))
           }
@@ -5331,7 +5349,7 @@ import Util._
             val s3 = s2w
             val prop = State.Claim.Prop(T, cond)
             val s4 = s3.addClaim(prop)
-            val thenSat = smt2.sat(context.methodName, config, cache, T,
+            val thenSat = config.branchSat || smt2.sat(context.methodName, config, cache, T,
               s"while-true-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s4.claims, reporter)
             if (thenSat) {
               for (s5 <- evalStmts(this, sp, smt2, cache, None(), rtCheck, s4, whileStmt.body.stmts, reporter)) {
@@ -5345,7 +5363,7 @@ import Util._
             }
             val negProp = State.Claim.Prop(F, cond)
             val s7 = s3.addClaim(negProp)
-            val elseSat = smt2.sat(context.methodName, config, cache, T,
+            val elseSat = config.branchSat || smt2.sat(context.methodName, config, cache, T,
               s"while-false-branch at [${pos.beginLine}, ${pos.beginColumn}]", pos, s7.claims, reporter)
             r = r :+ s7(status = State.statusOf(elseSat))
           } else {

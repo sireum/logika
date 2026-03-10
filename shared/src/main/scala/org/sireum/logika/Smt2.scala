@@ -1252,86 +1252,113 @@ object Smt2 {
         val tRandomSeedBetweenId = typeOpId(t, st"randomSeedBetween(Z, $tId, $tId)".render)
         val t2ZId = typeOpId(t, "toZ")
         val tMaxOpt: Option[ST] =
-          if (ti.ast.hasMax) Some(st"(define-const ${currentNameIdString(t.ids :+ "Max")} $tId ${toVal(config, t, ti.ast.max)})")
+          if (ti.ast.hasMax) Some(st"(define-const ${currentNameIdString(t.ids :+ "Max")} $tId ${toVal(config, if (config.useInt) AST.Typed.z else t, ti.ast.max)})")
           else None()
         val tMinOpt: Option[ST] =
-          if (ti.ast.hasMin) Some(st"(define-const ${currentNameIdString(t.ids :+ "Min")}  $tId ${toVal(config, t, ti.ast.min)})")
+          if (ti.ast.hasMin) Some(st"(define-const ${currentNameIdString(t.ids :+ "Min")}  $tId ${toVal(config, if (config.useInt) AST.Typed.z else t, ti.ast.min)})")
           else None()
-        (ti.ast.isSigned, ti.ast.isBitVector) match {
-          case (T, T) =>
-            val bwM1 = ti.ast.bitWidth - 1
-            val bwM2 = bwM1 - 1
-            val n = ti.ast.max + 1
-            addSort(t,
-              st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
-                  |(define-fun $t2ZId ((x $tId)) Z
-                  |  (ite (= ((_ extract $bwM1 $bwM1) x) #b0)
-                  |       (bv2nat ((_ extract $bwM2 0) x))
-                  |       (- (bv2nat ((_ extract $bwM2 0) x)) $n)))
-                  |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
-                  |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
-                  |(define-fun $tLeId ((x $tId) (y $tId)) B (bvsle x y))
-                  |(define-fun $tLtId ((x $tId) (y $tId)) B (bvslt x y))
-                  |(define-fun $tGtId ((x $tId) (y $tId)) B (bvsgt x y))
-                  |(define-fun $tGeId ((x $tId) (y $tId)) B (bvsge x y))
-                  |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
-                  |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
-                  |(define-fun $tAddId ((x $tId) (y $tId)) $tId (bvadd x y))
-                  |(define-fun $tSubId ((x $tId) (y $tId)) $tId (bvsub x y))
-                  |(define-fun $tMulId ((x $tId) (y $tId)) $tId (bvmul x y))
-                  |(define-fun $tDivId ((x $tId) (y $tId)) $tId (bvsdiv x y))
-                  |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvsrem x y))
-                  |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
-                  |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvashr x y))
-                  |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
-                  |(declare-fun $tRandomSeedId (Z) $tId)
-                  |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
-                  |$tMaxOpt
-                  |$tMinOpt""")
-          case (F, T) =>
-            addSort(t,
-              st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
-                  |(define-fun $t2ZId ((x $tId)) Z (bv2nat x))
-                  |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
-                  |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
-                  |(define-fun $tLeId ((x $tId) (y $tId)) B (bvule x y))
-                  |(define-fun $tLtId ((x $tId) (y $tId)) B (bvult x y))
-                  |(define-fun $tGtId ((x $tId) (y $tId)) B (bvugt x y))
-                  |(define-fun $tGeId ((x $tId) (y $tId)) B (bvuge x y))
-                  |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
-                  |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
-                  |(define-fun $tAddId ((x $tId) (y $tId)) $tId (bvadd x y))
-                  |(define-fun $tSubId ((x $tId) (y $tId)) $tId (bvsub x y))
-                  |(define-fun $tMulId ((x $tId) (y $tId)) $tId (bvmul x y))
-                  |(define-fun $tDivId ((x $tId) (y $tId)) $tId (bvudiv x y))
-                  |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvurem x y))
-                  |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
-                  |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvlshr x y))
-                  |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
-                  |(declare-fun $tRandomSeedId (Z) $tId)
-                  |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
-                  |$tMaxOpt
-                  |$tMinOpt""")
-          case (_, _) =>
-            addSort(t,
-              st"""(define-sort $tId () Int)
-                  |(define-fun $t2ZId ((n $tId)) Z n)
-                  |(define-fun $tNegId ((x $tId)) $tId (- x))
-                  |(define-fun $tLeId ((x $tId) (y $tId)) B (<= x y))
-                  |(define-fun $tLtId ((x $tId) (y $tId)) B (< x y))
-                  |(define-fun $tGtId ((x $tId) (y $tId)) B (> x y))
-                  |(define-fun $tGeId ((x $tId) (y $tId)) B (>= x y))
-                  |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
-                  |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
-                  |(define-fun $tAddId ((x $tId) (y $tId)) $tId (+ x y))
-                  |(define-fun $tSubId ((x $tId) (y $tId)) $tId (- x y))
-                  |(define-fun $tMulId ((x $tId) (y $tId)) $tId (* x y))
-                  |(define-fun $tDivId ((x $tId) (y $tId)) $tId (div x y))
-                  |(define-fun $tRemId ((x $tId) (y $tId)) $tId (mod x y))
-                  |(declare-fun $tRandomSeedId (Z) $tId)
-                  |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
-                  |$tMaxOpt
-                  |$tMinOpt""")
+        if (config.useInt) {
+          addSort(t,
+            st"""(define-sort $tId () Int)
+                |(define-fun $t2ZId ((x $tId)) Z x)
+                |(define-fun $tNegId ((x $tId)) $tId (- x))
+                |(declare-fun $tCompId ($tId) $tId)
+                |(define-fun $tLeId ((x $tId) (y $tId)) B (<= x y))
+                |(define-fun $tLtId ((x $tId) (y $tId)) B (< x y))
+                |(define-fun $tGeId ((x $tId) (y $tId)) B (> x y))
+                |(define-fun $tGtId ((x $tId) (y $tId)) B (>= x y))
+                |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
+                |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
+                |(define-fun $tAddId ((x $tId) (y $tId)) $tId (+ x y))
+                |(define-fun $tSubId ((x $tId) (y $tId)) $tId (- x y))
+                |(define-fun $tMulId ((x $tId) (y $tId)) $tId (* x y))
+                |(define-fun $tDivId ((x $tId) (y $tId)) $tId (div x y))
+                |(define-fun $tRemId ((x $tId) (y $tId)) $tId (mod x y))
+                |(declare-fun $tShlId ($tId $tId) $tId)
+                |(declare-fun $tShrId ($tId $tId) $tId)
+                |(declare-fun $tUshrId ($tId $tId) $tId)
+                |(declare-fun $tRandomSeedId (Z) $tId)
+                |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
+                |$tMaxOpt
+                |$tMinOpt"""
+          )
+        } else {
+          (ti.ast.isSigned, ti.ast.isBitVector) match {
+            case (T, T) =>
+              val bwM1 = ti.ast.bitWidth - 1
+              val bwM2 = bwM1 - 1
+              val n = ti.ast.max + 1
+              addSort(t,
+                st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
+                    |(define-fun $t2ZId ((x $tId)) Z
+                    |  (ite (= ((_ extract $bwM1 $bwM1) x) #b0)
+                    |       (bv2nat ((_ extract $bwM2 0) x))
+                    |       (- (bv2nat ((_ extract $bwM2 0) x)) $n)))
+                    |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
+                    |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
+                    |(define-fun $tLeId ((x $tId) (y $tId)) B (bvsle x y))
+                    |(define-fun $tLtId ((x $tId) (y $tId)) B (bvslt x y))
+                    |(define-fun $tGtId ((x $tId) (y $tId)) B (bvsgt x y))
+                    |(define-fun $tGeId ((x $tId) (y $tId)) B (bvsge x y))
+                    |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
+                    |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
+                    |(define-fun $tAddId ((x $tId) (y $tId)) $tId (bvadd x y))
+                    |(define-fun $tSubId ((x $tId) (y $tId)) $tId (bvsub x y))
+                    |(define-fun $tMulId ((x $tId) (y $tId)) $tId (bvmul x y))
+                    |(define-fun $tDivId ((x $tId) (y $tId)) $tId (bvsdiv x y))
+                    |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvsrem x y))
+                    |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
+                    |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvashr x y))
+                    |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
+                    |(declare-fun $tRandomSeedId (Z) $tId)
+                    |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
+                    |$tMaxOpt
+                    |$tMinOpt""")
+            case (F, T) =>
+              addSort(t,
+                st"""(define-sort $tId () (_ BitVec ${ti.ast.bitWidth}))
+                    |(define-fun $t2ZId ((x $tId)) Z (bv2nat x))
+                    |(define-fun $tNegId ((x $tId)) $tId (bvneg x))
+                    |(define-fun $tCompId ((x $tId)) $tId (bvnot x))
+                    |(define-fun $tLeId ((x $tId) (y $tId)) B (bvule x y))
+                    |(define-fun $tLtId ((x $tId) (y $tId)) B (bvult x y))
+                    |(define-fun $tGtId ((x $tId) (y $tId)) B (bvugt x y))
+                    |(define-fun $tGeId ((x $tId) (y $tId)) B (bvuge x y))
+                    |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
+                    |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
+                    |(define-fun $tAddId ((x $tId) (y $tId)) $tId (bvadd x y))
+                    |(define-fun $tSubId ((x $tId) (y $tId)) $tId (bvsub x y))
+                    |(define-fun $tMulId ((x $tId) (y $tId)) $tId (bvmul x y))
+                    |(define-fun $tDivId ((x $tId) (y $tId)) $tId (bvudiv x y))
+                    |(define-fun $tRemId ((x $tId) (y $tId)) $tId (bvurem x y))
+                    |(define-fun $tShlId ((x $tId) (y $tId)) $tId (bvshl x y))
+                    |(define-fun $tShrId ((x $tId) (y $tId)) $tId (bvlshr x y))
+                    |(define-fun $tUshrId ((x $tId) (y $tId)) $tId (bvlshr x y))
+                    |(declare-fun $tRandomSeedId (Z) $tId)
+                    |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
+                    |$tMaxOpt
+                    |$tMinOpt""")
+            case (_, _) =>
+              addSort(t,
+                st"""(define-sort $tId () Int)
+                    |(define-fun $t2ZId ((n $tId)) Z n)
+                    |(define-fun $tNegId ((x $tId)) $tId (- x))
+                    |(define-fun $tLeId ((x $tId) (y $tId)) B (<= x y))
+                    |(define-fun $tLtId ((x $tId) (y $tId)) B (< x y))
+                    |(define-fun $tGtId ((x $tId) (y $tId)) B (> x y))
+                    |(define-fun $tGeId ((x $tId) (y $tId)) B (>= x y))
+                    |(define-fun $tEqId ((x $tId) (y $tId)) B (= x y))
+                    |(define-fun $tNeId ((x $tId) (y $tId)) B (not (= x y)))
+                    |(define-fun $tAddId ((x $tId) (y $tId)) $tId (+ x y))
+                    |(define-fun $tSubId ((x $tId) (y $tId)) $tId (- x y))
+                    |(define-fun $tMulId ((x $tId) (y $tId)) $tId (* x y))
+                    |(define-fun $tDivId ((x $tId) (y $tId)) $tId (div x y))
+                    |(define-fun $tRemId ((x $tId) (y $tId)) $tId (mod x y))
+                    |(declare-fun $tRandomSeedId (Z) $tId)
+                    |(declare-fun $tRandomSeedBetweenId (Z $tId $tId) $tId)
+                    |$tMaxOpt
+                    |$tMinOpt""")
+          }
         }
       }
 
@@ -1985,10 +2012,10 @@ object Smt2 {
       }
       val s = HashSSet.empty[State.Value.Sym] ++ syms -- lsyms
       if (s.nonEmpty || lids.nonEmpty) {
-          val (decls, body2) = addTypeConstraintsH(isImply,
-            (for (id <- lids.values) yield (localId(id), id.sym.tipe, T)) ++
-              (for (sym <- s.elements) yield (v2ST(config, sym, reporter), sym.tipe, F)),
-            body)
+        val (decls, body2) = addTypeConstraintsH(isImply,
+          (for (id <- lids.values) yield (localId(id), id.sym.tipe, T)) ++
+            (for (sym <- s.elements) yield (v2ST(config, sym, reporter), sym.tipe, F)),
+          body)
         body =
           st"""(${if (isImply) "forall" else "exists"} (${(decls, " ")})
               |  $body2)"""

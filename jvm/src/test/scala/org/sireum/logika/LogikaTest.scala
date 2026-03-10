@@ -101,7 +101,10 @@ object LogikaTest {
       rwPar = T,
       rwEvalTrace = T,
       branchParPredNum = 3,
-      branchParPredComp = 16
+      branchParPredComp = 16,
+      undefined = F,
+      useInt = F,
+      branchSat = F
     )
 
   lazy val isInGithubAction: B = Os.env("GITHUB_ACTION").nonEmpty

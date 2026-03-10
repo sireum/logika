@@ -178,7 +178,10 @@ object OptionsUtil {
       rwPar = o.rwPar,
       rwEvalTrace = o.rwEvalTrace,
       branchParPredNum = o.branchPredNum,
-      branchParPredComp = o.branchPredComplexity
+      branchParPredComp = o.branchPredComplexity,
+      undefined = o.undefined,
+      useInt = o.useInt,
+      branchSat = o.branchSat
     )
     return Either.Left(config)
   }

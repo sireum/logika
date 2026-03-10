@@ -68,8 +68,10 @@ object OptionsCli {
     val infoFlow: B,
     val charBitWidth: Z,
     val fpRounding: LogikaFPRoundingMode.Type,
-    val useReal: B,
     val intBitWidth: Z,
+    val useInt: B,
+    val useReal: B,
+    val undefined: B,
     val interprocedural: B,
     val interproceduralContracts: B,
     val strictPureMode: LogikaStrictPureMode.Type,
@@ -94,6 +96,7 @@ object OptionsCli {
     val branchParReturn: B,
     val branchPredNum: Z,
     val branchPredComplexity: Z,
+    val branchSat: B,
     val rwPar: B,
     val dontSplitFunQuant: B,
     val splitAll: B,
@@ -207,10 +210,13 @@ import OptionsCli._
           |                           of { NearestTiesToEven, NearestTiesToAway,
           |                           TowardPositive, TowardNegative, TowardZero };
           |                           default: NearestTiesToEven)
-          |    --use-real           Use reals to approximate floating-point numbers
           |    --z-bitwidth         Bit-width representation for Z (integer) values
           |                           (expected 0, 8, 16, 32, 64) (expects an integer;
           |                           default is 0)
+          |    --use-int            Use arbitrary-precision integer to approximate
+          |                           bitvector integers
+          |    --use-real           Use reals to approximate floating-point numbers
+          |    --enable-undefined   Allows undefined claims
           |
           |Control Options:
           |    --interprocedural    Enable inter-procedural verification on
@@ -259,11 +265,14 @@ import OptionsCli._
           |    --par-branch         Enable branch parallelization
           |    --par-branch-return  Only use branch parallelization if all branches return
           |    --par-branch-pred-num
-          |                          Enable branch parallelization (expects an integer;
-          |                           min is 2; default is 2)
+          |                          Branch parallelization prediction minimum number of
+          |                           branches (expects an integer; min is 3; default is
+          |                           2)
           |    --par-branch-pred-complexity
-          |                          Enable branch parallelization (expects an integer;
-          |                           min is 0; default is 10)
+          |                          Branch parallelization prediction statement
+          |                           complexity (expects an integer; min is 0; default is
+          |                           16)
+          |    --branchSat          Assumes branches are always satisfiable
           |    --par-rw             Enable rewriting parallelization
           |
           |Path Splitting Options:
@@ -306,8 +315,10 @@ import OptionsCli._
     var infoFlow: B = false
     var charBitWidth: Z = 32
     var fpRounding: LogikaFPRoundingMode.Type = LogikaFPRoundingMode.NearestTiesToEven
-    var useReal: B = false
     var intBitWidth: Z = 0
+    var useInt: B = false
+    var useReal: B = false
+    var undefined: B = false
     var interprocedural: B = false
     var interproceduralContracts: B = false
     var strictPureMode: LogikaStrictPureMode.Type = LogikaStrictPureMode.Default
@@ -331,7 +342,8 @@ import OptionsCli._
     var branchPar: B = false
     var branchParReturn: B = false
     var branchPredNum: Z = 2
-    var branchPredComplexity: Z = 10
+    var branchPredComplexity: Z = 16
+    var branchSat: B = false
     var rwPar: B = true
     var dontSplitFunQuant: B = false
     var splitAll: B = false
@@ -401,16 +413,28 @@ import OptionsCli._
              case Some(v) => fpRounding = v
              case _ => return None()
            }
+         } else if (arg == "--z-bitwidth") {
+           val o: Option[Z] = parseNum(args, j + 1, None(), None())
+           o match {
+             case Some(v) => intBitWidth = v
+             case _ => return None()
+           }
+         } else if (arg == "--use-int") {
+           val o: Option[B] = { j = j - 1; Some(!useInt) }
+           o match {
+             case Some(v) => useInt = v
+             case _ => return None()
+           }
          } else if (arg == "--use-real") {
            val o: Option[B] = { j = j - 1; Some(!useReal) }
            o match {
              case Some(v) => useReal = v
              case _ => return None()
            }
-         } else if (arg == "--z-bitwidth") {
-           val o: Option[Z] = parseNum(args, j + 1, None(), None())
+         } else if (arg == "--enable-undefined") {
+           val o: Option[B] = { j = j - 1; Some(!undefined) }
            o match {
-             case Some(v) => intBitWidth = v
+             case Some(v) => undefined = v
              case _ => return None()
            }
          } else if (arg == "--interprocedural") {
@@ -549,7 +573,7 @@ import OptionsCli._
              case _ => return None()
            }
          } else if (arg == "--par-branch-pred-num") {
-           val o: Option[Z] = parseNum(args, j + 1, Some(2), None())
+           val o: Option[Z] = parseNum(args, j + 1, Some(3), None())
            o match {
              case Some(v) => branchPredNum = v
              case _ => return None()
@@ -558,6 +582,12 @@ import OptionsCli._
            val o: Option[Z] = parseNum(args, j + 1, Some(0), None())
            o match {
              case Some(v) => branchPredComplexity = v
+             case _ => return None()
+           }
+         } else if (arg == "--branchSat") {
+           val o: Option[B] = { j = j - 1; Some(!branchSat) }
+           o match {
+             case Some(v) => branchSat = v
              case _ => return None()
            }
          } else if (arg == "--par-rw") {
@@ -683,7 +713,7 @@ import OptionsCli._
         isOption = F
       }
     }
-    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, useReal, intBitWidth, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchPar, branchParReturn, branchPredNum, branchPredComplexity, rwPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, rwMax, rwTrace, rwEvalTrace, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
+    return Some(LogikaOption(help, parseArguments(args, j), background, manual, smt2Caching, transitionCaching, infoFlow, charBitWidth, fpRounding, intBitWidth, useInt, useReal, undefined, interprocedural, interproceduralContracts, strictPureMode, line, loopBound, callBound, patternExhaustive, pureFun, sat, skipMethods, skipTypes, logPc, logPcLines, logRawPc, logVc, logVcDir, logDetailedInfo, logAtRewrite, stats, par, branchPar, branchParReturn, branchPredNum, branchPredComplexity, branchSat, rwPar, dontSplitFunQuant, splitAll, splitContract, splitIf, splitMatch, rwMax, rwTrace, rwEvalTrace, elideEncoding, rawInscription, rlimit, sequential, simplify, smt2SatConfigs, smt2ValidConfigs, satTimeout, timeout, searchPC))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

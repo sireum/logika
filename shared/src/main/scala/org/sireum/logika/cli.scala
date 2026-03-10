@@ -74,12 +74,18 @@ object cli {
           tpe = Type.Choice(name = "FPRoundingMode", sep = None(), elements = ISZ(
             "NearestTiesToEven", "NearestTiesToAway", "TowardPositive", "TowardNegative", "TowardZero")),
           description = "Rounding mode for floating point numbers"),
+        Opt(name = "intBitWidth", longKey = "z-bitwidth", shortKey = None(),
+          tpe = Type.Num(sep = None(), default = 0, min = None(), max = None()),
+          description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)"),
+        Opt(name = "useInt", longKey = "use-int", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Use arbitrary-precision integer to approximate bitvector integers"),
         Opt(name = "useReal", longKey = "use-real", shortKey = None(),
           tpe = Type.Flag(F),
           description = "Use reals to approximate floating-point numbers"),
-        Opt(name = "intBitWidth", longKey = "z-bitwidth", shortKey = None(),
-          tpe = Type.Num(sep = None(), default = 0, min = None(), max = None()),
-          description = "Bit-width representation for Z (integer) values (expected 0, 8, 16, 32, 64)")
+        Opt(name = "undefined", longKey = "undefined", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Allows undefined claims")
       )),
       OptGroup(name = "Control", opts = ISZ(
         Opt(name = "interprocedural", longKey = "interprocedural", shortKey = None(),
@@ -154,6 +160,9 @@ object cli {
         Opt(name = "branchPredComplexity", longKey = "par-branch-pred-complexity", shortKey = None(),
           tpe = Type.Num(sep = None(), default = 16, min = Some(0), max = None()),
           description = "Branch parallelization prediction statement complexity"),
+        Opt(name = "branchSat", longKey = "branch-sat", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Assumes branches are always satisfiable"),
         Opt(name = "rwPar", longKey = "par-rw", shortKey = None(),
           tpe = Type.Flag(T),
           description = "Enable rewriting parallelization")

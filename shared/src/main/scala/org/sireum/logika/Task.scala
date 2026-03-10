@@ -89,7 +89,7 @@ object Task {
       var i = 1
       for (claim <- claims if s0.ok) {
         val pos = claim.posOpt.get
-        val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, csmt2, cache, T, s0, claim, reporter)
+        val ISZ((s1, v)) = logika.evalExp(Logika.Split.Disabled, csmt2, cache, !config.undefined, s0, claim, reporter)
         if (s1.ok) {
           val (s2, sym) = logika.value2Sym(s1, v, pos)
           val s3 = s2.addClaim(State.Claim.Prop(T, sym))
@@ -140,7 +140,7 @@ object Task {
         csmt2.addType(config, AST.Typed.TypeVar(tp.id.value, tp.kind), reporter)
       }
       if (theorem.proof.steps.isEmpty) {
-        logika.evalAssert(csmt2, cache, T, theorem.id.value, State.create, theorem.claim, theorem.claim.posOpt, ISZ(),
+        logika.evalAssert(csmt2, cache, !config.undefined, theorem.id.value, State.create, theorem.claim, theorem.claim.posOpt, ISZ(),
           reporter)
         return reporter.messages
       }
@@ -246,12 +246,12 @@ object Task {
         p match {
           case p: plugin.ExpPlugin =>
             isPlugin = T
-            svs = p.handle(logika, Logika.Split.Default, csmt2, cache, T, State.create, exp, reporter)
+            svs = p.handle(logika, Logika.Split.Default, csmt2, cache, !config.undefined, State.create, exp, reporter)
           case _ =>
         }
       }
       if (!isPlugin) {
-        svs = logika.evalExp(Logika.Split.Default, csmt2, cache, T, State.create, exp, reporter)
+        svs = logika.evalExp(Logika.Split.Default, csmt2, cache, !config.undefined, State.create, exp, reporter)
       }
       for (sv <- svs) {
         val (state, sym) = logika.value2Sym(sv._1, sv._2, exp.posOpt.get)
