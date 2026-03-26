@@ -2510,7 +2510,7 @@ object RewritingSystem {
           case info: Info.Theorem =>
             var localPatternSet: CoreExpTranslator.LocalPatternSet = HashSSet.empty
             val claim: AST.CoreExp = info.ast.claim match {
-              case AST.Exp.QuantType(true, AST.Exp.Fun(_, params, AST.Stmt.Expr(c))) =>
+              case AST.Exp.QuantType(true, AST.Exp.Fun(_, params, AST.Stmt.Expr(c, _), _)) =>
                 for (p <- params) {
                   localPatternSet = localPatternSet + (info.name, p.idOpt.get.value)
                 }
@@ -2524,7 +2524,7 @@ object RewritingSystem {
             var r = ISZ[Rewriter.Pattern]()
             for (factClaim <- info.ast.claims) {
               val claim: AST.CoreExp = factClaim match {
-                case AST.Exp.QuantType(true, AST.Exp.Fun(_, params, AST.Stmt.Expr(c))) =>
+                case AST.Exp.QuantType(true, AST.Exp.Fun(_, params, AST.Stmt.Expr(c, _), _)) =>
                   for (p <- params) {
                     localPatternSet = localPatternSet + (info.name, p.idOpt.get.value)
                   }

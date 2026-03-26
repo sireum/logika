@@ -135,7 +135,7 @@ import FoldUnfoldPlugin._
                 return err
             }
           }
-          AST.Exp.Invoke(e.receiverOpt, e.ident, e.targs, args, e.attr)
+          AST.Exp.Invoke(e.receiverOpt, e.ident, e.rTypes, e.targs, args, e.attr)
         case e =>
           reporter.error(e.posOpt, Logika.kind, s"Expecting an invocation expression")
           return err
@@ -207,7 +207,7 @@ import FoldUnfoldPlugin._
         val id = AST.Id(local.id, AST.Attr(receiver.posOpt))
         val localOpt = Option.some[AST.ResolvedInfo](local)
         vals = vals :+ AST.Stmt.Var(F, T, id, None(), Some(AST.Stmt.Expr(receiver,
-          AST.TypedAttr(receiver.posOpt, receiver.typedOpt))),
+          ISZ(), AST.TypedAttr(receiver.posOpt, receiver.typedOpt))), ISZ(),
           AST.ResolvedAttr(receiver.posOpt, localOpt, receiver.typedOpt))
         thisIdentOpt = MSome(AST.Exp.Ident(id, AST.ResolvedAttr(receiver.posOpt, localOpt, receiver.typedOpt)))
       }
@@ -219,7 +219,7 @@ import FoldUnfoldPlugin._
           AST.ResolvedInfo.LocalVar.Scope.Current, F, T, p.id.value)
         locals = locals :+ local
         vals = vals :+ AST.Stmt.Var(F, T, p.id, None(),
-          Some(AST.Stmt.Expr(arg, AST.TypedAttr(arg.posOpt, arg.typedOpt))),
+          Some(AST.Stmt.Expr(arg, ISZ(), AST.TypedAttr(arg.posOpt, arg.typedOpt))), ISZ(),
           AST.ResolvedAttr(arg.posOpt, Some(local), arg.typedOpt))
       }
 

@@ -95,7 +95,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
               params = params :+ AST.Exp.Fun.Param(Some(p.id), p.tipeOpt, p.tipeOpt.get.typedOpt)
             }
             val claim = AST.Exp.QuantType(T, AST.Exp.Fun(spc.context, params,
-              AST.Stmt.Expr(AST.Util.bigAnd(claims, spc.stepNo.posOpt), tattr), tattr), AST.Attr(spc.stepNo.posOpt))
+              AST.Stmt.Expr(AST.Util.bigAnd(claims, spc.stepNo.posOpt), ISZ(), tattr), ISZ(), tattr), AST.Attr(spc.stepNo.posOpt))
             r = r + spc.stepNo ~> (F, claim)
           case spc: StepProofContext.FreshAssumeSubProof =>
             val claims: ISZ[AST.Exp] = for (p <- computeProvenClaims(spc.spcs).entries) yield p._2._2
@@ -106,7 +106,7 @@ import org.sireum.logika.{Logika, Smt2, Smt2Config, Smt2Query, State, StepProofC
             }
             val claim = AST.Exp.QuantType(F, AST.Exp.Fun(spc.context, params,
               AST.Stmt.Expr(AST.Util.bigImply(T, ISZ(spc.assumption, AST.Util.bigAnd(claims, spc.stepNo.posOpt)),
-                spc.stepNo.posOpt), tattr), tattr), AST.Attr(spc.stepNo.posOpt))
+                spc.stepNo.posOpt), ISZ(), tattr), ISZ(), tattr), AST.Attr(spc.stepNo.posOpt))
             r = r + spc.stepNo ~> (F, claim)
         }
       }

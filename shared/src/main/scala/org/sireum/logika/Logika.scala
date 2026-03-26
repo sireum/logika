@@ -2409,7 +2409,7 @@ import Util._
             val typedAttr = AST.TypedAttr(mi.ast.sig.id.attr.posOpt, mi.ast.sig.returnType.typedOpt)
             return Context.InvokeMethodInfo(T, F, mi.ast.sig, AST.MethodContract.Simple.empty,
               extractResolvedInfo(mi.ast.attr), F, Some(AST.Stmt.Expr(
-                AST.Exp.Result(None(), typedAttr), typedAttr)))
+                AST.Exp.Result(None(), typedAttr), ISZ(), typedAttr)))
           case info => halt(s"Infeasible: $owner.$id => $info")
         }
       } else {
@@ -2739,7 +2739,7 @@ import Util._
         val (s8, pf) = Util.pureMethod(context.nameExePathMap, context.maxCores, context.fileOptions, th, config,
           plugins, smt2, cache, s1, lComp.context.receiverTypeOpt, info.sig.funType.subst(typeSubstMap),
           lComp.context.methodOpt.get.owner, info.sig.id.value, info.isHelper, F, for (p <- info.sig.params) yield p.id,
-          AST.Stmt.Expr(AST.Exp.Result(None(), typedAttr), typedAttr), reporter, lComp.context.implicitCheckTitlePosOpt)
+          AST.Stmt.Expr(AST.Exp.Result(None(), typedAttr), ISZ(), typedAttr), reporter, lComp.context.implicitCheckTitlePosOpt)
         s1 = s8
         Some(pf)
       } else {
@@ -3289,7 +3289,7 @@ import Util._
       if (res.isInObject) {
         th.typeMap.get(res.owner) match {
           case Some(info: TypeInfo.SubZ) =>
-            val t = AST.Typed.Name(info.name, ISZ())
+            val t = AST.Typed.Name(info.name, AST.Typed.noRType, ISZ())
             res.id.native match {
               case "fromZ" =>
                 val minOpt: Option[Z] = if (info.ast.hasMin || info.ast.isBitVector) Some(info.ast.min) else None()
@@ -3304,7 +3304,7 @@ import Util._
           case _ =>
             th.nameMap.get(res.owner) match {
               case Some(info: Info.Enum) =>
-                val t = AST.Typed.Name(info.name :+ "Type", ISZ())
+                val t = AST.Typed.Name(info.name :+ "Type", AST.Typed.noRType, ISZ())
                 res.id.native match {
                   case "random" => return random(t)
                   case "randomBetween" => return randomBetween(t)
@@ -3313,7 +3313,7 @@ import Util._
                   case "numOfElements" => return Some(ISZ((s0, State.Value.Z(info.elements.size, pos))))
                   case "elements" =>
                     val elements = info.elements.keys
-                    val (s1, sym) = s0.freshSym(AST.Typed.Name(AST.Typed.isName, ISZ(AST.Typed.z, AST.Typed.string)), pos)
+                    val (s1, sym) = s0.freshSym(AST.Typed.Name(AST.Typed.isName, AST.Typed.noRType, ISZ(AST.Typed.z, AST.Typed.string)), pos)
                     return Some(ISZ((
                       s1.addClaim(State.Claim.Let.SeqLit(sym, for (i <- elements.indices) yield
                         State.Claim.Let.SeqLit.Arg(State.Value.Z(i, pos), State.Value.String(elements(i), pos)))),
@@ -3833,7 +3833,7 @@ import Util._
       }
       if (config.transitionCache && cachedExp && state.ok) {
         cache.getAssignExpTransitionAndUpdateSmt2(th, config,
-          AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)), context.methodName, state, smt2) match {
+          AST.Stmt.Expr(e, ISZ(), AST.TypedAttr(e.posOpt, e.typedOpt)), context.methodName, state, smt2) match {
           case Some((svs, cached)) =>
             reporter.coverage(F, cached, e.posOpt.get)
             return svs
@@ -3862,7 +3862,7 @@ import Util._
       if (cachedExp) {
         if (config.transitionCache && ops.ISZOps(svs).
           forall((p: (State, State.Value)) => p._1.status != State.Status.Error)) {
-          val cached = cache.setAssignExpTransition(th, config, AST.Stmt.Expr(e, AST.TypedAttr(e.posOpt, e.typedOpt)),
+          val cached = cache.setAssignExpTransition(th, config, AST.Stmt.Expr(e, ISZ(), AST.TypedAttr(e.posOpt, e.typedOpt)),
             context.methodName, state, svs, smt2)
           reporter.coverage(T, cached, e.posOpt.get)
         } else {
@@ -4700,7 +4700,7 @@ import Util._
                   val assumeIdent = AST.Exp.Ident(AST.Id("assume", AST.Attr(posOpt)), assumeAttr)
                   val exprAttr = AST.TypedAttr(posOpt, AST.Typed.unitOpt)
                   val assumes: ISZ[AST.Stmt] = for (p <- premises) yield AST.Stmt.Expr(
-                    AST.Exp.Invoke(None(), assumeIdent, ISZ(), ISZ(p), assumeAttr), exprAttr)
+                    AST.Exp.Invoke(None(), assumeIdent, ISZ(), ISZ(), ISZ(p), assumeAttr), ISZ(), exprAttr)
                   branches = branches :+ Branch("match case pattern", sym,
                     cas.body(stmts = assumes ++ cas.body.stmts), m, bidMap)
                 case _ =>

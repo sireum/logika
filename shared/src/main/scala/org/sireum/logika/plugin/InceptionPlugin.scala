@@ -84,12 +84,12 @@ object InceptionPlugin {
           fen = if (fen.fun.params.size == n) fen else
             fen(fun = fen.fun(params = ops.ISZOps(fen.fun.params).slice(0, n), exp = AST.Stmt.Expr(
               AST.Exp.QuantType(fen.isForall, AST.Exp.Fun(fen.fun.context,
-                ops.ISZOps(fen.fun.params).slice(n, fen.fun.params.size), fen.fun.exp, fen.fun.attr), fen.attr),
-              AST.TypedAttr(fen.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
+                ops.ISZOps(fen.fun.params).slice(n, fen.fun.params.size), fen.fun.exp, ISZ(), fen.fun.attr), fen.attr),
+              ISZ(), AST.TypedAttr(fen.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
           ten = if (ten.fun.params.size == n) fen else ten(fun = ten.fun(params =
             ops.ISZOps(ten.fun.params).slice(0, n), exp = AST.Stmt.Expr(AST.Exp.QuantType(ten.isForall,
             AST.Exp.Fun(ten.fun.context, ops.ISZOps(ten.fun.params).slice(n, ten.fun.params.size), ten.fun.exp,
-              ten.fun.attr), ten.attr), AST.TypedAttr(ten.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
+              ISZ(), ten.fun.attr), ten.attr), ISZ(), AST.TypedAttr(ten.fun.exp.asStmt.posOpt, AST.Typed.bOpt))))
         }
         if (!ok) {
           return
@@ -146,8 +146,8 @@ object InceptionPlugin {
           }
           AST.Util.ExpSubstitutor(argParamRefMap).transformExp(te) match {
             case MSome(te2) =>
-              val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(te2, AST.TypedAttr(te.posOpt, te.typedOpt)),
-                AST.TypedAttr(fe.posOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F, paramTypes, fe.typedOpt.get))))
+              val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(te2, ISZ(), AST.TypedAttr(te.posOpt, te.typedOpt)),
+                ISZ(), AST.TypedAttr(fe.posOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F, paramTypes, fe.typedOpt.get))))
               addResult(id, fun)
               if (!ok) {
                 te match {
@@ -160,7 +160,7 @@ object InceptionPlugin {
             case _ =>
           }
           r.get(id) match {
-            case Some(AST.Exp.Fun(_, _, e: AST.Stmt.Expr)) =>
+            case Some(AST.Exp.Fun(_, _, e: AST.Stmt.Expr, _)) =>
               val paramRefArgMap = HashMap ++ (for (p <- argParamRefMap.entries) yield (p._2, p._1))
               val e2 = AST.Util.ExpSubstitutor(paramRefArgMap).transformExp(e.exp).getOrElseEager(e.exp)
               (e2, te) match {

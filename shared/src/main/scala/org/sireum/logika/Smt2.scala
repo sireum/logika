@@ -1347,7 +1347,7 @@ object Smt2 {
         val nameOp = typeOpId(t, "name")
         addSort(t,
           st"""(declare-datatypes (($tid 0)) ((
-              |  ${(for (element <- ti.elements.keys) yield st"(${typeHierarchyId(AST.Typed.Name(t.ids :+ element, ISZ()))})", " ")})))
+              |  ${(for (element <- ti.elements.keys) yield st"(${typeHierarchyId(AST.Typed.Name(t.ids :+ element, AST.Typed.noRType, ISZ()))})", " ")})))
               |(declare-fun $ordinalOp ($tid) Z)
               |(declare-fun $nameOp ($tid) String)
               |(define-fun $eqOp ((x $tid) (y $tid)) B (= x y))
@@ -1361,7 +1361,7 @@ object Smt2 {
           val element = enumId(owner, elementId)
           elements = elements :+ element
           addSort(t, st"(declare-const $element $tid)")
-          addSort(t, st"(assert (= $element ${typeHierarchyId(AST.Typed.Name(t.ids :+ elementId, ISZ()))}))")
+          addSort(t, st"(assert (= $element ${typeHierarchyId(AST.Typed.Name(t.ids :+ elementId, AST.Typed.noRType, ISZ()))}))")
           addSort(t, st"(assert (= ($ordinalOp $element) $ordinal))")
           addSort(t, st"""(assert (= ($nameOp $element) "$elementId"))""")
           ordinal = ordinal + 1

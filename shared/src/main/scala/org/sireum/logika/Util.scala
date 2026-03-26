@@ -1013,6 +1013,7 @@ object Util {
                 nameExp.resOpt,
                 nameExp.typedOpt
               )),
+              ISZ(),
               for (targ <- let.tipe.args) yield AST.Util.typedToType(targ, pos),
               es,
               AST.ResolvedAttr(
@@ -1044,7 +1045,7 @@ object Util {
             val nameExp = th.nameToExp(name, symPos)
             val ident = AST.Exp.Ident(AST.Id(name(name.size - 1), AST.Attr(symPosOpt)),
               AST.ResolvedAttr(symPosOpt, nameExp.resOpt, nameExp.typedOpt))
-            return Some(AST.Exp.Invoke(None(), ident, targs, es, AST.ResolvedAttr(symPosOpt,
+            return Some(AST.Exp.Invoke(None(), ident, ISZ(), targs, es, AST.ResolvedAttr(symPosOpt,
               TypeChecker.sConstructorTypedResOpt(name, let.args.size)._2, Some(t))))
           case let: State.Claim.Let.Quant =>
             @pure def isInBoundResOpt(resOpt: Option[AST.ResolvedInfo]): B = {
@@ -1163,8 +1164,8 @@ object Util {
                                   isIdent(fcontext, params(0).idOpt.get, rll.args(0)) =>
                                   if (left.receiverOpt == Some[AST.Exp](rll.ident)) {
                                     val fun = AST.Exp.Fun(fcontext, ISZ(params(1)(tipeOpt = None())),
-                                      AST.Stmt.Expr(right.right, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
-                                      AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F, ISZ(argTypes(1)), AST.Typed.b))))
+                                      AST.Stmt.Expr(right.right, ISZ(), AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
+                                      ISZ(), AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F, ISZ(argTypes(1)), AST.Typed.b))))
                                     return Some(AST.Exp.QuantEach(let.isAll, rll.ident, fun, AST.ResolvedAttr(symPosOpt,
                                       Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current,
                                         F, T, params(1).idOpt.get.value)),
@@ -1182,7 +1183,7 @@ object Util {
                         (info.resOpt, info.typedOpt)
                       }
                       val fun = AST.Exp.Fun(fcontext, ISZ(params(0)(tipeOpt = None())), AST.Stmt.Expr(exp.right,
-                        AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), AST.TypedAttr(symPosOpt,
+                        ISZ(), AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), ISZ(), AST.TypedAttr(symPosOpt,
                         Some(AST.Typed.Fun(AST.Purity.Pure, F, argTypes, AST.Typed.b))))
                       return Some(AST.Exp.QuantEach(let.isAll, AST.Exp.Select(left.receiverOpt, AST.Id("indices", attr),
                         ISZ(), AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), fun, AST.ResolvedAttr(symPosOpt,
@@ -1196,7 +1197,7 @@ object Util {
                       val lo = left.left.asInstanceOf[AST.Exp.Binary].left
                       val hi = left.right.asInstanceOf[AST.Exp.Binary].right
                       val fun = AST.Exp.Fun(fcontext, ISZ(params(0)(tipeOpt = None())), AST.Stmt.Expr(exp.right,
-                        AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), AST.TypedAttr(symPosOpt,
+                        ISZ(), AST.TypedAttr(symPosOpt, AST.Typed.bOpt)), ISZ(), AST.TypedAttr(symPosOpt,
                         Some(AST.Typed.Fun(AST.Purity.Pure, F, argTypes, AST.Typed.b))))
                       return Some(AST.Exp.QuantRange(let.isAll, lo, hi, isExact, fun, AST.ResolvedAttr(symPosOpt,
                         Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
@@ -1207,8 +1208,8 @@ object Util {
                 }
               case _ =>
             }
-            val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(exp, AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
-              AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F, argTypes, AST.Typed.b))))
+            val fun = AST.Exp.Fun(fcontext, params, AST.Stmt.Expr(exp, ISZ(), AST.TypedAttr(symPosOpt, AST.Typed.bOpt)),
+              ISZ(), AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F, argTypes, AST.Typed.b))))
             return Some(AST.Exp.QuantType(let.isAll, fun, attr))
           case let: State.Claim.Let.FieldLookup =>
             valueToExp(let.adt) match {
@@ -1282,7 +1283,7 @@ object Util {
             (rcvOptIdent(let.seq, symPosOpt), valueToExp(let.index), valueToExp(let.element)) match {
               case (Some((rcvOpt, ident)), Some(index), Some(element)) =>
                 val (_, resOpt) = TypeChecker.sStoreTypedResOpt(let.seq.tipe.asInstanceOf[AST.Typed.Name], 1)
-                return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(AST.Exp.Binary(index,
+                return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(), ISZ(AST.Exp.Binary(index,
                   AST.Exp.BinaryOp.MapsTo, element, AST.ResolvedAttr(symPosOpt,
                     Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo)), Some(AST.Typed.Tuple(ISZ(
                       let.index.tipe, let.element.tipe)))), symPosOpt)),
@@ -1293,7 +1294,7 @@ object Util {
             (rcvOptIdent(let.seq, symPosOpt), valueToExp(let.index)) match {
               case (Some((rcvOpt, ident)), Some(index)) =>
                 val (_, resOpt) = TypeChecker.sSelectTypedResOpt(let.seq.tipe.asInstanceOf[AST.Typed.Name], F)
-                return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(index), AST.ResolvedAttr(symPosOpt, resOpt,
+                return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(), ISZ(index), AST.ResolvedAttr(symPosOpt, resOpt,
                   Some(sym.tipe))))
               case (_, _) =>
                 return None()
@@ -1303,7 +1304,7 @@ object Util {
               case (Some(o), Some(index)) =>
                 val info = th.typeMap.get(let.seq.tipe.asInstanceOf[AST.Typed.Name].ids).get.asInstanceOf[TypeInfo.Sig].methods.get("isInBound").get
                 val ident = AST.Exp.Ident(AST.Id("isInBound", AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt, info.resOpt, info.typedOpt))
-                return Some(AST.Exp.Invoke(Some(o), ident, ISZ(), ISZ(index),
+                return Some(AST.Exp.Invoke(Some(o), ident, ISZ(), ISZ(), ISZ(index),
                   AST.ResolvedAttr(symPosOpt, info.resOpt, Some(sym.tipe))))
               case _ => return None()
             }
@@ -1357,7 +1358,7 @@ object Util {
                       Some(sym.tipe))))
                   } else {
                     return Some(AST.Exp.Invoke(Some(o), AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
-                      AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
+                      AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
                       Some(sym.tipe))))
                   }
                 case _ => return None()
@@ -1407,7 +1408,7 @@ object Util {
                   Some(sym.tipe))))
               } else {
                 return Some(AST.Exp.Invoke(rcvOpt, AST.Exp.Ident(AST.Id(let.pf.id, AST.Attr(symPosOpt)),
-                  AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
+                  AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), ISZ(), ISZ(), es, AST.ResolvedAttr(symPosOpt, resOpt,
                   Some(sym.tipe))))
               }
             }
@@ -1423,7 +1424,7 @@ object Util {
             val ident = AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt,
               Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, let.id)),
               Some(let.tipe)))
-            return Some(AST.Exp.Invoke(None(), ident, ISZ(), es, AST.ResolvedAttr(symPosOpt, ident.resOpt,
+            return Some(AST.Exp.Invoke(None(), ident, ISZ(), ISZ(), es, AST.ResolvedAttr(symPosOpt, ident.resOpt,
               Some(sym.tipe))))
           case let: State.Claim.Let.FieldStore =>
             (rcvOptIdent(let.adt, symPosOpt), valueToExp(let.value)) match {
@@ -1433,13 +1434,13 @@ object Util {
                   case _: TypeInfo.Adt =>
                     val (_, resOpt, _, paramNames) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), message.Reporter.create)
                     val index = ops.ISZOps(paramNames).indexOf(let.id)
-                    val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
+                    val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
                       e, index)), AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
                     return Some(r)
                   case _: TypeInfo.Sig =>
                     val (_, resOpt, _, paramNames) = TypeChecker.adtCopyTypedResOpt(F, th, symPosOpt, t, ISZ(let.id), message.Reporter.create)
                     val index = ops.ISZOps(paramNames).indexOf(let.id)
-                    val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
+                    val r = AST.Exp.InvokeNamed(rcvOpt, ident, ISZ(), ISZ(), ISZ(AST.NamedArg(AST.Id(let.id, AST.Attr(symPosOpt)),
                       e, index)), AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe)))
                     return Some(r)
                   case info => halt(s"Infeasible: $info")
@@ -2193,9 +2194,9 @@ object Util {
       typedOpt = Some(AST.Typed.Fun(AST.Purity.Impure,F, ISZ(AST.Typed.b), AST.Typed.unit))
     )
     return AST.Stmt.Expr(AST.Exp.Invoke(
-      None(), AST.Exp.Ident(AST.Id("assume", AST.Attr(posOpt)), assumeResAttr), ISZ(), ISZ(cond),
+      None(), AST.Exp.Ident(AST.Id("assume", AST.Attr(posOpt)), assumeResAttr), ISZ(), ISZ(), ISZ(cond),
       AST.ResolvedAttr(assumeResAttr.posOpt, assumeResAttr.resOpt, AST.Typed.unitOpt)
-    ), AST.TypedAttr(posOpt, AST.Typed.unitOpt))
+    ), ISZ(), AST.TypedAttr(posOpt, AST.Typed.unitOpt))
   }
 
   @pure def afterPos(pos: Position): Position = {
@@ -2247,7 +2248,7 @@ object Util {
         }
         val split: Split.Type = if (config.dontSplitPfq) Split.Default else Split.Enabled
         val svs: ISZ[(State, State.Value)] = body match {
-          case AST.Stmt.Expr(_: AST.Exp.Result) => ISZ()
+          case AST.Stmt.Expr(_: AST.Exp.Result, _) => ISZ()
           case _ => logika.evalAssignExpValue(split, smt2, cache, pf.returnType, T, s0, body, reporter)
         }
         var sss = ISZ[(State, State.Value.Sym)]()
@@ -2368,7 +2369,7 @@ object Util {
       }
       val (s2, pf) = pureMethod(logika.context.nameExePathMap, logika.context.maxCores, logika.context.fileOptions,
         logika.th, logika.config, logika.plugins, smt2, cache, s0, receiverTypeOpt, AST.Typed.Fun(AST.Purity.Pure,F, paramTypes, t),
-        owner, id, isHelper, T, paramIds, AST.Stmt.Expr(newExp, AST.TypedAttr(posOpt, tOpt)), reporter,
+        owner, id, isHelper, T, paramIds, AST.Stmt.Expr(newExp, ISZ(), AST.TypedAttr(posOpt, tOpt)), reporter,
         logika.context.implicitCheckTitlePosOpt)
       val (s3, sym) = s2.freshSym(t, posOpt.get)
       val s4 = s3.addClaim(State.Claim.Let.ProofFunApply(sym, pf, args))
@@ -2835,7 +2836,7 @@ object Util {
           || context.pathConditionsOpt.nonEmpty) current else if (stmt.isInstruction) removeOld(current) else current
         if (currentNoOld.ok) {
           stmt match {
-            case AST.Stmt.Expr(e: AST.Exp.Invoke) if e.attr.resOpt == TypeChecker.setOptionsResOpt =>
+            case AST.Stmt.Expr(e: AST.Exp.Invoke, _) if e.attr.resOpt == TypeChecker.setOptionsResOpt =>
               logika.logPc(current, reporter, stmt.posOpt)
               val tool = e.args(0).asInstanceOf[AST.Exp.LitString].value
               val value: String = e.args(1) match {
@@ -2945,7 +2946,7 @@ object Util {
     if (mi.ast.isStrictPure && mi.ast.bodyOpt.nonEmpty) {
       mi.ast.bodyOpt.get.stmts match {
         case ISZ(stmt: AST.Stmt.Var, _: AST.Stmt.Return) => return stmt.initOpt
-        case ISZ(stmt: AST.Stmt.Return) => return Some(AST.Stmt.Expr(stmt.expOpt.get, stmt.attr))
+        case ISZ(stmt: AST.Stmt.Return) => return Some(AST.Stmt.Expr(stmt.expOpt.get, ISZ(), stmt.attr))
         case ISZ(stmt: AST.Stmt.Expr) => return Some(stmt)
         case stmts => halt(s"Infeasible: $stmts")
       }

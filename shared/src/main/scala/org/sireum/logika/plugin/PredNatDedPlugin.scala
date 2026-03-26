@@ -95,9 +95,9 @@ object PredNatDedPlugin {
     res.id match {
       case string"AllI" =>
         val quant: AST.Exp.QuantType = step.claim match {
-          case stepClaim@AST.Exp.QuantType(T, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)) =>
+          case stepClaim@AST.Exp.QuantType(T, AST.Exp.Fun(_, _, _: AST.Stmt.Expr, _)) =>
             logika.th.normalizeQuantType(stepClaim).asInstanceOf[AST.Exp.QuantType]
-          case stepClaim@AST.Exp.QuantRange(T, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)) =>
+          case stepClaim@AST.Exp.QuantRange(T, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr, _)) =>
             logika.th.normalizeQuantType(stepClaim).asInstanceOf[AST.Exp.QuantType]
           case _ =>
             reporter.error(step.claim.posOpt, Logika.kind, "Expecting a simple universal quantified type/range claim")
@@ -140,7 +140,7 @@ object PredNatDedPlugin {
         if (quant.fun.params.size > size) {
           quantClaim = quant(fun = quant.fun(
             params = ops.ISZOps(quant.fun.params).drop(size),
-            exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt))))
+            exp = AST.Stmt.Expr(quantClaim, ISZ(), AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt))))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
         val substClaimNorm = logika.th.normalizeExp(substClaim)
@@ -160,9 +160,9 @@ object PredNatDedPlugin {
       case string"ExistsE" =>
         val ISZ(existsP, subProofNo) = args
         val quant: AST.Exp.QuantType = spcMap.get(existsP) match {
-          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)))) =>
+          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantType(F, AST.Exp.Fun(_, _, _: AST.Stmt.Expr, _)))) =>
             logika.th.normalizeQuantType(q).asInstanceOf[AST.Exp.QuantType]
-          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantRange(F, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr)))) =>
+          case Some(StepProofContext.Regular(_, _, q@AST.Exp.QuantRange(F, _, _, _, AST.Exp.Fun(_, _, _: AST.Stmt.Expr, _)))) =>
             logika.th.normalizeQuantType(q).asInstanceOf[AST.Exp.QuantType]
           case _ =>
             reporter.error(existsP.posOpt, Logika.kind, "Expecting a simple existential quantified type/range claim")
@@ -204,7 +204,7 @@ object PredNatDedPlugin {
         if (quant.fun.params.size > size) {
           quantClaim = quant.fun(
             params = ops.ISZOps(quant.fun.params).drop(size),
-            exp = AST.Stmt.Expr(quantClaim, AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
+            exp = AST.Stmt.Expr(quantClaim, ISZ(), AST.TypedAttr(quantClaim.posOpt, quantClaim.typedOpt)))
         }
         val substClaim = PredNatDedPlugin.LocalSubstitutor(substMap).transformExp(quantClaim).getOrElse(quantClaim)
         if (logika.th.normalizeExp(substClaim) != assumption) {
