@@ -129,7 +129,7 @@ object PredNatDedPlugin {
                 AST.ResolvedAttr(
                   funArg.id.attr.posOpt,
                   Some(AST.ResolvedInfo.LocalVar(logika.context.methodName, AST.ResolvedInfo.LocalVar.Scope.Closure, T,
-                    T, funArg.id.value)),
+                    T, funArg.id.value, None())),
                   funArg.tipeOpt.get.typedOpt
                 )
               )
@@ -193,7 +193,7 @@ object PredNatDedPlugin {
                 AST.ResolvedAttr(
                   funArg.id.attr.posOpt,
                   Some(AST.ResolvedInfo.LocalVar(logika.context.methodName, AST.ResolvedInfo.LocalVar.Scope.Closure, T,
-                    T, funArg.id.value)),
+                    T, funArg.id.value, None())),
                   funArg.tipeOpt.get.typedOpt
                 )
               )

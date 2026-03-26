@@ -195,7 +195,7 @@ object Context {
 
   @strictpure def receiverLocalTypeOpt: Option[(AST.ResolvedInfo.LocalVar, AST.Typed)] = methodOpt match {
     case Some(cm) if cm.receiverTypeOpt.nonEmpty => Some((AST.ResolvedInfo.LocalVar(cm.owner :+ cm.id,
-      AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), cm.receiverTypeOpt.get))
+      AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this", None()), cm.receiverTypeOpt.get))
     case _ => None()
   }
 

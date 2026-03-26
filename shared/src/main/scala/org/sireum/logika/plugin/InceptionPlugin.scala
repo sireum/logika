@@ -142,7 +142,7 @@ object InceptionPlugin {
             paramTypes = paramTypes :+ ptOpt.get
             argParamRefMap = argParamRefMap + arg ~> AST.Exp.Ident(AST.Id(pid, AST.Attr(arg.posOpt)),
               AST.ResolvedAttr(arg.posOpt, Some(AST.ResolvedInfo.LocalVar(fcontext,
-                AST.ResolvedInfo.LocalVar.Scope.Current, F, T, pid)), ptOpt))
+                AST.ResolvedInfo.LocalVar.Scope.Current, F, T, pid, None())), ptOpt))
           }
           AST.Util.ExpSubstitutor(argParamRefMap).transformExp(te) match {
             case MSome(te2) =>

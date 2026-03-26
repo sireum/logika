@@ -102,7 +102,7 @@ object AutoPlugin {
         case e: AST.Exp.Ident =>
           e.typedOpt.get match {
             case AST.Typed.z =>
-            case AST.Typed.b if e.resOpt.get == AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, "F") =>
+            case AST.Typed.b if e.resOpt.get == AST.ResolvedInfo.Var(T, F, T, AST.Typed.sireumName, "F", None()) =>
             case t if isSeq(t) =>
             case _ => fail(e.posOpt, s"Algebra cannot be used on expression of type '${e.typedOpt.get}'")
           }
@@ -146,7 +146,7 @@ object AutoPlugin {
 
   @strictpure def conjuncts(th: TypeHierarchy, e: AST.Exp): ISZ[AST.Exp] = {
     e match {
-      case e: AST.Exp.Binary if e.attr.resOpt.get == AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd) =>
+      case e: AST.Exp.Binary if e.attr.resOpt.get == AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd, None()) =>
         conjuncts(th, e.left) ++ conjuncts(th, e.right)
       case _ => ISZ(th.normalizeExp(e))
     }

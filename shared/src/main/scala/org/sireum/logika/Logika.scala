@@ -1306,7 +1306,7 @@ import Util._
           case res => halt(s"Infeasible: $res")
         }
       case _: AST.Exp.This => return local(AST.ResolvedInfo.LocalVar(context.methodName,
-        AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this"), exp.num.value)
+        AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this", None()), exp.num.value)
       case e: AST.Exp.LitString =>
         if (e.value == ".random") {
           return rand(exp.num.value)
@@ -1314,7 +1314,7 @@ import Util._
         val ids = ops.StringOps(e.value).split((c: C) => c == '.').map((s: String) => ops.StringOps(s).trim)
         val lcontext = ops.ISZOps(ids).dropRight(1)
         return local(AST.ResolvedInfo.LocalVar(lcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
-          ids(ids.size - 1)), exp.num.value)
+          ids(ids.size - 1), None()), exp.num.value)
       case e => halt(s"Infeasible: $e")
     }
   }
@@ -2218,7 +2218,7 @@ import Util._
         var s2 = s0
         for (p <- quant.fun.params) {
           val id = p.idOpt.get
-          val res = AST.ResolvedInfo.LocalVar(quant.fun.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+          val res = AST.ResolvedInfo.LocalVar(quant.fun.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value, None())
           val pos = id.attr.posOpt.get
           val (s3, v) = evalIdentH(s2, res, p.typedOpt.get, pos)
           val (s4, sym2) = value2Sym(s3, v, pos)
@@ -2812,10 +2812,10 @@ import Util._
           }
           var rwLocals: ISZ[AST.ResolvedInfo.LocalVar] = for (q <- paramArgs) yield q._1
           if (!isUnit) {
-            rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "Res")
+            rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, T, T, "Res", None())
           }
           if (receiverOpt.nonEmpty) {
-            rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this")
+            rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, "this", None())
           }
           ms1 = rewriteLocalVars(logikaComp, ms1, F, rwLocals, modPosOpt, reporter)
           if (newVars.nonEmpty) {
@@ -3431,7 +3431,7 @@ import Util._
                   }
                   argTypes(i) = argType
                   paramArgs = paramArgs :+
-                    ((AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id), argType, arg, vOpt.get))
+                    ((AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id, None()), argType, arg, vOpt.get))
                   i = i + 1
                 }
               case Either.Right(nargs) =>
@@ -3450,7 +3450,7 @@ import Util._
                   }
                   argTypes(i) = argType
                   paramArgs = paramArgs :+
-                    ((AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id), argType, arg, v))
+                    ((AST.ResolvedInfo.LocalVar(ctx, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id, None()), argType, arg, v))
                 }
             }
             val mType = info.sig.funType
@@ -4653,7 +4653,7 @@ import Util._
     def evalInductMatch(): ISZ[State] = {
       @pure def unifyPattern(pat1: AST.Pattern, pat2: AST.Pattern): Option[HashMap[AST.Exp, AST.Exp]] = {
         @strictpure def ident(vb: AST.Pattern.VarBinding): AST.Exp =
-          AST.Exp.Ident(vb.id, AST.ResolvedAttr(vb.attr.posOpt, Some(AST.ResolvedInfo.LocalVar(vb.idContext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, vb.id.value)), vb.attr.typedOpt))
+          AST.Exp.Ident(vb.id, AST.ResolvedAttr(vb.attr.posOpt, Some(AST.ResolvedInfo.LocalVar(vb.idContext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, vb.id.value, None())), vb.attr.typedOpt))
         (pat1, pat2) match {
           case (p1: AST.Pattern.Ref, p2: AST.Pattern.Ref) if p1.attr.resOpt == p2.attr.resOpt => return Some(HashMap.empty)
           case (p1: AST.Pattern.VarBinding, p2: AST.Pattern.VarBinding) if p1.idContext == p2.idContext =>
@@ -4931,7 +4931,7 @@ import Util._
                           j.invokeIdent.posOpt,
                           Some(AST.ResolvedInfo.Method(T, AST.MethodMode.Method,
                             for (tp <- minfo.ast.sig.typeParams) yield tp.id.value, res.owner, id,
-                            for (p <- minfo.ast.sig.params) yield p.id.value, Some(t), ISZ(), ISZ())), Some(t))
+                            for (p <- minfo.ast.sig.params) yield p.id.value, Some(t), ISZ(), ISZ(), None())), Some(t))
                         var witnesses = ISZ[AST.ProofAst.StepId]()
                         for (arg <- j.invoke.args) {
                           arg match {
@@ -5067,7 +5067,7 @@ import Util._
     }
     var claim = claims(claims.size - 1)
     val typedOpt: Option[AST.Typed] = Some(AST.Typed.b)
-    val resOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd))
+    val resOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd, None()))
     for (i <- claims.size - 2 to 0 by -1) {
       val exp = claims(i)
       val attr = AST.ResolvedAttr(exp.posOpt, resOpt, typedOpt)
@@ -5485,7 +5485,7 @@ import Util._
         st0 = s0
         @strictpure def bin(e1: AST.Exp, op: String, opKind: AST.ResolvedInfo.BuiltIn.Kind.Type, e2: AST.Exp,
                             posOpt: Option[Position]): AST.Exp =
-          AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, Some(AST.ResolvedInfo.BuiltIn(opKind)), Some(AST.Typed.b)), posOpt)
+          AST.Exp.Binary(e1, op, e2, AST.ResolvedAttr(posOpt, Some(AST.ResolvedInfo.BuiltIn(opKind, None())), Some(AST.Typed.b)), posOpt)
         var i = 0
         for (sequent <- deduceStmt.sequents) {
           val seqClaim: AST.Exp = if (sequent.premises.isEmpty) {

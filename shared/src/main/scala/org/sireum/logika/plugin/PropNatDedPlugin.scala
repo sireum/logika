@@ -168,17 +168,17 @@ import org.sireum.logika.Logika.Reporter
             exp
           case Some(StepProofContext.Regular(_, _, exp: AST.Exp.Binary)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryLe) =>
             AST.Exp.Binary(
-              exp(op = AST.Exp.BinaryOp.Lt, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLt)))),
+              exp(op = AST.Exp.BinaryOp.Lt, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLt, None())))),
               AST.Exp.BinaryOp.Or,
-              exp(op = AST.Exp.BinaryOp.Eq, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)))),
-              AST.ResolvedAttr(exp.posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)), AST.Typed.bOpt), exp.posOpt
+              exp(op = AST.Exp.BinaryOp.Eq, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq, None())))),
+              AST.ResolvedAttr(exp.posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr, None())), AST.Typed.bOpt), exp.posOpt
             )
           case Some(StepProofContext.Regular(_, _, exp: AST.Exp.Binary)) if isBuiltIn(exp, AST.ResolvedInfo.BuiltIn.Kind.BinaryGe) =>
             AST.Exp.Binary(
-              exp(op = AST.Exp.BinaryOp.Gt, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryGt)))),
+              exp(op = AST.Exp.BinaryOp.Gt, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryGt, None())))),
               AST.Exp.BinaryOp.Or,
-              exp(op = AST.Exp.BinaryOp.Eq, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq)))),
-              AST.ResolvedAttr(exp.posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr)), AST.Typed.bOpt), exp.posOpt
+              exp(op = AST.Exp.BinaryOp.Eq, attr = exp.attr(resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq, None())))),
+              AST.ResolvedAttr(exp.posOpt, Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryOr, None())), AST.Typed.bOpt), exp.posOpt
             )
           case _ =>
             reporter.error(orClaimNo.posOpt, Logika.kind, s"Expecting a proof step with a disjunction binary expression claim")

@@ -248,7 +248,7 @@ object Util {
       map.get(res) match {
         case Some((_, ident)) => return MSome(ident)
         case _ =>
-          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value, None())
           val ident = AST.Exp.Ident(id, AST.ResolvedAttr(id.attr.posOpt, Some(lres), typedOpt))
           map = map + res ~> ((o, ident))
           return MSome(ident)
@@ -260,7 +260,7 @@ object Util {
         case Some((_, ident)) => return AST.MTransformer.PreResult(F, MSome(ident))
         case _ =>
           val inId = s"${id.value}.in"
-          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, inId)
+          val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, inId, None())
           val ident = AST.Exp.Ident(id(value = inId), AST.ResolvedAttr(id.attr.posOpt, Some(lres), typedOpt))
           inputMap = inputMap + res ~> ((o, ident))
           return AST.MTransformer.PreResult(F, MSome(ident))
@@ -310,7 +310,7 @@ object Util {
 
     override def postExpResult(o: AST.Exp.Result): MOption[AST.Exp] = {
       val id = AST.Id("return", AST.Attr(o.posOpt))
-      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value, None())
       val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), o.typedOpt))
       resultOpt = Some((o, ident))
       return MSome(ident)
@@ -327,7 +327,7 @@ object Util {
           } else {
             hasThis = T
             val id = AST.Id("this", AST.Attr(o.posOpt))
-            val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+            val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value, None())
             val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), receiverTypeOpt))
             return MSome(AST.Exp.Select(Some(ident), o.id, o.targs, o.attr))
           }
@@ -380,7 +380,7 @@ object Util {
     override def postExpThis(o: AST.Exp.This): MOption[AST.Exp] = {
       hasThis = T
       val id = AST.Id("this", AST.Attr(o.posOpt))
-      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value)
+      val lres = AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, id.value, None())
       val ident = AST.Exp.Ident(id, AST.ResolvedAttr(o.attr.posOpt, Some(lres), o.typedOpt))
       return MSome(ident)
     }
@@ -803,7 +803,7 @@ object Util {
             } else {
               return Some(AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(
                 symPosOpt,
-                Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+                Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id, None())),
                 Some(sym.tipe))))
             }
           case let: State.Claim.Let.CurrentName =>
@@ -820,7 +820,7 @@ object Util {
               val n: Z = computeAtNum(key, let.poss, let.num, let.sym)
               if (let.inScope) {
                 return Some(AST.Exp.At(None(), AST.Exp.Ident(AST.Id(let.id, attr), AST.ResolvedAttr(symPosOpt,
-                  Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id)),
+                  Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, F, let.id, None())),
                   Some(sym.tipe))), AST.Exp.LitZ(n, attr), linesFresh, attr))
               } else {
                 return Some(AST.Exp.At(Some(AST.Util.typedToType(sym.tipe, pos)),
@@ -854,7 +854,7 @@ object Util {
             }
             valueToExp(let.value) match {
               case Some(e) =>
-                return Some(AST.Exp.Unary(op, e, AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(kind)),
+                return Some(AST.Exp.Unary(op, e, AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.BuiltIn(kind, None())),
                   Some(sym.tipe)), symPosOpt))
               case _ =>
                 return None()
@@ -939,7 +939,7 @@ object Util {
                   case _ =>
                 }
                 return Some(AST.Exp.Binary(left, op, right, AST.ResolvedAttr(symPosOpt,
-                  Some(AST.ResolvedInfo.BuiltIn(kind)), Some(sym.tipe)), symPosOpt))
+                  Some(AST.ResolvedInfo.BuiltIn(kind, None())), Some(sym.tipe)), symPosOpt))
               case (_, _) => return None()
             }
           case let: State.Claim.Let.Def =>
@@ -1168,7 +1168,7 @@ object Util {
                                       ISZ(), AST.TypedAttr(symPosOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F, ISZ(argTypes(1)), AST.Typed.b))))
                                     return Some(AST.Exp.QuantEach(let.isAll, rll.ident, fun, AST.ResolvedAttr(symPosOpt,
                                       Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current,
-                                        F, T, params(1).idOpt.get.value)),
+                                        F, T, params(1).idOpt.get.value, None())),
                                       AST.Typed.bOpt)))
                                   }
                                 case _ =>
@@ -1188,7 +1188,7 @@ object Util {
                       return Some(AST.Exp.QuantEach(let.isAll, AST.Exp.Select(left.receiverOpt, AST.Id("indices", attr),
                         ISZ(), AST.ResolvedAttr(symPosOpt, resOpt, typedOpt)), fun, AST.ResolvedAttr(symPosOpt,
                         Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
-                          params(0).idOpt.get.value)),
+                          params(0).idOpt.get.value, None())),
                         AST.Typed.bOpt)))
                     }
                   case left: AST.Exp.Binary if params.size == 1 =>
@@ -1201,7 +1201,7 @@ object Util {
                         Some(AST.Typed.Fun(AST.Purity.Pure, F, argTypes, AST.Typed.b))))
                       return Some(AST.Exp.QuantRange(let.isAll, lo, hi, isExact, fun, AST.ResolvedAttr(symPosOpt,
                         Some(AST.ResolvedInfo.LocalVar(fcontext, AST.ResolvedInfo.LocalVar.Scope.Current, F, T,
-                          params(0).idOpt.get.value)),
+                          params(0).idOpt.get.value, None())),
                         AST.Typed.bOpt)))
                     }
                   case _ =>
@@ -1222,19 +1222,19 @@ object Util {
                           case Some(info) =>
                             return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                               AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, info.ast.isSpec,
-                                info.ast.isVal, info.owner, let.id)), Some(sym.tipe))))
+                                info.ast.isVal, info.owner, let.id, None())), Some(sym.tipe))))
                           case _ =>
                             val info = ti.specVars.get(let.id).get
                             return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                               AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, T, info.ast.isVal,
-                                info.owner, let.id)), Some(sym.tipe))))
+                                info.owner, let.id, None())), Some(sym.tipe))))
                         }
                       case ti: TypeInfo.Sig =>
                         ti.specVars.get(let.id) match {
                           case Some(info) =>
                             return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                               AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Var(info.isInObject, T, info.ast.isVal,
-                                info.owner, let.id)), Some(sym.tipe))))
+                                info.owner, let.id, None())), Some(sym.tipe))))
                           case _ =>
                         }
                         val info = ti.methods.get(let.id).get
@@ -1245,7 +1245,7 @@ object Util {
                         }
                         return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
                           AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Method(info.isInObject, AST.MethodMode.Method, ISZ(),
-                            info.owner, let.id, ISZ(), tOpt, ISZ(), ISZ())), Some(sym.tipe))))
+                            info.owner, let.id, ISZ(), tOpt, ISZ(), ISZ(), None())), Some(sym.tipe))))
                       case info: TypeInfo.SubZ =>
                         assert(let.id == "toZ")
                         return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
@@ -1267,7 +1267,7 @@ object Util {
                         return Some(o.args(n - 1))
                       case _ =>
                         return Some(AST.Exp.Select(Some(o), AST.Id(let.id, AST.Attr(symPosOpt)), ISZ(),
-                          AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Tuple(t.args.size, n)), Some(sym.tipe))))
+                          AST.ResolvedAttr(symPosOpt, Some(AST.ResolvedInfo.Tuple(t.args.size, n, None())), Some(sym.tipe))))
                     }
                   case t: AST.Typed.TypeVar if t.isIndex =>
                     assert(let.id == "toZ")
@@ -1285,7 +1285,7 @@ object Util {
                 val (_, resOpt) = TypeChecker.sStoreTypedResOpt(let.seq.tipe.asInstanceOf[AST.Typed.Name], 1)
                 return Some(AST.Exp.Invoke(rcvOpt, ident, ISZ(), ISZ(), ISZ(AST.Exp.Binary(index,
                   AST.Exp.BinaryOp.MapsTo, element, AST.ResolvedAttr(symPosOpt,
-                    Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo)), Some(AST.Typed.Tuple(ISZ(
+                    Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryMapsTo, None())), Some(AST.Typed.Tuple(ISZ(
                       let.index.tipe, let.element.tipe)))), symPosOpt)),
                   AST.ResolvedAttr(symPosOpt, resOpt, Some(sym.tipe))))
               case (_, _, _) => return None()
@@ -1422,7 +1422,7 @@ object Util {
             }
             assert(let.isLocal && let.context == context || ops.ISZOps(let.context).slice(0, context.size) == context, s"${let.isLocal}: ${let.context} == ${context}")
             val ident = AST.Exp.Ident(AST.Id(let.id, AST.Attr(symPosOpt)), AST.ResolvedAttr(symPosOpt,
-              Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, let.id)),
+              Some(AST.ResolvedInfo.LocalVar(let.context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, let.id, None())),
               Some(let.tipe)))
             return Some(AST.Exp.Invoke(None(), ident, ISZ(), ISZ(), es, AST.ResolvedAttr(symPosOpt, ident.resOpt,
               Some(sym.tipe))))
@@ -1572,7 +1572,7 @@ object Util {
             AST.Exp.This(owner, AST.TypedAttr(posOpt, tOpt))
           } else {
             AST.Exp.Ident(AST.Id(id, AST.Attr(posOpt)), AST.ResolvedAttr(posOpt,
-              Some(AST.ResolvedInfo.LocalVar(owner, AST.ResolvedInfo.LocalVar.Scope.Current, isSpec, F, id)), tOpt))
+              Some(AST.ResolvedInfo.LocalVar(owner, AST.ResolvedInfo.LocalVar.Scope.Current, isSpec, F, id, None())), tOpt))
           }
         } else {
           th.nameToExp(owner :+ id, pos).asExp
@@ -1632,7 +1632,7 @@ object Util {
               return Some(
                 if (claim.isPos) e
                 else AST.Exp.Unary(AST.Exp.UnaryOp.Not, e, AST.ResolvedAttr(posOpt,
-                  Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot)), AST.Typed.bOpt), posOpt))
+                  Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot, None())), AST.Typed.bOpt), posOpt))
             case _ =>
               return None()
           }
@@ -1750,17 +1750,17 @@ object Util {
     AST.Typed.rName, AST.Typed.stName, AST.Typed.isName, AST.Typed.msName
   )
 
-  val condImplyResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply))
-  val condAndResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd))
-  val andResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd))
-  val implyResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply))
-  val leResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLe))
-  val ltResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLt))
-  val eqResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq))
-  val neResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryNe))
-  val equivResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv))
-  val inequivResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv))
-  val notResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot))
+  val condImplyResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondImply, None()))
+  val condAndResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryCondAnd, None()))
+  val andResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd, None()))
+  val implyResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryImply, None()))
+  val leResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLe, None()))
+  val ltResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryLt, None()))
+  val eqResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEq, None()))
+  val neResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryNe, None()))
+  val equivResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryEquiv, None()))
+  val inequivResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryInequiv, None()))
+  val notResOpt: Option[AST.ResolvedInfo] = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.UnaryNot, None()))
 
   @strictpure def emptyLocalSaveMap: LocalSaveMap = HashMap.empty
 
@@ -1866,7 +1866,7 @@ object Util {
       case Some(m) =>
         val context = m.owner :+ m.id
         for (p <- m.params) {
-          rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, p._1.value)
+          rwLocals = rwLocals :+ AST.ResolvedInfo.LocalVar(context, AST.ResolvedInfo.LocalVar.Scope.Current, F, T, p._1.value, None())
         }
       case _ =>
     }
@@ -2190,7 +2190,7 @@ object Util {
   def constructAssume(cond: AST.Exp, posOpt: Option[Position]): AST.Stmt = {
     val assumeResAttr = AST.ResolvedAttr(
       posOpt = posOpt,
-      resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Assume)),
+      resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Assume, None())),
       typedOpt = Some(AST.Typed.Fun(AST.Purity.Impure,F, ISZ(AST.Typed.b), AST.Typed.unit))
     )
     return AST.Stmt.Expr(AST.Exp.Invoke(

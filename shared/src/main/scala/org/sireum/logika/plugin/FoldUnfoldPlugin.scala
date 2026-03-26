@@ -202,7 +202,7 @@ import FoldUnfoldPlugin._
       var thisIdentOpt = MOption.none[AST.Exp]()
       if (!minfo.isInObject) {
         val local = AST.ResolvedInfo.LocalVar(newContext,
-          AST.ResolvedInfo.LocalVar.Scope.Current, F, T, s"this$$${unfoldFromPos.beginLine}_${unfoldFromPos.beginColumn}")
+          AST.ResolvedInfo.LocalVar.Scope.Current, F, T, s"this$$${unfoldFromPos.beginLine}_${unfoldFromPos.beginColumn}", None())
         val receiver = unfoldFrom.receiverOpt.get
         val id = AST.Id(local.id, AST.Attr(receiver.posOpt))
         val localOpt = Option.some[AST.ResolvedInfo](local)
@@ -216,7 +216,7 @@ import FoldUnfoldPlugin._
         val p = minfo.ast.sig.params(i)
         val arg = unfoldFrom.args(i)
         val local = AST.ResolvedInfo.LocalVar(newContext,
-          AST.ResolvedInfo.LocalVar.Scope.Current, F, T, p.id.value)
+          AST.ResolvedInfo.LocalVar.Scope.Current, F, T, p.id.value, None())
         locals = locals :+ local
         vals = vals :+ AST.Stmt.Var(F, T, p.id, None(),
           Some(AST.Stmt.Expr(arg, ISZ(), AST.TypedAttr(arg.posOpt, arg.typedOpt))), ISZ(),
