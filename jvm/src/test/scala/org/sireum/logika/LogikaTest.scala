@@ -51,10 +51,12 @@ object LogikaTest {
     r
   }
 
+  val cvc5ValidOpts: String = if (Os.env("GITHUB_ACTION").nonEmpty && !Os.isWin) Smt2.cvc5DefaultValidOpts else Smt2.cvc5WasmDefaultValidOpts
+
   val config: Config =
     Config(
       smt2Configs =
-        Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, s"${Smt2.cvc4DefaultValidOpts}; ${Smt2.z3DefaultValidOpts}; ${Smt2.cvc5WasmDefaultValidOpts}").left ++
+        Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), F, s"${Smt2.cvc4DefaultValidOpts}; $cvc5ValidOpts; ${Smt2.z3DefaultValidOpts}").left ++
           Smt2.parseConfigs(Smt2Invoke.nameExePathMap(sireumHome), T, Smt2.defaultSatOpts).left,
       parCores = Runtime.getRuntime.availableProcessors,
       sat = T,
