@@ -61,6 +61,20 @@ import org.sireum.logika.Logika.Reporter
                       step: AST.ProofAst.Step.Regular,
                       reporter: Reporter): State = {
     @strictpure def err: State = state(status = State.Status.Error)
+    @pure def isTheoremMethod(res: AST.ResolvedInfo.Method): B = {
+      if (!res.isInObject) {
+        return F
+      }
+      val fun = res.tpeOpt.get
+      if (!fun.isPureFun) {
+        return F
+      }
+      if (fun.ret != AST.Typed.unit) {
+        return F
+      }
+      val m = logika.th.nameMap.get(res.owner :+ res.id).get.asInstanceOf[Info.Method]
+      return m.ast.contract.modifies.isEmpty
+    }
     val just = step.just.asInstanceOf[AST.ProofAst.Step.Justification.Apply]
     val arg: AST.Exp = just.args(0) match {
       case a: AST.Exp.Eta => a.ref.asExp
@@ -73,14 +87,17 @@ import org.sireum.logika.Logika.Reporter
         arg.attr.resOpt.get match {
           case res: AST.ResolvedInfo.Fact => (res.name, ISZ())
           case res: AST.ResolvedInfo.Theorem => (res.name, ISZ())
+          case res: AST.ResolvedInfo.Method if isTheoremMethod(res) => (res.owner :+ res.id, ISZ())
           case _ =>
             reporter.error(arg.posOpt, Logika.kind, s"Expecting a fact, theorem, or lemma")
             return err
         }
       case arg: AST.Exp.Select =>
+        val tArgs: ISZ[AST.Typed] = for (t <- arg.targs) yield t.typedOpt.get
         arg.attr.resOpt.get match {
-          case res: AST.ResolvedInfo.Fact => (res.name, for (t <- arg.targs) yield t.typedOpt.get)
-          case res: AST.ResolvedInfo.Theorem => (res.name, ISZ())
+          case res: AST.ResolvedInfo.Fact => (res.name, tArgs)
+          case res: AST.ResolvedInfo.Theorem => (res.name, tArgs)
+          case res: AST.ResolvedInfo.Method if isTheoremMethod(res) => (res.owner :+ res.id, tArgs)
           case _ =>
             reporter.error(arg.posOpt, Logika.kind, s"Expecting a fact, theorem, or lemma")
             return err
@@ -93,6 +110,24 @@ import org.sireum.logika.Logika.Reporter
     val (kind, typeParams, claims): (String, ISZ[AST.TypeParam], ISZ[AST.Exp]) = logika.th.nameMap.get(name).get match {
       case inf: Info.Fact => ("Fact", inf.ast.typeParams, inf.ast.claims)
       case inf: Info.Theorem => (if (inf.ast.isLemma) "Lemma" else "Theorem", inf.ast.typeParams, ISZ(inf.ast.claim))
+      case inf: Info.Method =>
+        val params: ISZ[AST.Exp.Fun.Param] = for (p <- inf.ast.sig.params) yield AST.Exp.Fun.Param(Some(p.id), Some(p.tipe), p.tipe.typedOpt)
+        val funTypedAttr = AST.TypedAttr(inf.posOpt, Some(AST.Typed.Fun(AST.Purity.Pure, F,
+          for (p <- inf.ast.sig.params) yield p.tipe.typedOpt.get, AST.Typed.b)))
+        @pure def constructClaim(requires: ISZ[AST.Exp], ensures: ISZ[AST.Exp]): AST.Exp = {
+          val body = AST.Util.bigImply(T, ISZ(AST.Util.bigAndCond(T, requires, inf.posOpt), AST.Util.bigAndCond(T, ensures, inf.posOpt)), inf.posOpt)
+          val fun = AST.Exp.Fun(inf.owner :+ inf.ast.sig.id.value, params, AST.Stmt.Expr(body, ISZ(), AST.TypedAttr(inf.posOpt, AST.Typed.bOpt)), ISZ(), funTypedAttr)
+          return AST.Exp.QuantType(T, fun, AST.Attr(inf.posOpt))
+        }
+        var claims = ISZ[AST.Exp]()
+        inf.ast.contract match {
+          case contract: AST.MethodContract.Simple => claims = claims :+ constructClaim(contract.requires, contract.ensures)
+          case contract: AST.MethodContract.Cases =>
+            for (c <- contract.cases) {
+              claims = claims :+ constructClaim(c.requires, c.ensures)
+            }
+        }
+        ("Method", inf.ast.sig.typeParams, claims)
       case _ => halt("Infeasible")
     }
     val sm = lang.tipe.TypeChecker.buildTypeSubstMap(name, arg.posOpt, typeParams, targs, reporter).get
