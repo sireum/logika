@@ -408,6 +408,7 @@ object RewritingSystem {
             else
               None()
           case o: AST.CoreExp.UnaryTemporal => halt(s"Infeasible: $o")
+          case o: AST.CoreExp.BinaryTemporal => halt(s"Infeasible: $o")
           case o: AST.CoreExp.Constructor =>
             val r1: Option[IS[Z, AST.CoreExp.Base]] = transformCoreExpBases(cache, o.args)
             if (hasChanged || r1.nonEmpty)
@@ -1517,6 +1518,7 @@ object RewritingSystem {
           case e: AST.CoreExp.Binary => evalBinary(e)
           case e: AST.CoreExp.Unary => evalUnary(e)
           case e: AST.CoreExp.UnaryTemporal => halt(s"Infeasible: $e")
+          case e: AST.CoreExp.BinaryTemporal => halt(s"Infeasible: $e")
           case e: AST.CoreExp.Select => evalSelect(e)
           case e: AST.CoreExp.Update => evalUpdate(e)
           case e: AST.CoreExp.Indexing => evalIndexing(e)
