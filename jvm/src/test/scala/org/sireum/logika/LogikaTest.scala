@@ -51,7 +51,7 @@ object LogikaTest {
     r
   }
 
-  val cvc5ValidOpts: String = if (isInGithubAction) Smt2.cvc5DefaultValidOpts else Smt2.cvc5WasmDefaultValidOpts
+  val cvc5ValidOpts: String = Smt2.cvc5DefaultValidOpts
 
   val config: Config =
     Config(
