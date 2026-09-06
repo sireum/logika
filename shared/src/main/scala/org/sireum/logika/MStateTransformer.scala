@@ -44,11 +44,11 @@ object MStateTransformer {
   def transformISZ[T](s: IS[Z, T], f: T => MOption[T]): MOption[IS[Z, T]] = {
     val s2: MS[Z, T] = s.toMS
     var changed: B = F
-    for (i <- s2.indices) {
-      val e: T = s(i)
+    for (i <- 0 until s.size) {
+      val e: T = s.atZ(i)
       val r: MOption[T] = f(e)
       changed = changed || r.nonEmpty
-      s2(i) = r.getOrElse(e)
+      s2.updateZ(i, r.getOrElse(e))
     }
     if (changed) {
       return MSome(s2.toIS)
@@ -311,64 +311,91 @@ import MStateTransformer._
       case o: State.Value.String => return preStateValueString(o)
       case o: State.Value.Range =>
         val r: PreResult[State.Value] = preStateValueRange(o) match {
-         case PreResult(continu, MSome(r: State.Value)) => PreResult(continu, MSome[State.Value](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Value => PreResult(continu, MSome[State.Value](r))
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Value]())
         }
         return r
       case o: State.Value.S8 =>
         val r: PreResult[State.Value] = preStateValueS8(o) match {
-         case PreResult(continu, MSome(r: State.Value)) => PreResult(continu, MSome[State.Value](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Value => PreResult(continu, MSome[State.Value](r))
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Value]())
         }
         return r
       case o: State.Value.S16 =>
         val r: PreResult[State.Value] = preStateValueS16(o) match {
-         case PreResult(continu, MSome(r: State.Value)) => PreResult(continu, MSome[State.Value](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Value => PreResult(continu, MSome[State.Value](r))
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Value]())
         }
         return r
       case o: State.Value.S32 =>
         val r: PreResult[State.Value] = preStateValueS32(o) match {
-         case PreResult(continu, MSome(r: State.Value)) => PreResult(continu, MSome[State.Value](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Value => PreResult(continu, MSome[State.Value](r))
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Value]())
         }
         return r
       case o: State.Value.S64 =>
         val r: PreResult[State.Value] = preStateValueS64(o) match {
-         case PreResult(continu, MSome(r: State.Value)) => PreResult(continu, MSome[State.Value](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Value => PreResult(continu, MSome[State.Value](r))
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Value]())
         }
         return r
       case o: State.Value.U8 =>
         val r: PreResult[State.Value] = preStateValueU8(o) match {
-         case PreResult(continu, MSome(r: State.Value)) => PreResult(continu, MSome[State.Value](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Value => PreResult(continu, MSome[State.Value](r))
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Value]())
         }
         return r
       case o: State.Value.U16 =>
         val r: PreResult[State.Value] = preStateValueU16(o) match {
-         case PreResult(continu, MSome(r: State.Value)) => PreResult(continu, MSome[State.Value](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Value => PreResult(continu, MSome[State.Value](r))
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Value]())
         }
         return r
       case o: State.Value.U32 =>
         val r: PreResult[State.Value] = preStateValueU32(o) match {
-         case PreResult(continu, MSome(r: State.Value)) => PreResult(continu, MSome[State.Value](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Value => PreResult(continu, MSome[State.Value](r))
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Value]())
         }
         return r
       case o: State.Value.U64 =>
         val r: PreResult[State.Value] = preStateValueU64(o) match {
-         case PreResult(continu, MSome(r: State.Value)) => PreResult(continu, MSome[State.Value](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Value => PreResult(continu, MSome[State.Value](r))
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Value]())
         }
         return r
@@ -491,197 +518,281 @@ import MStateTransformer._
       case o: State.Claim.Eq => return preStateClaimEq(o)
       case o: State.Claim.And =>
         val r: PreResult[State.Claim] = preStateClaimAnd(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Or =>
         val r: PreResult[State.Claim] = preStateClaimOr(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Imply =>
         val r: PreResult[State.Claim] = preStateClaimImply(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.If =>
         val r: PreResult[State.Claim] = preStateClaimIf(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.AdtLit =>
         val r: PreResult[State.Claim] = preStateClaimLetAdtLit(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.SeqLit =>
         val r: PreResult[State.Claim] = preStateClaimLetSeqLit(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.CurrentName =>
         val r: PreResult[State.Claim] = preStateClaimLetCurrentName(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.SeqStore =>
         val r: PreResult[State.Claim] = preStateClaimLetSeqStore(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.FieldStore =>
         val r: PreResult[State.Claim] = preStateClaimLetFieldStore(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Random =>
         val r: PreResult[State.Claim] = preStateClaimLetRandom(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Name =>
         val r: PreResult[State.Claim] = preStateClaimLetName(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.CurrentId =>
         val r: PreResult[State.Claim] = preStateClaimLetCurrentId(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Id =>
         val r: PreResult[State.Claim] = preStateClaimLetId(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Def =>
         val r: PreResult[State.Claim] = preStateClaimLetDef(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.TypeTest =>
         val r: PreResult[State.Claim] = preStateClaimLetTypeTest(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Quant =>
         val r: PreResult[State.Claim] = preStateClaimLetQuant(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Ite =>
         val r: PreResult[State.Claim] = preStateClaimLetIte(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Binary =>
         val r: PreResult[State.Claim] = preStateClaimLetBinary(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Unary =>
         val r: PreResult[State.Claim] = preStateClaimLetUnary(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.SeqLookup =>
         val r: PreResult[State.Claim] = preStateClaimLetSeqLookup(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.SeqInBound =>
         val r: PreResult[State.Claim] = preStateClaimLetSeqInBound(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.FieldLookup =>
         val r: PreResult[State.Claim] = preStateClaimLetFieldLookup(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.ProofFunApply =>
         val r: PreResult[State.Claim] = preStateClaimLetProofFunApply(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Apply =>
         val r: PreResult[State.Claim] = preStateClaimLetApply(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.TupleLit =>
         val r: PreResult[State.Claim] = preStateClaimLetTupleLit(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.And =>
         val r: PreResult[State.Claim] = preStateClaimLetAnd(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Or =>
         val r: PreResult[State.Claim] = preStateClaimLetOr(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
       case o: State.Claim.Let.Imply =>
         val r: PreResult[State.Claim] = preStateClaimLetImply(o) match {
-         case PreResult(continu, MSome(r: State.Claim)) => PreResult(continu, MSome[State.Claim](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Claim")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: State.Claim => PreResult(continu, MSome[State.Claim](r))
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[State.Claim]())
         }
         return r
@@ -886,64 +997,91 @@ import MStateTransformer._
       case o: State.Value.String => return postStateValueString(o)
       case o: State.Value.Range =>
         val r: MOption[State.Value] = postStateValueRange(o) match {
-         case MSome(result: State.Value) => MSome[State.Value](result)
-         case MSome(_) => halt("Can only produce object of type State.Value")
+         case MSome(result) =>
+           result match {
+             case result: State.Value => MSome[State.Value](result)
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case _ => MNone[State.Value]()
         }
         return r
       case o: State.Value.S8 =>
         val r: MOption[State.Value] = postStateValueS8(o) match {
-         case MSome(result: State.Value) => MSome[State.Value](result)
-         case MSome(_) => halt("Can only produce object of type State.Value")
+         case MSome(result) =>
+           result match {
+             case result: State.Value => MSome[State.Value](result)
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case _ => MNone[State.Value]()
         }
         return r
       case o: State.Value.S16 =>
         val r: MOption[State.Value] = postStateValueS16(o) match {
-         case MSome(result: State.Value) => MSome[State.Value](result)
-         case MSome(_) => halt("Can only produce object of type State.Value")
+         case MSome(result) =>
+           result match {
+             case result: State.Value => MSome[State.Value](result)
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case _ => MNone[State.Value]()
         }
         return r
       case o: State.Value.S32 =>
         val r: MOption[State.Value] = postStateValueS32(o) match {
-         case MSome(result: State.Value) => MSome[State.Value](result)
-         case MSome(_) => halt("Can only produce object of type State.Value")
+         case MSome(result) =>
+           result match {
+             case result: State.Value => MSome[State.Value](result)
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case _ => MNone[State.Value]()
         }
         return r
       case o: State.Value.S64 =>
         val r: MOption[State.Value] = postStateValueS64(o) match {
-         case MSome(result: State.Value) => MSome[State.Value](result)
-         case MSome(_) => halt("Can only produce object of type State.Value")
+         case MSome(result) =>
+           result match {
+             case result: State.Value => MSome[State.Value](result)
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case _ => MNone[State.Value]()
         }
         return r
       case o: State.Value.U8 =>
         val r: MOption[State.Value] = postStateValueU8(o) match {
-         case MSome(result: State.Value) => MSome[State.Value](result)
-         case MSome(_) => halt("Can only produce object of type State.Value")
+         case MSome(result) =>
+           result match {
+             case result: State.Value => MSome[State.Value](result)
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case _ => MNone[State.Value]()
         }
         return r
       case o: State.Value.U16 =>
         val r: MOption[State.Value] = postStateValueU16(o) match {
-         case MSome(result: State.Value) => MSome[State.Value](result)
-         case MSome(_) => halt("Can only produce object of type State.Value")
+         case MSome(result) =>
+           result match {
+             case result: State.Value => MSome[State.Value](result)
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case _ => MNone[State.Value]()
         }
         return r
       case o: State.Value.U32 =>
         val r: MOption[State.Value] = postStateValueU32(o) match {
-         case MSome(result: State.Value) => MSome[State.Value](result)
-         case MSome(_) => halt("Can only produce object of type State.Value")
+         case MSome(result) =>
+           result match {
+             case result: State.Value => MSome[State.Value](result)
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case _ => MNone[State.Value]()
         }
         return r
       case o: State.Value.U64 =>
         val r: MOption[State.Value] = postStateValueU64(o) match {
-         case MSome(result: State.Value) => MSome[State.Value](result)
-         case MSome(_) => halt("Can only produce object of type State.Value")
+         case MSome(result) =>
+           result match {
+             case result: State.Value => MSome[State.Value](result)
+             case _ => halt("Can only produce object of type State.Value")
+           }
          case _ => MNone[State.Value]()
         }
         return r
@@ -1066,197 +1204,281 @@ import MStateTransformer._
       case o: State.Claim.Eq => return postStateClaimEq(o)
       case o: State.Claim.And =>
         val r: MOption[State.Claim] = postStateClaimAnd(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Or =>
         val r: MOption[State.Claim] = postStateClaimOr(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Imply =>
         val r: MOption[State.Claim] = postStateClaimImply(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.If =>
         val r: MOption[State.Claim] = postStateClaimIf(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.AdtLit =>
         val r: MOption[State.Claim] = postStateClaimLetAdtLit(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.SeqLit =>
         val r: MOption[State.Claim] = postStateClaimLetSeqLit(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.CurrentName =>
         val r: MOption[State.Claim] = postStateClaimLetCurrentName(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.SeqStore =>
         val r: MOption[State.Claim] = postStateClaimLetSeqStore(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.FieldStore =>
         val r: MOption[State.Claim] = postStateClaimLetFieldStore(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Random =>
         val r: MOption[State.Claim] = postStateClaimLetRandom(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Name =>
         val r: MOption[State.Claim] = postStateClaimLetName(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.CurrentId =>
         val r: MOption[State.Claim] = postStateClaimLetCurrentId(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Id =>
         val r: MOption[State.Claim] = postStateClaimLetId(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Def =>
         val r: MOption[State.Claim] = postStateClaimLetDef(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.TypeTest =>
         val r: MOption[State.Claim] = postStateClaimLetTypeTest(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Quant =>
         val r: MOption[State.Claim] = postStateClaimLetQuant(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Ite =>
         val r: MOption[State.Claim] = postStateClaimLetIte(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Binary =>
         val r: MOption[State.Claim] = postStateClaimLetBinary(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Unary =>
         val r: MOption[State.Claim] = postStateClaimLetUnary(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.SeqLookup =>
         val r: MOption[State.Claim] = postStateClaimLetSeqLookup(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.SeqInBound =>
         val r: MOption[State.Claim] = postStateClaimLetSeqInBound(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.FieldLookup =>
         val r: MOption[State.Claim] = postStateClaimLetFieldLookup(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.ProofFunApply =>
         val r: MOption[State.Claim] = postStateClaimLetProofFunApply(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Apply =>
         val r: MOption[State.Claim] = postStateClaimLetApply(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.TupleLit =>
         val r: MOption[State.Claim] = postStateClaimLetTupleLit(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.And =>
         val r: MOption[State.Claim] = postStateClaimLetAnd(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Or =>
         val r: MOption[State.Claim] = postStateClaimLetOr(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
       case o: State.Claim.Let.Imply =>
         val r: MOption[State.Claim] = postStateClaimLetImply(o) match {
-         case MSome(result: State.Claim) => MSome[State.Claim](result)
-         case MSome(_) => halt("Can only produce object of type State.Claim")
+         case MSome(result) =>
+           result match {
+             case result: State.Claim => MSome[State.Claim](result)
+             case _ => halt("Can only produce object of type State.Claim")
+           }
          case _ => MNone[State.Claim]()
         }
         return r
@@ -2261,8 +2483,11 @@ import MStateTransformer._
 
   def transformStateValueSym(o: State.Value.Sym): MOption[State.Value.Sym] = {
     val preR: PreResult[State.Value.Sym] = preStateValueSym(o) match {
-     case PreResult(continu, MSome(r: State.Value.Sym)) => PreResult(continu, MSome[State.Value.Sym](r))
-     case PreResult(_, MSome(_)) => halt("Can only produce object of type State.Value.Sym")
+     case PreResult(continu, MSome(r)) =>
+       r match {
+         case r: State.Value.Sym => PreResult(continu, MSome[State.Value.Sym](r))
+         case _ => halt("Can only produce object of type State.Value.Sym")
+       }
      case PreResult(continu, _) => PreResult(continu, MNone[State.Value.Sym]())
     }
     val r: MOption[State.Value.Sym] = if (preR.continu) {
@@ -2280,8 +2505,11 @@ import MStateTransformer._
     val hasChanged: B = r.nonEmpty
     val o2: State.Value.Sym = r.getOrElse(o)
     val postR: MOption[State.Value.Sym] = postStateValueSym(o2) match {
-     case MSome(result: State.Value.Sym) => MSome[State.Value.Sym](result)
-     case MSome(_) => halt("Can only produce object of type State.Value.Sym")
+     case MSome(result) =>
+       result match {
+         case result: State.Value.Sym => MSome[State.Value.Sym](result)
+         case _ => halt("Can only produce object of type State.Value.Sym")
+       }
      case _ => MNone[State.Value.Sym]()
     }
     if (postR.nonEmpty) {
