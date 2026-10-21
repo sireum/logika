@@ -348,9 +348,6 @@ import InceptionPlugin._
         return err
       }
       val id = name(name.size - 1)
-      if (id == "AllE") {
-        println("Here")
-      }
       var ok = T
       var idExpMap = HashSMap.empty[String, AST.Exp]
       val paramIds = HashSSet ++ paramNames
